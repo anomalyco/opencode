@@ -155,7 +155,7 @@ describe("MCP events client", () => {
       yield* server.notify("list_changed", server.state.listens[0].id)
       yield* reached(() => server.state.lists.length === 6)
       yield* server.close(server.state.listens[0].id)
-      // The listen reopens after a backoff on the test clock.
+      // The listen reopens after a backoff on the test clock. Nothing else waits on the in-memory server.
       while (!(server.state.listens.length === 2 && server.state.lists.length === 8)) {
         yield* Effect.promise(() => Bun.sleep(1))
         yield* TestClock.adjust("200 millis")

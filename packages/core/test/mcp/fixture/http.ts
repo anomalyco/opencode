@@ -32,6 +32,8 @@ export const serve = (spec: Spec & { readonly era: Era }) =>
         methods: [] as string[],
       }
       const streams = new Set<EventStream>()
+      // Requests the server is still answering; an open event stream counts only until its response starts.
+      const inflight = { count: 0 }
       const opened = yield* Queue.unbounded<EventStream>()
       const interceptors: Interceptor[] = []
       const sessions = new Map<string, { server: McpServer; transport: WebStandardStreamableHTTPServerTransport }>()
@@ -64,36 +66,45 @@ export const serve = (spec: Spec & { readonly era: Era }) =>
         // Event and listen streams stay open with nothing to send.
         idleTimeout: 0,
         fetch: async (request) => {
-          const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
-          const message = isRecord(body) ? body : undefined
-          const session = request.headers.get("mcp-session-id")
-          if (session) seen.sessions.add(session)
-          if (typeof message?.method === "string") {
-            seen.methods.push(message.method)
-            if (message.method === "initialize") seen.initializations++
-            if (message.method === "server/discover") seen.discovers++
-            if (message.method === "tools/list") seen.lists++
-            if (message.method === "tools/call" && isRecord(message.params))
-              seen.calls.push(String(message.params.name))
+          inflight.count++
+          try {
+            return await handle(request)
+          } finally {
+            inflight.count--
           }
-          for (const intercept of interceptors) {
-            const response = await intercept(request, message)
-            if (response) return response
-          }
-          if (spec.events && message) {
-            const answered = events(request, message, log, (stream) => {
-              streams.add(stream)
-              Queue.offerUnsafe(opened, stream)
-            })
-            if (answered) return answered
-          }
-          return modern ? modern.fetch(request) : legacy(request)
         },
       })
+      async function handle(request: Request) {
+        const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+        const message = isRecord(body) ? body : undefined
+        const session = request.headers.get("mcp-session-id")
+        if (session) seen.sessions.add(session)
+        if (typeof message?.method === "string") {
+          seen.methods.push(message.method)
+          if (message.method === "initialize") seen.initializations++
+          if (message.method === "server/discover") seen.discovers++
+          if (message.method === "tools/list") seen.lists++
+          if (message.method === "tools/call" && isRecord(message.params)) seen.calls.push(String(message.params.name))
+        }
+        for (const intercept of interceptors) {
+          const response = await intercept(request, message)
+          if (response) return response
+        }
+        if (spec.events && message) {
+          const answered = events(request, message, log, (stream) => {
+            streams.add(stream)
+            Queue.offerUnsafe(opened, stream)
+          })
+          if (answered) return answered
+        }
+        return modern ? modern.fetch(request) : legacy(request)
+      }
       return {
         url: http.url.href,
         state,
         seen,
+        /** Whether a request is still waiting for its response, so a test should not move its clock yet. */
+        busy: () => inflight.count > 0,
         /** Legacy sessions the server still holds. */
         sessions: () => sessions.size,
         /** Event streams still open. */

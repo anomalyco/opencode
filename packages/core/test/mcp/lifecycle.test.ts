@@ -232,7 +232,7 @@ function scenario(row: Row, ops: ReadonlyArray<Op>) {
     }
     for (const place of live) if (place) yield* place.close
     // Closing every Location leaves no event stream open.
-    yield* settle("event streams to close", Effect.sync(server.streams), (streams) => streams.length === 0)
+    yield* settle(server, "event streams to close", Effect.sync(server.streams), (streams) => streams.length === 0)
   }).pipe(Effect.scoped, Effect.provide(TestClock.layer()))
 }
 
@@ -245,6 +245,7 @@ const check = (server: Fixture, live: ReadonlyArray<Place | undefined>, model: R
       const place = live[index]
       if (!expected.open || !place) return
       yield* settle(
+        server,
         `location ${index} to be ${expected.status}`,
         place.status("fixture"),
         (status) => status?.status === expected.status,
@@ -281,6 +282,7 @@ const follows = (server: Fixture, place: Place, index: number, expected: Expecte
     if (expected.sub === "none") return expect(subscription).toBeUndefined()
     if (expected.sub === "ended")
       return yield* settle(
+        server,
         `location ${index}'s subscription to end`,
         place.mcp.subscriptions(),
         (all) => all[0]?.status.status === "ended",
@@ -288,12 +290,14 @@ const follows = (server: Fixture, place: Place, index: number, expected: Expecte
     if (expected.status !== "connected" || fault.refused || fault.down)
       return expect(subscription?.status.status).not.toBe("ended")
     yield* settle(
+      server,
       `location ${index}'s subscription to be active`,
       place.mcp.subscriptions(),
       (all) => all[0]?.status.status === "active",
     )
     const eventId = server.emit()
     yield* settle(
+      server,
       `location ${index} to receive ${eventId}`,
       Effect.sync(() => place.events),
       (events) =>
@@ -303,8 +307,15 @@ const follows = (server: Fixture, place: Place, index: number, expected: Expecte
     )
   })
 
-// Alternates a real millisecond, for sockets, with 200 virtual ones, for timers, until `predicate` holds.
-const settle = <A, E, R>(label: string, effect: Effect.Effect<A, E, R>, predicate: (value: A) => boolean) =>
+// Alternates a real millisecond, for sockets, with 200 virtual ones, for timers (event stream backoff), until
+// `predicate` holds. The clock stays put while the server is answering a request, so no timeout on the test clock
+// (a startup deadline, a session termination) runs out before a slow reply arrives.
+const settle = <A, E, R>(
+  server: Fixture,
+  label: string,
+  effect: Effect.Effect<A, E, R>,
+  predicate: (value: A) => boolean,
+) =>
   Effect.gen(function* () {
     const deadline = Date.now() + 5_000
     while (true) {
@@ -313,6 +324,6 @@ const settle = <A, E, R>(label: string, effect: Effect.Effect<A, E, R>, predicat
       if (Date.now() > deadline)
         return yield* Effect.die(new Error(`Timed out waiting for ${label}: ${JSON.stringify(value)}`))
       yield* Effect.promise(() => Bun.sleep(1))
-      yield* TestClock.adjust("200 millis")
+      if (!server.busy()) yield* TestClock.adjust("200 millis")
     }
   })

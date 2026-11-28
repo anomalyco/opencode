@@ -266,7 +266,8 @@ describe("MCP protocol quirks", () => {
         const place = yield* (yield* world).open({ servers: { fixture: remote(server.url) } })
         while ((yield* place.status("fixture"))?.status === "pending") {
           yield* Effect.promise(() => Bun.sleep(1))
-          yield* TestClock.adjust("100 millis")
+          // Only between attempts, so the connect deadline can't run out under a slow reply.
+          if (!server.busy()) yield* TestClock.adjust("100 millis")
         }
         expect((yield* place.status("fixture"))?.status).toBe("failed")
         expect(server.seen.discovers).toBe(attempts)
