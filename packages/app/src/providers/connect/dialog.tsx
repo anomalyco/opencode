@@ -1025,6 +1025,9 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
 
     return (
       <div class={STEP_CLASS}>
+        <Show when={connect().method?.label}>
+          {(label) => <p class="font-[530] text-v2-text-text-base">{label()}</p>}
+        </Show>
         <p>{language.t("provider.connect.oauth.auto.description", { provider: name() })}</p>
         <Show when={code()}>
           {(value) => (
