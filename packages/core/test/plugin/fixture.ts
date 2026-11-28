@@ -35,6 +35,7 @@ import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SharedCache } from "@opencode/core/shared-cache"
+import { Sandbox } from "@opencode/core/sandbox"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -92,6 +93,7 @@ const permissionLayer = Layer.succeed(
     close: Effect.void,
     ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
     assert: () => Effect.void,
+    assertSandboxedShell: () => Effect.void,
     assertNotDenied: () => Effect.void,
     allows: () => Effect.succeed(false),
     reply: () => Effect.void,
@@ -144,6 +146,7 @@ export const makePluginTestLayer = (
       SessionInbox.node,
       Session.node,
       SharedCache.node,
+      Sandbox.node,
       InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,

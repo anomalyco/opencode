@@ -75,6 +75,7 @@ import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
 import { ShellSelect } from "../shell/select.js"
+import { Sandbox } from "../sandbox.js"
 import { Snapshot } from "../snapshot.js"
 import { Skill } from "../skill.js"
 import { SkillDiscovery } from "../skill/discovery.js"
@@ -187,6 +188,7 @@ const nodes = [
   SubagentJob.node,
   SharedCache.node,
   Shell.node,
+  Sandbox.node,
   ShellSelect.node,
   Snapshot.node,
   Skill.node,

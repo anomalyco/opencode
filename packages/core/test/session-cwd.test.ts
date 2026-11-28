@@ -26,6 +26,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Ripgrep } from "@opencode/core/ripgrep"
+import { Sandbox } from "@opencode/core/sandbox"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionCwd } from "@opencode/core/session/cwd"
@@ -176,6 +177,7 @@ const toolPlugins = makeLocationNode({
     Permission.node,
     PersistentPty.node,
     Ripgrep.node,
+    Sandbox.node,
     Session.node,
     SessionInstructions.node,
     Shell.node,

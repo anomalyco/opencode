@@ -109,8 +109,13 @@ export function evaluate(policy: Policy, action: string, resource: string): Perm
 }
 
 /** Combines resource evaluations under the effect lattice (`deny > ask > allow`). */
-export function evaluateAll(policy: Policy, action: string, resources: ReadonlyArray<string>): Permission.Effect {
-  const effects = resources.map((resource) => evaluate(policy, action, resource).effect)
+export function evaluateAll(
+  policy: Policy,
+  action: string,
+  resources: ReadonlyArray<string>,
+  unmatched: "ask" | "allow" = "ask",
+): Permission.Effect {
+  const effects = resources.map((resource) => evaluateRule(policy, action, resource)?.effect ?? unmatched)
   if (effects.includes("deny")) return "deny"
   if (effects.includes("ask")) return "ask"
   return "allow"

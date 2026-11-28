@@ -31,6 +31,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionInstructions } from "@opencode/core/session/instructions"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Skill } from "@opencode/core/skill"
@@ -95,6 +96,7 @@ const toolPlugins = makeLocationNode({
     Ripgrep.node,
     Session.node,
     SessionInstructions.node,
+    Sandbox.node,
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,

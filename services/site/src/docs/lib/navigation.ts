@@ -65,6 +65,7 @@ export const docsSections: DocsSection[] = [
           { title: "Providers", slug: "providers" },
           { title: "Web search", slug: "websearch" },
           { title: "Network", slug: "network" },
+          { title: "Shell sandbox", slug: "sandbox" },
           { title: "Snapshots", slug: "snapshots" },
           { title: "Compaction", slug: "compaction" },
           { title: "Formatters", slug: "formatters" },

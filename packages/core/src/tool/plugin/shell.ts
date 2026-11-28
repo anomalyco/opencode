@@ -22,6 +22,7 @@ import { Shell } from "../../shell.js"
 import { ShellPermissions } from "../../shell/permissions.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { Sandbox } from "../../sandbox.js"
 import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
@@ -40,7 +41,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string, codeMode = false) =>
+const description = (shell?: string, codeMode = false, sandbox = false, fullDiskRead = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -52,6 +53,15 @@ const description = (shell?: string, codeMode = false) =>
     // Code Mode has no background parameter.
     ...(codeMode ? [] : ["Background commands return immediately, and you will be notified when they complete."]),
     "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
+    ...(sandbox
+      ? [
+          "Shell commands run in an OS sandbox with no network access. Writes are limited to the workspace, scratch and configured roots.",
+          fullDiskRead
+            ? "Disk reads are broadly allowed except protected paths."
+            : "Reads are restricted to the workspace, system runtime and configured roots.",
+          "Other tools and integrations are not confined by this shell sandbox. Running a command outside it is not supported.",
+        ]
+      : []),
   ].join(" ")
 
 const timeoutInput = (foreground: number) =>
@@ -315,6 +325,7 @@ export const Plugin = {
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
+    const sandbox = yield* Sandbox.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (
       invocation: ShellCreateBefore,
@@ -349,9 +360,20 @@ export const Plugin = {
       })
       yield* Effect.forEach(
         requests,
-        (request) => permission.assert({ ...request, ...Permission.invocation(context) }),
+        (request) => {
+          const input = { ...request, ...Permission.invocation(context) }
+          return sandbox.enabled && (request.action === "shell" || request.action === "external_directory")
+            ? permission.assertSandboxedShell({ ...input, action: request.action })
+            : permission.assert(input)
+        },
         { discard: true },
       )
+      if (sandbox.enabled && !requests.some((request) => request.action === name))
+        yield* permission.assertSandboxedShell({
+          action: name,
+          resources: [invocation.command],
+          ...Permission.invocation(context),
+        })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>
@@ -418,15 +440,16 @@ export const Plugin = {
             ? {
                 codemode: {
                   pinned: true,
-                  description: description(shellName, true),
+                  description: description(shellName, true, sandbox.enabled, sandbox.fullDiskRead),
                   input: CodeModeInput,
                 },
               }
             : { codemode: false },
-          description: description(shellName),
+          description: description(shellName, false, sandbox.enabled, sandbox.fullDiskRead),
           input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
+            if (sandbox.unavailable) return Effect.fail(new ToolFailure({ message: sandbox.unavailable.message }))
             // Code Mode input has no background parameter.
             const background = "background" in input && input.background === true
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
@@ -470,6 +493,10 @@ export const Plugin = {
                       stoppedBeforeStart,
                     ),
                   )
+                  if (sandbox.enabled && !target.environment.local)
+                    return yield* new ToolFailure({
+                      message: "Remote machine commands are unavailable while sandboxing is enabled.",
+                    })
                   const info = yield* shell.create(
                     {
                       command: input.command,
@@ -500,6 +527,7 @@ export const Plugin = {
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
                         if (timeoutBackgrounds) invocation.timeout = 0
+                        if (sandbox.enabled) return yield* sandbox.prepare(invocation)
                       }),
                   )
                   yield* context.progress({ shellID: info.id })

@@ -39,6 +39,7 @@ import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ShellResult } from "@opencode/core/shell/result"
+import { Sandbox } from "@opencode/core/sandbox"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
@@ -55,6 +56,7 @@ import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { nativeSandbox } from "./fixture/sandbox-host"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
@@ -62,23 +64,23 @@ const assertions: Permission.AssertInput[] = []
 let denyAction: string | undefined
 let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 
-const permission = permissionLayer({
-  assert: (input) =>
-    Effect.sync(() => assertions.push(input)).pipe(
-      Effect.andThen(Effect.suspend(() => afterPermission(input))),
-      Effect.andThen(
-        input.action === denyAction
-          ? Effect.fail(
-              new Permission.BlockedError({
-                rules: [],
-                permission: input.action,
-                resources: input.resources,
-              }),
-            )
-          : Effect.void,
-      ),
+const assertPermission = (input: Permission.AssertInput) =>
+  Effect.sync(() => assertions.push(input)).pipe(
+    Effect.andThen(Effect.suspend(() => afterPermission(input))),
+    Effect.andThen(
+      input.action === denyAction
+        ? Effect.fail(
+            new Permission.BlockedError({
+              rules: [],
+              permission: input.action,
+              resources: input.resources,
+            }),
+          )
+        : Effect.void,
     ),
-})
+  )
+
+const permission = permissionLayer({ assert: assertPermission, assertSandboxedShell: assertPermission })
 
 const reset = () => {
   assertions.length = 0
@@ -152,6 +154,7 @@ const shellPluginSupervisor = makeLocationNode({
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Sandbox.node,
     Bus.node,
     Tool.node,
   ],
@@ -229,6 +232,41 @@ const permissionIt = testEffect(
     offlineModels,
   ]).pipe(Layer.provide(noFlagOverrides)),
 )
+const sandboxIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Sandbox.settingsNode.replace(Sandbox.settingsConfigured({ enabled: true })),
+  ]),
+)
+const sandboxCodeModeIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Sandbox.settingsNode.replace(Sandbox.settingsConfigured({ enabled: true })),
+  ]).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))),
+)
+const sandboxDaemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...daemonReplacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Sandbox.settingsNode.replace(Sandbox.settingsConfigured({ enabled: true })),
+    PersistentPty.node.replace(
+      makeGlobalNode({
+        service: PersistentPty.Service,
+        layer: Layer.unwrap(
+          fakeDaemon().pipe(
+            Effect.map((daemon) => {
+              fake = daemon
+              return PersistentPty.layerWith(daemon.options)
+            }),
+          ),
+        ),
+        deps: [Bus.node, Global.node],
+      }),
+    ),
+  ]),
+)
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
   sessionID,
@@ -291,6 +329,89 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
   })
+
+const backend = await nativeSandbox()
+
+;(backend ? sandboxIt.live : sandboxIt.live.skip)("the shell tool executes in the sandbox and preserves denies", () =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => tmpdir()),
+    (tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const workspace = path.join(tmp.path, "workspace")
+        const outside = path.join(tmp.path, "outside")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(workspace)
+          await fs.writeFile(outside, "secret")
+        })
+        yield* withSession(workspace, (registry) =>
+          Effect.gen(function* () {
+            const success = yield* executeTool(registry, call({ command: "printf ready > result; cat result" }))
+            expect(success.metadata).toMatchObject({ exit: 0 })
+            expect(success.content).toEqual([{ type: "text", text: "ready" }])
+            expect(assertions).toEqual(expect.arrayContaining([expect.objectContaining({ action: "shell" })]))
+            const deniedRead = yield* executeTool(registry, call({ command: `cat '${outside}'` }, "call-outside"))
+            expect(deniedRead.metadata?.exit).not.toBe(0)
+            expect(JSON.stringify(deniedRead.content)).not.toContain("secret")
+            denyAction = "shell"
+            yield* executeTool(registry, call({ command: "touch blocked" }, "call-denied"))
+            expect(yield* Effect.promise(() => Bun.file(path.join(workspace, "blocked")).exists())).toBe(false)
+          }),
+        )
+      }),
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  ),
+)
+;(backend ? sandboxCodeModeIt.live : sandboxCodeModeIt.live.skip)("Code Mode shell calls remain sandboxed", () =>
+  withTempDir((tmp) =>
+    Effect.gen(function* () {
+      reset()
+      const workspace = path.join(tmp.path, "workspace")
+      const outside = path.join(tmp.path, "outside")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(workspace)
+        await fs.writeFile(outside, "secret")
+      })
+      yield* withSession(workspace, (registry) =>
+        Effect.gen(function* () {
+          const input = JSON.stringify({ command: `cat '${outside}'` })
+          const result = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-sandbox-code-mode",
+              name: "execute",
+              input: { code: `return await tools.shell(${input})` },
+            },
+          })
+          expect(result.status).toBe("completed")
+          const output = JSON.parse(result.output.output)
+          expect(output.exitCode).not.toBe(0)
+          expect(output.output).not.toContain("secret")
+        }),
+      )
+    }),
+  ),
+)
+;(backend ? sandboxDaemonIt.live : sandboxDaemonIt.live.skip)(
+  "sandboxed commands do not bypass confinement through the process daemon",
+  () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        yield* withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(registry, call({ command: "printf sandboxed" }))
+            expect(result.metadata).toMatchObject({ exit: 0 })
+            expect(result.content).toEqual([{ type: "text", text: "sandboxed" }])
+            expect(fake).toBeDefined()
+            expect(fake!.ops).not.toContain("create_pipe")
+          }),
+        )
+      }),
+    ),
+)
 
 const withScanner = <A, E, R>(
   body: (registry: Tool.Interface, fixture: { active: string; outside: string }) => Effect.Effect<A, E, R>,
@@ -1351,6 +1472,7 @@ describe("ShellTool", () => {
             Shell.node,
             Shell.daemonNode,
             ShellSelect.node,
+            Sandbox.node,
             Bus.node,
             Tool.node,
           ],

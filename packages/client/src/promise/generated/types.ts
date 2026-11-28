@@ -2766,6 +2766,14 @@ export type ConfigEntry =
           }
         }
         experimental?: {
+          sandbox?: {
+            enabled?: boolean
+            full_disk_read?: boolean
+            allow_git_writes?: boolean
+            linux?: { binary?: string }
+            readable_roots?: Array<string>
+            writable_roots?: Array<string>
+          }
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
