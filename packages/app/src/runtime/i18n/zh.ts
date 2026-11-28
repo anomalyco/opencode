@@ -697,6 +697,9 @@ export const dict = {
     "选择将后续消息加入队列还是引导当前轮次。使用 {{keybind}} 切换。",
   "settings.general.row.followUpBehavior.queue": "加入队列",
   "settings.general.row.followUpBehavior.steer": "引导",
+  "settings.general.row.questionSubmitKey.title": "提交问题答案的按键",
+  "settings.general.row.questionSubmitKey.description":
+    "用于前往下一个问题或提交答案的按键。{{keybind}} 可选择答案，或在自定义答案中换行。",
   "toast.migration.progress.clearingOldEvents": "正在清除旧事件",
   "toast.migration.progress.migratingSessions": "正在迁移会话",
   "session.new.workspace.existingLabel": "工作树",
