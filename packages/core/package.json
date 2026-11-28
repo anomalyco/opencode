@@ -110,7 +110,8 @@
     "@types/node": "catalog:",
     "@types/which": "3.0.4",
     "drizzle-kit": "catalog:",
-    "fast-check": "catalog:"
+    "fast-check": "catalog:",
+    "miniflare": "4.20260708.1"
   },
   "dependencies": {
     "@ai-sdk/provider": "3.0.19",
