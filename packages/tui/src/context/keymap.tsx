@@ -38,7 +38,7 @@ declare module "@opentui/keymap" {
   }
 }
 
-const MODE = { key: "opencode.mode", base: "base" } as const
+const MODE = { key: "opencode.mode", palette: "opencode.paletteMode", base: "base" } as const
 
 type OpenTuiKeymap = Parameters<typeof KeymapProvider>[0]["keymap"]
 type Mode = ReturnType<typeof createMode>
@@ -214,34 +214,37 @@ function createLayer(input: () => KeymapLayer) {
   // The keymap rebuilds a re-registered layer when a command's `opencode` object is new,
   // so each command keeps one object while its data is unchanged.
   const stable = new Map<string, KeymapCommand & { readonly id: string }>()
+  const compileCommand = (command: KeymapCommand & { readonly id: string }) => {
+    const previous = stable.get(command.id)
+    if (previous && sameData(previous, command))
+      Object.assign(
+        previous,
+        Object.fromEntries(Object.entries(command).filter(([, value]) => typeof value === "function")),
+      )
+    else stable.set(command.id, command)
+    const kept = stable.get(command.id)!
+    const { id, description, group, palette, bind, run, ...definition } = kept
+    return {
+      ...definition,
+      name: id,
+      opencode: kept,
+      run: (context: CommandContext<Renderable, KeyEvent>) => run(value.input(id), context.event),
+      ...(description === undefined ? {} : { desc: description }),
+      ...(group === undefined ? {} : { category: group }),
+      ...(palette === undefined ? {} : { namespace: "palette" }),
+    }
+  }
   useBindings(() => {
     const layer = input()
     const { commands, bindings, mode, ...options } = layer
     const grouped = groupCommands(commands)
+    const splitPalette = mode !== "global" && mode !== "modal"
+    const layerCommands = splitPalette ? grouped.named.filter((command) => !command.palette) : grouped.named
     return {
       ...options,
       enabled: enabled() ? options.enabled : false,
       ...(mode === "global" ? {} : { mode: mode ?? MODE.base }),
-      commands: grouped.named.map((command) => {
-        const previous = stable.get(command.id)
-        if (previous && sameData(previous, command))
-          Object.assign(
-            previous,
-            Object.fromEntries(Object.entries(command).filter(([, value]) => typeof value === "function")),
-          )
-        else stable.set(command.id, command)
-        const kept = stable.get(command.id)!
-        const { id, description, group, palette, bind, run, ...definition } = kept
-        return {
-          ...definition,
-          name: id,
-          opencode: kept,
-          run: (context: CommandContext<Renderable, KeyEvent>) => run(value.input(id), context.event),
-          ...(description === undefined ? {} : { desc: description }),
-          ...(group === undefined ? {} : { category: group }),
-          ...(palette === undefined ? {} : { namespace: "palette" }),
-        }
-      }),
+      commands: layerCommands.map(compileCommand),
       bindings: [
         ...grouped.inline.map((command) => ({
           key: command.bind,
@@ -264,6 +267,21 @@ function createLayer(input: () => KeymapLayer) {
         }),
         ...(bindings ?? []).flatMap((id) => value.config.keybinds.get(id)),
       ],
+    }
+  })
+  // Non-global palette commands stay discoverable when a modal dialog opens over their mode,
+  // while their keyboard bindings remain gated by the primary layer above.
+  useBindings(() => {
+    const { commands, bindings: _bindings, mode, ...options } = input()
+    if (mode === "global" || mode === "modal") return { enabled: false, commands: [], bindings: [] }
+    const paletteCommands = groupCommands(commands).named.filter((command) => command.palette)
+    if (paletteCommands.length === 0) return { enabled: false, commands: [], bindings: [] }
+    return {
+      ...options,
+      enabled: enabled() ? options.enabled : false,
+      paletteMode: mode ?? MODE.base,
+      commands: paletteCommands.map(compileCommand),
+      bindings: [],
     }
   })
 }
@@ -467,11 +485,20 @@ function createMode(keymap: OpenTuiKeymap) {
     { readonly id: symbol; readonly mode: string; readonly enabled: Accessor<boolean> }[]
   >([])
   const current = createMemo(() => stack().findLast((item) => item.enabled())?.mode ?? MODE.base)
+  const palette = createMemo(
+    () => stack().findLast((item) => item.enabled() && item.mode !== "modal")?.mode ?? MODE.base,
+  )
   // Publish mode changes before another command can be dispatched in the same callback.
-  createComputed(() => keymap.setData(MODE.key, current()))
+  createComputed(() => {
+    keymap.setData(MODE.key, current())
+    keymap.setData(MODE.palette, palette())
+  })
   const unregister = keymap.registerLayerFields({
     mode(value, context) {
       context.require(MODE.key, value)
+    },
+    paletteMode(value, context) {
+      context.require(MODE.palette, value)
     },
   })
   let disposed = false
@@ -493,6 +520,7 @@ function createMode(keymap: OpenTuiKeymap) {
       setStack([])
       unregister()
       keymap.setData(MODE.key, undefined)
+      keymap.setData(MODE.palette, undefined)
     },
   }
 }
