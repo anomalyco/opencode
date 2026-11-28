@@ -151,7 +151,7 @@ To replace a model's reasoning variants, describe its reasoning controls in `cap
 | Field       | Purpose                                                                    |
 | ----------- | -------------------------------------------------------------------------- |
 | `supported` | Whether the model reasons. `false`, or `true` without controls, adds no variants. |
-| `toggle`    | Adds a `none` variant that turns reasoning off.                             |
+| `toggle`    | Offers on/off controls when the provider package supports them.                   |
 | `effort`    | Effort levels to offer. `default` keeps the provider default and adds no variant. |
 | `budget`    | Optional `min` and `max` thinking tokens. Ignored when `effort` is set.     |
 
@@ -467,6 +467,50 @@ For another host or port, set the OpenAI-compatible URL. Models are still discov
 
 - Omit `apiKey` when LM Studio authentication is disabled.
 - Disable discovery with `"plugins": ["-opencode.provider.lmstudio"]`.
+
+#### Reasoning controls
+
+LM Studio discovery does not currently import reasoning capabilities. Add controls for each model under its exact
+discovered ID, using the effort levels your server and model accept.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": {
+      "models": {
+        "qwen/qwen3.8-27b": {
+          "capabilities": {
+            "reasoning": {
+              "supported": true,
+              "effort": ["low", "medium", "xhigh"],
+            },
+          },
+          "variants": [{ "id": "none", "settings": { "reasoningEffort": "none" } }],
+        },
+        "granite-4.2-3b": {
+          "capabilities": {
+            "reasoning": { "supported": true, "toggle": true },
+          },
+          "variants": [
+            { "id": "none", "settings": { "reasoningEffort": "none" } },
+            { "id": "thinking", "settings": { "reasoningEffort": "medium" } },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+The OpenAI-compatible package sends `settings.reasoningEffort` as `reasoning_effort` in the request body. Its variant
+builder handles effort controls, so `toggle: true` alone does not add on/off variants. The explicit `none` variant above
+requires a server that accepts `reasoning_effort: "none"`. Adjust or omit unsupported values; discovery does not validate
+these manual controls. Select a variant for a session or run as described in [Variants](#variants).
+
+For models that expose only off/on reasoning, use an explicit pair like the `granite-4.2-3b` entry instead of an effort
+ladder. On LM Studio models that accept this mapping, `none` turns thinking off and a graded effort such as `medium`
+turns it on. Confirm those request values against your server and model rather than sending the labels `off` and `on`
+as `reasoningEffort`.
 
 ### vLLM
 
