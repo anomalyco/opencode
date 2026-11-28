@@ -202,6 +202,13 @@ export type ModelSpeed = { base: string; id: string; faster: boolean }
 
 export type MoneyUSDPerMillionTokens = number
 
+export type ModelAvailability = {
+  mode?: "block" | "allow"
+  windows: Array<{ days?: Array<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun">; start: string; end: string }>
+  timezone?: string
+  fallback?: string
+}
+
 export type GenerateTextResponse = { data: { text: string } }
 
 export type GenerateUsage = { input?: number; output?: number }
@@ -2525,6 +2532,7 @@ export type ModelInfo = {
   cost: Array<ModelCost>
   status: "alpha" | "beta" | "deprecated" | "active"
   enabled: boolean
+  availability?: ModelAvailability
   limit: { context: number; input?: number; output: number }
 }
 
@@ -2760,6 +2768,16 @@ export type ConfigEntry =
                       cache?: { read?: MoneyUSDPerMillionTokens; write?: MoneyUSDPerMillionTokens }
                     }>
                 disabled?: boolean
+                availability?: {
+                  mode?: "block" | "allow"
+                  windows: Array<{
+                    days?: Array<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun">
+                    start: string
+                    end: string
+                  }>
+                  timezone?: string
+                  fallback?: string
+                }
                 limit?: { context?: number; input?: number; output?: number }
               }
             }

@@ -11,6 +11,7 @@ import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
+import { ModelAvailability } from "../model-availability.js"
 import { ModelRetry } from "../model-retry.js"
 import { Workspace } from "../workspace.js"
 import { SessionRunnerModel } from "./runner/model.js"
@@ -100,6 +101,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
+    cause instanceof SessionRunnerModel.ModelBlockedByAvailabilityError ||
+    cause instanceof ModelAvailability.TimezoneError ||
     cause instanceof ModelResolver.VariantUnavailableError ||
     cause instanceof ModelResolver.UnsupportedPackageError ||
     cause instanceof ModelResolver.ModelConfigurationError ||

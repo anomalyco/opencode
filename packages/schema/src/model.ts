@@ -116,6 +116,27 @@ export const Variant = Schema.Struct({
   settings: VariantSettings.pipe(optional),
 }).annotate({ identifier: "Model.Variant" })
 
+/** Time windows when a model may be used, from the model's `availability` config. */
+export interface Availability extends Schema.Schema.Type<typeof Availability> {}
+export const Availability = Schema.Struct({
+  /** `block` treats the windows as times the model may NOT be used; `allow` as the only times it may. */
+  mode: Schema.Literals(["block", "allow"]).pipe(optional),
+  windows: Schema.Array(
+    Schema.Struct({
+      /** Days the window starts on, `mon` to `sun`; every day when omitted. Overnight tails belong to the preceding day. */
+      days: Schema.Literals(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]).pipe(Schema.Array, optional),
+      /** Inclusive start, HH:mm in the window's timezone. */
+      start: Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)),
+      /** Exclusive end, HH:mm; earlier than `start` wraps past midnight. Equal endpoints cover the whole local calendar day. */
+      end: Schema.String.check(Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)),
+    }),
+  ),
+  /** IANA timezone for window times; `UTC` when omitted. Invalid names fail model selection with a config error. */
+  timezone: Schema.String.pipe(optional),
+  /** Model used instead while a window blocks this one, as `provider/model` or `provider/model#variant`. */
+  fallback: Schema.String.pipe(optional),
+}).annotate({ identifier: "Model.Availability" })
+
 /**
  * Set on a model that is another model served faster or slower, such as "gpt-5.5-fast" for "gpt-5.5". Clients offer
  * it as a speed of that model instead of listing it.
@@ -152,6 +173,7 @@ export const Info = Schema.Struct({
   cost: Schema.Array(Cost),
   status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
   enabled: Schema.Boolean,
+  availability: Availability.pipe(optional),
   limit: Schema.Struct({
     context: Schema.Int,
     input: Schema.Int.pipe(optional),
