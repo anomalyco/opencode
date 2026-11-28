@@ -13,7 +13,9 @@ import { Machines } from "@opencode/core/machine/machines"
 import { Noise } from "@opencode/core/machine/noise"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Cause, Effect, Exit, Fiber, Option, Queue, Result, type Scope } from "effect"
+import { Machine } from "@opencode/core/machine/index"
+import { FromWorker, ToWorker } from "@opencode/core/machine/wire"
+import { Cause, Effect, Exit, Fiber, Option, Queue, Result, Schema, type Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
@@ -524,4 +526,93 @@ it.effect("refuses an invalid welcome label in Link.dial, matching Rust opencode
       expect(yield* Fiber.join(dialing).pipe(Effect.flip)).toEqual(new Link.Refused())
     }
   }),
+)
+
+it.live(
+  "resume carries a link on from its saved state across rekeys, and saves nothing while a message is half across",
+  () =>
+    Effect.gen(function* () {
+      const prologue = text("resume")
+      const home = ok(Noise.handshake({ initiator: false, prologue, static: Noise.generateKeyPair() }))
+      const worker = ok(Noise.handshake({ initiator: true, prologue, static: Noise.generateKeyPair() }))
+      ok(home.read(ok(worker.write(new Uint8Array(0)))))
+      ok(worker.read(ok(home.write(new Uint8Array(0)))))
+      ok(home.read(ok(worker.write(new Uint8Array(0)))))
+      const homeTransport = ok(home.split())
+      const homeCiphers = Frames.rekeying(homeTransport, 2)
+      const peer = Frames.rekeying(ok(worker.split()), 2)
+      // Three messages before the snapshot, so the home's send nonce is 3, one past a rekey.
+      for (const index of [0, 1, 2])
+        expect(ok(peer.receive.decrypt(ok(homeCiphers.send.encrypt(text(`m${index}`)))))).toEqual(text(`m${index}`))
+
+      const inbound = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const outbound = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const saved: Array<Link.Resumable | undefined> = []
+      const resumed = yield* Link.resume(
+        {
+          send: (message) => Queue.offer(outbound, message).pipe(Effect.asVoid),
+          receive: Queue.take(inbound).pipe(Effect.mapError(() => new Link.Closed())),
+        },
+        {
+          machine: Environment.ID.make("gpu"),
+          hello: {
+            type: "hello",
+            protocol: 3,
+            os: "linux",
+            arch: "x64",
+            home: "/home/worker",
+            instance: Machine.Instance.make("one"),
+            processes: [],
+          },
+          transport: ok(homeTransport.snapshot()),
+        },
+        { rekeyInterval: 2 },
+        { persist: (state) => void saved.push(state) },
+      )
+      expect(saved.map((state) => state?.transport.send.nonce)).toEqual([3n])
+      const settled = (condition: () => boolean) =>
+        Effect.gen(function* () {
+          for (const _ of Array.from({ length: 10_000 })) {
+            if (condition()) return
+            yield* Effect.yieldNow
+          }
+          return yield* Effect.die(new Error("never settled"))
+        })
+
+      // A message of two frames from the worker: nothing is resumable between them.
+      const id = Machine.ProcessID.make("p")
+      const message = Schema.encodeSync(Schema.fromJsonString(FromWorker))({
+        type: "output",
+        id,
+        stream: "stdout",
+        offset: 0,
+        data: new Uint8Array(70_000),
+      })
+      const frames: Uint8Array[] = []
+      yield* Frames.write(
+        { send: (frame) => Effect.sync(() => void frames.push(frame)), receive: Effect.never },
+        peer.send,
+        text(message),
+      )
+      expect(frames).toHaveLength(2)
+      const first = yield* Effect.forkChild(Stream.runHead(resumed.connection.messages), { startImmediately: true })
+      yield* Queue.offer(inbound, frames[0])
+      yield* settled(() => saved.length === 2)
+      expect(saved[1]).toBeUndefined()
+      yield* Queue.offer(inbound, frames[1])
+      expect(yield* Fiber.join(first)).toEqual(Option.some(expect.objectContaining({ type: "output", id })))
+      expect(saved.at(-1)?.transport.receive.nonce).toBe(2n)
+
+      // Home to worker after the resume, a rekey after every second message: the worker decrypts every one.
+      for (const _ of [0, 1, 2]) resumed.connection.send({ type: "release", id })
+      const decode = Schema.decodeUnknownSync(Schema.fromJsonString(ToWorker))
+      const received = yield* Effect.forEach([0, 1, 2], () =>
+        Effect.map(Queue.take(outbound), (sealed) => {
+          const frame = ok(peer.receive.decrypt(sealed))
+          return decode(new TextDecoder().decode(frame.subarray(1)))
+        }),
+      )
+      expect(received).toEqual([0, 1, 2].map(() => ({ type: "release", id })))
+      expect(saved.at(-1)?.transport.send.nonce).toBe(6n)
+    }).pipe(Effect.scoped),
 )
