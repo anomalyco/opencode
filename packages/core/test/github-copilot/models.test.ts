@@ -168,3 +168,49 @@ test("prices cache reads from either token price spelling", async () => {
     await server.stop(true)
   }
 })
+
+test("detects Auto pool from top-level auto flag when billing.auto_discount is absent", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          {
+            model_picker_enabled: false,
+            auto: true,
+            id: "free-auto",
+            name: "Free Auto",
+            version: "free-auto-2026-08-01",
+            supported_endpoints: ["/responses"],
+            capabilities: {
+              family: "gpt",
+              limits: { max_output_tokens: 128_000, max_prompt_tokens: 922_000 },
+              supports: { tool_calls: true, vision: true },
+            },
+          },
+          {
+            model_picker_enabled: false,
+            auto: false,
+            id: "not-auto",
+            name: "Not Auto",
+            version: "not-auto-2026-08-01",
+            capabilities: {
+              family: "gpt",
+              limits: { max_output_tokens: 4_000, max_prompt_tokens: 8_000 },
+              supports: { tool_calls: true },
+            },
+          },
+        ],
+      }),
+  })
+
+  try {
+    const snapshot = await run((http) => CopilotModels.load(http, server.url.origin, {}))
+    const auto = CopilotModels.autoModel(server.url.origin, snapshot)
+    expect(auto?.id).toBe(CopilotModels.auto)
+    expect(auto?.enabled).toBe(true)
+    expect(auto?.limit).toEqual({ context: 922_000, input: 922_000, output: 128_000 })
+  } finally {
+    await server.stop(true)
+  }
+})
