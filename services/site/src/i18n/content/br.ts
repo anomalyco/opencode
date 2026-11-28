@@ -1128,7 +1128,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "Baixe o app",
-        body: "Instale a versão beta do OpenCode no iPhone pelo TestFlight ou instale o app no seu celular Android.",
+        body: "Instale o OpenCode no iPhone pela App Store ou no seu celular Android pelo Google Play.",
       },
       "run-this-on-your-computer": {
         title: "Execute o comando no computador",

@@ -155,7 +155,7 @@ export const voiceAnswers: VoiceAnswer[] = [
     keys: ["mobile", "phone", "iphone", "android", "ios", "pocket", "call"],
     // public/voice/mobile.mp3 reads the "available" text, so it is left out while Android is coming soon.
     text: androidSoon
-      ? "Yes. With the mobile app for iPhone, now a public beta on TestFlight, you can start, steer and approve sessions from your phone. You can even call a session and talk to the agent. It connects to OpenCode on your own computer. The Android app is coming soon."
+      ? "Yes. With the mobile app for iPhone, now on the App Store, you can start, steer and approve sessions from your phone. You can even call a session and talk to the agent. It connects to OpenCode on your own computer. The Android app is coming soon."
       : "Yes. With the mobile app for iPhone and Android, you can start, steer and approve sessions from your phone. You can even call a session and talk to the agent. It connects to OpenCode on your own computer.",
     links: [{ label: "Mobile", href: "/mobile" }],
     unrecorded: androidSoon,

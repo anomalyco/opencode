@@ -611,7 +611,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "احصل على التطبيق",
-        body: "ثبّت نسخة OpenCode التجريبية على iPhone عبر TestFlight، أو ثبّت التطبيق على هاتف Android.",
+        body: "ثبّت OpenCode على iPhone من App Store، أو على هاتف Android من Google Play.",
       },
       "run-this-on-your-computer": {
         title: "شغّل هذا الأمر على حاسوبك",

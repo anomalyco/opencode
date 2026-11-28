@@ -1128,7 +1128,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "Pobierz aplikację",
-        body: "Zainstaluj wersję beta OpenCode na iPhonie przez TestFlight lub aplikację na telefonie z systemem Android.",
+        body: "Zainstaluj OpenCode na iPhonie z App Store lub na telefonie z systemem Android z Google Play.",
       },
       "run-this-on-your-computer": {
         title: "Uruchom polecenie na komputerze",

@@ -1162,7 +1162,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "Uygulamayı edinin",
-        body: "OpenCode'un beta sürümünü TestFlight üzerinden iPhone'unuza kurun veya uygulamayı Android telefonunuza yükleyin.",
+        body: "OpenCode'u iPhone'unuza App Store'dan veya Android telefonunuza Google Play'den yükleyin.",
       },
       "run-this-on-your-computer": {
         title: "Bunu bilgisayarda çalıştırın",
