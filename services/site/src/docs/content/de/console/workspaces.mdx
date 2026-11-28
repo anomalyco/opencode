@@ -1,0 +1,98 @@
+---
+title: "Grundlagen"
+description: "Erstelle, wechsle und lösche Workspaces in OpenCode Console oder benenne sie um. Erfahre, welche Rechte die einzelnen Rollen haben."
+---
+
+Ein Workspace enthält alles in der [Console](https://opencode.ai/console): Mitglieder, Guthaben, Budgets, Anbieter,
+Policies und Service-Konten. Nutzung und Abrechnung werden pro Workspace erfasst.
+
+Ein Workspace kann nur ein einziges Mitglied haben. Du kannst Guthaben,
+[deine eigenen Anbieter](/console/providers), Budgets und [Go](/console/go) allein nutzen und bei Bedarf
+[Mitglieder einladen](/console/members).
+
+## Dein erster Workspace
+
+Wenn du ein Konto erstellst, legt die Console einen Workspace namens **Personal** an. Du bist dort Owner und
+das einzige Mitglied. Registrierst du dich über eine Einladung, trittst du stattdessen dem einladenden
+Workspace bei, ohne dass ein Personal-Workspace angelegt wird.
+
+## Workspace erstellen
+
+1. Öffne das Workspace-Menü in der oberen Leiste.
+2. Klicke auf **Create Workspace**.
+3. Gib einen **Workspace name** ein und klicke auf **Create**.
+
+Du wirst Owner des neuen Workspace.
+
+## Workspace wechseln
+
+Wähle im Workspace-Menü einen anderen Workspace. Die Console bleibt auf derselben Seite, sodass der Wechsel von
+`/acme/settings/members` die Members-Seite des anderen Workspace öffnet.
+
+Offene Einladungen erscheinen oben im selben Menü. Siehe [Mitglieder](/console/members#accept-an-invitation).
+
+## OpenCode verbinden
+
+Führe `/connect` in OpenCode aus und wähle den Workspace im Browser. OpenCode nutzt dann die Modelle, Policies und
+Budgets dieses Workspace.
+
+```text
+/connect
+```
+
+Führe `/connect` erneut aus, um OpenCode auf einen anderen Workspace umzustellen. Die [Policies](/policies#console) des
+Workspace werden durch die des neuen Workspace ersetzt und beim Trennen der Verbindung gelöscht.
+
+## Rollen
+
+Jedes Mitglied hat eine Rolle. Neue Mitglieder treten immer als **Member** bei.
+
+| Rolle  | Darf                                                                                                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Member | OpenCode nutzen, eigene Nutzung, Logs und eigenes Budget sehen.                                                      |
+| Admin  | Alles, was ein Mitglied darf, plus Mitglieder, Abrechnung, Budgets, Anbieter, Policies, Service-Konten und Einstellungen verwalten. |
+| Owner  | Alles, was ein Admin darf, plus SSO und Verzeichnissynchronisierung verwalten, die Rolle Owner vergeben und den Workspace löschen. |
+
+Mitglieder sehen ihre eigene Nutzung und ihre Logs unter **Activity**, plus die Rangliste, wenn sie für Mitglieder
+sichtbar ist. Wenn der Workspace ein [Go Teams](/console/go)-Abo hat, sehen sie außerdem **Go** mit ihren eigenen
+Limits. Sie öffnen **Account** über das Kontomenü.
+
+### Rollenregeln
+
+- Ein Workspace kann mehrere Owner haben und behält immer mindestens einen.
+- Du kannst keine höhere Rolle vergeben als deine eigene, daher können nur Owner jemanden zum Owner machen.
+- Du kannst deine eigene Rolle nicht ändern.
+
+### Rolle Owner übertragen
+
+1. Öffne als Owner **Settings › Members** und setze die Rolle des neuen Owner auf **Owner**.
+2. Bitte den neuen Owner, deine Rolle auf **Admin** oder **Member** zu ändern.
+
+## Workspace löschen
+
+Nur Owner können einen Workspace löschen, und nur, wenn sie mindestens einem anderen Workspace angehören.
+
+1. Öffne **Settings › General** und klicke auf **Delete workspace**.
+2. Setze für jede Bestätigung ein Häkchen.
+3. Klicke zur Bestätigung auf **Delete workspace**.
+
+Das Löschen ist sofort wirksam und kann nicht rückgängig gemacht werden:
+
+- Mitglieder verlieren sofort den Zugriff.
+- Alle API-Schlüssel von Service-Konten und offene Einladungen werden widerrufen.
+- Die automatische Aufladung wird eingestellt.
+- Ein aktives Go-Abo endet.
+- Ein verbleibendes Guthaben verfällt.
+
+<Callout type="warning">Das Löschen ist blockiert, solange eine Zahlung verarbeitet wird. Versuch es in ein paar Minuten erneut.</Callout>
+
+## Workspace verlassen
+
+1. Öffne **Account** über das Kontomenü.
+2. Klicke unter **Connected workspaces** neben dem Workspace auf **Leave**.
+3. Bestätige mit **Leave workspace**.
+
+Der letzte Owner kann den Workspace nicht verlassen. Weise zuerst einem anderen Mitglied die Rolle Owner zu.
+In Workspaces mit SSO oder Verzeichnissynchronisierung verwaltet dein Identity-Provider die Mitgliedschaft. Du
+kannst einen solchen Workspace daher nicht über die Console verlassen. Bitte um eine neue Einladung, wenn du
+später wieder beitreten möchtest.

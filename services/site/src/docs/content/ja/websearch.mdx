@@ -1,0 +1,113 @@
+---
+title: "Web 検索"
+description: "Exa、Firecrawl、Parallel、Tavily、TinyFish、または Claude のプランで OpenCode に Web を検索させ、検索のプロバイダーと権限を選択します。"
+---
+
+OpenCode は最新情報を尋ねられると、Web で検索し、検索結果を読んで、回答に出典へのリンクを添えられます。
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+最初の検索では、Web 検索を許可し、プロバイダーを選択するよう求められます。OpenCode はその選択を以降のセッションでも記憶します。
+
+## プロバイダー
+
+OpenCode には 5 つの検索プロバイダーが含まれています。
+
+| プロバイダー | ID          | 環境変数                  |
+| ------------ | ----------- | ------------------------- |
+| Exa          | `exa`       | `EXA_API_KEY`             |
+| Firecrawl    | `firecrawl` | `FIRECRAWL_API_KEY`       |
+| Parallel     | `parallel`  | `PARALLEL_API_KEY`        |
+| Tavily       | `tavily`    | `TAVILY_API_KEY`          |
+| TinyFish     | `tinyfish`  | `TINYFISH_API_KEY`（任意） |
+
+TUI で `/connect` を使ってアカウントを接続するか、OpenCode を起動する前にプロバイダーの環境変数を設定します。
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+[Claude Agent](/claude-agent) が接続されている場合、ID が `claude-agent` の検索プロバイダーも提供されます。Claude Code の WebSearch を実行するため、検索は Claude のプランに計上され、検索用の API キーは不要です。Claude だけでなく、どのモデルからも使用できます。
+
+Claude Agent が自動的に選ばれることはありません。`opencode.jsonc` で選択します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch はページの内容を暗号化して返すため、各検索は Claude モデルが実行する必要があります。Haiku が実行し、結果の短い要約が最初に、その後にリンクが続きます。検索には Claude Agent プロバイダーの接続設定と、チャットで最後に使用したアカウントが使われます。
+
+## 選択
+
+`opencode.jsonc` でプロバイダーを設定すると、選択のプロンプトをスキップできます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+`"random"` を指定すると、利用可能なプロバイダーが自動的に選択されます。各セッションは、選択したプロバイダーがレート制限されるまでそれを使い続けます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## 制限
+
+プロバイダーが HTTP 429 を返すと、ランダム選択では、利用可能な別のプロバイダーで検索を再試行します。レート制限に達したプロバイダーの再利用は `Retry-After` の指定時間だけ待ちます。レスポンスに有効な指定がなければ 60 秒待ちます。
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+すべてのプロバイダーがクールダウン中の場合、検索はすぐに失敗します。セッションを移動するかサーバーを再起動すると、記憶されたプロバイダーはクリアされます。クールダウンは同じワークスペースのセッション間で共有されます。
+
+## 権限
+
+Web 検索は `websearch` 権限アクションを使用し、検索クエリをリソースとします。明示的に許可されていない検索の前には確認を求めます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+ルールの順序とマッチングについては[権限](/permissions)を参照してください。
+
+## 無効化
+
+`websearch` を `false` にすると、モデルへのリクエストから Web 検索ツールが削除されます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

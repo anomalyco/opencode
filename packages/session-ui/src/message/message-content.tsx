@@ -14,7 +14,6 @@ import {
   type ComponentProps,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -34,14 +33,12 @@ import type { TurnSources } from "../sources/sources"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
-import { CommentCard, commentCardTarget, quoteTooltip } from "./comment-card"
 import { UserMessageQuotes } from "./user-message-quotes"
 import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
-import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
@@ -220,33 +217,6 @@ export function PacedMarkdown(props: { text: string; cacheKey: string; streaming
   )
 }
 
-function UserMessageComments(props: { comments: SessionUserComment[]; bounded: boolean }) {
-  const i18n = useI18n()
-  const [state, setState] = createStore({ expanded: false })
-  const comments = createMemo(() => (props.bounded && !state.expanded ? props.comments.slice(0, 5) : props.comments))
-
-  return (
-    <div data-slot="user-message-comments" data-bounded={props.bounded ? "true" : undefined}>
-      <For each={comments()}>
-        {(comment) => (
-          <CommentCard
-            comment={comment.comment ?? ""}
-            target={commentCardTarget(comment)}
-            title={comment.type === "quote" ? quoteTooltip(comment) : comment.comment || undefined}
-            tooltip
-            wide
-          />
-        )}
-      </For>
-      <Show when={props.bounded && props.comments.length > 5 && !state.expanded}>
-        <Button size="small" variant="ghost-muted" onClick={() => setState("expanded", true)}>
-          {i18n.t("ui.common.showMore")}
-        </Button>
-      </Show>
-    </div>
-  )
-}
-
 export function CurrentUserMessageDisplay(props: {
   sessionID: string
   message: SessionMessageUser
@@ -271,8 +241,6 @@ export function CurrentUserMessageDisplay(props: {
   /** Whether a folded message is open. The timeline owns it so it survives row recycling. */
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
-  /** Shows quotes and comments inside the bubble, after the text, instead of as cards. */
-  inlineQuotes?: boolean
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -298,9 +266,8 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-  const inline = createMemo(() => !!props.inlineQuotes && comments().length > 0)
-  // Inline quotes give a message without text a bubble of its own.
-  const bubble = createMemo(() => !!props.text || inline())
+  // Quotes give a message without text a bubble of its own.
+  const bubble = createMemo(() => !!props.text || comments().length > 0)
   const copyText = () => (props.voice ? props.text : props.message.text)
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
@@ -606,7 +573,7 @@ export function CurrentUserMessageDisplay(props: {
       <Show when={props.text}>
         <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
       </Show>
-      <Show when={inline()}>
+      <Show when={comments().length > 0}>
         <UserMessageQuotes comments={comments()} />
       </Show>
     </>
@@ -629,14 +596,7 @@ export function CurrentUserMessageDisplay(props: {
       data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
     >
       {renderAttachments()}
-      <Show
-        when={bubble()}
-        fallback={
-          <Show when={comments().length > 0}>
-            <UserMessageComments comments={comments()} bounded={false} />
-          </Show>
-        }
-      >
+      <Show when={bubble()}>
         <div data-slot="user-message-body" data-voice={props.voice ? "true" : undefined}>
           <Show when={props.voice}>
             <div data-slot="user-message-voice" role="img" aria-label={i18n.t("ui.message.voice")}>
@@ -648,7 +608,6 @@ export function CurrentUserMessageDisplay(props: {
           <div
             data-slot="user-message-text"
             dir="auto"
-            data-comments={comments().length > 0 && !inline() ? "true" : undefined}
             onCopy={copySessionReferences}
           >
             <Show when={props.fold} fallback={renderBody()}>
@@ -661,15 +620,12 @@ export function CurrentUserMessageDisplay(props: {
                 {renderBody()}
               </UserMessageFold>
             </Show>
-            <Show when={comments().length > 0 && !inline()}>
-              <UserMessageComments comments={comments()} bounded />
-            </Show>
             {renderMenu()}
           </div>
         </div>
       </Show>
       {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
-      <Show when={bubble() || comments().length > 0 || pending()}>
+      <Show when={bubble() || pending()}>
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <span data-slot="user-message-meta">

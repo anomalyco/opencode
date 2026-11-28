@@ -36,10 +36,16 @@ export const Hello = Schema.Struct({
   type: Schema.Literal("hello"),
   /** The version of the messages after the handshake: a home that does not know a worker's version ends the connection. */
   protocol: Schema.Literal(3),
+  /** Node's name for the worker's OS: `win32` gives the machine Windows path rules. */
   os: Schema.String,
   arch: Schema.String,
-  /** The worker's home directory, an absolute POSIX path: where `~` in a path on this machine starts. */
-  home: Schema.String.check(Schema.isPattern(/^\//)),
+  /**
+   * The worker's home directory, where `~` in a path on this machine starts: an absolute POSIX path, or on Windows a
+   * drive (`C:\Users\kit`, `C:/Users/kit`) or UNC (`\\server\share`) path.
+   */
+  home: Schema.String.check(Schema.isPattern(/^(?:\/|[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/]+[^\\/]+)/)),
+  /** The shell every command on this machine runs under, such as `pwsh`. A worker that names none runs `sh`. */
+  shell: Schema.optionalKey(Schema.String),
   /** Made once per worker process start: a new value means every process the worker held is gone. */
   instance: Instance,
   processes: Schema.Array(

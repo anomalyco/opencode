@@ -19,11 +19,23 @@ export type Key = typeof Key.Type
 export const Value = Schema.String.annotate({ identifier: "Space.Value" })
 export type Value = typeof Value.Type
 
-/** A value always goes out as one event, so a write is capped at 1 MiB of UTF-8. */
+/** A value always goes out as one event, so a write's values are capped at 1 MiB of UTF-8 in total. */
 export const MaxValueBytes = 1024 * 1024
 
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}
 export const Entry = Schema.Struct({ key: Key, value: Value }).annotate({ identifier: "Space.Entry" })
+
+/** One change of a write: a value sets the space's key, `null` deletes it. */
+export interface Change extends Schema.Schema.Type<typeof Change> {}
+export const Change = Schema.Struct({ space: Name, key: Key, value: Schema.NullOr(Value) }).annotate({
+  identifier: "Space.Change",
+})
+
+/** Changes one write commits at most, across all its spaces. */
+export const MaxChanges = 1024
+
+/** Spaces one sync, subscribe or unsubscribe names at most. */
+export const MaxSpaces = 100
 
 /** Server-issued, per space: every write in a space gets the next revision, and revisions are never reused. */
 export const Revision = NonNegativeInt.annotate({ identifier: "Space.Revision" })
@@ -44,7 +56,10 @@ const page = {
   next: optional(Cursor).annotate({ description: "Present while more pages remain: sync again with it as `cursor`." }),
 }
 
-/** A sync page that replaces everything the client held for the space. */
+/**
+ * A page of a snapshot, which replaces everything the client held for the space: its entries apply at once, and keys
+ * none of the snapshot's pages held are removed after its last one.
+ */
 export interface Snapshot extends Schema.Schema.Type<typeof Snapshot> {}
 export const Snapshot = Schema.Struct({ type: Schema.tag("snapshot"), ...page }).annotate({
   identifier: "Space.Snapshot",

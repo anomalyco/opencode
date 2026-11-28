@@ -11,6 +11,15 @@
 - Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` adds `/docs`.
 - Components used in MDX are registered in `document.tsx`. Named slots work as in Astro: `<div slot="go">` inside a component becomes that slot's content (`remark-slots.ts`, `components/Slot.tsx`).
 
+## Languages
+
+- The latest docs use the site's languages (`lib/language.ts`): English at `/docs/<slug>/`, every other language at `/<locale>/docs/<slug>/`. The V1 docs keep their own folders and URLs (`/v1/docs/ja/...`).
+- A translation is `content/<locale>/<same path>.mdx`. A language without one renders the English page in its chrome, with a "not translated yet" notice; those pages canonicalise to English and stay out of that language's hreflang and sitemap entries (`route.ts`, `render.tsx`, `lib/sitemap.ts`). A translation with no English page is skipped with a warning, never a failed build (`content.ts`).
+- A translated page reuses the English page's heading ids in order (`rehype-headings.ts`, `vite.ts`), so `#anchors` work in every language. Keep the English heading structure (order, depth and count) when translating. A translation whose heading depths no longer match is stale: the build warns, the page shows the English fallback with the notice, and it is left out of hreflang and the sitemap until it matches (`lib/heading-structure.ts`).
+- Links in content stay docs-root-relative (`/config`): `remark-links.ts` prefixes the page's language, and the Markdown twins do too. Sidebar, pagination, the section links, the language picker and the footer follow the page's language.
+- Every language is prerendered (`script/build.ts`), with its own Pagefind index beside its pages. `docs.translation.missing` in `src/i18n/<locale>.ts` is the fallback notice.
+- Check translations from `services/site` with `bun src/docs/script/check-translations.ts [locale ...] [--stamp]`; stamps live in `src/docs/i18n/stamps/<locale>.json`. The translator subagent (`.opencode/agent/translator.md`) has the page rules and review checklist; `src/docs/i18n/glossary.md` has the shared rules and an index of each language's glossaries in `src/docs/i18n/glossary/<locale>.md`.
+
 ## Rendering
 
 - The docs use the site's shell and David's docs components (the site's `DESIGN.md`, `component/site/docs-variants.css`), and every deploy builds the same docs.

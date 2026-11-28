@@ -84,8 +84,7 @@ async fn client(context: &Context) -> error::Result<Connected> {
     if context.server.standalone {
         bail!("--standalone starts a server for this command only; a machine needs one that keeps running.");
     }
-    let disabled = Local::from_env()?.config().read()?.disabled == Some(true);
-    if context.server.server.is_none() && disabled {
+    if context.server.server.is_none() && Local::from_env()?.config().read()?.disabled == Some(true) {
         bail!("Managing machines requires the background service; run `opencode service unset disabled` first.");
     }
     connect(context).await

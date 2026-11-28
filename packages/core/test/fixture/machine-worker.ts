@@ -63,13 +63,14 @@ export type Peers = ReturnType<typeof makePeers>
 /**
  * A worker in memory that keeps the worker's rules: files on a memory driver, scripted processes, and controls to
  * cut, restore and redial the connection, drop the next message of a type heading either way, and restart. Its
- * connections are served in the caller's scope.
+ * connections are served in the caller's scope. `system` is what its hello says it runs on.
  */
 export const makeWorker = (
   host: {
     readonly connect: (connection: Machine.Connection) => Effect.Effect<void, unknown>
   },
   peers = makePeers(),
+  system: Pick<Machine.Hello, "os" | "home" | "shell"> = { os: "linux", home: "/home/worker" },
 ) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope
@@ -314,9 +315,8 @@ export const makeWorker = (
       const hello: Machine.Hello = {
         type: "hello",
         protocol: 3,
-        os: "linux",
+        ...system,
         arch: "x64",
-        home: "/home/worker",
         instance,
         processes: [...table.values()].map((process) => ({
           id: process.run.id,

@@ -16,7 +16,7 @@ function TextPart(props: { text: string }) {
         syntaxStyle={syntax()}
         content={props.text.trim()}
         streaming={false}
-        tableOptions={{ style: "grid", cellPaddingX: 1 }}
+        tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
         conceal={true}
         fg={theme.markdown.text}
         bg={theme.background.base}

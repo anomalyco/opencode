@@ -4,10 +4,13 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Random, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
+import { Artifact } from "@opencode/core/artifact"
+import { Tool } from "@opencode/core/tool"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -811,26 +814,28 @@ describe("OpencodePlugin", () => {
           expect(yield* websearch.providers()).toEqual([])
 
           state.advertised = true
-          yield* TestClock.adjust("50 seconds")
+          yield* TestClock.adjust("4 minutes")
           yield* drain
           expect(state.requests).toBe(1)
           expect(rebuilds).toEqual(initial)
           expect(yield* websearch.providers()).toEqual([])
 
-          yield* TestClock.adjust("10 seconds")
+          yield* TestClock.adjust("2 minutes")
           yield* drain
           expect(state.requests).toBe(2)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(state.requests).toBe(3)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
           state.failing = true
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
+          yield* drain
+          yield* TestClock.adjust("10 seconds")
           yield* drain
           // The failed fetch and its 3 retries.
           expect(state.requests).toBe(7)
@@ -839,7 +844,7 @@ describe("OpencodePlugin", () => {
 
           state.failing = false
           state.advertised = false
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(state.requests).toBe(8)
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
@@ -887,25 +892,25 @@ describe("OpencodePlugin", () => {
             {},
           ]) {
             state.policies = [env, malformed]
-            yield* TestClock.adjust("1 minute")
+            yield* TestClock.adjust("6 minutes")
             yield* drain
             expect(yield* consolePolicies(config)).toEqual([sudo])
             expect(yield* providers.get(Provider.ID.opencode)).toBeDefined()
           }
 
           state.policies = [env, { action: "tool.use", resource: "shell:*", effect: "future-effect" }]
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(yield* consolePolicies(config)).toEqual([env])
 
           state.policies = [{ action: "future.use", future: { values: [true] } }]
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(yield* consolePolicies(config)).toEqual([])
           expect(yield* providers.get(Provider.ID.opencode)).toBeDefined()
 
           state.policies = [{ action: "future.use", effect: { next: true } }, env]
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(yield* consolePolicies(config)).toEqual([env])
         }),
@@ -956,14 +961,14 @@ describe("OpencodePlugin", () => {
           expect(yield* status()).toBeUndefined()
 
           state.sso = true
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           const url = `${server.url.origin}/console/auth/sso/ssoconn%2F1/start?redirectTo=%2Fconsole%2F`
           expect(yield* status()).toEqual({ status: "needs_auth", message: "Sign in with SSO again to use Acme", url })
           expect(yield* consolePolicies(config)).toEqual([sudo])
 
           state.sso = false
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(yield* status()).toBeUndefined()
           expect(yield* consolePolicies(config)).toEqual([sudo])
@@ -1087,7 +1092,7 @@ describe("OpencodePlugin", () => {
             () => Response.json({ _tag: "Forbidden", orgId: "org", connectionId: "ssoconn" }, { status: 403 }),
           ]) {
             state.body = body()
-            yield* TestClock.adjust("1 minute")
+            yield* TestClock.adjust("6 minutes")
             yield* drain
             expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toBeUndefined()
             expect(yield* consolePolicies(config)).toEqual([sudo])
@@ -1113,7 +1118,7 @@ describe("OpencodePlugin", () => {
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
       yield* drain
       state.status = 503
-      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("6 minutes")
       yield* drain
       yield* TestClock.adjust("10 seconds")
       yield* drain
@@ -1249,13 +1254,47 @@ describe("OpencodePlugin", () => {
           expect((yield* credentials.get(credential.id))?.value).toMatchObject({ access: "revoked" })
 
           state.revoked = false
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(yield* status()).toBeUndefined()
           expect(state.refreshes).toBe(0)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
+  )
+
+  it.effect("adds 0-1 minute jitter on top of the 5-minute Console config poll interval", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const state = { requests: 0 }
+      const server = {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+          state.requests++
+          return Response.json({ providers: {} })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(
+        inProcess(server),
+        Effect.provideService(Random.Random, { nextIntUnsafe: () => 0, nextDoubleUnsafe: () => 0.5 }),
+      )
+      yield* drain
+      expect(state.requests).toBe(1)
+
+      // 5 minutes + drain is still before 5m30s (base 5m + 30s jitter).
+      yield* TestClock.adjust("5 minutes")
+      yield* drain
+      expect(state.requests).toBe(1)
+
+      // Crossing 5m30s triggers the jittered poll and refreshes SharedCache.
+      yield* TestClock.adjust("30 seconds")
+      yield* drain
+      expect(state.requests).toBe(2)
+    }),
   )
 
   it.live("loads and executes hosted web search from the connected OpenCode server", () =>
@@ -1698,6 +1737,67 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("withholds providers, instructions, skills, watches and artifacts when integration is Withheld", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Test
+      const catalog = yield* Provider.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const skills = yield* Skill.Service
+      const tools = yield* Tool.Service
+      const artifacts = yield* Artifact.Service
+      const policies: ConfigPolicy.Info[] = [{ action: "tool.use", resource: "shell:sudo *", effect: "deny" }]
+      const requests: string[] = []
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: new Info({ experimental: new ConfigExperimental.Info({ console_watches: true, artifacts: true }) }),
+        }),
+      ])
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(
+        Effect.provideService(Config.Service, {
+          ...config,
+          integration: (id, document) =>
+            Effect.gen(function* () {
+              const result = document ? ConfigIntegration.result(document, false) : { _tag: "Cleared" as const }
+              yield* config.integration?.(id, result._tag === "Cleared" ? undefined : result.document) ?? Effect.void
+              return result
+            }),
+        }),
+        inProcess({
+          fetch: (request) => {
+            const path = new URL(request.url).pathname
+            requests.push(path)
+            if (path === "/api/v2/config")
+              return Response.json(
+                { policies, providers: { remote: { name: "Remote" } } },
+                { headers: { ...withLists.headers, "x-opencode-event-watches": "1", "x-opencode-artifacts": "1" } },
+              )
+            if (path === "/api/v2/instructions")
+              return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+            if (path === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
+            return new Response(null, { status: 404 })
+          },
+        }),
+      )
+      yield* drain
+      expect(yield* consolePolicies(config)).toEqual(policies)
+      expect(yield* catalog.get(Provider.ID.make("remote"))).toBeUndefined()
+      const instructions = yield* discovery.list()
+      expect(
+        Array.isArray(instructions) ? instructions.filter((file) => file.path.startsWith("OpenCode Console")) : [],
+      ).toEqual([])
+      expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
+      expect((yield* tools.list()).some((tool) => tool.id.startsWith("console_watch"))).toBe(false)
+      expect((yield* artifacts.providers()).some((provider) => provider.id === "console")).toBe(false)
+      expect(requests.some((path) => path.startsWith("/api/event-watches"))).toBe(false)
+    }),
+  )
+
   it.effect("keeps Console instructions and skills through an edit or a Console error, and clears them on 404", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
@@ -1735,13 +1835,13 @@ describe("OpencodePlugin", () => {
 
       // The config is unchanged, so config keeps the Console document it already holds.
       state.instruction = "Use spaces."
-      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("6 minutes")
       yield* drain
       expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
 
       // A Console error keeps both, through the retries.
       state.lists = 503
-      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("6 minutes")
       yield* drain
       yield* TestClock.adjust("10 seconds")
       yield* drain
@@ -1749,63 +1849,64 @@ describe("OpencodePlugin", () => {
 
       // A 404 means the workspace has none.
       state.lists = 404
-      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("6 minutes")
       yield* drain
       expect(yield* loaded).toEqual({ instructions: [], skill: undefined })
     }),
   )
 
-  it.effect("applies Console policies while its instructions and skills fail, and keeps a list over a malformed one", () =>
-    Effect.gen(function* () {
-      const credentials = yield* Credential.Service
-      const config = yield* Config.Service
-      const discovery = yield* InstructionDiscovery.Service
-      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
-      const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
-      const server = {
-        fetch: (request: Request) => {
-          const path = new URL(request.url).pathname
-          if (path === "/api/v2/config")
-            return Response.json({ providers: {}, policies: [sudo] }, withLists)
-          if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
-          if (state.lists === "down") return new Response("Unavailable", { status: 503 })
-          if (path === "/api/v2/skills") return Response.json({ skills: [] })
-          if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
-          return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
-        },
-      }
-      const instructions = discovery
-        .list()
-        .pipe(
-          Effect.map((files) =>
-            Array.isArray(files)
-              ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
-              : [],
-          ),
-        )
-      yield* credentials.create({
-        integrationID: Integration.ID.make("opencode"),
-        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
-      })
+  it.effect(
+    "applies Console policies while its instructions and skills fail, and keeps a list over a malformed one",
+    () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const config = yield* Config.Service
+        const discovery = yield* InstructionDiscovery.Service
+        const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+        const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
+        const server = {
+          fetch: (request: Request) => {
+            const path = new URL(request.url).pathname
+            if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] }, withLists)
+            if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
+            if (state.lists === "down") return new Response("Unavailable", { status: 503 })
+            if (path === "/api/v2/skills") return Response.json({ skills: [] })
+            if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          },
+        }
+        const instructions = discovery
+          .list()
+          .pipe(
+            Effect.map((files) =>
+              Array.isArray(files)
+                ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+                : [],
+            ),
+          )
+        yield* credentials.create({
+          integrationID: Integration.ID.make("opencode"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+        })
 
-      // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
-      const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("10 seconds")
-      yield* Fiber.join(started)
-      expect(yield* consolePolicies(config)).toEqual([sudo])
-      expect(yield* instructions).toEqual([])
+        // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
+        const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+        yield* TestClock.adjust("10 seconds")
+        yield* Fiber.join(started)
+        expect(yield* consolePolicies(config)).toEqual([sudo])
+        expect(yield* instructions).toEqual([])
 
-      state.lists = "ok"
-      yield* TestClock.adjust("1 minute")
-      yield* drain
-      expect(yield* instructions).toEqual(["Use tabs."])
+        state.lists = "ok"
+        yield* TestClock.adjust("6 minutes")
+        yield* drain
+        expect(yield* instructions).toEqual(["Use tabs."])
 
-      state.lists = "malformed"
-      yield* TestClock.adjust("1 minute")
-      yield* drain
-      expect(yield* instructions).toEqual(["Use tabs."])
-      expect(yield* consolePolicies(config)).toEqual([sudo])
-    }),
+        state.lists = "malformed"
+        yield* TestClock.adjust("6 minutes")
+        yield* drain
+        expect(yield* instructions).toEqual(["Use tabs."])
+        expect(yield* consolePolicies(config)).toEqual([sudo])
+      }),
   )
 
   it.effect("requests Console instructions and skills together", () =>
@@ -2518,7 +2619,7 @@ describe("OpencodePlugin with a Console config", () => {
           expect(yield* websearch.default()).toBeUndefined()
 
           state.selected = true
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("6 minutes")
           yield* drain
           expect(yield* announced(opencode)).toEqual(opencode)
           expect(yield* websearch.providers()).toContainEqual(opencode)

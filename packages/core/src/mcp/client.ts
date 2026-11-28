@@ -29,7 +29,7 @@ import {
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
-import { SKILLS_EXTENSION_ID, SkillsClient } from "@modelcontextprotocol/client/ext/skills"
+import { SKILLS_EXTENSION_ID, SkillsClient, SkillVerificationError } from "@modelcontextprotocol/client/ext/skills"
 import type { Skill as SdkSkill, SkillFile as SdkSkillFile } from "@modelcontextprotocol/client/ext/skills"
 import {
   Cause,
@@ -50,9 +50,18 @@ import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
+import { McpTarget } from "./target.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
+import { ConnectError, NeedsAuthError, SessionExpiredError, SkillMismatchError } from "./errors.js"
 
-export { EventStreamRejectedError, EventStreamTerminatedError }
+export {
+  ConnectError,
+  EventStreamRejectedError,
+  EventStreamTerminatedError,
+  NeedsAuthError,
+  SessionExpiredError,
+  SkillMismatchError,
+}
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -191,27 +200,6 @@ export interface Tool {
   readonly _meta?: Record<string, unknown>
 }
 
-export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
-  server: Schema.String,
-  message: Schema.String,
-}) {}
-
-export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
-  server: Schema.String,
-  message: Schema.String,
-  /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
-  answered: Schema.optional(Schema.Boolean),
-}) {}
-
-/** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
-export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()("MCP.SessionExpiredError", {
-  server: Schema.String,
-}) {
-  override get message() {
-    return `MCP server session expired: ${this.server}`
-  }
-}
-
 export type CallToolContent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "media"; readonly data: string; readonly mimeType: string; readonly uri?: string }
@@ -328,7 +316,7 @@ export interface Skills {
    * Reads one file of a listed skill, its `SKILL.md` when `ref` is omitted, and verifies its size, digest and, for
    * `SKILL.md`, frontmatter against the entry.
    */
-  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, Error>
+  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, SkillMismatchError | Error>
   /** One skill by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
   readonly get: (uri: string) => Effect.Effect<Skill, Error>
 }
@@ -343,7 +331,7 @@ export interface Attached {
 
 export interface ConnectOptions {
   readonly server: string
-  readonly config: typeof ConfigMCP.Server.Type | Attached
+  readonly target: McpTarget.Target | Attached
   /** Resolves a relative stdio `cwd` and is the default one, and is the root `roots/list` answers with. */
   readonly directory: string
   /** Remote only. A 401 the provider cannot recover from ends in UnauthorizedError → needs_auth. */
@@ -365,13 +353,13 @@ export interface ConnectOptions {
  */
 export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const server = options.server
-  const config = options.config
+  const target = options.target
   const elicitation = options.elicitation
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
-    config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
-  const protocol = config.protocol ?? (config.type === "attached" ? "legacy" : "auto")
+    target.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : target.config.timeout
+  const protocol = target.type === "attached" ? (target.protocol ?? "legacy") : (target.config.protocol ?? "auto")
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -526,9 +514,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const failure = (error: unknown) => {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
+    // The server refused the credential even after a refresh, or there is none it would take: only a new login helps.
+    // A 403 for more scope is left to fail the one request: servers ask for it per tool, and a new login asks for the
+    // scope of the first challenge, so ending the connection would only take the server's other tools down with it.
+    if (
+      error instanceof UnauthorizedError ||
+      (error instanceof SdkHttpError && error.code === SdkErrorCode.ClientHttpAuthentication)
+    )
+      return new NeedsAuthError({ server, message: describe(error) })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
-      error.status === 404 ||
+      (error.status === 404 && !methodNotFound(error.data.text)) ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
@@ -541,18 +538,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   }
 
   const exit = yield* Effect.gen(function* () {
-    if (config.type === "attached") return yield* initialize(config.transport, protocol)
-    if (config.type === "local") {
-      const [command, ...args] = config.command
+    if (target.type === "attached") return yield* initialize(target.transport, protocol)
+    if (target.type === "local") {
+      const command = target.command
       const spawn = (protocol: ConfigMCP.Protocol) =>
         McpStdio.make({
           server,
           command,
-          args,
-          cwd: McpStdio.resolveCwd(options.directory, config.cwd),
+          args: target.args,
+          cwd: McpStdio.resolveCwd(options.directory, target.config.cwd),
           environment: {
             ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-            ...config.environment,
+            ...target.config.environment,
           },
         }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
       // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
@@ -570,14 +567,10 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
-    // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
-    // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
-    const url = new URL(config.url)
-    const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
-    if (addedCodemode) url.searchParams.set("codemode", "false")
+    const dialed = McpTarget.dialUrl(target.url, target.config.codemode)
     const open = Effect.fnUntraced(function* (url: URL, protocol: ConfigMCP.Protocol, startup?: number) {
       session.transport = new StreamableHTTPClientTransport(url, {
-        requestInit: config.headers ? { headers: config.headers } : undefined,
+        requestInit: target.config.headers ? { headers: target.config.headers } : undefined,
         authProvider: options.authProvider,
         fetch,
       })
@@ -605,12 +598,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
 
     return yield* retrying(
       "MCP connect",
-      negotiate(url).pipe(
+      negotiate(dialed ?? target.url).pipe(
         Effect.catch((error) => {
-          if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
+          if (!dialed || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
             return Effect.fail(error)
           // Servers that reject unknown query params get one retry at the configured URL.
-          return negotiate(new URL(config.url))
+          return negotiate(target.url)
         }),
       ),
       deadline,
@@ -838,7 +831,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 Effect.map((result) => result.skills),
               ),
             read: (skill, ref) =>
-              request("read MCP skill file", (signal) => skills.read(skill, ref, { signal, timeout: execution })),
+              Effect.tryPromise({
+                try: (signal) => skills.read(skill, ref, { signal, timeout: execution }),
+                catch: (error) =>
+                  error instanceof SkillVerificationError
+                    ? new SkillMismatchError({ uri: error.uri, check: error.reason, message: error.message })
+                    : failure(error),
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("failed to read MCP skill file", { server, error: error.message }),
+                ),
+              ),
             get: (uri) =>
               request("get MCP skill", (signal) => skills.get(uri, { signal, timeout: execution })).pipe(
                 Effect.map((result) => result.skill),
@@ -1044,6 +1047,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
 
+const decodeMethodNotFound = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ code: Schema.Literal(-32601) }) })),
+)
+const methodNotFound = (body: unknown) => typeof body === "string" && Option.isSome(decodeMethodNotFound(body))
+
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.
 function repeats(error: unknown): boolean {
@@ -1058,17 +1066,6 @@ function repeats(error: unknown): boolean {
     isTransient(error) ||
     PlatformError.isPlatformError(error)
   )
-}
-
-// These servers reject any unknown query parameter and have no Code Mode of their own, so adding
-// ?codemode=false only costs a failed request before the retry at the configured URL.
-function rejectsUnknownQuery(url: URL) {
-  // Google Workspace MCP (gmailmcp, drivemcp, calendarmcp, ...) returns 404.
-  if (url.hostname.endsWith(".googleapis.com")) return true
-  // Zoho MCP gateways (zohomcp.com, zohomcp.eu, ...) return 400.
-  if (/(^|\.)zohomcp\.[a-z.]+$/.test(url.hostname)) return true
-  // Loopback servers run on this machine (Figma Desktop's Dev Mode MCP returns 404), so they are not hosted Code Mode servers.
-  return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
 }
 
 // Legacy sends the plain initialize handshake with no discover probe.

@@ -234,14 +234,23 @@ impl State {
             }
             _ => {}
         }
-        let Some(location) = located(event) else { return };
+        let Some(location) = located(event) else {
+            // A catalog change published outside a Location's context (a plugin's deferred registration) carries no
+            // location, and the catalog publishes no further event once it settles. It may belong to any Location here.
+            if let Some(catalog) = catalog_event(event) {
+                let locations: Vec<Location> = self.locations.keys().cloned().collect();
+                for location in &locations {
+                    self.refresh_catalog(catalog, location, effects);
+                }
+            }
+            return;
+        };
         let location = Location::from(location);
+        if let Some(catalog) = catalog_event(event) {
+            self.refresh_catalog(catalog, &location, effects);
+            return;
+        }
         match event {
-            V2Event::ProviderUpdated(_) => self.refresh_catalog(Catalog::Provider, &location, effects),
-            V2Event::ModelUpdated(_) => self.refresh_catalog(Catalog::Model, &location, effects),
-            V2Event::AgentUpdated(_) => self.refresh_catalog(Catalog::Agent, &location, effects),
-            V2Event::CommandUpdated(_) => self.refresh_catalog(Catalog::Command, &location, effects),
-            V2Event::SkillUpdated(_) => self.refresh_catalog(Catalog::Skill, &location, effects),
             // The event names only the current branch. Reload the rest: the default branch and
             // provider can change with it, and a read served before the location's VCS provider
             // loaded has neither.
@@ -361,6 +370,17 @@ impl State {
         if changed {
             self.touch_location(location, Parts::catalogs(&[Catalog::Integration]));
         }
+    }
+}
+
+fn catalog_event(event: &V2Event) -> Option<Catalog> {
+    match event {
+        V2Event::ProviderUpdated(_) => Some(Catalog::Provider),
+        V2Event::ModelUpdated(_) => Some(Catalog::Model),
+        V2Event::AgentUpdated(_) => Some(Catalog::Agent),
+        V2Event::CommandUpdated(_) => Some(Catalog::Command),
+        V2Event::SkillUpdated(_) => Some(Catalog::Skill),
+        _ => None,
     }
 }
 

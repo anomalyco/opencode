@@ -24,8 +24,8 @@ pub use discovery::{config_directories, discover};
 pub use state::{Effect, ModeSetting, ThemeError, ThemeState, ThemeStateOptions};
 pub use system::{TerminalColors, generate_system, terminal_mode};
 pub use tokens::{
-    ActionStates, Actions, Background, Base, Diff, DiffBackground, DiffLineNumber, DiffPair, DiffText, Feedback,
-    Markdown, Raised, Stateful, Syntax, Text, TextFeedback, Tokens,
+    ActionStates, Actions, Background, Base, Diff, DiffBackground, DiffLineNumber, DiffPair, DiffText, Feedback, Find,
+    FindBackground, FindText, Markdown, Raised, Stateful, Syntax, Text, TextFeedback, Tokens,
 };
 
 /// The hue steps, lightest role first: index 0 is step 100.

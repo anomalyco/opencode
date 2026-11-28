@@ -1,0 +1,45 @@
+---
+title: "控制台網路搜尋"
+description: "透過控制台為 OpenCode 提供託管的網路搜尋。"
+---
+
+控制台為已連接的 OpenCode 使用者提供託管的網路搜尋。工作區擁有者或管理員為工作區啟用一次，成員就不需要提供個別的搜尋供應商金鑰。
+
+每次成功搜尋收費 **$0.01**，從工作區餘額扣款，並計入成員的消費上限。
+
+## 啟用
+
+1. 以工作區擁有者或管理員身分登入[控制台](https://opencode.ai/console)。
+2. 開啟 **Integrations**，並在 **Hosted Web Search** 上點選 **Set up**。
+3. 點選 **Enable**。
+
+接著每位成員使用 `/connect` 將 OpenCode 連接到工作區。
+
+```text
+/connect
+```
+
+工作區設定會選取 **OpenCode Web Search** 作為預設供應商。成員不需要設定 `websearch.provider`，也不需要新增
+供應商 API 金鑰。若成員自行設定 `websearch.provider`，則會保留該選擇。
+
+## 搜尋
+
+在提示詞中向 OpenCode 詢問最新資訊。搜尋會從 OpenCode 執行，而不是從控制台中的互動頁面執行。
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+託管供應商會搜尋公開網路並回傳最多八個結果。OpenCode 會使用這些結果回答提示詞並引用來源。
+
+設定權限或停用工具請參閱[網路搜尋指南](/websearch)。
+
+## 帳單
+
+搜尋回傳有效結果集後，控制台會收取 **$0.01**。失敗與受速率限制的搜尋不會收費。
+
+在 **Activity › Usage**、**Activity › Overview**、成員活動、發票與 CSV 匯出檔案中，網路搜尋和模型用量會分開列出。涵蓋全部支出的適用預算原則也會計入網路搜尋費用。
+
+## 隱私
+
+託管網路搜尋採零資料保留。控制台和提供託管搜尋的供應商會處理每筆查詢及其結果，但不會儲存內容。

@@ -17,5 +17,5 @@
     "types": ["vite/client", "bun"]
   },
   "include": ["src"],
-  "exclude": ["src/**/*.stories.tsx"]
+  "exclude": ["src/**/*.lab.tsx"]
 }

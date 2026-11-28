@@ -1,0 +1,94 @@
+---
+title: "Codex"
+description: "從 Codex 使用控制台與 Go 模型。"
+---
+
+Codex 使用 OpenAI Responses API。將它指向控制台，即可使用任何付費或 Go 模型，包括 Claude、Gemini 與
+開放模型。對於不接受 Responses 的模型，控制台會轉譯請求。
+
+<Callout>
+  [控制台 CLI](/console/harnesses#console-cli) 可用一個指令設定 Codex，包括工作區的原則、
+  MCP 伺服器、技能與指示。請執行 `npx @opencode/console setup codex`。下列步驟為手動設定。
+</Callout>
+
+## 設定
+
+在 `~/.codex/config.toml` 中將控制台新增為模型供應商，並設為預設。
+
+```toml title="~/.codex/config.toml"
+model = "gpt-6.1-sol"
+model_provider = "opencode"
+
+[model_providers.opencode]
+name = "OpenCode Console"
+base_url = "https://opencode.ai/inference/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+Codex 會在基礎 URL 後附加 `/responses`，並從 `env_key` 讀取金鑰。請建立
+[個人 API 金鑰](/console/harnesses#get-an-api-key)，再將金鑰匯出為環境變數。
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+codex
+```
+
+<Callout>
+  Codex 只會從 `~/.codex/config.toml` 讀取模型供應商。專案的 `.codex/config.toml` 無法設定它們。
+</Callout>
+
+## Go
+
+使用 Go 基礎 URL，以及具有 [Go](/console/go) 訂閱之工作區的金鑰。
+
+```toml title="~/.codex/config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+
+[model_providers.opencode-go]
+name = "OpenCode Go"
+base_url = "https://opencode.ai/inference/go/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+## 模型
+
+將 `model` 設為[控制台](/console/models#endpoints)或 [Go](/console/go#endpoints) 表中的任何模型 ID。使用 `--model`
+可只為這次執行指定其他模型。
+
+```bash
+codex --model claude-sonnet-5-5
+```
+
+Codex 不知道其自有目錄以外模型的上下文視窗或推理設定。它會對它們使用通用預設值
+並印出警告，你可以忽略。
+
+## Profile
+
+使用 profile 讓按用量計費與 Go 並存。在 `~/.codex/config.toml` 中定義兩個供應商，然後新增
+切換到 Go 的 profile 檔案。
+
+```toml title="~/.codex/go.config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+```
+
+```bash
+codex --profile go
+```
+
+## 控制台 MCP
+
+新增[控制台 MCP](/console/harnesses#console-mcp) 伺服器，並從瀏覽器登入。
+
+```bash
+codex mcp add opencode-console --url https://opencode.ai/console/mcp
+```
+
+若登入未自動開始，請自行執行。
+
+```bash
+codex mcp login opencode-console
+```

@@ -1,0 +1,126 @@
+---
+title: "Enterprise"
+description: "Kontroller hvilke modeller, leverandører og integrasjoner folk i organisasjonen kan bruke i OpenCode."
+---
+
+Bruk [policyer](/policies) for å kontrollere hva OpenCode kan bruke på organisasjonens maskiner. Legg dem i administrert
+konfigurasjon, slik at brukere og prosjekter ikke kan endre dem.
+
+## Rull ut
+
+Legg policyene i systemkonfigurasjonsfilen:
+
+| Plattform | Fil                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+På macOS kan du også rulle dem ut med MDM som administrerte innstillinger for domenet `ai.opencode.managed`. Se
+[konfigurasjonsplasseringer](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Policyer i disse filene går foran bruker- og prosjektkonfigurasjon, så en bruker eller et repositorium kan ikke tillate noe du nekter.
+Se [prioritet](/policies#precedence).
+
+## Blokker gratis modeller
+
+Blokker gratisnivået for bruk uten innlogging. Alt annet fungerer fortsatt, og brukerne kan koble til egne leverandører og kontoer.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Gratisnivået er `opencode`-integrasjonen uten konto. Console-kontoer med innlogging identifiseres som `opencode#<account>`,
+så regelen påvirker dem ikke.
+
+Et Console-arbeidsområde kan også tilby gratis modeller. Slik blokkerer du dem:
+
+- I ditt eget arbeidsområde slår du av **Free models** på Models-fanen i Console. Se
+  [OpenCode-modeller](/console/providers#opencode-models).
+- For å skjule gratis modeller i alle kontoer, angi `OPENCODE_DISABLE_FREE_MODELS=1` på OpenCode-tjenesten. Se
+  [gratis modeller](/models#free-models).
+
+## Krev Console-arbeidsområdet ditt
+
+Tillat bare organisasjonens Console-arbeidsområde. Ingenting annet kan kobles til eller brukes.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` lister bare OpenCode Console, slik at folk kan logge inn.
+- Bare arbeidsområdet ditt virker. Gratisnivået, personlige Console-kontoer, andre organisasjoner, API-nøkler fra miljøvariabler
+  og leverandører fra `opencode.json` blokkeres.
+- Arbeidsområdets modeller, MCP-servere og nettsøk virker. Endre dem i Console uten å rulle ut policyen på nytt.
+
+Erstatt `org_01M3CAP8H43Z49CER6NT0Y3ZF1` med organisasjons-ID-en til arbeidsområdet ditt. For å blokkere gratis modeller i arbeidsområdet
+også, slå av **Free models** i Console.
+
+## Tillat bare godkjente leverandører
+
+Nekt alle leverandører, og tillat deretter de du godkjenner. Dette eksempelet tillater bare en intern OpenAI-kompatibel gateway.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+En blokkert leverandør fjernes selv om noen har tilgangsopplysninger for den. Se [leverandører](/policies#providers).
+
+## Begrens MCP-servere og verktøy
+
+Tillat bare godkjente MCP-servere, og blokker verktøy du ikke vil at agenter skal kjøre.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+Se [MCP-servere, skills og plugins](/policies#mcp-servers-skills-and-plugins) og [verktøy](/policies#tools).
+
+## Kontroller at det virker
+
+- Kjør `/connect` og `/models` som en bruker, og bekreft at bare det du tillot, vises.
+- Sjekk serverloggen for advarsler. Regler som ikke består valideringen, forkastes. Resten gjelder fortsatt.
+- Et blokkert verktøykall mislykkes med `Blocked by configuration policy`.
+
+## Versjoner
+
+| Handling                                                                  | Krever |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+Eldre klienter ignorerer disse reglene.

@@ -1,0 +1,209 @@
+---
+title: "Console sağlayıcıları"
+description: "Kendi model sağlayıcı hesaplarınızı bir OpenCode Console çalışma alanına bağlayın ve üyelerin hangi modelleri kullanabileceğini seçin."
+---
+
+Zaten ödeme yaptığınız sağlayıcı hesaplarını, örneğin Anthropic, OpenAI veya AWS Bedrock, bağlayın ve modellerini
+çalışma alanındaki herkesle paylaşın. Console kimlik bilgisini saklar ve her sağlayıcıyı kendi ağ geçidi üzerinden sunar;
+böylece üyeler sağlayıcı anahtarını hiç görmeden modelleri kullanır. Aynı ağ geçidi kendi araçlarınıza
+[Providers API](/console/api/providers) üzerinden de açıktır.
+
+Sahipler ve yöneticiler sağlayıcıları **Providers** sekmesinden yönetir. Üyeler `/connect` çalıştırdıktan sonra etkin
+modelleri OpenCode'da alır.
+
+## Sağlayıcı bağlama
+
+1. **Providers** bölümünü açın ve **Connect Provider** düğmesine tıklayın.
+2. Katalogdan bir sağlayıcı seçin ve API anahtarını girin.
+3. İsteğe bağlı olarak **Test connection** düğmesine tıklayın, ardından **Save** düğmesine tıklayın.
+
+Katalog Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter ve daha birçok sağlayıcıyı içerir. Katalog
+sağlayıcıları modelleriyle birlikte önceden yapılandırılmış olarak gelir.
+
+### Bulut sağlayıcıları
+
+Bulut sağlayıcıları birkaç ek ayrıntı gerektirir.
+
+| Sağlayıcı              | Ayrıntılar                            |
+| --------------------- | ------------------------------------- |
+| Azure                 | Kaynak adı ve API anahtarı            |
+| AWS Bedrock           | Bölge ve API anahtarı                 |
+| Google Vertex AI      | Bölge ve hizmet hesabı JSON'u         |
+| Cloudflare AI Gateway | Hesap kimliği, ağ geçidi kimliği ve API token'ı |
+| Databricks            | Çalışma alanı URL'si ve token         |
+
+### Özel sağlayıcılar
+
+Başka bir endpoint'i bağlamak için **Add Custom Provider** düğmesine tıklayın. Ardından sağlayıcının modellerini **Add Model** ile ekleyin.
+
+| Alan       | Açıklama                                                                        |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Console'un istekleri yönlendirdiği yer, örneğin `https://api.deepseek.com/v1`.   |
+| Format     | Chat Completions, Responses API, Anthropic Compatible veya Google Generative AI. |
+| Auth mode  | Bearer, API key header veya Custom header.                                      |
+| Credential | Console'un sağlayıcıya gönderdiği anahtar.                                      |
+
+## Model seçme
+
+Modellerini görmek için bir sağlayıcı açın. Üyeler için yalnızca etkin modeller kullanılabilir.
+
+- Bir modeli açmak veya kapatmak için **Enabled** anahtarını kullanın.
+- Sağlayıcının gelecekte eklediği modelleri etkinleştirmek için **New models** seçeneğini açın.
+
+## Modelleri düzenleme
+
+Düzenlemek için bir modele tıklayın. Değişiklikler paneli kapattığınızda kaydedilir.
+
+| Bölüm         | Neleri değiştirebilirsiniz                                      |
+| ------------- | --------------------------------------------------------------- |
+| General       | Görünen ad, API kimliği, araç desteği, girdi ve çıktı türleri    |
+| Variants      | Kendi başlıkları veya gövdeleri olan varyantlar                  |
+| Configuration | Varsayılan varyant, istek başlıkları ve gövdesi, token limitleri |
+| Cost Tiers    | 1M token başına girdi, çıktı, önbellek okuma ve yazma fiyatları |
+
+### Özel fiyatlandırma
+
+Katalog modelleri sağlayıcının liste fiyatıyla başlar. Pazarlık edilmiş bir fiyatınız varsa, örneğin OpenAI sözleşmenizde
+bir indirim, kullanım raporları ve [bütçeler](/console/budgets) gerçekte ödediğiniz tutarla eşleşsin diye fiyatları
+**Cost Tiers** altında geçersiz kılın.
+
+| Alan             | Liste fiyatı | Sizin fiyatınız |
+| ---------------- | ------------ | --------------- |
+| Girdi fiyatı     | $2,50        | $2,00           |
+| Çıktı fiyatı     | $15,00       | $12,00          |
+| Önbellek okuma fiyatı | $0,25   | $0,20           |
+
+Değiştirdiğiniz fiyatlar sağlayıcı sayfasında vurgulanır. Liste fiyatına dönmek için bir alanda
+**Restore default value** veya modelde **⋯ › Restore...** kullanın.
+
+Bir model belirli bir bağlam boyutunun üzerinde daha fazla ücretlendirdiğinde, örneğin 200K token'ı aşan promptlar için,
+bir **Context** katmanı ekleyin.
+
+### Özel modeller
+
+Katalogda olmayan bir modeli **Display name** ve **Model ID** ile eklemek için **Add Model** düğmesine tıklayın. Mevcut
+bir modelin ayarlarından başlamak için modelde **⋯ › Duplicate...** kullanın.
+
+## OpenCode modelleri
+
+**Models** sekmesi, Console'un sunduğu ve çalışma alanı kredilerinden ödenen [modelleri](/console/models) yönetir. Bir
+sağlayıcı sayfası gibi çalışır:
+
+- Tek tek modelleri açın veya kapatın.
+- Çalışma alanı için ücretsiz modelleri engellemek üzere **Free models** seçeneğini kapatın.
+- Yeni Console modellerini otomatik etkinleştirmek için **New models** seçeneğini açın.
+
+Yalnızca kendi sağlayıcılarınızı kullanmak için sağlayıcının tamamını **⋯ › Disable** ile devre dışı bırakın.
+
+## OpenCode'da kullanma
+
+Üyeler `/connect` çalıştırır ve çalışma alanını seçer. Etkin her sağlayıcı, çalışma alanı adının ardından sağlayıcı adıyla
+görünür ve `/models` etkin modellerini listeler.
+
+```text
+Acme Inc. / Anthropic
+```
+
+OpenCode'u herkes için çalışma alanının sağlayıcılarıyla sınırlamak üzere **Settings › General** bölümünde
+**Managed providers only** seçeneğini açın.
+
+## Kimlik gönderme
+
+Bir sağlayıcı sizin çalıştırdığınız bir ağ geçidiyse sayfasında **Send identity** seçeneğini açın. Console ardından oraya
+gönderdiği her model isteğine bir `x-opencode-actor` başlığı ekler. Başlık isteğin arkasındaki üyeyi veya hizmet hesabını
+adlandırır; böylece ağ geçidiniz istekleri gönderene göre günlüğe yazabilir veya kısıtlayabilir.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- Bu ayar varsayılan olarak kapalıdır. Base URL'yi değiştirirseniz ayar kapanır.
+- Hâlâ satıcının kendi API'sinde olan bir sağlayıcı, örneğin `https://api.openai.com/v1`, ayarı göstermez; çünkü satıcı
+  başlığı yok sayar.
+- Console, bir istemcinin gönderdiği her `x-opencode-*` başlığını kaldırır; böylece ağ geçidinizin aldığı tek
+  `x-opencode-actor`, Console'un imzaladığıdır.
+- **Test connection** ve model listeleme, `GET <base URL>/models` çağrısını yalnızca kimlik bilgisiyle yapar; bu nedenle o
+  rotada başlığı zorunlu kılmayın.
+
+### Token
+
+Başlık, Console'un her istek için imzaladığı bir JWT'dir.
+
+| Alan         | Değer                                            |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | Sağlayıcının, sondaki eğik çizgiler çıkarılmış base URL'si |
+| `iat`, `exp` | `exp`, `iat` değerinden 120 saniye sonradır      |
+
+| Talep                | Değer                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | Bir üye için `user_id`, aksi halde `service_account_id`                |
+| `workspace_id`       | İsteğin çalıştığı çalışma alanı                                        |
+| `user_id`, `email`   | İsteği bir üye gönderdiğinde o üye                                     |
+| `service_account_id` | İsteği bir hizmet hesabı gönderdiğinde o hizmet hesabı (agent'lar dahil) |
+| `session_id`         | İstemci bir tane gönderdiyse istemcinin oturum kimliği                 |
+| `request_id`         | İstemcinin `x-opencode-log-id` yanıt başlığında geri aldığı kimlik    |
+
+Bir üyenin isteği şuna benzer bir yük taşır:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Token'ı doğrulama
+
+Console ortak anahtarlarını `https://opencode.ai/inference/.well-known/jwks.json` adresinde yayımlar ve
+`Cache-Control: public, max-age=300` ile sunar. İmzayı, issuer'ı, audience'ı, türü ve yaşı, ardından çalışma alanını
+denetleyin. Bu örnek [jose](https://github.com/panva/jose) kullanır.
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+`audience` değerine sağlayıcının Console'da kayıtlı base URL'sini, sondaki eğik çizgiler olmadan yazın. `org_...` yerine Console URL'nizdeki çalışma alanı kimliğini girin. Console yeni imzalama anahtarını kullanmaya başlamadan önce yayımlar. Böylece `createRemoteJWKSet` örneğindeki gibi anahtarları `kid` ile bulan bir doğrulayıcı, anahtar yenilenirken çalışmaya devam eder.
+
+## Devre dışı bırakma veya kaldırma
+
+Sağlayıcının **⋯** menüsünü açın:
+
+- **Disable**, sağlayıcıyı ve modellerini üyelerden gizler ancak ayarlarını korur.
+- **Remove...**, sağlayıcıyı ve modellerini siler. İletişim kutusu onu son kullananları gösterir ve
+  **Disable instead** seçeneğini sunar.
+
+Anahtarı yenilemek için sağlayıcı sayfasındaki kimlik bilgisine tıklayın ve yeni anahtarı girin.
+
+## Faturalandırma
+
+Token ücretlerini sağlayıcınız faturalandırır; Console bu kullanım için bakiyenizden kredi düşmez. Ancak Console, her isteği ve modelin fiyatlarına göre hesaplanan maliyetini kaydeder. Böylece bu maliyet kullanım raporlarına ve [bütçelere](/console/budgets) dahil edilir.
+
+Bir sağlayıcıyı OpenCode yerine kendi araçlarınızdan çağırmak için [Providers API](/console/api/providers) kullanın.

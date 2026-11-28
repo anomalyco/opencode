@@ -1,0 +1,171 @@
+---
+title: "Plugins"
+description: "Agrega paquetes npm o directorios de plugins locales a OpenCode en opencode.json, y habilita o deshabilita plugins por ID o comodín."
+---
+
+Agrega paquetes publicados, con versión o con ámbito, o directorios de plugins locales a `opencode.json(c)`.
+
+## Configurar
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Las rutas relativas se resuelven desde el archivo de configuración que contiene la entrada.
+
+Las rutas locales configuradas deben ser directorios. Se omite una ruta a un solo archivo. Consulta [Carga](/build/plugins#load) para ver
+cómo encuentra OpenCode cada parte en un directorio.
+
+Los arrays de plugins de los archivos de configuración aplicables se aplican de menor a mayor precedencia en lugar de sustituirse
+unos a otros.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Descubrimiento
+
+OpenCode también carga archivos `.ts` y `.js` directos y directorios de paquetes de plugins inmediatos de cada directorio
+`.opencode/plugins/` descubierto.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Los plugins globales usan la misma estructura de descubrimiento bajo el directorio de configuración de OpenCode.
+
+```text
+~/.config/opencode/plugins/
+```
+
+Un directorio `plugins/` junto a un `opencode.json(c)` en la raíz del proyecto no se descubre automáticamente; configura sus directorios de plugins
+explícitamente o muévelo bajo `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Control
+
+Las entradas de plugins se procesan en orden. Antepón `-` a un ID o comodín para deshabilitarlo, usa `*` para todos los plugins y
+usa `.*` para coincidir con un prefijo de ID. Un ID posterior vuelve a habilitar un plugin.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Para deshabilitar el aviso que se agrega a las bifurcaciones nuevas, agrega `"-opencode.fork-notice"` a `plugins`.
+
+Dos plugins integrados ignoran las eliminaciones para que un repositorio no pueda desactivar
+la aplicación de [políticas](/policies): `opencode.config.policy` y
+`opencode.provider.opencode`, la conexión de Console que entrega la política de la organización.
+
+## Gestionar
+
+Instala, lista, comprueba, actualiza o elimina plugins de paquete globales con la CLI.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` busca actualizaciones de los plugins de paquete del servidor, exclusivos de la GUI y exclusivos de la TUI. `plugin update` actualiza todos los paquetes
+desactualizados; pasa un destino de paquete configurado para comprobar o actualizar solo ese paquete. Los plugins locales y las revisiones exactas de paquetes se
+omiten.
+
+Un paquete se actualiza solo cuando indica qué seguir: `name@latest`, un rango de versiones como `name@^1.2.0`,
+`name@~1.2.0`, `name@1.x` o `name@>=1.2.0 <2`, una rama de Git como `github:acme/plugin#main` o un rango `semver:` de Git.
+OpenCode lo comprueba al arrancar y cada 24 horas, instala una versión más nueva y la recarga. Un rango solo avanza a versiones
+dentro de él. Si la nueva versión no se carga, la anterior sigue ejecutándose y permanece instalada.
+
+Un nombre simple (`name`) o un repositorio (`github:acme/plugin`) se queda en la versión que instaló. También otras etiquetas npm como
+`name@next` y las etiquetas de Git. `plugin check` sigue informando de sus actualizaciones y `plugin update` las instala. Las versiones exactas y los
+hashes de commit quedan fijados.
+
+La instalación de paquetes acepta nombres npm con versiones, etiquetas o rangos, además de especificaciones de paquetes Git compatibles con npm.
+Los repositorios Git pueden usar atajos alojados, HTTPS o SSH, incluidos repositorios privados disponibles mediante tus credenciales
+de Git existentes.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Se admiten ramas, etiquetas, hashes de commit completos y los selectores de subdirectorio de repositorio `::path:` de npm. Configura
+las rutas locales directamente; `plugin add` no acepta destinos de tarball ni de alias npm.
+
+## Recarga
+
+Los cambios en los directorios de configuración vigilados se recargan automáticamente. El arranque del servidor carga inmediatamente los plugins de paquete en caché,
+instala en segundo plano los paquetes que faltan y busca actualizaciones de los plugins npm y Git sin fijar. Las versiones exactas de npm y
+los hashes de commit completos de Git permanecen fijados. Los cambios en dependencias locales no vigiladas
+pueden seguir requiriendo reiniciar OpenCode.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Desktop
+
+Un plugin que exporta `./gui-experimental` también agrega paneles, comandos o ajustes a OpenCode Desktop. La aplicación carga
+plugins desde el servidor que ejecuta, así que configura el plugin en tu `opencode.json(c)` global para usarlo en todas las ventanas.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+**Settings > Extensions > Plugins** los enumera cuando está seleccionado el servidor propio de la aplicación. El interruptor de un plugin solo desactiva
+su interfaz de escritorio, y **Reload** lo vuelve a cargar después de un fallo. Para desactivar todo el plugin, agrega `-` y su ID a
+`plugins`, por ejemplo `"-acme"`.
+
+## Terminal
+
+Los plugins exclusivos de la TUI se configuran por separado y siguen activos cuando se conecta a un servidor remoto.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  Crea plugins que agregan herramientas, hooks, integraciones, comandos, agentes y otro comportamiento.
+</Card>

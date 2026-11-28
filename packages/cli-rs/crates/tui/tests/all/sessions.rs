@@ -515,11 +515,83 @@ fn pin_toggles_session_json() {
         kit.pins(),
         kit.app.text()
     );
-    // Pin the first row again (ses_a is newest).
+    // Selection stays on ses_b when it leaves Pinned, so pressing ctrl+f again pins ses_b back.
     kit.app.press("ctrl+f");
     kit.wait_for("Pinned");
-    assert!(kit.app.wait_until(WAIT, || { kit.pins() == json!({ "pinned": ["ses_a"] }) }));
+    assert!(kit.app.wait_until(WAIT, || { kit.pins() == json!({ "pinned": ["ses_b"] }) }));
     assert!(kit.mutations().is_empty(), "pins are local");
+}
+
+#[test]
+fn rename_after_arming_delete_prefills_the_session_title() {
+    let kit = Kit::new(Mode::List);
+    kit.open_list();
+    kit.wait_gone("Loading");
+    kit.clear_log();
+    kit.app.press("ctrl+d");
+    kit.wait_for("again to confirm");
+    kit.app.press("ctrl+r");
+    let screen = kit.wait_for("Rename session");
+    assert!(screen.contains("Write docs"), "{screen}");
+    assert!(!screen.contains("again to confirm"), "{screen}");
+    kit.app.press("enter");
+    assert!(kit.app.wait_until(WAIT, || !kit.tui.dialogs.is_open()), "{}", kit.app.text());
+    assert_eq!(
+        kit.mutations(),
+        [("PATCH".to_owned(), "/api/session/ses_b".to_owned(), Some(json!({ "title": "Write docs" })))]
+    );
+}
+
+#[test]
+fn a_running_current_session_keeps_the_current_marker_color_on_its_spinner() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let sessions = vec![
+        session("ses_c", Some("session-C"), 3000.0, json!({})),
+        session("ses_b", Some("session-B"), 2000.0, json!({})),
+        session("ses_a", Some("session-A"), 1000.0, json!({})),
+    ];
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": sessions, "cursor": {} })),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/active",
+            200,
+            &json!({ "data": { "ses_a": { "type": "running" }, "ses_b": { "type": "running" } } }),
+        ),
+        MemoryRoute::json("GET", "/api/project", 200, &projects()),
+        MemoryRoute::json(
+            "GET",
+            "/api/location",
+            200,
+            &json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+        ),
+    ];
+    for item in &sessions {
+        routes.extend(support::session_routes(item));
+    }
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::decode(r#"{ "tabs": { "mode": "off" }, "animations": false }"#)),
+        events: true,
+        route: support::session_route("ses_b"),
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let harness = support::mount(100, 34, deps);
+    harness.app.press("ctrl+x");
+    harness.app.press("l");
+    harness.wait("both running sessions spin", || {
+        harness.app.text().lines().filter(|line| line.contains("session-") && line.contains('⋯')).count() == 2
+    });
+    let capture = harness.app.render();
+    let spinner_fg = |title: &str| {
+        let row = capture.text().lines().position(|line| line.contains(title)).unwrap();
+        let line = capture.text().lines().nth(row).unwrap().to_owned();
+        let col = line[..line.find('⋯').unwrap()].chars().count();
+        capture.cells[row * capture.width as usize + col].fg
+    };
+    let selected = harness.tui.page().surface(opencode_ui::theme::Surface::Dialog).text.formfield.selected;
+    assert_eq!(spinner_fg("session-B"), selected);
+    assert_ne!(spinner_fg("session-A"), selected);
 }
 
 #[test]

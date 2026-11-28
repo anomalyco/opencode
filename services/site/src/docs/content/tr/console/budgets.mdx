@@ -1,0 +1,84 @@
+---
+title: "Bütçeler"
+description: "Bir çalışma alanı, üyeleri ve hizmet hesapları için aylık harcamayı sınırlayın."
+---
+
+Bütçeler politikalar aracılığıyla aylık harcamayı sınırlar. Sahipler ve yöneticiler bunları **Controls** bölümünde
+yönetir.
+
+## Bütçe düzeyleri
+
+| Politikanın kapsamı     | Kimlerin harcamasına uygulanır?                       |
+| ---------------------- | ---------------------------------------------------- |
+| Tüm çalışma alanı      | Tüm üyelerin ve hizmet hesaplarının birleşik harcaması |
+| Tüm üyeler             | Her üye veya tüm üyeler için tek paylaşılan kota       |
+| Etiketlenen üyeler     | Seçilen etiketlere sahip üyeler                      |
+| Bu üyeler              | Belirli üyeler                                       |
+| Tüm hizmet hesapları   | Her hizmet hesabı veya tek paylaşılan kota            |
+| Bu hizmet hesapları    | Belirli hizmet hesapları                             |
+
+Bir isteğin maliyeti, geçerli bütçelerin hiçbirinde kalan tutarı aşmamalıdır. Daha yüksek bir limit, daha düşük bir limiti geçersiz kılmaz. Bütçe tanımlanmamışsa harcama sınırsızdır.
+
+## Çalışma alanı bütçesi
+
+Çalışma alanı bütçesi dolduğunda herkesin yeni istekleri engellenir.
+
+1. **Controls** bölümünü açın ve **Add policy** düğmesine tıklayın.
+2. **Entire workspace** seçeneğini seçin ve bir **Budget** kuralı ekleyin.
+3. Aylık limiti USD olarak girin ve **Save** düğmesine tıklayın.
+
+## Üye bütçeleri
+
+Bir politikada **All members** seçeneğiyle her üyeye aylık bir limit tanımlayabilir veya tüm üyelerin tek bir limiti paylaşmasını sağlayabilirsiniz. Yalnızca belirli üyeleri kapsamak için ilgili üyeleri veya etiketleri seçin.
+
+Tek bir kişi için bütçe ayarlamak için:
+
+1. **Settings › Members** bölümünde üyeyi açın.
+2. **Create budget policy** düğmesine tıklayın. Politika oluşturma ekranı, ilgili üye seçili olarak açılır.
+3. Tutarı girin ve **Save** düğmesine tıklayın.
+
+Üyenin sayfasında kendisi için geçerli olan politikalar listelenir. Tüm üyeler için tanımlanmış bir bütçe de varsa iki limit de uygulanır.
+
+## Hizmet hesabı bütçeleri
+
+**Controls** bölümünde **All service accounts** veya **These service accounts** seçeneğini seçin, bir **Budget** kuralı
+ekleyin ve bireysel ya da paylaşılan aylık kota ayarlayın. Politika o hesaplara ait her anahtarı kapsar.
+
+## Tutarlar ve sıfırlama
+
+- Tutarlar en fazla iki ondalık basamaklı ABD doları cinsindendir.
+- Bütçeler her ayın 1'inde 00:00 UTC'de sıfırlanır.
+- `$0` tutarındaki bir bütçe, bütçe kapsamında sayılan tüm harcamaları engeller.
+- Bütçe eklediğinizde veya değiştirdiğinizde o ay kayda geçen harcamalar hesaba katılır; limit sıfırlanmaz.
+
+## Bütçeye dahil olan harcamalar
+
+Varsayılan seçenek olan **All spend**, tüm harcamaları kapsar. Bütçeyi belirli modellerle sınırlandırırsanız yalnızca bu modellerin harcamaları hesaba katılır. Bu modellere ortak bir limit veya her modele ayrı bir limit tanımlayabilirsiniz.
+
+| Harcama                                                             | Bütçelere sayılır            |
+| ------------------------------------------------------------------- | ---------------------------- |
+| Ücretli Console modelleri                                           | Evet                         |
+| Fiyatı ayarlanmış [kendi sağlayıcılarınızdaki](/console/providers) modeller | Evet, yapılandırılmış fiyattan |
+| [Web araması](/console/websearch)                                    | Evet, tüm harcama bütçeleri için |
+| Ücretsiz modeller                                                    | Hayır                        |
+| Plan içindeki [Go](/console/go) kullanımı                            | Hayır                        |
+| Kredilerden ödenen Go ek kullanımı                                   | Evet                         |
+
+## Bütçeye ulaşıldığında
+
+Bütçe sıfırlanana veya bir çalışma alanı sahibi ya da yöneticisi limiti artırana kadar yeni istekler HTTP `429` ile reddedilir. Yanıt, bir bütçe politikasının limitine ulaşıldığını belirtir ancak bütçenin adını vermez. İsteği hangi politikanın engellediğini görmek için **Activity › Logs** bölümünde açın.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Bütçeler istek başlatıldığında kontrol edilir. Devam eden istekler tamamlanır; dolayısıyla toplam harcama limiti bir miktar aşabilir.
+
+## Harcamayı izleme
+
+Her üye **Activity** sayfasında kendi harcamasını ve limitini görür. Bütçe ayrıntıları ve sıfırlama tarihleri dahil
+**Activity › Overview** için **My usage** bölümünü açın.
+
+Sahipler ve yöneticiler harcama grafiğinden **Activity › Usage** bölümünü açabilir. Maliyeti güne, modele ve kişiye göre
+ayırır ve **Export usage** düğmesi son 7, 30 veya 90 günün günlük toplamlarını CSV olarak indirir. Aynı dosyayı bir
+betikten indirmek için [Kullanım dışa aktarma API'sini](/console/api/usage-export) kullanın.

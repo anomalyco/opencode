@@ -66,7 +66,7 @@ import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
-import type { ServerOptions } from "./options"
+import type { EmbeddedRoutesOptions, ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   App.node,
@@ -129,25 +129,32 @@ export function createRoutes(
   return makeRoutes(options.password ? Option.some(options.password) : Option.none(), options, serviceURLs, overrides)
 }
 
-type InstanceNode = (
-  replacements: () => LayerNode.Replacements,
-) => LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
+type InstanceNode = LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
 
+/**
+ * The routes without a listener: no Basic auth, so the embedder owns access control. A per-Session `Instance`
+ * provider goes in `overrides` as `Instance.node.replace(...)`.
+ */
 export function createEmbeddedRoutes(
-  options: ServerOptions = {},
+  options: EmbeddedRoutesOptions = {},
   overrides: LayerNode.Replacements = [],
+  /** @deprecated Pass `Instance.node.replace(instances)` first in `overrides`. Removed in the next minor. */
   instances?: InstanceNode,
 ) {
-  return makeRoutes(Option.none(), options, () => [], overrides, instances)
+  return makeRoutes(
+    Option.none(),
+    options,
+    () => [],
+    instances ? [Instance.node.replace(instances), ...overrides] : overrides,
+  )
 }
 
 function makeRoutes(
   password: Option.Option<string>,
-  options: ServerOptions,
+  options: EmbeddedRoutesOptions,
   serviceURLs: () => ReadonlyArray<string>,
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
-  instances?: InstanceNode,
 ) {
   const auth = ServerAuth.Config.configLayer({ password })
   // Code Mode `opencode://` fetches go straight to this router, set once the router below is built. They carry the
@@ -207,15 +214,8 @@ function makeRoutes(
       }),
     ),
   ]
-  const build = (overrides: LayerNode.Replacements) => {
-    const replacements: LayerNode.Replacements = [
-      ...standard,
-      // Private instances resolve this list lazily so they inherit the complete host graph, including the selector.
-      ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
-      ...overrides,
-    ]
-    return AppNodeBuilder.build(applicationServices, replacements)
-  }
+  const build = (overrides: LayerNode.Replacements) =>
+    AppNodeBuilder.build(applicationServices, [...standard, ...overrides])
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {
@@ -252,7 +252,10 @@ function makeRoutes(
         HttpRouter.provideRequest(requestServices),
         Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
-        Layer.provideMerge(HttpRouter.layer),
+        // MCP server names are path parameters, and clients name servers longer than find-my-way's default 100 characters.
+        Layer.provideMerge(
+          HttpRouter.layer.pipe(Layer.provide(Layer.succeed(HttpRouter.RouterConfig)({ maxParamLength: 512 }))),
+        ),
         Layer.tap((context) =>
           Effect.sync(() => {
             internal = Context.get(context, HttpRouter.HttpRouter)

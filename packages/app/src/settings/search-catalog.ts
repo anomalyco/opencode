@@ -91,6 +91,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.keepServiceRunning.title",
+    target: "settings-keep-service-running",
+    keywords: "background service server quit exit close tray stop",
+    available: "desktop",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
     available: "mobile",
@@ -146,20 +153,18 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     description: "settings.experimental.row.newTimeline.description",
     keywords: "new timeline redesign activity explored edited ran grouping status",
   },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.automations.title",
-    target: "settings-automations",
-    description: "settings.experimental.row.automations.description",
-    keywords: "automations schedules timers cron watches events",
-  },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.newQuestionUI.title",
-    target: "settings-new-question-ui",
-    description: "settings.experimental.row.newQuestionUI.description",
-    keywords: "question answers keyboard dock redesign",
-  },
+  // Matches questionComposerAvailable in settings/model.tsx; that module is too heavy to import here.
+  ...(import.meta.env?.VITE_OPENCODE_CHANNEL === "local" || import.meta.env?.VITE_OPENCODE_CHANNEL === "dev"
+    ? [
+        {
+          tab: "experimental",
+          label: "settings.experimental.row.questionComposer.title",
+          target: "settings-question-composer",
+          description: "settings.experimental.row.questionComposer.description",
+          keywords: "question answers keyboard dock composer custom answer",
+        } satisfies Entry<SettingsRootTab>,
+      ]
+    : []),
   {
     tab: "experimental",
     label: "settings.experimental.row.tabGroups.title",

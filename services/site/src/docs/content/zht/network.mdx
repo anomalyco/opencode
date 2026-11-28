@@ -1,0 +1,150 @@
+---
+title: "網路"
+description: "設定代理、自訂憑證授權單位與用戶端憑證。"
+---
+
+請設定標準代理變數。OpenCode 的 CLI 與背景服務之間使用本機 HTTP 連線，CLI 會自動讓迴環位址的連線略過代理。
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+`HTTP_PROXY` 處理 HTTP 目的地，`HTTPS_PROXY` 處理 HTTPS 目的地。兩個變數的代理 URL 本身都可以使用 `http://`。
+CLI 啟動時，會將 `127.0.0.1`、`localhost` 和 `::1` 加入 `NO_PROXY` 和 `no_proxy`。若還有其他需要直接連線的主機，請在 `NO_PROXY` 中以逗號分隔列出。
+
+## 服務
+
+Shell 匯出的變數只會在背景服務從該 shell 啟動時影響它。請將變數保存在受管理的
+服務設定中，讓之後的服務啟動使用相同的網路設定。
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+變更受管理的環境變數會停止執行中的服務。`service start` 會以新環境重新啟動它。
+CLI 的 shell 需要另外設定自己的代理變數，因為受管理服務的變數只會套用到伺服器處理程序，不會套用到 CLI。兩端都會自動排除迴環位址。
+
+使用 `service unset env` 移除已保存的變數：
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## 驗證
+
+對於接受 URL 憑證的代理，請在每個需要驗證的代理 URL 中包含使用者名稱與密碼。
+請對任一憑證中的 `@`、`:` 與 `/` 等字元進行百分比編碼。
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+對於背景服務，請保存完整的 URL。該值會儲存在私有的服務設定中，並由
+`opencode service get env` 顯示，因此請勿分享該輸出。
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## 憑證
+
+當代理或目的地使用由私有憑證授權單位簽署的憑證時，請將 `NODE_EXTRA_CA_CERTS`
+設為 PEM 檔案。額外的授權單位會在處理程序啟動時加入執行階段的信任存放區。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+為背景服務保存檔案路徑，然後重新啟動它：
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## 防毒軟體與 HTTPS 檢查
+
+防毒軟體的「HTTPS 掃描」或「加密連線掃描」（Kaspersky、Avast、ESET 等），以及企業的
+SSL 檢查代理，會以自身的憑證取代伺服器的憑證。OpenCode 會拒絕該憑證，請求會以下列
+錯誤失敗：
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+請以下列兩種方式之一修正：
+
+- 在防毒軟體設定中將 `opencode.ai` 與 `*.opencode.ai` 排除於 HTTPS 掃描之外。若你直接連接供應商，也請加入其 API
+  主機，例如 `api.anthropic.com`。
+- 將檢查用的憑證授權單位匯出為 PEM 檔案，並依[憑證](#certificates)所述以 `NODE_EXTRA_CA_CERTS`
+  信任它。
+
+## 用戶端憑證
+
+在閘道需要雙向 TLS 的供應商上設定 `settings.tls`。其模型請求會出示憑證，而
+TLS 握手只會將它傳送給要求憑證的伺服器。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` 與 `key` 是 PEM 文字。使用 `{file:...}` 從檔案讀取。無法讀取的檔案會讓 `tls` 保持未設定。
+- `passphrase` 只有加密金鑰才需要。
+- 適用於 Bun 與 Node 建置。Cloudflare Workers 上的伺服器無法透過 `fetch` 出示用戶端憑證。
+- 使用用戶端憑證的請求不會跟隨重新導向，因此憑證不會出示給其他主機。
+
+該供應商的每個模型請求都會出示憑證：聊天、壓縮、圖片與決策模型。具有 `tls`
+的供應商會使用 HTTP，而不是 WebSocket。webfetch、遠端 MCP 伺服器與外掛安裝等工具不會出示
+它。
+
+## 前景
+
+`--standalone` 與 `serve` 使用其自身處理程序的環境。`opencode service set env` 不會設定這些
+處理程序。
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+對前景伺服器套用相同模式：
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## 確認
+
+套用設定後，檢查 CLI 能否連線到背景服務：
+
+```bash
+opencode api get /api/info
+```
+
+狀態檢查成功，表示本機用戶端可以連到服務。再向供應商發出一般請求，確認服務的對外代理與憑證路徑正常。

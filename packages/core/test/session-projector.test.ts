@@ -1273,10 +1273,9 @@ describe("SessionProjector", () => {
       })
 
       expect(yield* SessionHistory.firstUserMessage(db, sessionID)).toEqual({ id: userID, text: "user attachment" })
-      expect(yield* SessionInbox.nextPromotable(db, sessionID, "input")).toEqual({
-        id: inboxID,
-        type: "user",
-        delivery: "queue",
+      expect(yield* SessionInbox.boundary(db, sessionID, "input")).toEqual({
+        _tag: "Promote",
+        items: [{ id: inboxID, type: "user", delivery: "queue" }],
       })
 
       yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })

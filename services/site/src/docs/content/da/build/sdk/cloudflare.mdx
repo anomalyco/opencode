@@ -1,0 +1,99 @@
+---
+title: "Cloudflare"
+description: "Kør OpenCode inde i et Cloudflare Durable Object med @opencode/sdk/workerd, understøttet af objektets SQLite-lagring."
+---
+
+Brug `@opencode/sdk/workerd` i et Cloudflare Durable Object. Profilen bruger objektets SQLite-lager, gemmer hændelser til gendannelse, hvis instansen fjernes fra hukommelsen, og erstatter de lokale filsystem- og procestjenester, der ikke er tilgængelige.
+
+```sh
+bun add @opencode/sdk
+```
+
+Genbrug én vært i hele Durable Object-instansens levetid i stedet for at oprette en ny ved hver anmodning.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` blokerer alle Durable Object-hændelser, indtil værten er klar, og nulstiller objektet, hvis initialiseringen mislykkes. Ved at beholde det samme Promise har de funktioner, der håndterer anmodninger, direkte adgang til samme vært efter start.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler bruger pakkebetingelsen `workerd` til at vælge de OpenCode-implementeringer, der fungerer i Workerd. Cloudflare kan fjerne et Durable Object fra hukommelsen uden at køre oprydningen, så det skal fungere, selv hvis `close()` ikke kaldes.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Videresend udgående anmodninger
+
+Send `fetch` for at lede OpenCodes udgående HTTP-anmodninger (OpenCode Console-konfiguration, modelanmodninger, webhentning og websøgning, well-known-konfiguration og eksterne MCP-servere) gennem din egen handler, f.eks. en Service Binding. Agentkode i Code Mode bruger fortsat `globalThis.fetch`.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## Tilpas
+
+Tilpas din OpenCode-instans ved at registrere plugins, der er bundlet med din
+Worker. Send plugins til `OpenCodeWorkerd.create()` for at tilpasse agenter, modeller,
+værktøjer og anden adfærd:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Se den [fulde plugindokumentation](/build/plugins/server) for plugin-hooks,
+transforms, værktøjer og den komplette plugin-kontekst.

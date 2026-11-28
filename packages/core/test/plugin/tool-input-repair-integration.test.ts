@@ -294,3 +294,54 @@ it.effect("repairs nested Code Mode calls against the Code Mode input schema", (
     expect(executed).toEqual([{ count: 3, detail: true }, { count: 4 }])
   }),
 )
+
+it.effect("keeps undeclared keys when a required key is missing so the error shows them", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "edit-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) =>
+            draft.add({
+              name: "edit",
+              options: { codemode: false },
+              description: "Edit",
+              input: Schema.Struct({ path: Schema.String, oldString: Schema.String, newString: Schema.String }),
+              execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+            }),
+          ),
+      },
+    ])
+    const snapshot = yield* registry.snapshot()
+    const failed = yield* snapshot
+      .execute({
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-wrong-keys",
+          name: "edit",
+          input: { path: "a.ts", old_string: "a", new_string: "b" },
+        },
+      })
+      .pipe(Effect.flip)
+    expect(failed.message).toContain("oldString")
+    expect(failed.message).toContain("old_string")
+    expect(failed.message).toContain("new_string")
+
+    yield* snapshot.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-extra-key",
+        name: "edit",
+        input: { path: "a.ts", oldString: "a", newString: "b", extra: true },
+      },
+    })
+    expect(executed).toEqual([{ path: "a.ts", oldString: "a", newString: "b" }])
+  }),
+)

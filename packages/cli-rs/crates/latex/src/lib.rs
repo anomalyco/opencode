@@ -37,6 +37,7 @@ fn register(setup: &mut Setup, shown: Shown) {
     let render = Rc::new(renderer(shown));
     for language in ["latex", "math"] {
         let render = render.clone();
+        setup.code_block_draws(language, |code, _| crate::render(code).is_ok());
         setup.code_block(language, move |_, fence| render(fence));
     }
     setup.inline_math(|_, tex| inline_line(tex));

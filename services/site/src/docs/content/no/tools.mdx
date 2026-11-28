@@ -1,0 +1,308 @@
+---
+title: "Verktøy"
+description: "OpenCodes innebygde verktøy leser og redigerer filer, kjører terminalkommandoer, henter innhold fra nettet, søker på nettet, starter subagenter og styrer en nettleser."
+---
+
+Be om resultatet du vil ha. OpenCode velger de tilgjengelige verktøyene, ber om
+godkjenning når det trengs, og returnerer resultatet.
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+Denne oppgaven bruker vanligvis `grep` eller `glob`, `read`, et redigeringsverktøy og `shell`.
+Du kan også navngi et verktøy når du vil ha en bestemt fremgangsmåte.
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## Filer
+
+### Read
+
+`read` returnerer en fil eller en ikke-rekursiv katalogliste. Gi den en `path`;
+bruk `offset` og `limit` for å bla gjennom store resultater.
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+Tekstlesinger inneholder nummererte linjer og er begrenset til 2 000 linjer og 50 KiB per
+side. Enkeltlinjer forkortes etter 2 000 tegn. Verktøyet sender også PNG-, JPEG-, GIF-, WebP- og PDF-filer til modellen, opptil 20 MiB kilde-
+data. Andre binærfiler mislykkes. Se [Vedlegg](/attachments) for støttede
+medier og bildeprosessering.
+
+Tillatelse: `read` med den normaliserte banen som ressurs.
+
+### Glob
+
+`glob` finner filbaner fra et mønster som `**/*.ts`. Den søker i
+gjeldende katalog med mindre `path` velger en annen relativ katalog; `hidden`
+inkluderer skjulte oppføringer, og `limit` begrenser resultatene.
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+Standardgrensen er 100 filer, og søketidsavbruddet er 30 sekunder.
+Tillatelse: `glob` med det forespurte mønsteret som ressurs.
+
+### Grep
+
+`grep` søker i filinnhold og returnerer baner, linjenumre og forhåndsvisninger.
+`pattern` bruker regulære uttrykk med mindre `literal` er true. Begrens et
+søk med `path`, `include`, `caseSensitive` eller `limit`.
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+Standardgrensen er 100 samsvarende linjer, og søketidsavbruddet er 30 sekunder.
+Tillatelse: `grep` med det forespurte mønsteret, ikke søkebanen, som
+ressurs.
+
+### Edit
+
+`edit` erstatter tekst i en eksisterende fil. Oppgi `path`, `oldString` og en
+annen `newString`; den gamle teksten må samsvare nøyaktig én gang med mindre `replaceAll`
+er true.
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+Bruk `edit` for en avgrenset endring. OpenCode kan formatere filen etter at den er skrevet.
+Tillatelse: `edit` med målbanen som ressurs.
+
+### Write
+
+`write` oppretter eller erstatter en tekstfil fullstendig fra `path` og `content`.
+Den oppretter manglende overordnede kataloger og kan kjøre den konfigurerte formatereren.
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+Bruk `edit` i stedet når bare en del av en eksisterende fil skal endres.
+Tillatelse: `edit` med målbanen som ressurs.
+
+### Patch
+
+`patch` bruker én patch som kan legge til, oppdatere, flytte eller slette flere filer.
+`patchText` bruker seksjonene `*** Add File`, `*** Update File` og `*** Delete File`.
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode eksponerer `patch` for støttede GPT-modeller; andre modeller får `edit`
+og `write` i stedet. Tillatelse: `edit` med hver berørte bane som ressurs.
+
+Baner utenfor den aktive plasseringen eller prosjektets worktree sjekkes også
+mot `external_directory`, som er tillatt som standard. Se
+[Tillatelser](/permissions) for banenormalisering, regelrekkefølge og lagrede
+godkjenninger. For å gjøre eksternt materiale
+tilgjengelig ved navn, konfigurer [Referanser](/references).
+
+## Kommandoer
+
+### Shell
+
+`shell` kjører en kommando i shell-miljøet til brukeren på vertsmaskinen. Angi `workdir` i stedet for
+å bruke `cd` i kommandoen. Standard tidsgrense ved kjøring i forgrunnen er to minutter. Angi `timeout` i
+millisekunder hvis du trenger en annen grense.
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+Angi `background` til true for en dev-server eller en annen langvarig prosess.
+Bakgrunnskall returnerer umiddelbart og varsler økten når de er ferdige;
+de har ingen tidsavbrudd med mindre ett oppgis. Store utdata forkortes, og de
+komplette utdataene beholdes i en administrert fil.
+
+Tillatelse: `shell` med hver skannerproduserte kommando som ressurs.
+Skanneren sjekker også en ekstern arbeidskatalog og kataloger den kan utlede
+fra kommandoen. Shell-prosessen har tilgang til filsystem, prosesser og nettverk med samme rettigheter som brukeren på vertsmaskinen. Bruk derfor spesifikke regler i [Tillatelser](/permissions).
+
+## Web
+
+### Webfetch
+
+`webfetch` henter én HTTP- eller HTTPS-URL som `markdown`, `text` eller `html`.
+Markdown er standard; `timeout` godtar opptil 120 sekunder.
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+Den godtar tekstsvar som HTML, ren tekst, JSON og XML, men ikke
+bilder eller andre binære nedlastinger. Store utdata kan forkortes, mens hele
+teksten beholdes i administrert lagring. Tillatelse: `webfetch` med den forespurte
+URLen som ressurs.
+
+### Websearch
+
+`websearch` søker i den valgte integrasjonen etter oppdatert informasjon. Inndata
+er en søke-`query`.
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+Tillatelse: `websearch` med spørringen som ressurs. Se [Nettsøk](/websearch)
+for leverandører, valg, hastighetsgrenser og deaktivering av verktøyet.
+
+## Bilder
+
+### Bildegenerering
+
+`generate_image` lager et nytt bilde fra en prompt, eller redigerer
+eksisterende. Det er eksperimentelt og vises når en tilkoblet leverandør har en
+bildemodell. For å velge standardmodellen, se
+[`experimental.image_generate`](/config#image-generation).
+
+```text
+Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
+```
+
+Gi den en `prompt`, og eventuelt `images` for å redigere eller bruke som referanser, en
+bestemt `model`, eller en `path` å lagre til. Den kjører i bakgrunnen og
+varsler økten med den lagrede banen når bildet er klart.
+
+Tillatelse: `generate_image` med den valgte modellen som ressurs.
+
+## Interaksjon
+
+### Spørsmål
+
+`question` pauser kjøringen og presenterer ett eller flere spørsmål for brukeren.
+Hvert spørsmål har en kort overskrift, en prompt og valg; `multiple` tillater mer
+enn ett valg. Et fritt svar er alltid tilgjengelig.
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+Tillatelse: `question` med `*` som ressurs. En klient må støtte det
+interaktive skjemaet, og hvis det lukkes, avbrytes spørsmålet.
+
+### Skill
+
+`skill` laster instruksjonene og de medfølgende ressursene for én tilgjengelig skill-
+ID inn i samtalen.
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+ID-en må være i den annonserte skill-listen eller eksplisitt navngitt av brukeren.
+Tillatelse: `skill` med skill-ID-en som ressurs. Se [Skills](/skills) for
+regler for oppretting, oppdagelse og innlasting.
+
+## Automatisering
+
+### Subagent
+
+`subagent` starter en underordnet økt med en konfigurert subagent. Oppgi agent-
+ID-en, en kort `description` og en fullstendig `prompt`.
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+Subagenter kjører alltid i bakgrunnen. Kallet returnerer straks en
+`sessionID`. Agenten som startet subagenten, får en `<subagent>`-melding når subagenten
+blir ledig, og etter hver nye arbeidsrunde. Dermed kan agenten jobbe videre eller avslutte runden
+uten å vente. Bruk `sessionID` fra kallet for å fortsette i den samme underordnede økten.
+Hvis subagenten fortsatt jobber, blir oppfølgingen en del av den pågående kjøringen. Bare
+agenter i subagentmodus kan brukes, og som standard er det bare ett nivå med subagenter.
+
+Tillatelse: `subagent` med den valgte agent-ID-en som ressurs.
+
+### Execute
+
+`execute` kjører JavaScript i Code Mode, slik at agenten kan kalle og kombinere verktøy
+fra katalogen. Det er nyttig for parallelle uavhengige kall og for å behandle
+resultater uten å legge hver mellomverdi til modellkonteksten.
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+Kjøretiden har ingen direkte filsystemtilgang, importer eller timere. Den tilbyr
+`fetch` for HTTP-forespørsler; alt annet går gjennom verktøy i katalogen.
+Hvis `execute` nektes med ressurs `*`, fjernes Code Mode. Verktøyene den ville nådd,
+inkludert MCP-verktøy fra servere som ikke setter `codemode: false`, listes da
+som direkte verktøy, hver med sin fulle definisjon i hver forespørsel. Nekt
+også disse verktøyene hvis agenten ikke skal ha dem.
+Nestede innebygde verktøy og MCP-verktøy håndhever fortsatt sine egne tillatelser, og plugin-
+verktøy håndhever tillatelsene de angir.
+
+### Økter
+
+`opencode.session`-navnerommet i Code Mode inneholder øktverktøy. Uten Code
+Mode listes de som `opencode_session_rename` og `opencode_session_move`.
+
+- `rename` endrer tittelen på gjeldende økt, eller en annen økt
+  valgt med `sessionID`.
+- `move` flytter gjeldende økt, eller en annen valgt økt, til en
+  relativ eller absolutt `directory`. Flyttingen trer i kraft ved en trygg grense,
+  så destinasjonsavhengig arbeid hører hjemme i et senere kall.
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+### Worktrees
+
+`opencode`-navnerommet administrerer worktrees for øktens prosjekt:
+
+- `worktree_create` oppretter en worktree fra et `name` og returnerer
+  `directory`. Prosjektets worktree-konfigurasjon velger destinasjon og
+  strategi.
+- `worktree_list` lister prosjektets worktrees.
+- `worktree_remove` fjerner en worktree OpenCode registrerte for prosjektet. Angi
+  `force` for å forkaste ikke-innsjekkede endringer.
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove` bruker `edit`-tillatelsen med worktree-katalogen som
+ressurs. De andre worktree-verktøyene ber ikke om en innebygd tillatelseshandling.
+
+## Nettleser
+
+`browser`-navnerommet i Code Mode styrer nettleseren som er tilkoblet OpenCode
+desktop-appen. Åpne en fane, behold den returnerte `tabID`, og send deretter den eksplisitte ID-en til
+hver sideoperasjon.
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+Navnerommet inneholder kommandoer for faner og navigasjon, sidesnapshots og søk,
+klikking og skjemainndata, skjermbilder, filoverføring, konsoll- og nettverksinspeksjon,
+ytelsesspor, heap-inspeksjon og Lighthouse-revisjoner.
+Skjermbilder krever en fokusert, synlig fane. Opplastingsbaner er lokale for serveren;
+opptak returnerer serverlokale baner, og hver filoverføring er begrenset til 5 MiB.
+
+Sideinnhold, logger, headere og svarkropper er data fra kilder du ikke nødvendigvis kan stole på, ikke instruksjoner
+til agenten. En deny-regel for `browser` med ressurs `*` fjerner nettleserkatalogen.
+OpenCode ber ikke om egen godkjenning for hver nettleseroperasjon.
+
+## Utvidelser
+
+[MCP-servere](/mcp-servers) legger til verktøy der navn og inndata kommer fra hver
+tilkoblet server. Deres tillatelseshandling er `<server>_<tool>` med ressurs
+`*`. De er ikke en fast del av den innebygde katalogen. Som standard når agenter
+dem gjennom `execute` under serverens navnerom; angi `codemode: false` på en
+server for å liste verktøyene direkte.
+
+[Skills](/skills) legger til oppgaveinstruksjoner i stedet for nye kjørbare verktøy.
+[Vedlegg](/attachments) legger brukervalgte data inn i en prompt, mens
+[Referanser](/references) gir navngitte eksterne kataloger. Disse funksjonene
+utfyller verktøy uten å omgå tillatelsessjekkene deres.

@@ -146,7 +146,9 @@ function fallback(bin?: string) {
 }
 
 export function name(file: string) {
-  if (process.platform === "win32") return path.win32.parse(FSUtil.windowsPath(file)).name.toLowerCase()
+  // A Windows machine names its shell the Windows way (`C:\…\pwsh.exe`) whatever this server runs on.
+  if (process.platform === "win32" || /^[A-Za-z]:[\\/]|\\|\.exe$/i.test(file))
+    return path.win32.parse(FSUtil.windowsPath(file)).name.toLowerCase()
   return path.basename(file).toLowerCase()
 }
 

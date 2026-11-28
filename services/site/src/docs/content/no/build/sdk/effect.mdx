@@ -1,0 +1,102 @@
+---
+title: "Effect-SDK"
+description: "Kjør OpenCode i et Effect-program med @opencode/sdk/effect, det Effect-native innebygde SDK-et."
+---
+
+`@opencode/sdk/effect` er det innebygde SDK-et for Effect. Operasjoner returnerer Effects og Streams med definerte typer.
+Når Scope-objektet som eier verten, lukkes, frigjøres ruteren, Location-tjenestene, fiberne og plugin-registreringene.
+
+```sh
+bun add @opencode/sdk effect@4.0.1
+```
+
+## Lag en vert
+
+Lag verten inne i `Effect.scoped`, og bruk deretter de genererte API-gruppene eller `sessions`-aliaset.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+Den innebygde verten bruker samme skjemaverdier, deklarerte feil, forespørselsalternativer og Streams som
+`@opencode/client/effect`.
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## Strøm hendelser
+
+Strømmende endepunkter returnerer `Stream`-verdier fra Effect. Start en egen fiber i vertens Scope for hver leser som skal kjøre
+i bakgrunnen.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## Tilpass
+
+Tilpass OpenCode-forekomsten din ved å registrere Effect-plugins. Bruk den innebygde
+verten til å tilpasse agenter, modeller, verktøy og annen atferd:
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+Se [den fullstendige Effect-plugin-dokumentasjonen](/build/plugins/effect) for plugin-
+hooks, transforms, verktøy og hele pluginkonteksten.
+
+## Layer
+
+Bruk `OpenCode.layer()` når den innebygde verten skal være en applikasjonstjeneste.
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

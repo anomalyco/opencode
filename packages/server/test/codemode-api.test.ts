@@ -15,6 +15,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
+import { noToolCalls } from "../../core/test/lib/tool"
 import { createRoutes } from "../src/routes"
 
 it.live("sends Code Mode opencode:// requests to the server's own router with the server's credential", () =>
@@ -78,6 +79,7 @@ it.live("sends Code Mode opencode:// requests to the server's own router with th
           messageID: SessionMessage.ID.create(),
           id: Tool.CallID.make("call_opencode_api"),
           progress: () => Effect.void,
+          tool: noToolCalls,
         },
       )
     }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))))

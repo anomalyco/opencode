@@ -34,9 +34,9 @@ const ConnectServerScreen = lazy(() =>
 
 // The dev server and Beta only. Both are fixed at build time, so other builds, prod included, drop the import and never
 // contain the lab, its stories or knobs. Beta loads it as its own chunk, only when /components opens.
-const ComponentsLab =
+const Lab =
   import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
-    ? lazy(() => import("@/components-lab/lab"))
+    ? lazy(() => import("@/lab/lab"))
     : undefined
 
 const TargetSessionRouteContent = lazy(() =>
@@ -83,7 +83,7 @@ export function AppRoutes() {
         )}
       />
       <Route path="/new-session" component={DraftRoute} />
-      {ComponentsLab && <Route path="/components" component={ComponentsLab} />}
+      {Lab && <Route path="/components" component={Lab} />}
     </Route>
   )
 }

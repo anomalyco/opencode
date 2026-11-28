@@ -1,0 +1,44 @@
+---
+title: "Búsqueda web de Console"
+description: "Búsqueda web alojada para OpenCode a través de Console."
+---
+
+Console ofrece búsqueda web alojada a los usuarios de OpenCode conectados. Un propietario o administrador del espacio de trabajo la habilita una vez para el espacio, sin dar a los miembros una clave de proveedor de búsqueda aparte.
+
+Cada búsqueda completada cuesta **$0.01**. El importe se descuenta del saldo del espacio de trabajo y cuenta para los límites de gasto de los miembros.
+
+## Habilitar
+
+1. Inicia sesión en [Console](https://opencode.ai/console) como propietario o administrador del espacio de trabajo.
+2. Abre **Integrations** y haz clic en **Set up** en **Hosted Web Search**.
+3. Haz clic en **Enable**.
+
+Después, cada miembro conecta OpenCode al espacio de trabajo con `/connect`.
+
+```text
+/connect
+```
+
+La configuración del espacio de trabajo selecciona **OpenCode Web Search** como proveedor predeterminado. Los miembros no necesitan definir `websearch.provider` ni agregar una clave de API de proveedor. Un miembro que defina su propio `websearch.provider` conserva esa opción.
+
+## Buscar
+
+Pide a OpenCode información actual en un prompt. Las búsquedas se ejecutan desde OpenCode, no desde una página interactiva de Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+El proveedor alojado busca en la web pública y devuelve hasta ocho resultados. OpenCode usa los resultados para responder al prompt y citar las fuentes.
+
+Consulta la [guía de búsqueda web](/websearch) para configurar permisos o deshabilitar la herramienta.
+
+## Facturación
+
+Console cobra **$0.01** cuando una búsqueda devuelve un conjunto de resultados válido. No cobra las búsquedas que fallan o se bloquean por un límite de solicitudes.
+
+La búsqueda web se muestra por separado del uso de modelos en **Activity › Usage**, **Activity › Overview**, la actividad de los miembros, las facturas y las exportaciones CSV. Los cargos de búsqueda web cuentan para las políticas de presupuesto que abarcan todo el gasto.
+
+## Privacidad
+
+La búsqueda web alojada tiene retención cero de datos. Console y su proveedor de búsqueda procesan cada consulta y sus resultados sin almacenar su contenido.

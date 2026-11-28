@@ -1,0 +1,104 @@
+---
+title: "用量导出 API"
+description: "以 CSV 下载工作区的每日用量，包含每天、每个人、每个提供商和每个模型的请求数、token 和费用。"
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export` 以 CSV 返回工作区的用量，每行对应一个 UTC 日期、成员或服务账号、提供商和模型。它与 **Activity › Usage** 中 **Export usage** 按钮下载的文件相同。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## 认证
+
+将 [API 密钥](/console/api#api-keys)作为 bearer 令牌发送。密钥会导出其创建时所在的工作区。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+密钥需要 **Usage › Read**。拥有 **All** 或 **Read only** 的密钥具备该权限。受限密钥需要：
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+定时导出请使用[服务账号密钥](/console/api#service-accounts)，或者所有者、管理员的[个人 API 密钥](/console/api#personal-api-keys)。成员无法读取工作区用量，因此他们的密钥会返回 `403`。
+
+## 请求
+
+| 参数 | 必需 | 值                                                                                                                 |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `range`   | 是      | `7d`、`30d` 或 `90d`。                                                                                                |
+| `user_id` | 否       | 成员 ID（`user_...`）或服务账号 ID（`svcacct_...`）。仅返回该成员或服务账号的行。 |
+
+`range` 按 UTC 天数计算并包含今天，因此 `7d` 表示今天及之前的六天。今天的行会在 UTC 午夜前持续增长。
+
+要导出一个服务账号的用量，请传入之前导出中 `user_id` 列里的 ID：
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+不在该工作区中的 ID 只会返回表头行。
+
+## 响应
+
+请求成功时返回 `200` 和 `Content-Type: text/csv; charset=utf-8`。第一行是表头，随后是数据行，最新的日期在前。
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- 行以 `\r\n` 结尾。
+- 没有用量的日期没有行。
+- 响应会作为下载返回（`Content-Disposition: attachment; filename="usage-30d.csv"`），且永远不会被缓存（`Cache-Control: private, no-store`）。
+- 以 `=`、`+`、`-` 或 `@` 开头的文本单元格会添加前导 `'`，以免电子表格将其作为公式执行。
+
+### 列
+
+| 列                  | 含义                                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `day`                   | UTC 日期，格式为 `YYYY-MM-DD`。                                                                                |
+| `user_type`             | `member` 或 `service_account`。                                                                                |
+| `user_id`               | 成员或服务账号的 ID。                                                                         |
+| `user_name`             | 成员的邮箱，或服务账号的名称。可以为空。                                              |
+| `provider`              | 处理请求的提供商，例如 [OpenCode Models](/console/models) 的 `opencode`。             |
+| `model`                 | 模型 ID。                                                                                                 |
+| `requests`              | 请求数。                                                                                           |
+| `input_tokens`          | 输入 token。                                                                                                 |
+| `output_tokens`         | 输出 token。                                                                                                |
+| `cache_read_tokens`     | 从提示词缓存读取的 token。                                                                            |
+| `cache_write_5m_tokens` | 写入提示词缓存、生命周期为 5 分钟的 token。                                                  |
+| `cache_write_1h_tokens` | 写入提示词缓存、生命周期为 1 小时的 token。                                                    |
+| `cost_micro_cents`      | 以整数微美分表示的费用。1 美元为 `100000000`。                                          |
+| `cost_usd`              | 以美元表示的相同费用，为至少两位小数的精确值，例如 `2.145` 或 `0.00`。 |
+
+### 包含的内容
+
+- 工作区成员和服务账号发出的每个模型请求。
+- 对免费模型的请求，以及成员通过自己的 Claude Code、Codex 或 OpenCode 订阅发出的请求，也会计入，其 token 按零费用计算。
+- 不包含[网页搜索](/console/websearch)和其他托管服务。
+- 汇总数据可能比新请求晚大约一分钟。
+
+## 限制
+
+- 每次导出最多覆盖 90 天。要保留更长的历史，请按计划保存文件。
+- 请求计入控制台 API 每账号每分钟 300 次的限制，并与其其他端点共享。个人 API 密钥的请求计入拥有该密钥的成员。
+
+## 错误
+
+| 状态 | 含义                                                                                               |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| `400`  | `range` 缺失或不是 `7d`、`30d` 或 `90d`，或者 `user_id` 不是成员或服务账号 ID。 |
+| `401`  | 没有凭据，或密钥已过期、已撤销。                                                         |
+| `403`  | 密钥没有 **Usage › Read**，或属于不是所有者或管理员的成员。         |
+| `429`  | 超出速率限制。请按 `Retry-After` 响应头中的秒数重试。                   |
+| `503`  | 每日汇总数据尚不可用。请稍后重试。                                           |

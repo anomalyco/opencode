@@ -1,0 +1,164 @@
+---
+title: "Allegati"
+description: "Allega file, directory e immagini ai prompt di OpenCode e scopri cosa riceve il modello per ogni formato."
+---
+
+## Allegare
+
+Allega un file locale, poi chiedi a OpenCode di usarlo nel prompt. Nel client desktop
+o web, scegli **Attach file**, incolla un file o trascinalo nel prompt.
+
+```text
+Summarize the attached README.md and list the required setup steps.
+```
+
+Le selezioni dal file picker del desktop possono arrivare a 20 MiB in totale. Altre interfacce possono
+applicare limiti lato client più bassi.
+
+<Callout type="warning">
+  Prima di allegare un'immagine, scegli un modello che accetti immagini in input. OpenCode può inviare al provider le immagini
+  supportate, ma il provider e il modello applicano comunque i propri requisiti per formato, dimensioni dell'immagine, numero di file e dimensioni in byte.
+  Un modello che accetta solo testo può rifiutare la richiesta.
+</Callout>
+
+## Sintassi
+
+Gli input di prompt e comandi V2 descrivono un allegato con un `uri` e `name` e
+`description` facoltativi:
+
+```json
+{
+  "uri": "file:///home/me/project/src/server.ts",
+  "name": "server.ts",
+  "description": "HTTP server entrypoint"
+}
+```
+
+Usa un URL `file:` assoluto per un file o una directory disponibili al
+server. Per i file di testo, i parametri positivi `start` ed `end` selezionano righe
+con base uno.
+
+```text
+file:///home/me/project/src/server.ts?start=20&end=60
+```
+
+Usa un URL `data:` per inviare contenuto inline:
+
+```json
+{
+  "uri": "data:text/plain;base64,SGVsbG8sIE9wZW5Db2RlIQ==",
+  "name": "greeting.txt"
+}
+```
+
+Gli URL di allegati HTTP e HTTPS non sono supportati. Vedi il [riferimento API](/api)
+generato per l'invio programmatico dei prompt.
+
+## Formati
+
+Le sessioni V2 correnti rendono visibili al modello questi tipi di allegato:
+
+| Input                   | Il modello riceve                                        | Esempio            |
+| ----------------------- | -------------------------------------------------------- | ------------------ |
+| File di testo UTF-8     | Nome del file e testo decodificato                       | `README.md`        |
+| Directory               | Elenco non ricorsivo dei file e delle directory immediati | `file:///home/me/` |
+| PNG, JPEG, GIF o WebP   | Immagine                                                 | `diagram.png`      |
+| PDF                     | Documento                                                | `report.pdf`       |
+
+I PDF richiedono un modello con input PDF. Se il modello non supporta il tipo di un allegato,
+OpenCode invia una breve nota al suo posto.
+
+SVG viene trattato come testo. AVIF, BMP, audio, video e altri allegati binari al prompt
+non vengono inclusi nella richiesta al modello. Converti prima un binario non supportato in testo o in un'immagine
+supportata; ad esempio, converti un'immagine BMP in PNG prima di allegarla.
+
+OpenCode legge ogni allegato prima di accettare il prompt. Rifiuta URL non validi,
+percorsi illeggibili, percorsi diversi da file o directory e allegati decodificati oltre 20 MiB. Il tipo di media viene rilevato dai byte, quindi cambiare
+il nome di un file o il tipo di media di un URL `data:` non rende visibile un binario non supportato.
+
+## Immagini
+
+Configura la normalizzazione delle immagini in `opencode.json` o `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Tutti i campi sono facoltativi:
+
+| Campo              | Predefinito | Comportamento                                                            |
+| ------------------ | ----------- | ------------------------------------------------------------------------ |
+| `auto_resize`      | `true`      | Ridimensiona un'immagine oltre un limite configurato; quando è `false`, rifiuta l'immagine. |
+| `max_width`        | `2000`      | Larghezza massima in pixel; deve essere un intero positivo.              |
+| `max_height`       | `2000`      | Altezza massima in pixel; deve essere un intero positivo.                |
+| `max_base64_bytes` | `5242880`   | Numero massimo di byte dell'immagine codificata in Base64. Deve essere un intero positivo. |
+
+Ad esempio, questo rifiuta invece di ridimensionare un'immagine più larga di 1200 pixel:
+
+```jsonc title="opencode.jsonc"
+{
+  "media": {
+    "image": {
+      "auto_resize": false,
+      "max_width": 1200,
+    },
+  },
+}
+```
+
+Queste impostazioni si applicano sia alle immagini supportate allegate ai prompt sia alle immagini
+restituite dallo strumento integrato `read`.
+
+## Elaborazione
+
+Lo strumento `read` riconosce PNG, JPEG, GIF e WebP dal contenuto e legge
+fino a 20 MiB di dati dell'immagine sorgente. Controlla larghezza, altezza e lunghezza Base64
+rispetto ai limiti delle immagini configurati.
+
+Con `auto_resize: true`, OpenCode conserva le proporzioni e riduce
+fino ai limiti di dimensione. Poi prova codifiche PNG e JPEG progressivamente più piccole
+finché non raggiunge il limite Base64, quindi il tipo di media di output può cambiare.
+
+```text
+Input:  4000 × 2000 WebP
+Limits: 2000 × 2000
+Output: 2000 × 1000 PNG or JPEG
+```
+
+Se nessuna codifica rientra, l'elaborazione fallisce. Con `auto_resize: false`, un'immagine che
+supera qualsiasi limite fallisce senza modifiche; anche un'immagine che non può essere decodificata
+fallisce.
+
+```text
+Input:  2400 × 1600 JPEG
+Limit:  max_width = 2000, auto_resize = false
+Result: Image processing fails
+```
+
+Se il ridimensionatore di immagini non è disponibile, OpenCode passa l'immagine originale
+invariata. Le impostazioni delle immagini sono quindi limiti di elaborazione, non un confine di caricamento o di sicurezza.
+
+## Limiti
+
+| Limite                        | Valore o comportamento                                        | Esempio                                      |
+| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------- |
+| Allegato diretto              | 20 MiB decodificati per elemento; i client possono imporre limiti più bassi | Due file da 12 MiB rispettano il limite per elemento |
+| Selezione dal picker del desktop | 20 MiB in totale                                           | Due file da 12 MiB superano il limite della selezione |
+| `max_base64_bytes`            | Solo Base64 codificato, escluso l'intero URL `data:`          | `SGVsbG8=` conta come 8 byte                 |
+| Limiti immagini del provider  | Si applicano dopo l'elaborazione di OpenCode                  | Un provider può rifiutare un'immagine accettata |
+| Supporto dei modelli per gli allegati di testo | Non richiede un modello multimodale          | `notes.txt` viene inserito come testo del prompt |
+| Limiti di testo di `read`     | Usa limiti separati di paginazione e troncamento              | Leggi un log grande a pagine                 |
+
+Che un client accetti un file non garantisce che il suo contenuto raggiunga il
+modello. L'allegato deve usare un formato visibile al modello e rispettare sia i limiti di OpenCode
+sia quelli del provider.

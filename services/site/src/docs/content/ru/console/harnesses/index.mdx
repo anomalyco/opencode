@@ -1,0 +1,105 @@
+---
+title: "Harness"
+description: "Используйте модели Console и Go из других агентов для программирования и AI-приложений."
+---
+
+Console работает и с другими агентами для программирования. Подключите harness к шлюзу Console с помощью API-ключа, чтобы использовать любую платную модель или модель Go. Запросы оплачиваются так же, как остальные запросы вашего рабочего пространства.
+
+| Harness                                       | Оплата по факту | Go       | MCP |
+| --------------------------------------------- | --------------- | -------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | Да              | Да       | Да  |
+| [Codex](/console/harnesses/codex)             | Да              | Да       | Да  |
+| [Hermes](/console/harnesses/hermes)           | Встроено        | Встроено | Да  |
+| [OpenClaw](/console/harnesses/openclaw)       | Плагин          | Встроено | Да  |
+| [Pi](/console/harnesses/pi)                   | Встроено        | Встроено | Да  |
+| [Raycast](/console/harnesses/raycast)         | Расширение      | Расширение | Да  |
+
+Чат-модели бесплатного уровня доступны только внутри OpenCode. Другие harness получают для этих моделей HTTP `403`, даже с API-ключом Console. Используйте платные модели или подписку Go.
+
+## Console CLI
+
+[Console CLI](https://github.com/anomalyco/opencode-console-cli) подключает harness к рабочему пространству одной командой. Для работы нужен Node.js 22 или новее.
+
+| Harness          | Команда                                        |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+В браузере открывается Console. Подтвердите вход и выберите рабочее пространство. После этого harness получает:
+
+- модели рабочего пространства через Console;
+- политики рабочего пространства, которые проверяются перед каждым вызовом инструмента;
+- MCP-серверы, навыки и инструкции рабочего пространства.
+
+Console CLI синхронизирует настройки harness с рабочим пространством и обновляется автоматически.
+
+Чтобы сохранить текущий способ входа и модели harness, например подписку Claude или ChatGPT, добавьте `--keep-provider`. Политики, MCP-серверы, навыки и инструкции рабочего пространства при этом всё равно применяются. Флаг работает с Claude Code, Codex, Hermes и OpenClaw.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+Чтобы настроить harness вручную или тот, который не покрывает CLI, используйте API-ключ и базовые URL ниже.
+
+## Получение API-ключа
+
+Harness аутентифицируются ключом API Console. Самый быстрый вариант — [личный API-ключ](/console/api#personal-api-keys), который вызывает модели от вашего имени.
+
+1. Откройте **Account** из меню аккаунта в [Console](https://opencode.ai/console).
+2. В разделе **Personal API keys** нажмите **Add API key**.
+3. Выберите рабочее пространство, задайте имя ключа и нажмите **Create**.
+4. Скопируйте ключ. Он показывается только один раз.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Расходы учитываются в вашем [бюджете участника](/console/budgets#member-budgets). Для оплаты по факту используйте ключ рабочего пространства, на балансе которого есть кредиты; для Go — ключ рабочего пространства с подпиской [Go](/console/go).
+
+Для общих машин или CI владельцы и администраторы могут создать ключ [сервисного аккаунта](/console/api#service-accounts), чтобы использование не было привязано к одному человеку.
+
+## Базовые URL
+
+Оплата по факту и Go обслуживаются с разных базовых URL. Используйте тот, что соответствует вашему тарифу.
+
+| Тариф          | Базовый URL                        |
+| -------------- | ---------------------------------- |
+| Оплата по факту | `https://opencode.ai/inference`    |
+| Go             | `https://opencode.ai/inference/go` |
+
+Добавьте путь API, который использует ваш harness. Через любой из этих API доступны все платные текстовые модели и текстовые модели Go. Если модель поддерживает этот API, Console пересылает запрос на её собственный эндпоинт, а если нет — преобразует его.
+
+| API                     | Путь                                            |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## Сессии
+
+Отправляйте стабильный ID сессии с каждым запросом, чтобы Console мог последовательно маршрутизировать разговор и переиспользовать кэш промптов. Go [требует его](/console/go#where-can-i-use-it).
+
+```text
+x-opencode-session: ses_...
+```
+
+Console также распознаёт нативные заголовки сессий, которые отправляют Claude Code, Codex, Hermes и Pi, а OpenClaw сам отправляет `x-opencode-session`, поэтому никому из них не нужна дополнительная настройка.
+
+## MCP Console
+
+Если ваш harness поддерживает MCP, он может управлять рабочим пространством через MCP-сервер Console. Сервер использует OAuth с динамической регистрацией клиента: вместо ввода ключа выполните вход в браузере.
+
+```text
+https://opencode.ai/console/mcp
+```
+
+Инструкции по добавлению сервера есть на странице каждого harness. Когда сервер включён в рабочем пространстве, OpenCode автоматически добавляет его как `opencode_console` и при первом использовании просит войти в браузере.

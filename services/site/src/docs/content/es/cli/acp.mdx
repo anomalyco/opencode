@@ -1,0 +1,396 @@
+---
+title: "ACP"
+description: "Usa OpenCode con un cliente Agent Client Protocol."
+---
+
+`opencode acp` ejecuta OpenCode como un agente de [Agent Client Protocol](https://agentclientprotocol.com), para que puedas usarlo
+desde un cliente ACP como Zed. Este ejemplo agrega OpenCode a Zed:
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Otros clientes ACP usan el mismo comando y el argumento `acp`, pero sus archivos de configuración y nombres de campo pueden variar. Si
+un cliente gráfico no encuentra `opencode`, define `command` con la ruta absoluta que imprime `which opencode`.
+
+## Autenticación
+
+OpenCode usa las credenciales de proveedor que ya tiene. Inicia sesión desde un terminal antes de iniciar el cliente ACP:
+
+```bash
+opencode auth login
+```
+
+OpenCode ofrece un método de autenticación, `opencode-login`. De forma predeterminada es un método de autenticación de agente. La solicitud `authenticate`
+acepta solo ese método y no recopila credenciales. Si un prompt falla porque un proveedor necesita autenticación,
+OpenCode devuelve el error `auth_required` de ACP.
+
+Si el cliente define `clientCapabilities.auth.terminal` como `true`, el método de autenticación es un método de terminal:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+El cliente no debe enviar este método a `authenticate`. En su lugar, agrega `--login` al comando que inicia OpenCode,
+por ejemplo `opencode acp --login`, y lo ejecuta en un terminal. OpenCode ejecuta el flujo de `opencode auth login` y sale.
+Un estado de salida 0 significa que el inicio de sesión se completó. El cliente se vuelve a conectar y envía `initialize` de nuevo.
+
+Si el cliente define `clientCapabilities._meta["terminal-auth"]` como `true`, el método de autenticación incluye el comando de inicio de sesión:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## Solución de problemas
+
+`opencode acp` espera mensajes ACP en stdin, así que parece bloqueado cuando lo ejecutas directamente en un terminal. Inícialo desde
+un cliente ACP en su lugar.
+
+Si el cliente informa de que el proceso terminó o escribió una salida de protocolo no válida, agrega `--print-logs` antes de `acp` en los
+argumentos del cliente. OpenCode escribe entonces sus registros de ACP y del servidor privado en stderr. Stdout solo lleva mensajes ACP.
+
+```bash
+opencode --print-logs acp
+```
+
+## Referencia del protocolo
+
+Esta sección es para autores de clientes ACP. Enumera las partes de ACP que admite OpenCode y las claves `_meta` que
+agrega OpenCode. Los clientes que no reconozcan estas claves pueden ignorarlas. La
+[documentación de ACP](https://agentclientprotocol.com) define los mensajes.
+
+### Transporte
+
+El cliente inicia `opencode acp` como proceso hijo. Ambos intercambian mensajes JSON-RPC delimitados por saltos de línea por stdin y
+stdout, usando la versión 1 del protocolo ACP.
+
+`opencode acp` inicia un servidor privado de OpenCode para su propio uso. No se conecta al servicio en segundo plano compartido
+ni abre un puerto de red para ACP. Un proceso puede servir muchas sesiones ACP. Termina cuando el cliente cierra
+stdin.
+
+### Capacidades
+
+La respuesta `initialize` de OpenCode incluye estas capacidades de agente:
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode lee estas capacidades del cliente:
+
+| Capacidad                              | Efecto                                                         |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `auth.terminal` definido como `true`   | El método de autenticación es un [método de terminal](#authentication). |
+| `elicitation.form`                     | OpenCode hace [preguntas](#questions) como formularios.        |
+| `session.compaction`                   | OpenCode informa de la [compactación](#compaction) con las actualizaciones de ACP. |
+| `_meta["terminal-auth"]` definido como `true` | El método de autenticación incluye el [comando de inicio de sesión](#authentication). |
+
+### Sesiones
+
+El cliente define el directorio de trabajo al crear una sesión. OpenCode usa la configuración de ese directorio,
+incluidos sus modelos, agentes, comandos, skills, instrucciones, plugins y servidores MCP.
+
+- `cwd` debe ser una ruta absoluta. OpenCode rechaza un `cwd` relativo con un error de parámetros no válidos.
+- `session/load` repite los mensajes guardados. `session/resume` y `session/fork` no los repiten.
+- Para cargar, reanudar o bifurcar una sesión, el cliente debe pasar el directorio de esa sesión como `cwd`, u otro directorio del
+  mismo proyecto, como el checkout principal de una sesión que se trasladó a un worktree. OpenCode rechaza cualquier otro
+  `cwd` con un error de parámetros no válidos cuyo `data.directory` es el directorio de la sesión.
+- `session/list` devuelve hasta 100 sesiones por página. Acepta un filtro `cwd` y un `cursor`. Cada sesión de subagente
+  lleva `_meta["opencode/child-session"]` con su `id`, `parentID` y `title`.
+- Cuando OpenCode renombra una sesión, por ejemplo después de generar un título, envía `session_info_update` con el nuevo
+  `title`.
+- `session/close` interrumpe el trabajo activo y desvincula la sesión del proceso ACP. OpenCode conserva la sesión
+  guardada.
+- `session/delete` termina un prompt activo como `session/cancel` y luego elimina la sesión. Eliminar una sesión que
+  no existe se considera correcto.
+- Una sesión ejecuta un prompt a la vez. OpenCode devuelve un error para un segundo `session/prompt` mientras el primero está
+  activo.
+- Si un prompt falla, el `data` del error tiene el `errorName` del fallo. También tiene `status` y `retryAfterMs` cuando
+  el proveedor los envió.
+
+### Cancelación
+
+`session/cancel` termina el prompt activo con `stopReason: "cancelled"`. Un `$/cancel_request` para la solicitud del prompt hace
+lo mismo. OpenCode rechaza las solicitudes de permiso pendientes. Informa de las llamadas a herramientas que no terminan después de una cancelación como
+`failed`.
+
+### Directorios adicionales
+
+El cliente puede pasar `additionalDirectories` en `session/new`, `session/load`, `session/resume` y `session/fork`:
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- Cada entrada debe ser una ruta absoluta sin `*` ni `?`.
+- OpenCode permite el acceso a directorios externos dentro de cada raíz. Las reglas de permisos de lectura, edición y shell siguen aplicándose.
+- La lista de cada solicitud sustituye a la lista anterior de la sesión, como especifica el
+  [RFD de directorios adicionales](https://agentclientprotocol.com/rfds/additional-directories).
+- OpenCode guarda los permisos en la sesión, así que también se aplican cuando otro cliente de OpenCode usa la sesión. Las sesiones hijas
+  copian los permisos cuando OpenCode las crea.
+
+`session/list` devuelve la lista guardada de cada sesión en `additionalDirectories`.
+
+### Opciones de configuración
+
+Las sesiones nuevas usan el modelo predeterminado y el agente principal del directorio. Las respuestas a `session/new`, `session/load`,
+`session/resume` y `session/fork` incluyen estas opciones de configuración:
+
+| ID       | Categoría       | Valores                                                                       |
+| -------- | --------------- | ----------------------------------------------------------------------------- |
+| `model`  | `model`         | Modelos habilitados como `provider/model`. Un sufijo `/variant` también define el esfuerzo. |
+| `effort` | `thought_level` | Las variantes del modelo y `default`. Solo aparece en modelos con variantes.   |
+| `mode`   | `mode`          | Agentes principales visibles.                                                 |
+
+Cada opción `model` se nombra con el nombre visible de su proveedor y el nombre del modelo, por ejemplo
+`Anthropic / Claude Sonnet 5.5`. `session/set_config_option` acepta valores de cadena:
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
+```
+
+`session/set_mode` también define el agente. OpenCode envía `config_option_update` cuando cambian los modelos o agentes
+disponibles. También envía uno cuando otro cliente cambia el modelo o el agente de la sesión.
+
+### Contenido del prompt
+
+Los prompts pueden contener texto, imágenes, recursos incrustados y enlaces a recursos. OpenCode ignora los bloques de audio. Maneja los
+demás bloques así:
+
+| Bloque                                                | Qué hace OpenCode                                                                     |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `text`                                                | Lo envía al modelo.                                                                   |
+| `text` con audiencia solo `assistant`                 | Lo envía al modelo como contexto aparte, fuera del mensaje del usuario.               |
+| `text` con audiencia solo `user`                      | Lo deja fuera de la entrada del modelo.                                               |
+| `image` con `data`                                    | Lo adjunta al prompt.                                                                 |
+| `image` solo con `uri`                                | Lo trata como un enlace a recurso.                                                    |
+| `resource` con `text`                                 | Incrusta el texto después de la ruta o URI del recurso.                               |
+| `resource` con `blob`                                 | Lo adjunta. Sin `mimeType`, lo infiere del nombre de archivo del URI.                 |
+| `resource_link` a un URI `file:`                      | Adjunta el archivo. Envía un enlace de Markdown si el archivo falta o no se puede leer. |
+| `resource_link` a un URI `zed://` con una consulta `path` | Adjunta el archivo en `path`.                                                     |
+| `resource_link` a otro URI                            | Envía un enlace de Markdown como `[spec](https://example.com/spec.md)`.               |
+
+La audiencia viene de las `annotations` del bloque. OpenCode rechaza un bloque `image` que no tiene `data` ni `uri`.
+Este bloque es solo contexto para el modelo:
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### Comandos
+
+Después de `session/new`, `session/load`, `session/resume` o `session/fork`, OpenCode envía `available_commands_update`
+con los comandos del directorio, el comando integrado `compact` y las skills del directorio. Envía otra actualización
+cuando cambian los comandos o las skills.
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+Si un prompt empieza por `/` y el nombre de un comando disponible, OpenCode ejecuta ese comando con el resto del texto
+como argumentos. Si empieza por `/` y el ID de una skill, OpenCode envía el prompt con esa skill adjunta. OpenCode envía
+como prompt normal cualquier otro texto que empiece por `/`. `/compact` ejecuta la [compactación](/compaction). Si el ID de una skill coincide
+con el nombre de un comando, la skill no aparece en la lista.
+
+Si un comando falla, el prompt falla con el mensaje propio del comando, como su uso, y `data.service` definido como
+`command`.
+
+### Servidores MCP
+
+El cliente puede pasar servidores MCP stdio y HTTP en `session/new`, `session/load`, `session/resume` y `session/fork`.
+OpenCode los agrega al directorio de la sesión mientras dure el proceso `opencode acp`, así que otras sesiones de ese
+directorio pueden usarlos. Si OpenCode descarga un directorio inactivo, los agrega de nuevo antes del siguiente prompt de la sesión.
+OpenCode pasa los encabezados HTTP y no usa OAuth para estos servidores. No
+anuncia MCP por SSE y no admite MCP por ACP.
+
+| Caso                             | Comportamiento                                                     |
+| -------------------------------- | ------------------------------------------------------------------ |
+| Mismo nombre que un servidor configurado | El servidor del cliente sustituye al configurado en ese directorio. |
+| [Políticas](/policies)           | Las reglas `integration.use` siguen aplicándose.                   |
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### Permisos
+
+Las solicitudes de permiso ofrecen tres opciones:
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+Cuando una solicitud cambia archivos, OpenCode incluye contenido `diff` si puede crear una vista previa del cambio.
+
+### Preguntas
+
+Si el cliente anuncia `elicitation.form`, OpenCode hace preguntas con `elicitation/create` en modo formulario. La solicitud
+incluye `toolCallId` cuando OpenCode envió esa llamada a herramienta como un `session/update` para esta sesión.
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode nunca envía formularios que puedan recopilar secretos. Una opción redactada como tal, por ejemplo «Which API token should I
+  use?», se envía igualmente, sin su respuesta escrita.
+- Si un campo acepta una respuesta escrita junto a sus opciones, el esquema agrega una propiedad de cadena opcional `<key>_custom`.
+  Para una elección única, una respuesta personalizada no vacía sustituye a la opción seleccionada. Para una elección múltiple, OpenCode la agrega
+  a las opciones seleccionadas.
+- Si el usuario rechaza o cancela el formulario, OpenCode cancela la pregunta.
+
+Si OpenCode no puede mostrar una pregunta, la cancela e indica al modelo que continúe sin respuesta.
+
+### Compactación
+
+Si el cliente anuncia `session.compaction`, OpenCode informa de la compactación con las actualizaciones `compaction_update` y
+`compaction_summary_chunk` del [RFD de compactación de sesión](https://agentclientprotocol.com/rfds/session-compaction)
+de ACP, que está en Preview. Cuando el cliente carga una sesión, OpenCode repite cada compactación completada o fallida como una sola
+actualización.
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+Los demás clientes reciben el [marcador de compactación](#compaction-marker) en su lugar. También las compactaciones de sesiones hijas.
+
+### Uso
+
+La respuesta del prompt incluye `usage` del RFD [end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage),
+que es un borrador. `usage` suma las llamadas al modelo del prompt en esta sesión. No incluye las sesiones hijas.
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+Antes de la respuesta, OpenCode envía `usage_update` del
+[RFD de uso de sesión](https://agentclientprotocol.com/rfds/session-usage). Solo lo envía si el prompt usó tokens y
+OpenCode conoce el tamaño de contexto del modelo. `cost` es el costo total en USD de la sesión y sus sesiones hijas.
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### Sesiones hijas
+
+Mientras se ejecuta un prompt, OpenCode envía actualizaciones de sus sesiones hijas como notificaciones `session/update` en la sesión
+del prompt. Cada actualización lleva `_meta["opencode/child-session"]`. OpenCode antepone `<childSessionId>:` a los ID de llamada a herramienta.
+Antepone el título de la sesión hija a los títulos de las llamadas a herramientas si la sesión hija tiene uno.
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| Campo      | Tipo     | Descripción                                                                            |
+| ---------- | -------- | -------------------------------------------------------------------------------------- |
+| `id`       | `string` | El ID de la sesión hija.                                                               |
+| `parentID` | `string` | El ID de la sesión padre de la sesión hija.                                            |
+| `depth`    | `number` | 1 para una hija de la sesión del prompt, 2 para una hija de esa sesión hija, y así sucesivamente. |
+| `title`    | `string` | El título de la sesión hija. OpenCode lo omite cuando la sesión hija no tiene título.  |
+
+Las solicitudes de permiso de una sesión hija llevan la misma clave en `toolCall._meta`. Cuando termina el prompt, OpenCode deja de
+enviar actualizaciones de sesiones hijas. Las solicitudes de permiso y las preguntas de las sesiones hijas siguen llegando al cliente.
+
+### Estado de reintento
+
+Cuando una llamada al modelo falla y OpenCode programa un reintento, envía `session_info_update` con `_meta["opencode/retry"]`.
+Cuando empieza el reintento, OpenCode envía `"opencode/retry": null`. Borra cualquier estado de reintento cuando llegue la respuesta del prompt.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| Campo         | Tipo     | Descripción                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `attempt`     | `number` | El número de intento del reintento.                                                        |
+| `nextRetryAt` | `string` | La hora del siguiente intento, en formato ISO 8601.                                        |
+| `error`       | `object` | Tiene `type` y `message`. También tiene `status` y `response.body` si el proveedor los envió. |
+
+### Marcador de compactación
+
+Si el cliente no anuncia `session.compaction`, OpenCode informa del progreso de la compactación como `session_info_update` con
+`_meta["opencode/compaction"]`. OpenCode siempre usa el marcador para las compactaciones de sesiones hijas.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| Campo       | Tipo     | Descripción                                                                          |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `status`    | `string` | `started`, `completed` o `failed`. Una compactación cancelada es `failed`.           |
+| `messageId` | `string` | Empareja el inicio de una compactación con su fin. Trátalo como una clave opaca.     |
+| `reason`    | `string` | `auto` o `manual`.                                                                   |
+| `error`     | `object` | Aparece cuando `status` es `failed`. Misma forma que el `error` de [reintento](#retry-status). |
+
+El marcador no incluye un resumen. Una compactación automática puede fallar sin un marcador `started`. Cuando el cliente
+carga una sesión, OpenCode repite cada compactación completada o fallida como un marcador.

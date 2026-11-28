@@ -1,0 +1,271 @@
+---
+title: Références
+description: Donnez à OpenCode un accès nommé à des répertoires locaux et à des dépôts Git hors du projet courant, puis joignez-les aux prompts.
+---
+
+Les références permettent à OpenCode d’accéder par un alias à des répertoires situés hors du projet courant. Ajoutez une référence dans `opencode.json` ou `opencode.jsonc`, puis joignez-la par son alias depuis votre client lorsque vous en avez besoin.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Après avoir joint `docs`, demandez à l’agent d’inspecter le chemin pertinent :
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Utilisez les références pour de la documentation, des bibliothèques partagées, des exemples ou le code source d’un autre dépôt.
+
+## Local
+
+Utilisez `path` pour un répertoire local :
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Les chemins se comportent ainsi :
+
+- Les chemins relatifs sont résolus depuis le répertoire contenant le fichier de configuration.
+- Les chemins absolus sont pris en charge.
+- Les chemins relatifs au répertoire personnel comme `~/docs` sont pris en charge.
+
+Utilisez la forme abrégée en chaîne lorsqu’aucun autre champ n’est nécessaire :
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  Une chaîne abrégée n’est un chemin local que si elle commence par `.`, `/` ou `~`. Utilisez `./docs`, pas `docs` ; une
+  valeur `docs` seule est interprétée comme un dépôt Git.
+</Callout>
+
+## Git
+
+Utilisez `repository` pour un dépôt Git distant :
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Les formes distantes prises en charge incluent :
+
+- La forme abrégée GitHub `owner/repo`
+- Les URL Git
+- Les formes hôte/chemin
+- Les dépôts distants de style SCP
+
+Les dépôts locaux `file:` ne sont pas pris en charge.
+
+Utilisez la forme abrégée en chaîne pour suivre la branche par défaut du dépôt distant :
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Sans `branch`, OpenCode récupère et rafraîchit la branche par défaut du dépôt distant. Les noms de branche peuvent contenir des lettres, des chiffres, `/`, `_`, `.` et `-`, mais ne peuvent pas commencer par `-` ni contenir `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Stockage
+
+OpenCode normalise chaque dépôt distant et stocke une copie de travail par dépôt et par branche sous son répertoire de données global. Sans branche explicite, le chemin suit cette forme :
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+Sur une installation Linux classique, `Effect-TS/effect` est stocké dans :
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+Une branche explicite ajoute un suffixe `@<branch>` encodé :
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Rafraîchissement
+
+Les dépôts manquants sont clonés de façon asynchrone. Les copies de travail existantes sont vérifiées en arrière-plan au chargement ou rechargement des références, et après l’admission d’un nouveau prompt utilisateur dans leur Location.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+Une copie de travail est éligible lorsque sa dernière tentative de rafraîchissement date d’au moins 24 heures, ou lorsqu’aucune tentative n’a été enregistrée. Un rafraîchissement récupère la branche configurée ou la branche par défaut du dépôt distant, puis s’y réinitialise.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+Le comportement du rafraîchissement suit ces règles :
+
+- Les horodatages persistent entre les redémarrages du service.
+- Les Locations qui utilisent la même copie de travail partagent son horodatage.
+- Les tentatives échouées sont journalisées et restent soumises à la limite de 24 heures.
+- Aucune interrogation périodique n’a lieu tant qu’une Location est inutilisée.
+- Les échecs de clonage ou de rafraîchissement n’empêchent pas le chargement des autres références.
+
+Les prompts n’attendent ni le clonage ni le rafraîchissement. Une pièce jointe peut contenir un contenu plus ancien même si une lecture d’outil ultérieure voit la copie de travail mise à jour, et une nouvelle référence peut apparaître avant que sa copie de travail soit prête.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Les copies de travail en cache sont partagées et peuvent se mettre à jour pendant qu’un agent les utilise. Évitez de
+  modifier les copies de travail en cache, car un rafraîchissement les réinitialise.
+</Callout>
+
+## Indications
+
+`description` indique aux agents quand une référence est pertinente. Les références dotées d’une description apparaissent dans les instructions de l’agent avec leur alias et leur chemin résolu.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Les références sans description restent disponibles pour les clients mais ne sont pas annoncées automatiquement.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Visibilité
+
+Définissez `hidden` sur `true` pour retirer une référence des sélecteurs interactifs des clients :
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` n’affecte que la visibilité interactive. La référence reste dans l’API des références et, lorsqu’elle a une description, dans les instructions de l’agent.
+
+## Utilisation
+
+Les clients joignent une référence par son alias racine. La pièce jointe liste les fichiers et sous-répertoires directs de la racine, sans parcours récursif.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Demandez à l’agent d’inspecter un chemin précis lorsque vous avez besoin du contenu sous la racine.
+
+## Autorisations
+
+Les références n’accordent aucune autorisation d’outil supplémentaire. L’accès hors de la Location active suit toujours les règles d’outils normales et l’autorisation `external_directory` ; la modification nécessite aussi l’autorisation d’édition applicable.
+
+```text
+Read ../product-docs/api.md
+```
+
+La requête ne réussit que si les autorisations actives permettent cette lecture externe.
+
+## Champs
+
+| Champ | Local | Git | Description |
+| --- | --- | --- | --- |
+| `path` | Requis | Non | Chemin du répertoire local |
+| `repository` | Non | Requis | Dépôt Git distant |
+| `branch` | Non | Facultatif | Branche à récupérer et à extraire |
+| `description` | Facultatif | Facultatif | Indication décrivant quand les agents doivent l’utiliser |
+| `hidden` | Facultatif | Facultatif | Le masquer dans les sélecteurs interactifs des clients |
+
+Une entrée Git complète peut utiliser tous les champs compatibles Git :
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Alias
+
+Un alias ne peut pas être vide ni contenir `/`, `\`, d’espace, de backtick ou de virgule.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

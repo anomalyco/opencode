@@ -1,0 +1,141 @@
+---
+title: "CLI sağlayıcıları"
+description: "Sağlayıcı hesaplarını CLI ve TUI'dan bağlayın ve kimlik bilgilerini yönetin."
+---
+
+TUI'da bir sağlayıcı bağlayın, ardından modellerinden birini seçin:
+
+```text
+/connect
+/models
+```
+
+`/connect` geçerli sunucudan ve projeden kullanılabilir entegrasyonları listeler. Bir sağlayıcı seçin, birden fazla
+yöntem sunduğunda bir kimlik doğrulama yöntemi seçin ve istemleri izleyin.
+
+## TUI
+
+TUI API anahtarlarını, OAuth'u ve sağlayıcı kimlik doğrulama komutlarını destekler. OAuth bir yetkilendirme URL'si açar
+veya girilecek bir kod gösterir; URL'yi açmak için `o`, yetkilendirme ayrıntılarını kopyalamak için `c` tuşlarına basın.
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+Başka bir hesap eklemek için `/connect` komutunu yeniden çalıştırın. Zaten bağlı bir sağlayıcıyı seçmek, kaydedilmiş bir
+hesabı etkinleştirebileceğiniz, yeniden adlandırabileceğiniz veya silebileceğiniz hesap listesini açar.
+
+## CLI
+
+TUI'yı açmadan aynı sağlayıcı yöntemleri için `auth login` kullanın. Sağlayıcı argümanı olmadan komut etkileşimli bir
+sağlayıcı seçici açar.
+
+```bash
+opencode auth login
+```
+
+İlk seçiciyi atlamak için bir entegrasyon kimliği veya adı iletin. API anahtarı girişini açıkça seçmek için `--method key`
+kullanın.
+
+```bash
+opencode auth login anthropic --method key
+```
+
+Yöntem kimlikleri sağlayıcıya özgüdür. Bir sağlayıcının birden fazla yöntemi olduğunda kullanılabilir yöntemleri görmek
+için komutu `--method` olmadan çalıştırın.
+
+```bash
+opencode auth login openai
+```
+
+API anahtarı girişi ve sağlayıcı formları etkileşimli bir terminal gerektirir. Sizden bir yetkilendirme kodu yapıştırmanızı
+isteyen OAuth yöntemleri de bir terminal gerektirir.
+
+## Yöntemler
+
+OpenCode sağlayıcı kimlik bilgilerini dört entegrasyon yöntemiyle alır:
+
+| Yöntem | Davranış |
+| --- | --- |
+| API anahtarı | Bir gizli değer ister ve onu sağlayıcı hesabı olarak kaydeder. |
+| OAuth | Bir tarayıcı URL'si, cihaz kodu veya yetkilendirme kodu istemi sunar, ardından token'ları kaydeder ve desteklendiğinde yeniler. |
+| Komut | Sağlayıcının sağladığı bir kimlik doğrulama komutunu çalıştırır ve standart çıktısını anahtar olarak kaydeder. |
+| Ortam | Sunucu sürecinden desteklenen bir değişkeni kaydetmeden okur. |
+
+Sağlayıcılar, Azure kaynak adı veya GitHub Enterprise alanı gibi gerekli ayrıntılar için API anahtarı ve OAuth yöntemlerine
+form ekleyebilir. CLI ve TUI bu formları kimlik doğrulamayı başlatmadan önce gösterir.
+
+## Ortam
+
+Sağlayıcının desteklediği ortam değişkenini model isteklerini çalıştıran sunucu sürecinde ayarlayın. Tek seferlik özel bir
+sunucu için bağımsız modu başlatırken değişkeni iletin.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+Paylaşılan arka plan sunucusu için değişkeni onun yönetilen ortamına ekleyin. Bu, çalışan hizmeti durdurur; sonraki
+OpenCode komutu onu yeni değerle başlatır.
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+Ortam bağlantıları `auth list` içinde `environment` türüyle görünür. Hesap değildirler: `auth logout` onları kaldıramaz;
+bağlantıyı kesmek için değişkeni kaldırın. Aynı entegrasyon için kaydedilmiş bir hesap, ortam bağlantısının önüne geçer.
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+Bazı sağlayıcılar API anahtarı değişkeni yerine kendi yerel ortam kimlik bilgisi zincirlerini de kullanır:
+
+- Amazon Bedrock, profiller, erişim anahtarı ortamları, web kimliği ve kapsayıcı kimlik bilgileri dahil AWS varsayılan
+  kimlik bilgisi zincirini destekler. `AWS_BEARER_TOKEN_BEDROCK` değişkenini de destekler.
+- Google Vertex, Application Default Credentials ve çözümlenebilir bir proje kullanır. Örneğin
+  `gcloud auth application-default login` ile kimlik doğrulayın ve `GOOGLE_CLOUD_PROJECT` ayarlayın.
+- Azure, `az` kurulu olduğunda bağlantı yöntemi olarak **Microsoft Entra ID (Azure CLI)** sunar. Önce `az login`
+  çalıştırın, ardından `/connect` veya `auth login azure` içinde o yöntemi seçin.
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+Sağlayıcıya özgü ve sunucu tarafı kurulum için [Sağlayıcılar](/providers) sayfasına bakın.
+
+## Hesaplar
+
+Her başarılı API anahtarı, OAuth veya komut oturum açması kaydedilmiş bir hesap oluşturur. En yeni hesap etkin olur;
+etkin hesabı etiketiyle veya kimlik bilgisi kimliğiyle değiştirin.
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+Kaydedilmiş bir hesabı `auth logout` ile kaldırın. Her iki komut da argümanları belirtilmediğinde seçiciler açar.
+
+```bash
+opencode auth logout anthropic work
+```
+
+TUI'da `/connect`, kaydedilmiş hesaplar için aynı ekleme, etkinleştirme, yeniden adlandırma ve silme işlemlerini sunar.
+
+## Depolama
+
+Kaydedilmiş API anahtarları ve OAuth token'ları sunucunun SQLite veritabanında saklanır. Yerel sunucunun veritabanı yolunu
+şununla yazdırın:
+
+```bash
+opencode debug paths db
+```
+
+Normal sürüm yolu `~/.local/share/opencode/opencode.db` şeklindedir; `XDG_DATA_HOME`, sürüm kanalı ve `OPENCODE_DB` bunu
+değiştirebilir. Kimlik bilgilerini yönetmek için veritabanını düzenlemeyin; `/connect` veya `auth` komutlarını kullanın.
+
+V2, veritabanı geçişi sırasında OpenCode veri dizinindeki eski `auth.json` dosyasından desteklenen kimlik bilgilerini içe
+aktarır. Yeni ve güncellenen kimlik bilgileri o dosyaya geri yazılmak yerine SQLite'ta saklanır.

@@ -958,6 +958,27 @@ fn a_stalled_js_host_holds_keys_no_longer_than_the_limit() {
     assert_eq!(harness.text(), "%ab%c%x");
 }
 
+// Expected (the key hold's bound): the JS host's entry for the command that stalls it is not its answer, even when it
+// comes after the limit; the keys typed while that handler still runs are not held again. Held, the messages a CI run
+// can apply between the limit and the next key are applied there, in the order they came.
+#[test]
+fn a_stalled_js_hosts_entry_holds_the_keys_after_it_no_more() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let harness = &pipe.harness;
+    harness.tui.keymap.dispatch("v2probe.arm", Some("stall"));
+    pipe.settle();
+    pipe.scripts().hold_answers(true);
+    harness.app.type_text("%ab");
+    pipe.until("the JS host entered the command", || pipe.scripts().held_types().iter().any(|kind| kind == "entered"));
+    harness.app.advance(Duration::from_millis(51));
+    assert_eq!(harness.text(), "%ab");
+    pipe.scripts().hold_answers(false);
+    harness.app.type_text("%c");
+    harness.app.advance(Duration::from_millis(1));
+    assert_eq!(harness.text(), "%ab%c", "the entry of a stalled command held the keys after it");
+}
+
 #[test]
 fn a_disabled_commands_key_is_not_held() {
     let Some(config) = config() else { return };

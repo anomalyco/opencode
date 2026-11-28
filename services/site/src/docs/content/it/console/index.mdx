@@ -1,0 +1,38 @@
+---
+title: "Introduzione a Console"
+description: "OpenCode Console è un servizio opzionale che aggiunge spazi di lavoro per i team, inferenza dei modelli, budget, policy e ricerca web ospitata."
+---
+
+L'[OpenCode Console](https://opencode.ai/console) è un servizio opzionale che offre vantaggi aggiuntivi
+nell'uso di OpenCode, da soli o in team.
+
+- [Spazi di lavoro](/console/workspaces) per condividere l'accesso con il tuo [team](/console/members)
+- [Inferenza](/console/models) per modelli proprietari e open source
+- [Provider](/console/providers) per collegare i tuoi account provider tramite il gateway di Console
+- Monitoraggio dell'utilizzo e controlli di [budget](/console/budgets)
+- Distribuzione di policy a tutto il team per controllare il comportamento di OpenCode
+- [Ricerca web](/console/websearch)
+- [Harness](/console/harnesses) per usare i modelli di Console da Claude Code, Codex e altri agenti
+- [OpenCode Go, Go Plus e Go Teams](/console/go), abbonamenti per accedere ai modelli open source: rispettivamente $10 al mese, $40 al mese e $20 al mese per membro
+
+## Per iniziare
+
+Non serve un team per usare Console. Ogni account parte con uno spazio di lavoro **Personal** in cui sei l'unico
+membro.
+
+1. Accedi alla [Console](https://opencode.ai/console).
+2. Abbonati a [Go](/console/go), aggiungi [crediti](/console/billing#add-credits) o collega un [provider](/console/providers).
+3. Esegui `/connect` in OpenCode e scegli lo spazio di lavoro.
+4. Se vuoi, [invita](/console/members#invite-members) il tuo team.
+
+```text
+/connect
+```
+
+## Policy
+
+Le regole Providers e Tools della pagina Policies si applicano a ogni client OpenCode
+connesso allo spazio di lavoro. Vengono distribuite come istruzioni [policy](/policies#console)
+che prevalgono sulla configurazione utente e di progetto del membro e hanno effetto
+entro circa un minuto. Le preferenze gestite e il file di configurazione di sistema restano
+comunque prioritari rispetto allo spazio di lavoro; vedi la [precedenza](/policies#precedence).

@@ -557,7 +557,8 @@ impl Local {
             }
         };
         self.catalog(|data| {
-            listed(data).find(|agent| Some(&agent.id.0) == selected.as_ref()).or_else(|| listed(data).next()).cloned()
+            // A command can switch the session to a hidden agent, which stays out of the list but is still in use.
+            primary(data).find(|agent| Some(&agent.id.0) == selected.as_ref()).or_else(|| listed(data).next()).cloned()
         })
     }
 
@@ -1119,10 +1120,15 @@ pub(crate) fn is_speed_in(models: &[ModelInfo], info: &ModelInfo) -> bool {
         .is_some_and(|speed| models.iter().any(|item| item.provider_id == info.provider_id && item.id == speed.base))
 }
 
+/// Primary agents, including hidden ones that a command can switch a session to.
+fn primary(data: Option<&LocationData>) -> impl Iterator<Item = &AgentInfo> + Clone {
+    let agents = data.and_then(|data| data.agent.as_deref()).unwrap_or_default();
+    agents.iter().filter(|agent| !matches!(agent.mode, AgentInfoMode::Subagent))
+}
+
 /// The agents a user picks from: neither subagents nor hidden.
 fn listed(data: Option<&LocationData>) -> impl Iterator<Item = &AgentInfo> + Clone {
-    let agents = data.and_then(|data| data.agent.as_deref()).unwrap_or_default();
-    agents.iter().filter(|agent| !matches!(agent.mode, AgentInfoMode::Subagent) && !agent.hidden)
+    primary(data).filter(|agent| !agent.hidden)
 }
 
 pub(crate) fn is(info: &ModelInfo, model: &Model) -> bool {

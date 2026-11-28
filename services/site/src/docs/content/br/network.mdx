@@ -1,0 +1,153 @@
+---
+title: "Rede"
+description: "Configure proxies, autoridades de certificação personalizadas e certificados de cliente."
+---
+
+Defina as variáveis de proxy padrão. O OpenCode usa conexões HTTP locais entre a CLI e o serviço em segundo plano.
+A CLI exclui automaticamente os endereços de loopback do proxy.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+Use `HTTP_PROXY` para destinos HTTP e `HTTPS_PROXY` para destinos HTTPS. A URL do proxy pode usar `http://` nas duas
+variáveis. Ao iniciar, a CLI adiciona `127.0.0.1`, `localhost` e `::1` tanto a `NO_PROXY` quanto a `no_proxy`.
+Para outros hosts que precisam de conexão direta, liste-os em `NO_PROXY`, separados por vírgulas.
+
+## Serviço
+
+As variáveis exportadas no shell só afetam o serviço em segundo plano se ele for iniciado a partir desse shell. Salve as variáveis
+na configuração do serviço gerenciado para manter a mesma configuração de rede nas próximas inicializações.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+Alterar uma variável de ambiente gerenciada interrompe o serviço em execução. Use `service start` para iniciá-lo com o novo ambiente.
+Defina as variáveis de proxy também no shell da CLI, pois as do serviço gerenciado só se aplicam ao processo do servidor.
+Tanto a CLI quanto o servidor excluem automaticamente os endereços de loopback.
+
+Remova uma variável persistida com `service unset env`:
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## Autenticação
+
+Para um proxy que aceita credenciais na URL, inclua o nome de usuário e a senha em cada URL de proxy que precisa de autenticação.
+Codifique com percent-encoding caracteres como `@`, `:` e `/` em qualquer uma das credenciais.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+Para o serviço em segundo plano, salve a URL completa. O valor fica na configuração privada do serviço e aparece na saída de
+`opencode service get env`. Não compartilhe essa saída.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## Certificados
+
+Defina `NODE_EXTRA_CA_CERTS` como um arquivo PEM quando o proxy ou o destino usa um certificado assinado por uma autoridade
+certificadora privada. As autoridades adicionais entram no repositório de certificados confiáveis do runtime quando o processo inicia.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+Persista o caminho do arquivo para o serviço em segundo plano e reinicie-o:
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## Antivírus e inspeção de HTTPS
+
+A "verificação de HTTPS" ou "verificação de conexões criptografadas" de antivírus (Kaspersky, Avast, ESET e outros) e proxies corporativos
+de inspeção SSL substituem o certificado do servidor pelo deles. O OpenCode o rejeita e as requisições falham com
+erros como:
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+Escolha uma destas formas de corrigir o problema:
+
+- Exclua `opencode.ai` e `*.opencode.ai` da verificação de HTTPS nas configurações do antivírus. Adicione também o host da API do seu provedor,
+  como `api.anthropic.com`, se você se conecta a um provedor diretamente.
+- Exporte a autoridade certificadora de inspeção como um arquivo PEM e confie nela com `NODE_EXTRA_CA_CERTS`, como mostrado em
+  [Certificados](#certificates).
+
+## Certificados de cliente
+
+Defina `settings.tls` em um provedor cujo gateway exige TLS mútuo. As requisições de modelo dele apresentam o certificado, e o
+handshake TLS só o envia a servidores que pedem um.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` e `key` são texto no formato PEM. Use `{file:...}` para ler os valores de arquivos. Se algum arquivo não puder ser lido, `tls` fica indefinido.
+- `passphrase` só é necessária para uma chave criptografada.
+- Funciona nas builds Bun e Node. Um servidor no Cloudflare Workers não consegue apresentar um certificado de cliente pelo `fetch`.
+- Requisições com certificado de cliente não seguem redirecionamentos, então o certificado não é apresentado a outro host.
+
+Toda requisição de modelo desse provedor apresenta o certificado: chat, compactação, modelos de imagem e de decisão. Um provedor
+com `tls` usa HTTP em vez de WebSockets. Ferramentas como webfetch, servidores MCP remotos e instalações de plugins não o apresentam.
+
+## Primeiro plano
+
+`--standalone` e `serve` usam o ambiente do próprio processo. `opencode service set env` não configura esses
+processos.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+Aplique o mesmo padrão a um servidor em primeiro plano:
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## Verificar
+
+Verifique se a CLI consegue alcançar o serviço em segundo plano depois de aplicar as configurações:
+
+```bash
+opencode api get /api/info
+```
+
+Uma resposta bem-sucedida da verificação de integridade confirma a conexão local entre o cliente e o serviço. Faça uma requisição normal
+a um provedor para verificar o proxy de saída e o caminho do certificado do serviço.

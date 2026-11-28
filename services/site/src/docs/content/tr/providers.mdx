@@ -1,0 +1,691 @@
+---
+title: "Sağlayıcılar"
+description: "OpenCode'u OpenCode Go, ChatGPT, Amazon Bedrock, Google Vertex, GitHub Copilot ve Ollama gibi model sağlayıcılarına bağlayın veya özel bir sağlayıcı ekleyin."
+---
+
+OpenCode, sağlayıcı ve model kataloğunu [models.dev](https://models.dev) üzerinden alır. Çoğu sağlayıcıda önce bir hesap
+bağlamanız, ardından bir model seçmeniz gerekir.
+
+## Kurulum
+
+`/connect` komutunu çalıştırın, bir sağlayıcı seçin ve kimlik bilgilerini girin. Ardından `/models` komutuyla
+sağlayıcının modellerinden birini seçin.
+
+```text
+/connect
+/models
+```
+
+## Go
+
+[OpenCode Go](/console/go), OpenCode ekibi tarafından test edilen kodlama modelleri için isteğe bağlı bir aboneliktir.
+[Console](https://opencode.ai/console) üzerinden abone olun, API anahtarınızı kopyalayın, ardından **OpenCode Go** olarak
+bağlayın.
+
+```text
+/connect
+# Select OpenCode Go, then paste your API key.
+/models
+```
+
+Kullanım limitleri, endpoint'ler ve gizlilik ayrıntıları için [Go rehberine](/console/go) bakın.
+
+## ChatGPT
+
+OpenAI API anahtarı yerine ChatGPT Plus veya Pro aboneliğinizi kullanabilirsiniz. **OpenAI** sağlayıcısını bağlayın, ardından
+**Sign in with ChatGPT** veya eski **Codex** oturum açma yöntemlerinden birini seçin. Kullanım abonelik kotanızdan düşer;
+bu nedenle bu modeller için maliyet gösterilmez.
+
+```text
+/connect
+/models
+```
+
+### Bağlam limitleri
+
+Bu yöntemlerle oturum açtığınızda OpenCode, varsayılan olarak her modelin bağlam penceresini gerçek limitinin altında tutar.
+Limitler Codex'in varsayılanlarıyla aynıdır. Böylece abonelik kotanız diğer OpenAI ürünlerindekine benzer hızda azalır.
+
+| Model                 | Girdi limiti |
+| --------------------- | ------------ |
+| GPT-6.1 Sol ve üstü   | 500.000      |
+| Daha eski modeller    | 272.000      |
+
+Bu sınırı kaldırmak için yapılandırmanızda sınır eklentisini devre dışı bırakın. `-` öneki yerleşik bir eklentiyi kapatır;
+diğer tüm eklentiler etkin kalır.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["-opencode.provider.openai-context-caps"],
+}
+```
+
+## Özel
+
+API'si katalogda olmayan bir sağlayıcı ekleyin. Bu OpenAI uyumlu örnek kimlik bilgisini, çalışma zamanı paketini,
+endpoint'i ve ilk modeli birlikte tanımlar.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+`providers` nesnesi, `acme/qwen3-coder` gibi model referanslarında kullanılan sağlayıcı kimliğine göre anahtarlanır.
+
+| Alan | Amaç |
+| --- | --- |
+| `name` | Görünen ad. |
+| `env` | Kimlik bilgileri için sırayla bakılacak ortam değişkenlerinin adları. |
+| `package` | Sağlayıcıyla iletişim kuran çalışma zamanı paketi. |
+| `canonical` | Katalog varsayılanlarının devralındığı yerleşik sağlayıcının kimliği. |
+| `compatibility` | Sağlayıcının tüm modellerinde ortak olan API davranışları. Bkz. [Uyumluluk](/models#compatibility). |
+| `settings` | Türü belirli OpenCode ayarları ve çalışma zamanı paketine iletilen JSON seçenekleri. |
+| `headers` | İsteklere eklenecek, değerleri dize türünde olan HTTP başlıkları. |
+| `body` | İstek gövdesiyle birleştirilecek JSON alanları. |
+| `models` | Eklenecek modeller veya mevcut modellerin yerine geçecek tanımlar. Anahtar olarak OpenCode model kimliği kullanılır. |
+
+## Endpoint
+
+Katalogdaki bir sağlayıcının isteklerini proxy veya uyumlu bir endpoint üzerinden göndermek için `settings.baseURL`
+değerini değiştirin. Sağlayıcının mevcut paketi, modelleri ve bağlantısı geçerli kalır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+`settings` pakete özgüdür. Bir alan yalnızca seçili paket onu desteklediğinde etkili olur.
+
+## İstekler
+
+Ek HTTP başlıkları için `headers`, her istek gövdesiyle birleştirilecek JSON alanları için `body` kullanın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+Değişiklik yalnızca sağlayıcının trafiğinin bir bölümünü ilgilendiriyorsa iki alanı da model veya varyant düzeyinde
+ayarlayabilirsiniz.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "headers": { "X-Model-Tier": "coding" },
+          "variants": [
+            {
+              "id": "batch",
+              "body": { "service_tier": "flex" },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+## Zaman aşımları
+
+HTTP isteklerinde yanıt başlıkları en fazla beş dakika, akış hâlindeki yanıt parçaları arasında ise en fazla on beş
+dakika beklenir. Limiti değiştirmek için sağlayıcının `settings.headerTimeout` veya `settings.chunkTimeout` değerine
+milisaniye cinsinden bir sayı yazın. Limiti kaldırmak için `false` kullanın. `settings.timeout`, isteğin gönderilmesinden
+yanıtın tamamlanmasına kadar geçen süreyi sınırlar. Varsayılan değeri yoktur. Bu ayarlar model veya varyant başına değil,
+sağlayıcı genelinde geçerlidir. WebSocket bağlantılarında `chunkTimeout` çerçeveler arasındaki bekleme süresini sınırlar.
+Bu durumda varsayılan süre otuz dakikadır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+Bu sürelerden biri aşılırsa istek bir aktarım hatasıyla sonuçlanır. OpenCode, zaman aşımına uğrayan isteği en fazla üç
+kez yeniden dener.
+
+## İstek kodlaması
+
+`settings.encoding` HTTP istek gövdelerini `"zstd"` veya `"gzip"` ile sıkıştırır ya da `"none"` ile düz JSON gönderir. Bunu
+bir sağlayıcıda, modelde veya varyantta ayarlayın; en özel değer önceliklidir. Yalnızca endpoint'in çözebildiği bir kodlamayı
+etkinleştirin. Çoğu sağlayıcı ve ağ geçidi sıkıştırılmış istek gövdelerini reddeder. OpenAI için ChatGPT ile oturum
+açtıysanız ve özel bir `baseURL` ayarlamadıysanız varsayılan olarak `"zstd"` kullanılır. API anahtarıyla bağlanıldığında
+sıkıştırılmamış JSON gönderilir. WebSocket mesajları etkilenmez.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "encoding": "none" },
+    },
+  },
+}
+```
+
+## Paketler
+
+`package` alanı bir sağlayıcıyla iletişim kuran çalışma zamanını seçer. OpenAI istek biçimini uygulayan API'ler için uyumlu
+çalışma zamanını kullanın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {},
+      },
+    },
+  },
+}
+```
+
+Sağlayıcılara özgü yerleşik paketlerden bazıları şunlardır:
+
+- `@opencode/ai/providers/openai`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google`
+- `@opencode/ai/providers/google-vertex`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/azure`
+- `@opencode/ai/providers/azure/chat`
+- `@opencode/ai/providers/azure/responses`
+- `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/mantle`
+- `@opencode/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode/ai/providers/amazon-bedrock/mantle/messages`
+- `@opencode/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/xai`
+
+`@acme/opencode-provider` gibi bir npm paketi veya yerel bir paket için mutlak bir `file://` URL'si de kullanabilirsiniz.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@acme/opencode-provider",
+      "models": { "acme-coder": {} },
+    },
+  },
+}
+```
+
+## Modeller
+
+Modelleri eklemek veya mevcut model tanımlarını değiştirmek için sağlayıcının `models` eşlemesini kullanın. Anahtar,
+OpenCode'un kullandığı model kimliğidir. `modelID` ise sağlayıcıya gönderilen kimliği değiştirir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+| Alan | Amaç |
+| --- | --- |
+| `modelID` | Sağlayıcıya gönderilen model veya dağıtım kimliği. |
+| `name` | Görünen ad. |
+| `family` | İlgili modelleri gruplamak için kullanılan model ailesi. |
+| `type` | Modelin çıktı türü: `chat`, `decision`, `image`, `video`, `realtime`, `embedding` veya `transcription`. Varsayılan tür `chat` olarak ayarlanır. Oturumlarda yalnızca sohbet modelleri seçilebilir. Sesli kullanım için konuşarak yanıt veren gerçek zamanlı modeller sunulur. `disabled: true` ayarlanırsa bu modeller gösterilmez. |
+| `releaseDate` | `YYYY-MM-DD` veya `YYYY-MM` biçiminde sürüm tarihi. |
+| `package` | Model için sağlayıcının çalışma zamanı paketinin yerine kullanılacak paket. Transkripsiyon modelinde `@opencode/ai/protocols/openai-transcription` gibi bir transkripsiyon protokolü belirtin. Gerçek zamanlı modellerde bu alan kullanılmaz; sesli oturumlar modelin kendi API'si üzerinden başlatılır. |
+| `settings` | Model düzeyinde OpenCode denetimleri ve pakete özgü JSON ayarları. |
+| `headers` | Değerleri dize türünde olan ek istek başlıkları. |
+| `body` | Ek JSON istek gövdesi alanları. |
+| `capabilities` | Araç desteği, kabul edilen girdi ve çıktı medya türleri, sıcaklık desteği ve akıl yürütme denetimleri. |
+| `compatibility` | Modele özgü API davranışları. Sağlayıcı ayarının önüne geçer. Bkz. [Uyumluluk](/models#compatibility). |
+| `variants` | Kendi `settings`, `headers` ve `body` değerlerine sahip adlandırılmış varyantlar. |
+| `cost` | Milyon token başına girdi, çıktı ve isteğe bağlı önbellek fiyatlandırması. |
+| `limit` | Bağlam, girdi ve çıktı token limitleri. |
+| `disabled` | `true` olduğunda modeli seçimden kaldırır. |
+
+Seçim, varsayılanlar, yetenekler, limitler, maliyetler ve varyantlar için [Modeller](/models) sayfasına bakın.
+
+## Azure
+
+Azure'un standart katalog endpoint'i, kimlik bilgisine ek olarak bir kaynak adı gerektirir. `settings.resourceName` değerini
+bir kez ayarlayın, ardından bir API anahtarı bağlayın veya [Sağlayıcı hesapları](/cli/providers) bölümünde açıklandığı gibi
+Azure CLI'da açık olan Microsoft Entra ID oturumunu kullanın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "settings": {
+        "resourceName": "my-models",
+      },
+    },
+  },
+}
+```
+
+**Resource name** değerini [Azure portalında](https://portal.azure.com/) veya
+[Microsoft Foundry](https://ai.azure.com/) üzerinde bulun. Aynı zamanda `https://my-models.openai.azure.com/` ve
+`https://my-models.services.ai.azure.com/` gibi endpoint adreslerinin ilk parçasıdır.
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+Entra ID kullanmak için [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) kurun, oturum açın,
+ardından Azure'u bağlarken **Microsoft Entra ID (Azure CLI)** seçeneğini seçin.
+
+```bash
+az login
+```
+
+Kaynak adı yapılandırma dosyasında veya ortam değişkenlerinde belirtilmemişse bağlanırken girin. Bağlantıyla birlikte
+kaydedilen kaynak adı yapılandırmadakinin önüne geçer. Bu adı değiştirmek için yeniden bağlanın.
+
+Azure CLI bağlantıları Azure CLI'da seçili hesabı kullanır. Başka bir kiracıdaki veya abonelikteki bir kaynak için ikisini de
+açıkça seçin.
+
+```bash
+az login --tenant TENANT_ID
+az account set --subscription NAME_OR_ID
+```
+
+Kaynak adını yapılandırma dosyası yerine `AZURE_RESOURCE_NAME` ortam değişkeniyle de OpenCode sunucusuna verebilirsiniz.
+Eski `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` değişkeni de çalışır.
+
+### Dağıtımlar
+
+Azure modelleri yalnızca dağıtım üzerinden sunar. Bu yüzden OpenCode, Azure kataloğunun tamamı yerine kaynağınızdaki
+dağıtımları listeler. Liste, OpenCode başlatıldığında, sağlayıcı bağlandığında veya hesap değiştirildiğinde arka planda
+yüklenir. Sonradan eklenen bir dağıtımı görmek için OpenCode'u yeniden başlatın veya sağlayıcıya yeniden bağlanın.
+
+- Bir bağlantı için liste yüklenene kadar veya yükleme başarısız olursa kataloğun tamamı kullanılabilir kalır.
+- Aynı bağlantının listesi yeniden yüklenemezse son eksiksiz liste gösterilmeye devam eder.
+- Hesap değiştirdiğinizde önceki hesabın listesi gösterilmez. Yeni hesap için önce kataloğun tamamı gösterilir.
+- Dağıtımlar limitleri, maliyetleri ve yetenekleri katalog modellerinden devralır.
+
+Dağıtım adları model kimlikleridir ve Azure adlarda büyük/küçük harfi yok saydığı için küçük harflidir; örneğin
+`azure/gpt-production`. Modeliyle aynı adı taşıyan bir dağıtım, örneğin `gpt-6-luna`, katalog kimliğini korur. Bu kimlikler
+başka dağıtımlar eklendiğinde veya kaldırıldığında sabit kalır.
+
+OpenCode, dağıtımı çalıştırdığı modele göre katalogla eşleştirir. Azure model adını farklı yazıyorsa, örneğin GPT-4
+Turbo için `gpt-4` kullanıyorsa, eşleştirme ada göre yapılır. Dağıtım başka bir modelin adını taşısa bile çalıştırdığı
+modelin adı, limitleri ve maliyetleri gösterilir. Örneğin `gpt-6-luna` modelini çalıştıran `gpt-6.1-sol` adlı dağıtımda
+gösterilen bilgiler GPT 6 Luna'ya aittir.
+
+Azure CLI ile bağlandığınızda OpenCode dağıtımları, kaynak için okuma izni gerektiren Azure yönetim API'si üzerinden
+listeler. Bu işlem başarısız olursa kaynağın eski dağıtım listesi kullanılır. API anahtarıyla bağlanıldığında da her
+zaman eski liste kullanılır. OpenCode listeyi göstermeden önce tüm sayfaları okur. Özel bir `settings.baseURL`
+ayarlarsanız katalog gösterilmeye devam eder.
+
+Modeli katalogda olmayan bir dağıtımı, örneğin ince ayarlı bir modeli, açıkça yapılandırın veya bir model kimliğini kendiniz
+bir dağıtıma eşleyin. OpenCode bu tür dağıtımları adlandıran bir uyarı günlüğe yazar. Açıkça yapılandırılmış modeller her
+zaman korunur.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-6-luna": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+Kimliğinizin şu rollerden birine sahip olması gerekir:
+
+- Azure OpenAI modelleri için **Cognitive Services OpenAI User**.
+- Diğer Foundry modelleri için **Cognitive Services User**.
+
+Bir istek yanlış kiracıdan gelen bir token kullanıyorsa gerekli kiracıyla yeniden oturum açın.
+
+```bash
+az login --tenant TENANT_ID
+```
+
+## Bedrock
+
+Amazon Bedrock, AWS'nin varsayılan kimlik bilgisi zincirini kullanır. Kalıcı kurulumun en kolay yolu adlandırılmış bir
+AWS profili kullanmaktır. OpenCode, ortam değişkenlerindeki erişim anahtarlarını, web kimliğini ve kapsayıcı kimlik
+bilgilerini de destekler.
+
+```bash
+aws configure sso --profile work
+aws sso login --profile work
+```
+
+Profili ve bölgeyi sağlayıcı ayarlarında seçin. Yapılandırılmış bir `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, web
+kimliği token dosyası veya kapsayıcı kimlik bilgisi URI'si sağlayıcıyı etkinleştirir; tek başına bir bölge etkinleştirmez.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+      },
+    },
+  },
+}
+```
+
+Bölge belirtilmediyse OpenCode sırayla `AWS_REGION`, `AWS_DEFAULT_REGION` ve `us-east-1` değerlerine bakar. Özel bir
+endpoint veya VPC endpoint'i için profil ve bölgeyi değiştirmeden `baseURL` ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+        "baseURL": "https://bedrock-runtime.vpce.example.com",
+      },
+    },
+  },
+}
+```
+
+Bedrock API anahtarları için `AWS_BEARER_TOKEN_BEDROCK` kullanılır. Diğer AWS değişkenleri SigV4'e iletilir ve OpenCode'da
+API anahtarıyla bağlı hesap olarak kaydedilmez.
+
+## Vertex
+
+Google Vertex, Application Default Credentials (ADC) kullanır. Modelleri kullanabilmek için bir proje belirtmeniz gerekir.
+Yerel ADC oluşturun, ardından sağlayıcı ayarlarında projeyi ve konumu belirtin.
+
+```bash
+gcloud auth application-default login
+```
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "google-vertex": {
+      "settings": {
+        "project": "my-project",
+        "location": "us-central1",
+      },
+    },
+  },
+}
+```
+
+OpenCode projeyi sırasıyla `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT` veya `GCLOUD_PROJECT`
+değişkenlerinden de çözümler. Konumu `GOOGLE_VERTEX_LOCATION`, `GOOGLE_CLOUD_LOCATION` veya `VERTEX_LOCATION`
+değişkenlerinden çözümler ve varsayılan olarak `us-central1` kullanır.
+
+```bash
+GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
+```
+
+Hizmet hesapları aynı ADC yolu üzerinden çalışır. `GOOGLE_APPLICATION_CREDENTIALS` değişkenini hizmet hesabı JSON dosyasına
+yönlendirin ve yine ayarlardan veya yukarıdaki proje değişkenlerinden birinden bir proje sağlayın.
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
+GOOGLE_CLOUD_PROJECT=my-project \
+opencode --standalone
+```
+
+Gemini, Anthropic ve OpenAI uyumlu Vertex katalog modelleri için tek `google-vertex` sağlayıcı kimliğini kullanın. Eski
+`google-vertex-anthropic` sağlayıcı kimliği V2'de kullanılamaz.
+
+## Copilot
+
+GitHub Copilot'ta API anahtarını elle girmek yerine OAuth cihaz akışıyla oturum açın. **GitHub Copilot** sağlayıcısını
+bağlayın, GitHub.com veya GitHub Enterprise'ı seçin ve cihazda doğrulamayı tamamlayın. Ardından `/models` komutunu çalıştırın.
+
+```text
+/connect
+# Select GitHub Copilot, then Login with GitHub Copilot.
+/models
+```
+
+GitHub Enterprise için istendiğinde dağıtım URL'sini veya alan adını girin. GitHub bir Copilot API endpoint'i döndürürse
+OpenCode onu kullanır; aksi hâlde endpoint'i kurumsal alan adından türetir.
+
+```text
+company.ghe.com
+```
+
+Bağlı hesabın Copilot Chat erişimi olmalıdır. GitHub hesabınızın erişimi olmadığını bildirirse Copilot Free'ye kaydolun
+veya kuruluşunuzdan hesabınıza Copilot lisansı atamasını isteyin. Ardından yeniden bağlanın. OpenCode, oturum açtığınızda
+ve etkin Copilot hesabı her değiştiğinde hesabın güncel model listesini alır.
+
+## Ollama
+
+Ollama'yı başlatın ve bir model çekin. OpenCode `http://127.0.0.1:11434` adresini yoklar, tamamlama modellerini keşfeder ve
+hesap bağlantısı olmadan `/models` listesine ekler.
+
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
+
+OpenCode'u `settings.baseURL` ile uzak veya proxy'li bir Ollama sunucusuna yönlendirin. `/v1` ekleyin; OpenCode yerel
+`/api/tags` ve `/api/show` keşif yollarını bundan türetir. `apiKey` isteğe bağlıdır ve keşif ile model isteklerine bearer
+token olarak gönderilir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "https://ollama.example.com/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+OpenCode model listesini düzenli olarak yeniler. Geçici kesintilerde son alınan listeyi korur. Yalnızca gömme üreten
+modeller listelenmez; OpenCode yalnızca Ollama üst verilerinde `completion` yeteneği belirtilen modelleri ekler.
+
+## Çalışma zamanları
+
+OpenCode, LM Studio ve vLLM modellerini de yerelde otomatik olarak bulur. Varsayılan endpoint'leri `http://127.0.0.1:1234/v1` ve
+`http://127.0.0.1:8000/v1` şeklindedir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": { "baseURL": "http://gpu-host:1234/v1" },
+    },
+    "vllm": {
+      "settings": { "baseURL": "http://gpu-host:8000/v1" },
+    },
+  },
+}
+```
+
+LM Studio dil modellerini `/api/v1/models` üzerinden listeler. OpenCode, vLLM için `/v1/models` listesini okumadan
+önce `/health` adresini kontrol eder. Araç desteği otomatik olarak belirlenemediği için bulunan vLLM modellerinde
+araçlar başlangıçta kapalıdır. Diğer OpenAI uyumlu çalışma zamanları için [özel sağlayıcı](#custom) örneğini kullanın
+ve modelleri yapılandırmada açıkça listeleyin.
+
+## Ağ geçitleri
+
+OpenRouter kendi çalışma zamanını ve kataloğunu kullanır. OpenCode sunucusuna `OPENROUTER_API_KEY` sağlayın veya bir
+OpenRouter hesabı bağlayın, ardından sağlayıcı önekinden sonra tam OpenRouter model kimliğiyle modellere başvurun.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/anthropic/claude-sonnet-5.5",
+}
+```
+
+Endpoint'i değiştirirken veya istekleri OpenRouter uyumlu bir ağ geçidine yönlendirirken OpenRouter'ın kendi paketini kullanmaya devam edin.
+Bu, OpenRouter istek ve akıl yürütme davranışını korur.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openrouter": {
+      "settings": {
+        "baseURL": "https://openrouter-gateway.example.com/api/v1",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+OpenAI uyumlu bir API sunan ancak kendi model envanteri olan bir ağ geçidi için bunun yerine özel bir sağlayıcı tanımlayın.
+Yapılandırma anahtarı sağlayıcı öneki, her `models` anahtarı da seçilebilir bir model kimliği olur.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "company/coder",
+  "providers": {
+    "company": {
+      "env": ["COMPANY_GATEWAY_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://gateway.example.com/v1",
+      },
+      "models": {
+        "coder": { "modelID": "upstream/coder-v2" },
+      },
+    },
+  },
+}
+```
+
+## Hatalar
+
+Sağlayıcı ve model hataları genellikle başarısız aşamayı belirtir. Paketleri değiştirmeden önce sunucu süreci ortamını ve tam
+model kimliğini denetleyin.
+
+| Hata veya belirti | Denetlenecek |
+| --- | --- |
+| `No model is available for session ...` | Şu anda seçilebilir etkin bir model yok. Sağlayıcıya özgü kurulumu tamamlayın, ardından `/models` içinde bir model seçin. |
+| `Model unavailable: provider/model` | Sağlayıcı etkin değil, model kimliği yok veya devre dışı ya da dinamik keşif artık onu döndürmüyor. Özel takma adlarda `modelID` yerine `models` eşlemesi anahtarını denetleyin. |
+| `Cannot initialize provider/model: NAME is required to resolve the provider endpoint` | `baseURL` içinde bir `${NAME}` yer tutucusu kalmış. Değişkeni OpenCode sunucusunda ayarlayın veya şablonun yerine tam endpoint adresini yazın. |
+| `Azure resource name is missing` | `providers.azure.settings.resourceName`, `AZURE_RESOURCE_NAME` veya tam bir `settings.baseURL` ayarlayın. |
+| Vertex görünmüyor | Sağlayıcı ayarlarında veya desteklenen bir proje değişkeninde çözümlenebilir bir proje ayarlayın. Tek başına ADC sağlayıcıyı etkinleştirmez. |
+| Bedrock görünmüyor | Bir profil veya desteklenen başka bir AWS kimlik bilgisi zinciri girdisi sağlayın. `AWS_REGION` tek başına yalnızca bir bölge seçer. |
+| Ollama'da model yok | Sunucunun `baseURL` üzerinden türetilen yolda `/api/tags` ve `/api/show` sunduğunu ve `/api/show` yanıtının `completion` yeteneğini bildirdiğini doğrulayın. |
+| Copilot'ta model yok | Etkin OAuth hesabının Copilot Chat erişimine sahip olduğunu doğrulayın. Başarısız bir model eşitlemesi `failed to sync GitHub Copilot models` olarak günlüğe yazılır. |
+
+V2, kullanımdan kaldırılmış sağlayıcı kimliklerini reddeder ve yerine ne kullanacağınızı belirtir. `azure-cognitive-services/<model>`
+yerine `azure/<model>` ve `google-vertex-anthropic/<model>` yerine `google-vertex/<model>` kullanın.
+
+## WebSocket'ler
+
+OpenAI, xAI ve desteklenen Azure Responses modelleri her oturum için bir WebSocket bağlantısını açık tutabilir. Ardışık
+adımlarda isteğin değişmeyen başlangıç bölümü yeniden kullanılır. Yalnızca önceki yanıttan sonra eklenen içerik
+gönderildiği için uzun oturumlarda aktarılan veri miktarı azalır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "transport": "http" },
+    },
+  },
+}
+```
+
+WebSocket davranışı şu kuralları izler:
+
+- Yerleşik sağlayıcılar desteklenen rotaları kendi politikalarına göre etkinleştirir.
+- Sağlayıcı `settings.transport: "websocket"` ayarı bunu etkinleştirir; `"http"` kapatır.
+- WebSocket kanalı olmayan bir rotada `"websocket"` seçilirse OpenCode günlüğe bir uyarı yazar ve HTTP kullanır.
+- OpenAI sağlayıcısı sıkıştırma için de aynı bağlantıyı kullanır.
+- xAI yalnızca saklanan yanıtlardan devam eder. Varsayılan `store: false` ile her adım yeniden kullanılan bağlantı üzerinden
+  tam olarak gönderilir.
+- Kapanan bir soket sonraki adımda yeniden bağlanır. Bağlantı açılamazsa oturum HTTP üzerinden devam eder.
+- `http.request` veya `http.response` kancaları olan sağlayıcı eklentileri, her isteğin gözlemlenebilir kalması için HTTP'de
+  kalır.

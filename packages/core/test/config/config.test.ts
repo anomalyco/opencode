@@ -106,14 +106,18 @@ describe("Config", () => {
             fs.mkdir(project, { recursive: true }),
             fs.mkdir(path.join(home, ".claude"), { recursive: true }),
             fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+            fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
           ]),
         ).pipe(
           Effect.andThen(
             Effect.gen(function* () {
-              // The fixture is real: with global enabled the walk finds both.
+              // Discovery also sees ancestors above the fixture, which may have host config.
               const config = yield* Config.Service
               const compatibility = yield* config.compatibility!()
-              expect([...compatibility.claude, ...compatibility.agents]).toHaveLength(2)
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toHaveLength(2)
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
             }).pipe(Effect.provide(testLayer(project, global))),
           ),
           Effect.andThen(
@@ -122,7 +126,11 @@ describe("Config", () => {
             // project walk enabled.
             Effect.gen(function* () {
               const config = yield* Config.Service
-              expect(yield* config.compatibility!()).toEqual({ claude: [], agents: [] })
+              const compatibility = yield* config.compatibility!()
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toEqual([])
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
               const watcher = yield* Watcher.Test
               expect(
                 (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
@@ -630,7 +638,7 @@ describe("Config", () => {
           Effect.andThen(
             Effect.gen(function* () {
               const config = yield* Config.Service
-              const install = () =>
+              const install = (policiesOnly = false) =>
                 config.integration!(
                   opencode,
                   ConfigIntegration.make({
@@ -638,20 +646,25 @@ describe("Config", () => {
                     connection: { type: "credential", id: credentialID, label: "Console", method: "key" },
                     organization: org,
                     info: decodeInfo({
-                      mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } },
+                      ...(policiesOnly
+                        ? {}
+                        : { mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } } }),
                       policies: [{ action: "mcp.use", resource: "github", effect: "deny" }],
                     }),
                   }),
                 )
-              yield* install()
+              expect((yield* install())._tag).toBe("Withheld")
               // The personal account's servers and the denied well-known origin's config are gone; their policies stay.
               expect(supplied(yield* config.entries())).toEqual([
                 { servers: [], policies: 1 },
                 { servers: [], policies: 1 },
               ])
+              const withheld = yield* install(true)
+              expect(withheld._tag).toBe("Withheld")
+              expect(yield* install(true)).toEqual(withheld)
               org = allowed
-              yield* config.integration!(opencode, undefined)
-              yield* install()
+              expect(yield* config.integration!(opencode, undefined)).toEqual({ _tag: "Cleared" })
+              expect((yield* install())._tag).toBe("Applied")
               expect(supplied(yield* config.entries())).toEqual([
                 { servers: ["docs"], policies: 1 },
                 { servers: [], policies: 1 },

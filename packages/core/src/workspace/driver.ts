@@ -26,6 +26,11 @@ export class ProviderNotFound extends Schema.TaggedError<ProviderNotFound>()("Wo
 
 export interface Interface {
   /**
+   * Static environment defaults (`path`, `shell`, `rg`, `home`) known before connecting, so callers
+   * (such as shell permission scanning and path resolution) can read them without waking a cold workspace.
+   */
+  readonly options?: EnvironmentDriver.DriverOptions
+  /**
    * Get-or-create the provider resource backing this logical workspace.
    *
    * MUST be idempotent per `workspaceID`: core retries the same ID after

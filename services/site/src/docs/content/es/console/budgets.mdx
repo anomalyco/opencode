@@ -1,0 +1,90 @@
+---
+title: "Presupuestos"
+description: "Limita el gasto mensual de un espacio de trabajo, sus miembros y sus cuentas de servicio."
+---
+
+Los presupuestos limitan el gasto mensual mediante políticas. Los propietarios y administradores los gestionan en **Controls**.
+
+## Niveles de presupuesto
+
+| Destinatarios de la política | Se aplica a                                                        |
+| ---------------------------- | ------------------------------------------------------------------ |
+| Todo el espacio de trabajo   | Gasto combinado de todos los miembros y cuentas de servicio        |
+| Todos los miembros           | Cada miembro, o una cuota compartida para todos los miembros        |
+| Miembros etiquetados con     | Miembros con las etiquetas elegidas                                 |
+| Estos miembros               | Miembros concretos                                                  |
+| Todas las cuentas de servicio | Cada cuenta de servicio, o una cuota compartida                   |
+| Estas cuentas de servicio    | Cuentas de servicio concretas                                       |
+
+Cada solicitud debe respetar todos los presupuestos aplicables. Una cuota mayor nunca prevalece sobre una menor. Sin ningún
+presupuesto, el gasto es ilimitado.
+
+## Presupuesto del espacio de trabajo
+
+Al alcanzarse el presupuesto del espacio de trabajo, se bloquean las solicitudes de todos.
+
+1. Abre **Controls** y haz clic en **Add policy**.
+2. Elige **Entire workspace** y agrega una regla **Budget**.
+3. Escribe el límite mensual en USD y haz clic en **Save**.
+
+## Presupuestos de miembros
+
+Elige **All members** en una política para dar a cada miembro una cuota mensual, o comparte un mismo importe entre el
+grupo. Elige miembros o etiquetas concretas para cubrir un grupo más pequeño.
+
+Para fijar el presupuesto de una persona:
+
+1. Abre la ficha de la persona en **Settings › Members**.
+2. Haz clic en **Create budget policy** para abrir el formulario con esa persona ya seleccionada.
+3. Escribe el importe y haz clic en **Save**.
+
+En su ficha figuran las políticas que se le aplican. Si también hay un presupuesto para todos los miembros,
+se aplican ambos límites.
+
+## Presupuestos de cuentas de servicio
+
+En **Controls**, elige **All service accounts** o **These service accounts**, agrega una regla **Budget** y define una
+cuota mensual individual o compartida. La política cubre todas las claves de esas cuentas.
+
+## Importes y reinicios
+
+- Los importes están en dólares estadounidenses con hasta dos decimales.
+- Los presupuestos se reinician el día 1 de cada mes a las 00:00 UTC.
+- Un presupuesto de `$0` bloquea todo el gasto que cuenta para los presupuestos.
+- Agregar o cambiar un presupuesto incluye el gasto ya registrado ese mes; no reinicia la cuota.
+
+## Qué gastos se incluyen
+
+De forma predeterminada, un presupuesto cubre **All spend**. Puedes limitarlo a modelos concretos; entonces solo
+cuentan esos modelos, con una sola cuota para el conjunto o una cuota independiente para cada modelo.
+
+| Gasto                                                                     | Cuenta para los presupuestos   |
+| ------------------------------------------------------------------------- | ------------------------------ |
+| Modelos de pago de Console                                                | Sí                             |
+| Modelos de [tus propios proveedores](/console/providers) con un precio definido | Sí, al precio configurado |
+| [Búsqueda web](/console/websearch)                                        | Sí, para los presupuestos de todo el gasto |
+| Modelos gratis                                                            | No                             |
+| Uso de [Go](/console/go) dentro del plan                                  | No                             |
+| Uso extra de Go pagado con créditos                                       | Sí                             |
+
+## Cuando se alcanza un presupuesto
+
+Las solicitudes nuevas fallan con HTTP `429` hasta que el presupuesto se reinicie o un propietario o administrador lo
+aumente. La respuesta indica que una política de presupuesto bloqueó la solicitud, pero no identifica el presupuesto. Abre la solicitud en
+**Activity › Logs** para ver la política que la bloqueó.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Los presupuestos se comprueban al iniciarse una solicitud. Las solicitudes ya en curso terminan, así que el gasto puede
+acabar ligeramente por encima del límite.
+
+## Consultar el gasto
+
+Cada miembro ve su propio gasto y límite en **Activity**. Abre **My usage** para ver **Activity › Overview**, incluidos
+los detalles del presupuesto y las fechas de reinicio.
+
+Los propietarios y administradores pueden abrir **Activity › Usage** desde el gráfico de gasto. Desglosa el costo por
+día, modelo y persona, y el botón **Export usage** descarga los totales diarios de los últimos 7, 30 o 90 días en CSV.
+Para descargar el mismo archivo desde un script, usa la [API de exportación de uso](/console/api/usage-export).

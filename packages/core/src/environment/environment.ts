@@ -3,7 +3,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcessSpawner } from "effect/process"
-import { posix, type PlatformPath } from "node:path"
+import path from "node:path"
 import { type Driver, EnvironmentDriver } from "./driver.js"
 import type { Files } from "./files.js"
 import { makeFiles } from "./exec-defaults.js"
@@ -18,7 +18,10 @@ import { WorkspaceConnector } from "./workspace-connector.js"
 export const ID = Schema.String.pipe(Schema.brand("Environment.ID"))
 export type ID = typeof ID.Type
 
-/** The server's own machine. */
+/**
+ * The server's own Location/environment name. Unlike `environment.local`, this still matches on runtimes without a
+ * local host OS (such as workerd) so bare server Locations remain distinct from sandboxed workspace Locations.
+ */
 export const localID = ID.make("local")
 
 /** Where a file or a directory is: an absolute path in an environment. */
@@ -37,11 +40,11 @@ export interface Options {
    */
   readonly local?: boolean
   /** The path rules of its files, when they are not the server's. */
-  readonly path?: PlatformPath
+  readonly path?: path.PlatformPath
   /** The shell every command there runs under, when it is not the configured one. */
   readonly shell?: string
   /** Resolves `~` in this environment when available (host homedir locally, `hello.home` on paired machines). */
-  readonly home?: Effect.Effect<string, unknown>
+  readonly home?: Effect.Effect<string | undefined, unknown>
   /**
    * Ripgrep command to spawn in this environment (`undefined` means search is unavailable).
    * Local environments (`local: true`) use the bundled `RipgrepBinary` when `rg` is set.
@@ -51,7 +54,10 @@ export interface Options {
 
 export interface Interface extends Options {
   readonly id: ID
+  /** True only when commands and files live on the server's own OS process (false on workerd and all remotes). */
   readonly local: boolean
+  /** The path rules of its files (host `node:path` locally, POSIX on remotes and workspaces). */
+  readonly path: path.PlatformPath
   readonly files: Files
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"]
 }
@@ -64,6 +70,7 @@ export const make = (id: ID, driver: Driver, options?: Options): Interface => ({
   id,
   // `local` is owned exclusively by the explicit `options` argument so a remote driver can never claim host privileges.
   local: options?.local === true,
+  path: options?.path ?? driver.options?.path ?? path,
   files: makeFiles(driver),
   spawner: driver.spawner,
 })
@@ -74,19 +81,20 @@ export const make = (id: ID, driver: Driver, options?: Options): Interface => ({
  */
 export const local = (spawner: ChildProcessSpawner.ChildProcessSpawner["Service"]) =>
   spawner === EnvironmentUnavailable.spawner
-    ? make(localID, { spawner }, { path: posix })
+    ? make(localID, { spawner }, { path: path.posix })
     : make(localID, makeLocalDriver(spawner), {
         local: true,
         home: Effect.sync(() => Global.Path.home),
         rg: Effect.succeed("rg"),
       })
 
-/** A workspace sandbox environment; runs ripgrep through its own spawner and uses POSIX path rules. */
+/** A workspace sandbox environment; runs ripgrep through its own spawner and uses POSIX path rules and `sh`. */
 export const workspace = (id: Workspace.ID, driver: Driver) =>
   make(ID.make(id), driver, {
-    path: posix,
+    shell: "sh",
     rg: Effect.succeed("rg"),
     ...driver.options,
+    path: driver.options?.path ?? path.posix,
     local: false,
   })
 
@@ -101,7 +109,7 @@ export const unavailable = (id: ID, cause: Error): Interface =>
       module: "Environment",
       spawnDescription: cause.message,
     }),
-    { path: posix, shell: "sh" },
+    { path: path.posix, shell: "sh" },
   )
 
 /**

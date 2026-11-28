@@ -1,0 +1,157 @@
+---
+title: "Ekler"
+description: "Dosyaları, dizinleri ve görselleri OpenCode promptlarına ekleyin; her biçimde modelin ne aldığını görün."
+---
+
+## Ekleme
+
+Yerel bir dosya ekleyin, ardından OpenCode'dan bunu promptunuzda kullanmasını isteyin. Masaüstü veya web istemcisinde
+**Attach file** seçeneğini seçin, bir dosya yapıştırın ya da dosyayı promptun içine sürükleyin.
+
+```text
+Summarize the attached README.md and list the required setup steps.
+```
+
+Masaüstü dosya seçiciyle yapılan seçimler toplamda 20 MiB'a kadar olabilir. Diğer arayüzler istemci tarafında daha düşük
+sınırlar uygulayabilir.
+
+<Callout type="warning">
+  Bir görsel eklemeden önce görsel girdisi olan bir model seçin. OpenCode desteklenen görselleri sağlayıcıya iletebilir, ancak
+  sağlayıcı ve model kendi biçim, boyut, dosya sayısı ve dosya boyutu kurallarını uygulamaya devam eder. Yalnızca metin
+  destekleyen bir model isteği reddedebilir.
+</Callout>
+
+## Sözdizimi
+
+V2 prompt ve komut girdileri bir eki `uri` ile, isteğe bağlı `name` ve `description` alanlarıyla tanımlar:
+
+```json
+{
+  "uri": "file:///home/me/project/src/server.ts",
+  "name": "server.ts",
+  "description": "HTTP server entrypoint"
+}
+```
+
+Sunucunun erişebildiği bir dosya veya dizin için mutlak bir `file:` URL'si kullanın. Metin dosyalarında pozitif `start` ve
+`end` parametreleri birden başlayan satırları seçer.
+
+```text
+file:///home/me/project/src/server.ts?start=20&end=60
+```
+
+İçeriği satır içi göndermek için `data:` URL'si kullanın:
+
+```json
+{
+  "uri": "data:text/plain;base64,SGVsbG8sIE9wZW5Db2RlIQ==",
+  "name": "greeting.txt"
+}
+```
+
+HTTP ve HTTPS ek URL'leri desteklenmez. Programlı prompt gönderimi için oluşturulan
+[API referansına](/api) bakın.
+
+## Biçimler
+
+Güncel V2 oturumları şu ek türlerini modele görünür kılar:
+
+| Girdi                   | Modelin aldığı                                           | Örnek              |
+| ----------------------- | -------------------------------------------------------- | ------------------ |
+| UTF-8 metin dosyası     | Dosya adı ve çözülen metin                               | `README.md`        |
+| Dizin                   | Hemen altındaki dosya ve dizinlerin özyinelemesiz listesi | `file:///home/me/` |
+| PNG, JPEG, GIF veya WebP | Görsel medya                                            | `diagram.png`      |
+| PDF                     | Belge medyası                                            | `report.pdf`       |
+
+PDF'ler için PDF girdisi olan bir model gerekir. Model bir ekin türünü desteklemiyorsa OpenCode onun yerine kısa bir not
+gönderir.
+
+SVG metin olarak işlenir. AVIF, BMP, ses, video ve diğer ikili prompt ekleri model isteğine dahil edilmez. Desteklenmeyen
+bir ikili dosyayı önce metne veya desteklenen bir görsele dönüştürün; örneğin bir BMP görselini eklemeden önce PNG'ye
+dönüştürün.
+
+OpenCode, promptu kabul etmeden önce her eki okur. Geçersiz URL'leri, okunamayan yolları, dosya veya dizin olmayan yolları
+ve çözüldüğünde 20 MiB'ı aşan ekleri reddeder. Medya türü baytlardan algılanır; bu nedenle dosya adını veya `data:`
+URL'sinin medya türünü değiştirmek desteklenmeyen bir ikili dosyayı görünür kılmaz.
+
+## Görseller
+
+Görsel normalleştirmeyi `opencode.json` veya `opencode.jsonc` içinde yapılandırın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Tüm alanlar isteğe bağlıdır:
+
+| Alan               | Varsayılan | Davranış                                                                |
+| ------------------ | ---------- | ------------------------------------------------------------------------ |
+| `auto_resize`      | `true`     | Yapılandırılmış sınırı aşan görseli yeniden boyutlandırır; `false` ise görseli reddeder. |
+| `max_width`        | `2000`     | Piksel cinsinden azami genişlik; pozitif bir tam sayı olmalıdır.          |
+| `max_height`       | `2000`     | Piksel cinsinden azami yükseklik; pozitif bir tam sayı olmalıdır.         |
+| `max_base64_bytes` | `5242880`  | Base64 ile kodlanmış görselin azami bayt sayısı; pozitif bir tam sayı olmalıdır. |
+
+Örneğin bu ayar, 1200 pikselden geniş bir görseli yeniden boyutlandırmak yerine reddeder:
+
+```jsonc title="opencode.jsonc"
+{
+  "media": {
+    "image": {
+      "auto_resize": false,
+      "max_width": 1200,
+    },
+  },
+}
+```
+
+Bu ayarlar hem promptlara eklenen desteklenen görseller hem de yerleşik `read` aracının döndürdüğü görseller için geçerlidir.
+
+## İşleme
+
+`read` aracı PNG, JPEG, GIF ve WebP dosyalarını içeriklerinden tanır ve 20 MiB'a kadar kaynak görsel verisi okur. Genişliği,
+yüksekliği ve Base64 uzunluğunu yapılandırılmış görsel sınırlarına göre denetler.
+
+`auto_resize: true` olduğunda OpenCode en-boy oranını korur ve görseli boyut sınırlarına göre küçültür. Ardından Base64
+sınırına ulaşana kadar gitgide küçülen PNG ve JPEG kodlamaları dener; bu nedenle çıktının medya türü değişebilir.
+
+```text
+Input:  4000 × 2000 WebP
+Limits: 2000 × 2000
+Output: 2000 × 1000 PNG or JPEG
+```
+
+Hiçbir kodlama sınıra sığmazsa görsel işlenemez. `auto_resize: false` olduğunda herhangi bir sınırı aşan görsel
+değiştirilmeden reddedilir. Kodu çözülemeyen görseller de reddedilir.
+
+```text
+Input:  2400 × 1600 JPEG
+Limit:  max_width = 2000, auto_resize = false
+Result: Image processing fails
+```
+
+Görsel yeniden boyutlandırıcı kullanılamıyorsa OpenCode özgün görseli değiştirmeden iletir. Bu nedenle görsel ayarları bir
+yükleme veya güvenlik sınırı değil, işleme sınırıdır.
+
+## Sınırlar
+
+| Sınır                          | Değer veya davranış                                            | Örnek                                         |
+| ------------------------------ | -------------------------------------------------------------- | --------------------------------------------- |
+| Doğrudan ek                    | Öğe başına 20 MiB, kod çözme sonrası; istemciler daha düşük sınır koyabilir | 12 MiB boyutunda iki dosya, öğe başına sınırı aşmaz |
+| Masaüstünde dosya seçimi       | Toplam 20 MiB                                                  | 12 MiB boyutunda iki dosya, seçim sınırını aşar |
+| `max_base64_bytes`             | Yalnızca kodlanmış Base64, tam `data:` URL'si hariç            | `SGVsbG8=` 8 bayt sayılır                     |
+| Sağlayıcı görsel sınırları     | OpenCode işlemesinden sonra uygulanır                          | Sağlayıcı, kabul edilmiş bir görseli reddedebilir |
+| Metin eki model desteği        | Çok kipli bir model gerektirmez                                | `notes.txt` prompt metni olarak eklenir       |
+| `read` metin sınırları         | Ayrı sayfalama ve kısaltma sınırları kullanır                  | Büyük bir günlüğü sayfalar halinde okuyun     |
+
+Bir istemcinin dosyayı kabul etmesi, içeriğinin modele ulaşacağını garanti etmez. Ek, modelin görebildiği bir biçimde olmalı
+ve hem OpenCode hem de sağlayıcı sınırlarını karşılamalıdır.

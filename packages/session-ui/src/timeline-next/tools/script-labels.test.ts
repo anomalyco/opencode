@@ -1,3 +1,4 @@
+import type { JsonValue } from "@opencode/client/promise"
 import { describe, expect, test } from "bun:test"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { storyTool } from "../../storybook/current-session-scenarios"
@@ -92,5 +93,110 @@ describe("script labels", () => {
   test("the New timeline counts a script's files only where they are placed", () => {
     expect(next([script, ...files])).toBe("Edited 3 files · 1 command")
     expect(next([script])).toBe("Ran 1 command")
+  })
+
+  describe("counting a script's steps", () => {
+    const step = (tool: string, input: Record<string, string>, status = "completed") => ({ tool, status, input })
+
+    const changes = script.state.status === "completed" ? (script.state.metadata?.files ?? []) : []
+
+    const stepped = (toolCalls: JsonValue[], status: "running" | "completed" = "completed") =>
+      storyTool("exec_1", "execute", status, { code: "x" }, { metadata: { files: changes, toolCalls } })
+
+    const steps = stepped([
+      step("read", { path: "/repo/a.ts" }),
+      step("shell", { command: "ls" }),
+      step("edit", { path: "/repo/a.ts" }),
+      step("write", { path: "/repo/b.ts" }),
+      step("patch", { patchText: "x" }),
+      step("Bun", { method: "write", path: "/repo/c.bin" }),
+    ])
+
+    const stepsNext = (parts: ActivityGroupPart[]) =>
+      (activityText(activityLabel(parts, i18n, true)) ?? usedLabel(parts, i18n)).text
+
+    test("Compact: a script beside its files counts its steps, with no patch", () => {
+      expect(contextGroupLabel([steps, ...files], i18n, true).text).toBe("Used 6 Read, Shell, Edit, Write, Patch")
+      expect(stepsNext([steps, ...files])).toBe("Edited 3 files · 1 command, 1 read")
+    })
+
+    test("Quiet: a hidden script's files still read as a patch", () => {
+      expect(contextGroupLabel(files, i18n, true).text).toBe("Used 1 Patch")
+      expect(stepsNext(files)).toBe("Edited 3 files")
+    })
+
+    test("a script with no steps to count counts as itself", () => {
+      expect(contextGroupLabel([stepped([], "running")], i18n, true).text).toBe("Used 1 Execute")
+      expect(contextGroupLabel([stepped([step("Bun", { method: "spawn" })])], i18n, true).text).toBe("Used 1 Execute")
+    })
+
+    test("live Bun steps count as recorded, and old Bun writes as edits", () => {
+      const live = storyTool(
+        "exec_3",
+        "execute",
+        "completed",
+        { code: "x" },
+        {
+          metadata: {
+            toolCalls: [
+              step("read", { path: "/repo/a.ts" }),
+              step("write", { path: "/repo/b.ts" }),
+              step("glob", { pattern: "src/**/*.ts" }),
+            ],
+            files: [{ file: "/repo/b.ts", status: "added", additions: 1, deletions: 0 }],
+          },
+        },
+      )
+
+      const liveFiles = factsOf([live]).flatMap((fact) =>
+        fact.kind === "file" && fact.via === "script"
+          ? [{ type: "file" as const, id: fact.id, file: fact, render: () => null }]
+          : [],
+      )
+
+      expect(contextGroupLabel([live, ...liveFiles], i18n, true).text).toBe("Used 3 Read, Write, Glob")
+      expect(stepsNext([live, ...liveFiles])).toBe("Edited b.ts · 1 read, 1 search")
+      expect(
+        contextGroupLabel([stepped([step("Bun", { method: "write", path: "/repo/b.ts" })])], i18n, true).text,
+      ).toBe("Used 1 Edit")
+    })
+
+    test("an edit step before its files land does not name the group as edits", () => {
+      const running = storyTool(
+        "exec_2",
+        "execute",
+        "running",
+        { code: "x" },
+        {
+          metadata: {
+            files: [],
+            toolCalls: [step("read", { path: "/repo/a.ts" }), step("edit", { path: "/repo/a.ts" }, "running")],
+          },
+        },
+      )
+
+      expect(stepsNext([running])).not.toContain("Edited")
+    })
+  })
+
+  test("the New timeline names unknown script steps as one Tool, last", () => {
+    const unknown = storyTool(
+      "exec_9",
+      "execute",
+      "completed",
+      { code: "x" },
+      {
+        metadata: {
+          toolCalls: ["anomaly_slack.slack_search_users", "skill_x", "anomaly_slack.slack_read_thread"].map((tool) => ({
+            tool,
+            status: "completed",
+            input: {},
+          })),
+        },
+      },
+    )
+
+    expect(activityText(activityLabel([unknown], i18n, true))?.text).toBe("Used tool")
+    expect(activityText(activityLabel([unknown], i18n))?.text).toBe("Ran 1 command")
   })
 })

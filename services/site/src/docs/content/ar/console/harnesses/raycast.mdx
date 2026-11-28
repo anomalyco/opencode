@@ -1,0 +1,40 @@
+---
+title: "Raycast"
+description: "استخدم نماذج Console وGo في Raycast AI."
+---
+
+استخدم نماذج Console وGo في Raycast AI Chat وQuick AI وAI Commands عبر
+[امتداد OpenCode](https://www.raycast.com/vimtor/opencode). والنماذج التي توفّرها الامتدادات تتطلب
+[Raycast Pro](https://www.raycast.com/pro).
+
+## الإعداد
+
+يحمّل الامتداد النماذج المفعّلة في مساحة عملك، ويُحتسب استخدامها على مساحة العمل. اختر نماذج مدفوعة أو نماذج Go؛
+إذ تتطلّب نماذج المحادثة المجانية استخدام OpenCode، وتُرفض طلباتها من Raycast برمز HTTP `403`.
+
+1. ثبّت الامتداد من Raycast Store.
+2. أنشئ [مفتاح API شخصيًا](/console/harnesses#get-an-api-key) والصقه في إعداد **API Key** في الامتداد.
+3. اسمح للامتداد بإظهار نماذجه في قائمة اختيار النماذج في Raycast.
+
+شغّل **Refresh Models** بعد تفعيل النماذج أو تعطيلها في Console.
+
+```text
+Refresh Models
+```
+
+## Go
+
+استخدم مفتاحًا من مساحة عمل لديها اشتراك [Go](/console/go). عندئذٍ يعرض الامتداد نماذج Go في قائمة
+اختيار النماذج.
+
+## Console MCP
+
+أضف خادم [Console MCP](/console/harnesses#console-mcp) بأمر **Install MCP Server**.
+
+| الحقل      | القيمة                            |
+| ---------- | --------------------------------- |
+| Transport  | HTTP                              |
+| URL        | `https://opencode.ai/console/mcp` |
+| OAuth Type | Dynamic                           |
+
+ويطلب Raycast منك تسجيل الدخول عند أول استخدام للخادم.

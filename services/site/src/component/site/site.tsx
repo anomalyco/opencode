@@ -395,7 +395,7 @@ export function Site(props: {
   }
 
   // Follows the locale, so a client-side language switch relabels the nav and footer.
-  const links = createMemo(() => siteLinks(i18n.t, language.route))
+  const links = createMemo(() => siteLinks(i18n.t, language.route, language.consoleRoute))
   // Every known item renders, in the saved list's order (Design mode shows the hidden ones, dimmed);
   // the shown ones are numbered and take the number keys. The items stay the same objects while the
   // list changes, so a reorder moves them in place.
@@ -1254,8 +1254,8 @@ export function Site(props: {
           font-display: optional's short wait and reflowing the text (CLS). Only the Latin file:
           most pages need nothing else. */}
       <Link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
-      {/* OpenTUI Mono's regular Latin file, the monospace text above the fold (the nav, the hero title,
-          card titles): fetched with the page, so it paints in OpenTUI Mono instead of swapping to it
+      {/* OpenMono's regular Latin file, the monospace text above the fold (the nav, the hero title,
+          card titles): fetched with the page, so it paints in OpenMono instead of swapping to it
           (which, with the size-matched stand-ins, is a change of letter shapes only). The other files
           load when text needs them. */}
       <Link rel="preload" href={monoFontLatin} as="font" type="font/woff2" crossorigin="anonymous" />

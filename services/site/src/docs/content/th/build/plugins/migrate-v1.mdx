@@ -1,0 +1,399 @@
+---
+title: "ย้ายปลั๊กอินจาก V1"
+description: "พอร์ตเครื่องมือและฮุกของปลั๊กอิน V1 ไปยัง API ปลั๊กอิน V2"
+---
+
+การกำหนดค่าปลั๊กอินปรับให้เป็นมาตรฐานได้อัตโนมัติ แต่โค้ดการใช้งานปลั๊กอินต้องพอร์ต ฟังก์ชันปลั๊กอิน V1
+คืนออบเจกต์เดียวที่มีเครื่องมือและฮุก ปลั๊กอิน V2 ส่งออกค่าเริ่มต้นเป็นคำจำกัดความที่มี `id` และ `setup(ctx)`;
+`setup` ลงทะเบียนฮุก การแปลง เครื่องมือ และการสมัครรับผ่านบริบท
+
+<Callout type="warning">
+  การใช้งานปลั๊กอิน V1 ไม่ทำงานใน V2 การย้ายไฟล์หรือเปลี่ยนชื่อรายการกำหนดค่าไม่เพียงพอ
+</Callout>
+
+## ย้ายการกำหนดค่าปลั๊กอิน
+
+เปลี่ยนชื่อ `plugin` เป็น `plugins` แทนทูเพิลแพ็กเกจและตัวเลือกด้วยออบเจกต์
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 ค้นพบปลั๊กอินในเครื่องจากทั้ง `.opencode/plugin/` และ `.opencode/plugins/` ให้ใช้ `.opencode/plugins/` สำหรับไฟล์ V2
+พาธในเครื่องที่กำหนดค่าไว้ต้องระบุไดเรกทอรี สำหรับตัวอย่างข้างต้น ให้ย้ายการใช้งานที่พอร์ตแล้วไปที่
+`./plugin/local/index.ts` ไฟล์ `./plugin/local.ts` ที่กำหนดค่าไว้จะถูกข้ามพร้อมคำเตือนในบันทึก
+เก็บโมดูลประกอบไว้ข้างปลั๊กอินเมื่อย้าย ปลั๊กอินในเครื่องและปลั๊กอินแพ็กเกจใช้ API การใช้งานเดียวกัน
+
+## เปลี่ยนจุดเริ่มต้นของปลั๊กอิน
+
+เปลี่ยนการนำเข้าแพ็กเกจ แทนฟังก์ชันปลั๊กอินที่ส่งออกด้วย `Plugin.define` และย้ายการเริ่มต้นเข้า
+`setup`
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+ทุกปลั๊กอิน V2 ต้องมี `id` ที่คงที่ ที่เก็บข้อมูลของปลั๊กอินผูกกับ ID นี้ และ ID ยังระบุปลั๊กอินในสถานะ
+และการวินิจฉัย ปลั๊กอินที่เผยแพร่ควรพึ่ง `@opencode/plugin` เวอร์ชันที่เข้ากันได้กับรุ่น OpenCode
+ที่กำหนดเป้าหมาย
+
+## ย้ายบริบท
+
+บริบท V2 เป็นทั้งไคลเอนต์ OpenCode และ API ปลั๊กอิน การดำเนินการส่วนใหญ่จัดกลุ่มตามโดเมนแทนการ
+อยู่บนพร็อพเพอร์ตี `client` แยก
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | เมธอดโดเมนเช่น `ctx.session`, `ctx.permission`, `ctx.agent` |
+| อาร์กิวเมนต์ตัวเลือกของปลั๊กอิน                 | `ctx.options`                                                       |
+| ฮุก `dispose()` ที่คืน | ฟังก์ชันสำหรับคืนทรัพยากรที่ `setup` คืน |
+| ฮุก `event` ที่คืน                   | `ctx.event.subscribe()`                                             |
+| การเปลี่ยนแปลง config, model หรือ tool ที่คืน | `transform(...)` ของโดเมน                                           |
+| ตัวช่วย Bun shell `$`                    | นำเข้าและจัดการ API โปรเซสที่ปลั๊กอินใช้                  |
+
+`ctx.location` อธิบายตำแหน่งที่อินสแตนซ์ปลั๊กอินนี้โหลด ไม่ใช่ตำแหน่งของทุกเซสชันหรืออีเวนต์
+ที่ปลั๊กอินอาจเห็น ให้อ่านข้อมูลเซสชันหรืออีเวนต์เมื่อความต่างนี้สำคัญ
+
+บริบทปลั๊กอินมีโดเมนอื่นนอกเหนือจากที่ระบุในตาราง เช่น คำสั่ง การเชื่อมต่อกับระบบอื่น เซิร์ฟเวอร์ MCP การอ้างอิง
+สกิล ที่เก็บข้อมูล VCS เวิร์กทรี และการค้นหาเว็บ ดู[บริบทปลั๊กอินทั้งหมด](/build/plugins/server#api)
+
+### ย้ายจากโดเมนแคตตาล็อก
+
+ปลั๊กอินรุ่นก่อนเผยแพร่ผู้ให้บริการและโมเดลผ่าน `ctx.catalog` ตอนนี้ OpenCode แยกเป็นสองโดเมนคือ `ctx.provider` และ
+`ctx.model` ดังนั้นปลั๊กอินที่เรียก `ctx.catalog.transform` จะโหลดไม่สำเร็จ
+
+| API แคตตาล็อกเดิม | API ที่ใช้แทนในปัจจุบัน |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` และ `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` บน `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` บน `ctx.model` |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` และ `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+ดู API ของตัวแก้ไขแบบครบถ้วนในหัวข้อ [ผู้ให้บริการ](/build/plugins/server#providers) และ [โมเดล](/build/plugins/server#models)
+
+## ลงทะเบียนฮุกใน `setup`
+
+V1 คืนฮุกตามคีย์สตริง V2 ลงทะเบียนแต่ละฮุกบนโดเมนที่เป็นเจ้าของการดำเนินการ คอลแบ็กได้รับอีเวนต์
+ที่แก้ไขได้หนึ่งรายการแทนออบเจกต์ `input` และ `output` แยก
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+การลงทะเบียนคงอยู่ตลอดอายุปลั๊กอินและถูก dispose เมื่อถอน เก็บการลงทะเบียนที่คืนไว้เฉพาะเมื่อปลั๊กอิน
+ต้องนำฮุกหรือการแปลงนั้นออกก่อนด้วย `registration.dispose()`
+
+ใช้ตารางนี้เพื่อหา API V2 ที่ใกล้ที่สุดสำหรับแต่ละฮุก V1
+
+| ฮุก V1                                | API V2                                                       |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose` | ฟังก์ชันสำหรับคืนทรัพยากรที่ `setup` คืน |
+| `config`                               | การแปลงบนโดเมนที่ได้รับผลกระทบ                           |
+| แมป `tool`                             | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` และ API การเชื่อมต่อ        |
+| `provider`                             | `ctx.provider.transform(...)` และ `ctx.model.transform(...)` |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` หรือ `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | การแปลงคำสั่งหรือฮุกพรอมต์ ขึ้นกับเจตนา   |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` และแก้ไข `event.system`   |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` และแก้ไข `event.messages` |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+สิ่งเหล่านี้เป็นจุดหมายการย้าย ไม่ใช่การเปลี่ยนชื่อที่ตรงเสมอไป โดยเฉพาะฮุก `prompt` ของ V2 ทำงานก่อน
+การรับพรอมต์แบบถาวร ส่วน `context` ทำงานทันทีก่อนคำขอโมเดลของเอเจนต์ ให้ลงทะเบียน `context`, `compaction`,
+`generate` และ `title` แยกหากการแปลงต้องมีผลกับคำขอโมเดลทุกชนิด
+
+ไม่มีฮุก V2 โดยตรงที่ตรงกับฮุกทดลอง V1 ทุกตัว ให้ประเมินปลั๊กอินที่ใช้
+`experimental.compaction.autocontinue`, `experimental.provider.small_model` หรือ `experimental.text.complete` ใหม่กับ
+API เซสชัน ผู้ให้บริการ โมเดล และอีเวนต์ของ V2 แทนการคงสมมติฐานวงจรชีวิตภายใน
+
+`command.execute.before` ก็ไม่มีฮุกส่วนกลางแบบหนึ่งต่อหนึ่ง ให้ลงทะเบียนคำสั่งด้วย `ctx.command.transform` เมื่อ
+ปลั๊กอินเป็นเจ้าของคำสั่งนั้น ใช้ฮุกพรอมต์เมื่อเจตนาจริงคือการแก้พรอมต์ที่ส่งโดยคำสั่งและแหล่งพรอมต์อื่น
+
+## ย้ายฮุกคำขอ
+
+V2 แยกการรับพรอมต์ บริบทที่โมเดลมองเห็น ตัวเลือกโมเดลเชิงความหมาย และ HTTP เนทีฟ เลือกชั้นที่แคบที่สุด
+ที่ปลั๊กอินต้องการ
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+ใช้ตัวเลือกผู้ให้บริการเชิงความหมายใน `event.options` ใช้ `model.request` สำหรับเฮดเดอร์คำขอโมเดลและการตั้งค่า
+คำขอดิบ และใช้ `http.request` หรือ `http.response` เฉพาะเมื่อปลั๊กอินต้องการการแลกเปลี่ยน HTTP เนทีฟของผู้ให้บริการ
+ฮุกเฉพาะผู้ให้บริการส่ง `{ providerID: "..." }` เป็นอาร์กิวเมนต์ที่สามของ `ctx.session.hook` ได้
+
+## ย้ายเครื่องมือกำหนดเอง
+
+V1 คืนแมป `tool` ที่สร้างด้วยตัวช่วย `tool()` เดิม V2 ลงทะเบียนคำจำกัดความเครื่องมือผ่านตัวแก้ไข
+`ctx.tool.transform` แบบซิงโครนัส เครื่องมือกำหนด schema ด้วย JSON Schema และคืนเนื้อหาแบบมีโครงสร้างเมื่อเรียกใช้
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+การแปลงจะแก้ไขสถานะในแบบที่นำมาทำซ้ำได้ ให้คอลแบ็กทำงานแบบซิงโครนัส ใช้ทรัพยากรน้อย และไม่ก่อผลข้างเคียงที่ควรเกิดเพียงครั้งเดียว
+โหลดข้อมูลภายนอกก่อนลงทะเบียน เก็บไว้ในคอลแบ็ก และเรียกเมธอด `reload()` ของโดเมนเมื่อข้อมูลนั้น
+เปลี่ยน การแปลงของปลั๊กอินภายหลังจะเห็นการเปลี่ยนแปลงก่อนหน้าและอาจอัปเดต แทนที่ หรือนำออก
+
+รูปแบบการแปลงเดียวกันแทนฮุก `config` และ `provider` ของ V1 แต่ V2 ไม่เปิดออบเจกต์ config ส่วนกลาง
+ที่แก้ไขได้หนึ่งออบเจกต์ ให้ลงทะเบียนการเปลี่ยนแปลงกับโดเมนที่เป็นเจ้าของ: `ctx.agent`, `ctx.provider`, `ctx.model`, `ctx.command`,
+`ctx.integration`, `ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch` หรือ `ctx.worktree`
+วิธีตรวจสอบสิทธิ์เป็นของการเชื่อมต่อ การแปลงผู้ให้บริการให้คำจำกัดความแหล่งและการตั้งค่าผู้ให้บริการ
+ส่วนการแปลงโมเดลใช้ข้อจำกัดและการแทนที่กับคอลเลกชันโมเดลของผู้ให้บริการที่ใช้งานทั้งหมด
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## ย้ายการรับอีเวนต์และการคืนทรัพยากร
+
+`event` ของ V1 เปลี่ยนเป็นการสมัครรับสตรีมอีเวนต์สาธารณะของเซิร์ฟเวอร์แบบอะซิงโครนัส ให้ยกเลิกการสมัครรับในฟังก์ชันสำหรับคืนทรัพยากร
+ที่ `setup` คืน
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+ใช้ฟังก์ชันเพื่อคืนตัวจับเวลา โปรเซสย่อย ซ็อกเก็ต และทรัพยากรอื่นที่ปลั๊กอินเป็นเจ้าของ การลงทะเบียน
+ฮุกและการแปลงผูกกับปลั๊กอินและถูกล้างอัตโนมัติ
+
+## ย้ายตัวเลือกและสถานะถาวร
+
+อ่านตัวเลือกจาก `ctx.options` ใช้ `ctx.storage` แทนการสร้างไฟล์ส่วนกลางเองเมื่อสถานะเป็นของปลั๊กอิน
+ค่า JSON ของมันคงทนและผูกกับปลั๊กอิน
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## รองรับ V1 และ V2 จากแพ็กเกจเดียว
+
+แพ็กเกจสามารถเปิดทั้งสองการใช้งานชั่วคราวจาก default export เดียว V1 เรียก `server()` และ V2 เรียก
+`setup()` API ยังแยกกัน รูปแบบนี้ไม่ได้แปลงฮุกอัตโนมัติ
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+จุดเข้าแบบออบเจกต์ V1 รองรับใน OpenCode `1.18.29` ขึ้นไป หากคุณรองรับ V1 รุ่นเก่ากว่า ให้ใช้
+แพ็กเกจหรือจุดเข้าแยก และทดสอบรุ่นเก่าสุดที่คุณอ้างว่ารองรับ ลบการใช้งาน V1 หลังช่วงสนับสนุน
+สิ้นสุด
+
+## ตรวจสอบปลั๊กอินที่พอร์ตแล้ว
+
+สำหรับแต่ละปลั๊กอิน
+
+1. ยืนยันว่า ID และแหล่งของมันปรากฏในรายการปลั๊กอินที่ใช้งาน
+2. ทดสอบฮุก การแปลง เครื่องมือ คำสั่ง และการสมัครรับอีเวนต์ที่ลงทะเบียนทุกตัว
+3. ตรวจว่าคืนทรัพยากรแล้วโดยลองโหลดปลั๊กอินใหม่หรือนำปลั๊กอินออก
+4. ทดสอบตัวเลือกปลั๊กอินและสถานะที่บันทึกไว้ด้วยโปรเจกต์ใหม่สะอาด
+5. สำหรับแพ็กเกจที่เผยแพร่ ให้ทดสอบแพ็กเกจที่ติดตั้ง ไม่ใช่เฉพาะสำเนาที่ลิงก์กับเวิร์กสเปซ
+
+ดู[เซิร์ฟเวอร์](/build/plugins/server)สำหรับ API Promise ทั้งหมด [ปลั๊กอิน Effect](/build/plugins/effect)สำหรับ
+จุดเข้า Effect [plugin RPC](/build/plugins/rpc)สำหรับเมธอดและอีเวนต์กำหนดเอง และ[ปลั๊กอิน TUI](/build/plugins/cli)สำหรับ
+UI เทอร์มินัล

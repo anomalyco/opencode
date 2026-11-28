@@ -62,6 +62,7 @@ pub fn show(tui: &Tui) {
             props.skip_filter = true;
             props.current = current.clone();
             props.focus_current = false;
+            props.preserve_selection = true;
             props.on_filter = Some(Rc::new(bind!(weak, |list, _: &str| list.debounce_search())));
             props.on_move = Some(Rc::new(bind!(weak, |list, _: &SelectOption<SessionID>| {
                 if list.state.borrow_mut().to_delete.take().is_some() {
@@ -98,9 +99,11 @@ pub fn show(tui: &Tui) {
                     "rename",
                     bind!(weak, |list, option: &SelectOption<SessionID>| {
                         let Some(tui) = list.tui.upgrade() else { return };
-                        let (id, title) = (option.value.clone(), option.title.clone());
+                        let id = option.value.clone();
+                        // The row title may be the delete confirmation prompt, so prefill from the session itself.
+                        let initial = list.session_title(&tui, &id);
                         let app = tui.app.clone();
-                        app.defer(bind!(tui, |tui, _| crate::dialogs::rename::show(&tui, id, Some(title))));
+                        app.defer(bind!(tui, |tui, _| crate::dialogs::rename::show(&tui, id, initial)));
                     }),
                 ),
             ];
@@ -376,6 +379,14 @@ impl List {
             project_name(store.project(&current.project.id))
         });
         name.unwrap_or_default()
+    }
+
+    fn session_title(&self, tui: &Tui, id: &SessionID) -> Option<String> {
+        let picker = picker_location(tui);
+        tui.data.read(|store| {
+            let location = store.location(Some(&picker)).and_then(|data| data.info.as_ref());
+            self.sessions(store, location).iter().find(|session| &session.id == id).map(title)
+        })
     }
 
     /// `sessions()`: the read's results, or the loaded sessions while a read is pending or failed.

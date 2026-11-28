@@ -1,0 +1,222 @@
+---
+title: Outils
+description: Les outils intégrés d’OpenCode lisent et modifient les fichiers, exécutent des commandes shell, récupèrent des pages et effectuent des recherches sur le web, lancent des subagents et pilotent un navigateur.
+---
+
+Demandez le résultat souhaité. OpenCode choisit les outils disponibles, demande une approbation si nécessaire et renvoie le résultat.
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+Cette tâche utilise généralement `grep` ou `glob`, `read`, un outil d’édition et `shell`. Vous pouvez aussi nommer un outil lorsque vous voulez une approche précise.
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## Fichiers
+
+### Read
+
+`read` renvoie un fichier ou le contenu d’un répertoire, sans parcours récursif. Indiquez le `path`, puis utilisez `offset` et `limit` pour parcourir les résultats volumineux page par page.
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+Les lectures de texte contiennent des lignes numérotées et sont limitées à 2 000 lignes et 50 Kio par page. Les lignes individuelles sont raccourcies au-delà de 2 000 caractères. L’outil transmet aussi au modèle les fichiers PNG, JPEG, GIF, WebP et PDF, jusqu’à 20 Mio de données source. Les autres fichiers binaires échouent. Consultez [Pièces jointes](/attachments) pour les médias pris en charge et le traitement des images.
+
+Autorisation : `read` avec le chemin normalisé comme ressource.
+
+### Glob
+
+`glob` trouve des chemins de fichiers à partir d’un motif comme `**/*.ts`. Il cherche dans le répertoire courant sauf si `path` sélectionne un autre répertoire relatif ; `hidden` inclut les entrées cachées et `limit` plafonne les résultats.
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+La limite par défaut est de 100 fichiers et le délai de recherche est de 30 secondes. Autorisation : `glob` avec le motif demandé comme ressource.
+
+### Grep
+
+`grep` cherche dans le contenu des fichiers et renvoie les chemins, les numéros de ligne et des aperçus. Son `pattern` utilise la syntaxe des expressions régulières sauf si `literal` vaut true. Affinez une recherche avec `path`, `include`, `caseSensitive` ou `limit`.
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+La limite par défaut est de 100 lignes correspondantes et le délai de recherche est de 30 secondes. Autorisation : `grep` avec le motif demandé, pas le chemin de recherche, comme ressource.
+
+### Edit
+
+`edit` remplace du texte dans un fichier existant. Fournissez `path`, `oldString` et un `newString` différent ; l’ancien texte doit correspondre exactement une fois sauf si `replaceAll` vaut true.
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+Utilisez `edit` pour une modification ciblée. OpenCode peut formater le fichier après l’avoir écrit. Autorisation : `edit` avec le chemin cible comme ressource.
+
+### Write
+
+`write` crée ou remplace entièrement un fichier texte à partir de `path` et `content`. Il crée les répertoires parents manquants et peut exécuter le formateur configuré.
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+Utilisez plutôt `edit` lorsque seule une partie d’un fichier existant doit changer. Autorisation : `edit` avec le chemin cible comme ressource.
+
+### Patch
+
+`patch` applique un patch qui peut ajouter, mettre à jour, déplacer ou supprimer plusieurs fichiers. Son `patchText` utilise les sections `*** Add File`, `*** Update File` et `*** Delete File`.
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode expose `patch` pour les modèles GPT pris en charge ; les autres modèles reçoivent `edit` et `write` à la place. Autorisation : `edit` avec chaque chemin concerné comme ressource.
+
+Les chemins hors de la Location active ou de son worktree de projet sont aussi vérifiés par rapport à `external_directory`, autorisé par défaut. Consultez [Autorisations](/permissions) pour la normalisation des chemins, l’ordre des règles et les approbations enregistrées. Pour rendre du contenu externe disponible par nom, configurez des [Références](/references).
+
+## Commandes
+
+### Shell
+
+`shell` exécute une commande dans le shell de l’utilisateur hôte. Définissez `workdir` au lieu de mettre `cd` dans la commande, et `timeout` en millisecondes lorsque le délai par défaut de deux minutes au premier plan ne convient pas.
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+Définissez `background` sur true pour un serveur de développement ou un autre processus de longue durée. Les appels en arrière-plan reviennent immédiatement et notifient la session lorsqu’ils se terminent ; ils n’ont pas de délai sauf si vous en fournissez un. Les sorties volumineuses sont raccourcies et la sortie complète est conservée dans un fichier géré.
+
+Autorisation : `shell` avec chaque commande produite par le scanner comme ressource. Le scanner vérifie aussi un répertoire de travail externe et les répertoires qu’il peut déduire de la commande. Le shell dispose des droits du système de fichiers, des processus et du réseau de l’utilisateur hôte : utilisez donc des règles étroites dans [Autorisations](/permissions).
+
+## Web
+
+### Webfetch
+
+`webfetch` récupère une URL HTTP ou HTTPS sous forme de `markdown`, `text` ou `html`. Markdown est la valeur par défaut ; `timeout` accepte jusqu’à 120 secondes.
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+Il accepte les réponses textuelles comme HTML, texte brut, JSON et XML, mais pas les images ni les autres téléchargements binaires. Les sorties volumineuses peuvent être raccourcies tandis que le texte complet est conservé dans le stockage géré. Autorisation : `webfetch` avec l’URL demandée comme ressource.
+
+### Websearch
+
+`websearch` recherche des informations actuelles dans l’intégration sélectionnée. Son entrée est une `query` de recherche.
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+Autorisation : `websearch` avec la requête comme ressource. Consultez [Recherche web](/websearch) pour les fournisseurs, la sélection, les limites de débit et la désactivation de l’outil.
+
+## Images
+
+### Génération d’images
+
+`generate_image` crée une nouvelle image à partir d’un prompt, ou modifie des images existantes. Il est expérimental et apparaît lorsqu’un fournisseur connecté dispose d’un modèle d’image. Pour choisir son modèle par défaut, consultez [`experimental.image_generate`](/config#image-generation).
+
+```text
+Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
+```
+
+Fournissez un `prompt` et, en option, des `images` à modifier ou à utiliser comme références, un `model` précis, ou un `path` d’enregistrement. L’outil s’exécute en arrière-plan et notifie la session avec le chemin enregistré lorsque l’image est prête.
+
+Autorisation : `generate_image` avec le modèle sélectionné comme ressource.
+
+## Interaction
+
+### Question
+
+`question` met l’exécution en pause et présente une ou plusieurs questions à l’utilisateur. Chaque question a un en-tête court, un prompt et des choix ; `multiple` autorise plusieurs choix. Une réponse libre est toujours disponible.
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+Autorisation : `question` avec `*` comme ressource. Un client doit prendre en charge le formulaire interactif, et le fermer annule la question.
+
+### Skill
+
+`skill` charge dans la conversation les instructions et les ressources fournies avec un ID de skill disponible.
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+L’ID doit figurer dans la liste des skills annoncés ou être nommé explicitement par l’utilisateur. Autorisation : `skill` avec l’ID du skill comme ressource. Consultez [Skills](/skills) pour la création, la découverte et les règles de chargement.
+
+## Automatisation
+
+### Subagent
+
+`subagent` démarre une session enfant avec un subagent configuré. Fournissez l’ID de l’agent, une courte `description` et un `prompt` complet.
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+Les subagents s’exécutent toujours en arrière-plan. L’appel revient immédiatement avec un `sessionID`, et le parent reçoit un message `<subagent>` lorsque l’enfant devient inactif, puis après chaque nouvelle série de travaux, afin de pouvoir continuer à travailler ou terminer son tour sans attendre. Passez le `sessionID` renvoyé pour poursuivre cette même conversation enfant ; un suivi adressé à un enfant en cours rejoint son exécution actuelle. Seuls les agents en mode subagent peuvent être utilisés, et la profondeur d’imbrication par défaut est de un.
+
+Autorisation : `subagent` avec l’ID de l’agent sélectionné comme ressource.
+
+### Execute
+
+`execute` exécute du JavaScript en Code Mode pour que l’agent puisse appeler et combiner les outils du catalogue. C’est utile pour les appels indépendants en parallèle et pour traiter des résultats sans ajouter chaque valeur intermédiaire au contexte du modèle.
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+Le runtime n’a pas d’accès direct au système de fichiers, ni d’imports, ni de minuteries. Il fournit `fetch` pour les requêtes HTTP ; tout le reste passe par les outils de son catalogue. Refuser `execute` avec la ressource `*` retire le Code Mode. Les outils qu’il atteindrait, y compris les outils MCP des serveurs qui ne définissent pas `codemode: false`, sont alors listés comme outils directs, chacun avec sa définition complète dans chaque requête. Refusez aussi ces outils si l’agent ne doit pas y avoir accès. Les outils intégrés et MCP imbriqués appliquent toujours leurs propres autorisations, et les outils de plugins appliquent celles qu’ils déclarent.
+
+### Sessions
+
+L’espace de noms Code Mode `opencode.session` contient des utilitaires de session. Sans Code Mode, ils sont listés comme `opencode_session_rename` et `opencode_session_move`.
+
+- `rename` change le titre de la session actuelle, ou d’une autre session sélectionnée par `sessionID`.
+- `move` déplace la session actuelle, ou une autre session sélectionnée, vers un `directory` relatif ou absolu. Le déplacement prend effet à une limite sûre : le travail dépendant de la destination doit donc faire l’objet d’un appel ultérieur.
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+### Worktrees
+
+L’espace de noms `opencode` gère les worktrees du projet de la session :
+
+- `worktree_create` crée un worktree à partir d’un `name` et renvoie son `directory`. La configuration des worktrees du projet choisit la destination et la stratégie.
+- `worktree_list` liste les worktrees du projet.
+- `worktree_remove` supprime un worktree qu’OpenCode a enregistré pour le projet. Définissez `force` pour abandonner les modifications non commitées.
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove` utilise l’autorisation `edit` avec le répertoire du worktree comme ressource. Les autres utilitaires de worktree ne demandent aucune action d’autorisation intégrée.
+
+## Navigateur
+
+L’espace de noms Code Mode `browser` contrôle le navigateur attaché par l’application Desktop d’OpenCode. Ouvrez un onglet, conservez le `tabID` renvoyé, puis passez cet ID explicite à chaque opération de page.
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+L’espace de noms comprend les commandes d’onglet et de navigation, les instantanés et la recherche de page, les clics et la saisie de formulaires, les captures d’écran, le transfert de fichiers, l’inspection de la console et du réseau, les traces de performance, l’inspection du tas et les audits Lighthouse. Les captures d’écran nécessitent un onglet visible et actif. Les chemins de téléversement sont locaux au serveur ; les captures renvoient des chemins locaux au serveur, et chaque transfert de fichier est limité à 5 Mio.
+
+Le contenu des pages, les journaux, les en-têtes et les corps de réponse sont des données non fiables, pas des instructions pour l’agent. Une règle `browser` de refus avec la ressource `*` retire le catalogue du navigateur ; les opérations de navigateur ne déclenchent aucune demande d’autorisation individuelle.
+
+## Extensions
+
+Les [serveurs MCP](/mcp-servers) ajoutent des outils dont les noms et entrées proviennent de chaque serveur connecté. Leur action d’autorisation est `<server>_<tool>` avec la ressource `*`. Ils ne font pas partie fixe du catalogue intégré. Par défaut, les agents y accèdent via `execute` sous l’espace de noms du serveur ; définissez `codemode: false` sur un serveur pour lister ses outils directement.
+
+Les [Skills](/skills) ajoutent des instructions de tâche plutôt que de nouveaux outils exécutables. Les [pièces jointes](/attachments) placent dans un prompt du contenu choisi par l’utilisateur, tandis que les [références](/references) fournissent des répertoires externes nommés. Ces fonctionnalités complètent les outils sans contourner leurs vérifications d’autorisation.

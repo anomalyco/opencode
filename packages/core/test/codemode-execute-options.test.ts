@@ -17,6 +17,7 @@ import { Global } from "@opencode/util/global"
 import { Context, DateTime, Deferred, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
+import { noToolCalls } from "./lib/tool"
 
 const it = testEffect(
   Layer.mergeAll(
@@ -40,6 +41,7 @@ const context = (sessionID: string): Tool.Context => ({
   messageID: "msg_test" as never,
   id: Tool.CallID.make("call_test"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 })
 
 const script = (ms: number) => () =>

@@ -9,6 +9,7 @@ import { copyHeadingLinks, copyWithFeedback } from "../component/site/copy-feedb
 import { holdOpenMenu } from "../component/site/menu-hold"
 import { navMenusOnIntent } from "../component/site/nav-intent"
 import { isSearchShortcut } from "../component/site/search-key"
+import { cookie, parseLocale } from "../lib/language"
 import { sectionNavScroll } from "../component/site/site-frame"
 import { startThemeSwitch } from "../component/site/theme-switch"
 
@@ -134,6 +135,31 @@ on("keydown", (event) => {
 on("change", (event) => {
   const select = (event.target as Element).closest<HTMLSelectElement>("[data-docs-lang]")
   if (select) location.assign(select.value)
+})
+
+// The latest docs' language picker (DocsLanguagePicker.tsx), as the site's static pages drive
+// theirs (client/menus.ts): the popover's open state, focus to the current language when it opens
+// from the keyboard, and the chosen language saved where the site reads it. The links themselves
+// are ordinary page loads, so the picker still works without this.
+document.addEventListener(
+  "toggle",
+  (event) => {
+    const menu = event.target as HTMLElement
+    if (!(event instanceof ToggleEvent) || !menu.matches?.("[data-component=language-picker] [data-slot=dropdown]"))
+      return
+    const trigger = menu.previousElementSibling as HTMLElement | null
+    trigger?.setAttribute("aria-expanded", String(event.newState === "open"))
+    if (event.newState === "open" && trigger?.matches(":focus-visible"))
+      menu.querySelector<HTMLElement>('[aria-current="true"]')?.focus()
+  },
+  true,
+)
+on("click", (event) => {
+  const item = (event.target as Element).closest?.<HTMLElement>(
+    "[data-component=language-picker] [data-slot=item][data-locale]",
+  )
+  const locale = parseLocale(item?.dataset.locale)
+  if (locale) document.cookie = cookie(locale)
 })
 
 // Escape closes the section menu (the Contents menu closes itself, contents-spy.ts) and gives focus

@@ -1,0 +1,62 @@
+---
+title: "ปลั๊กอิน CLI"
+description: "โหลดปลั๊กอิน TUI จาก OpenCode config ใน CLI และเพิ่มปลั๊กอินเฉพาะ CLI พร้อมตัวเลือกใน cli.json"
+---
+
+ปลั๊กอินที่กำหนดค่าใน `opencode.json(c)` และมีคอมโพเนนต์ TUI จะถูกโหลดโดย CLI โดยอัตโนมัติ หากต้องการเรียนรู้วิธี
+สร้างปลั๊กอิน ดู[การสร้างปลั๊กอิน](/build/plugins) คุณไม่จำเป็นต้องเพิ่มแพ็กเกจเดียวกันลงใน `cli.json` CLI
+จะได้รับรายการปลั๊กอินที่ใช้งานอยู่จากเซิร์ฟเวอร์ OpenCode ที่เชื่อมต่ออยู่ จึงใช้งานได้เช่นกันเมื่อเซิร์ฟเวอร์อยู่ระยะไกล
+
+ใช้ `cli.json` สำหรับปลั๊กอินเฉพาะ CLI ปลั๊กอินเหล่านี้ทำงานในเครื่องภายในเทอร์มินัลและยังคงทำงานอยู่เมื่อ CLI เชื่อมต่อ
+กับเซิร์ฟเวอร์ระยะไกล
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+รายการจะถูกประมวลผลตามลำดับ เติม `-` นำหน้า ID หรือไวลด์การ์ดเพื่อปิดใช้งานปลั๊กอินที่ตรงกัน
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+ส่งตัวเลือกของปลั๊กอินในรูปแบบออบเจกต์
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode ยังค้นพบปลั๊กอินภายใต้ไดเรกทอรีการกำหนดค่าส่วนกลางและไดเรกทอรี `.opencode` ของโปรเจกต์ แต่ละปลั๊กอินใช้
+โครงสร้างเดียวกับแพ็กเกจที่เผยแพร่ โดยมี entrypoint ของเซิร์ฟเวอร์และ TUI อยู่ด้วยกัน
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+ปลั๊กอินที่ค้นพบสามารถ import `@opencode/plugin/tui` ได้โดยตรง OpenCode จะค้นหาแพ็กเกจให้ตอนรัน ดูตัวอย่างได้ที่
+[การสร้างปลั๊กอิน TUI](/build/plugins/cli)

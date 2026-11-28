@@ -394,9 +394,9 @@ export type PushLevel = "all" | "attention" | "none"
 
 export type PushRegistered = { publicKey: string }
 
-export type SpaceEpoch = string
-
 export type SpaceCursor = string
+
+export type SpaceEpoch = string
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -751,6 +751,7 @@ export type ModelCompatibility = {
   cacheFormat?: ModelCacheFormat
   supportsThinkingBlockBinding?: boolean
   supportsEffortUpdates?: boolean
+  supportsSystemUpdates?: boolean
   mediaInput?: ModelMediaInput
 }
 
@@ -5075,17 +5076,19 @@ export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; reado
 
 export type ExperimentalPushSettingsSetOutput = { data: PushSettings }["data"]
 
-export type ExperimentalSpaceSetInput = { readonly space: string; readonly key: string; readonly value: string }
+export type ExperimentalSpaceWriteInput = {
+  readonly changes: ReadonlyArray<{ readonly space: string; readonly key: string; readonly value: string | null }>
+}
 
-export type ExperimentalSpaceSetOutput = void
+export type ExperimentalSpaceWriteOutput = {
+  spaces: Array<{ space: SpaceName; revision: SpaceRevision; cursor: SpaceCursor }>
+}
 
-export type ExperimentalSpaceDeleteInput = { readonly space: string; readonly key: string }
+export type ExperimentalSpaceSyncInput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor?: string }>
+}
 
-export type ExperimentalSpaceDeleteOutput = void
-
-export type ExperimentalSpaceSyncInput = { readonly space: string; readonly cursor?: string | undefined }
-
-export type ExperimentalSpaceSyncOutput = SpacePage
+export type ExperimentalSpaceSyncOutput = { pages: Array<SpacePage> }
 
 export type ExperimentalSpaceSubscribeInput = {
   readonly stream: string

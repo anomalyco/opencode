@@ -1,0 +1,249 @@
+---
+title: "CLI-tema"
+description: "Velg et innebygd tema for OpenCode-terminalgrensesnittet, bruk terminalens egne farger, eller legg til et eget tema."
+---
+
+OpenCode leveres med mange innebygde temaer for lys og mørk modus. Velg ett i innstillingene, eller sett sammen dine egne farger.
+
+## Velg et tema
+
+Trykk `Ctrl+P`, velg **Open settings**, og åpne **Theme**. Standardtemaet er `opencode`. Den forrige standarden er fortsatt tilgjengelig som `opencode-classic`.
+
+Du kan også angi tema og modus i de globale [CLI-innstillingene](/cli/config):
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+Kjør `/themes` for å bytte tema uten å åpne innstillingene.
+
+## Systemfarger
+
+Når OpenCode kan lese terminalpaletten din, inkluderer temavelgeren temaet `system`. Det utleder farger fra terminalens forgrunn, bakgrunn og ANSI-palett.
+
+Temaet `system` henter fargene fra terminalen. Modusen `system` følger terminalens lyse eller mørke utseende.
+
+## Modus
+
+Bruk `system` for å følge terminalens utseende, eller lås temaet til lys eller mørk modus:
+
+| Modus | Virkemåte |
+| --- | --- |
+| `system` | Bruk lys eller mørk modus ut fra hvordan terminalen ser ut. |
+| `dark` | Bruk alltid temaets mørke farger. |
+| `light` | Bruk alltid temaets lyse farger. |
+
+Dette tilsvarer feltet `mode` inne i `theme` i CLI-konfigurasjonen din. Hvis et egendefinert tema bare har én modus, bruker OpenCode den modusen når den andre forespørres.
+
+## Legg til et tema
+
+For å legge til et tema du har lastet ned eller fått av noen andre, kopier JSON-filen inn i den globale temakatalogen:
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+Du kan også legge temaet i et prosjekts `.opencode/themes`-katalog for å gjøre det tilgjengelig bare i det prosjektet.
+
+Filnavnet blir temanavnet. For eksempel vises `my-theme.json` som `my-theme`. Start OpenCode på nytt etter at du har lagt til filen, og kjør deretter `/themes` for å velge det.
+
+OpenCode leser bare `.json`-filer. Et tema nærmere gjeldende katalog erstatter et globalt tema eller overordnet tema med samme navn.
+
+## Bruk temaer i plugins
+
+[TUI-plugins](/build/plugins/cli) henter de ferdig beregnede fargene fra `context.theme` og den aktive modusen fra `context.themeMode`. Bruk semantiske tokens, slik at pluginen følger det valgte temaet:
+
+```tsx title="Inside a TUI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+Det offentlige TUI-plugin-API-et registrerer ikke temaer. Legg til egendefinerte temadefinisjoner med JSON-filer i katalogene ovenfor.
+
+## Lag et tema
+
+Bruk [temavektøyet](https://opencode.ai/theme/) vårt for å lage eller redigere temaer. Verktøyet gjør det enkelt å forstå strukturen, endre den og definere egendefinerte farger. Forklaringen nedenfor er til referanse.
+
+Et tema skiller delte semantiske tokens fra modusspesifikke paletter:
+
+| Del | Formål |
+| --- | --- |
+| `base` | Det komplette tokentreet som deles av alle moduser. |
+| `light`, `dark` | En komplett fargepalett og valgfrie tokenoverstyringer for den modusen. |
+
+Hvert tema har en komplett `base` og definerer minst én av `light` eller `dark`. Moduser arver fra filens `base`; de arver ikke fra det innebygde OpenCode-temaet eller fra hverandre.
+
+Eksemplene nedenfor viser bare delene som er relevante for hvert begrep. Bruk temaredigeringsprogrammet til å generere en komplett fil før du tilpasser den.
+
+### Struktur
+
+Legg farger som brukes av begge moduser, i `base`, og overstyr dem inne i `light` eller `dark` når det trengs:
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+Den komplette `base` leverer hvert semantiske token. Hver modus leverer hver påkrevde fargetone og kan overstyre enhver del av basetokentreet.
+
+### Farger og referanser
+
+En farge kan være en hex-verdi, `"transparent"` eller en referanse til en annen temafarge:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### Fargetoner
+
+Fargetoner er fargeskalaer med ni trinn. Hver modus definerer de åtte basisfargetonene og tre aliaser:
+
+| Type | Verdier |
+| --- | --- |
+| Base | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias | `accent`, `interactive`, `neutral` |
+| Trinn | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+Definer alle ni trinn for en basisfargetone, eller la én fargetone være alias for en annen:
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+Fargetonetrinn følger modusens kontrastretning. Lyse temaer går fra mørkt på `100` til lyst på `900`; mørke temaer går fra lyst på `100` til mørkt på `900`.
+
+`categorical`-matrisen i `base` angir de ordnede fargetonene som brukes til å skille agenter og andre gjentatte elementer:
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### Semantiske tokens
+
+Semantiske tokens tildeler farger til grensesnittroller. Komponenter bruker disse rollene i stedet for å velge farger direkte.
+
+| Gruppe | Formål |
+| --- | --- |
+| `text` | Basis-, dempet, svak, utvalgs-, handling-, skjemafelt- og tilbakemeldingstekst. `faint` er som standard `muted`. |
+| `background` | Basis, utvalg, hevede flater, handlinger, skjemafelt og tilbakemeldingsfyll. |
+| `border`, `scrollbar` | Farger for kantlinjer og rullefelt. |
+| `diff` | Farger for lagt til, fjernet, kontekst, utheving og linjenummer. |
+| `syntax` | Fremheving av kildekode. |
+| `markdown` | Markdown-elementer. |
+
+For eksempel styrer `text.muted` sekundærtekst, mens `background.raised` definerer gradvis hevede flater:
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+`text.selection` og `background.selection` farger teksten du velger med mus eller tastatur. De bruker som standard den fokuserte primærhandlingen, `text.action.primary.$focused` på `background.action.primary.$focused`.
+
+Syntaksnøklene er `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` og `punctuation`.
+
+Markdown-nøklene er `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText` og `codeBlock`.
+
+### Handlinger og tilstander
+
+Handlinger har variantene `primary`, `secondary` og `destructive`. Handlinger og skjemafelt bruker `base` pluss valgfrie interaksjonstilstander:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+Tilstandsnøklene er `$hovered`, `$focused`, `$pressed`, `$selected` og `$disabled`. En tilstand som ikke er angitt, bruker handlingens eller skjemafeltets `base`-farge.
+
+### Dialogflate
+
+Paneler, dialoger, menyer og varsler velger dybden sin fra `background.raised`. Dialoger kan i tillegg overstyre semantiske tokens med `@dialog`:
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+TUI-en løser referansene på nytt etter at `@dialog` er brukt, så tokens som refererer til `$background.base`, følger dialogbakgrunnen. En kontekstuell handlings `base` blir fallback for tilstandene som ikke er angitt; eksplisitte tilstandsoverstyringer vinner fortsatt.

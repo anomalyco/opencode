@@ -1,6 +1,6 @@
 export * as ServerWorkerd from "./workerd"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect } from "effect"
 import { BlobStore } from "@opencode/core/blob-store"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Database } from "@opencode/core/database/database"
@@ -52,7 +52,7 @@ export interface Options {
   readonly password?: string
   /** Inline opencode config content (JSON), same as `ServerOptions.config.content`. */
   readonly config?: { readonly content?: string }
-  /** models.dev catalog options; the bundled snapshot is the boot-time floor either way. */
+  /** models.dev catalog options. Fetching is off by default, so a wake serves the bundled snapshot with no network. */
   readonly models?: ServerOptions["models"]
   /** Replaces `globalThis.fetch` for OpenCode's own HTTP requests, e.g. to route them through a Service Binding. */
   readonly fetch?: ServerOptions["fetch"]
@@ -98,7 +98,7 @@ export function serverOptions(options: Options): ServerOptions {
     // cannot opt out of it, so this is not exposed as an option.
     events: { persist: true },
     config: { content: options.config?.content },
-    models: options.models,
+    models: { ...options.models, fetch: options.models?.fetch ?? false },
     fetch: options.fetch,
   }
 }
@@ -115,9 +115,10 @@ export function replacements(options: Options): LayerNode.Replacements {
         onIdleScheduled: (atMs) => Effect.tryPromise(() => options.storage.setAlarm(atMs)),
       }),
     ),
+    // Kept here so ServerWorkerd.replacements stays self-contained when composed outside routes.ts.
     WorkspaceConnector.node.replace(Workspace.connectorNode),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
-    Pty.node.replace(ptyLayer),
+    Pty.node.replace(Pty.unsupportedLayer),
     Npm.node.replace(Npm.unsupportedLayer),
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
     BlobStore.node.replace(BlobStore.unsupportedLayer),
@@ -127,16 +128,3 @@ export function replacements(options: Options): LayerNode.Replacements {
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
   ]
 }
-
-const ptyLayer = Layer.succeed(
-  Pty.Service,
-  Pty.Service.of({
-    list: () => Effect.succeed([]),
-    get: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    create: () => Effect.die(new Error("Pty.create is unavailable in the workerd profile")),
-    update: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    remove: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    write: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    attach: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-  }),
-)

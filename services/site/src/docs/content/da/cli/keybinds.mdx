@@ -1,0 +1,414 @@
+---
+title: "Tastebindinger"
+description: "Tilpas OpenCode CLI-tastebindinger i cli.json, og slå hver kommandos ID og standardbinding op."
+---
+
+Tilpas tastebindinger i `cli.json`:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+Brug en streng til én tast:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+Adskil alternativer med kommaer:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+Deaktivér en binding med `"none"` eller `false`:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+Brug et objekt til hændelsesadfærd:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` er som standard `ctrl+x`. `<leader>` i en anden binding refererer til den tast.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+Ukendte kommando-ID'er ignoreres.
+
+## Applikation
+
+| ID                         | Standard                   | Beskrivelse                         |
+| -------------------------- | ------------------------- | ----------------------------------- |
+| `leader`                   | `ctrl+x`                  | Leadertast for tastebindingskombinationer |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | Afslut applikationen |
+| `app.debug`                | `none`                    | Slå debug-panelet til/fra |
+| `app.console`              | `none`                    | Slå konsollen til/fra |
+| `app.scrap`                | `none`                    | Åbn scrap-skærmen |
+| `app.toggle.animations`    | `none`                    | Slå animationer til/fra |
+| `app.toggle.file_context`  | `none`                    | Slå filkontekst til/fra |
+| `app.toggle.diffwrap`      | `none`                    | Slå ombrydning af diffs til/fra |
+| `app.toggle.paste_summary` | `none`                    | Slå opsummering ved indsæt til/fra |
+| `command.palette.show`     | `ctrl+p`                  | Vis tilgængelige kommandoer |
+| `help.show`                | `none`                    | Åbn hjælpedialogen |
+| `docs.open`                | `none`                    | Åbn dokumentationen |
+| `opencode.settings`        | `none`                    | Åbn indstillingerne |
+| `server.pair`              | `none`                    | Par enhed |
+| `service.restart`          | `none`                    | Genstart tjenesten |
+| `location.reload`          | `none`                    | Genindlæs konfigurationen |
+
+## Mini
+
+Kommandoen `app.clear` virker kun i [`opencode mini`](/cli). Tryk på `ctrl+l` for at rydde den synlige skærm og tegne prompten igen. Terminalen beholder scrollback.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID          | Standard  | Beskrivelse      |
+| ----------- | -------- | ---------------- |
+| `app.clear` | `ctrl+l` | Ryd skærmen |
+
+## Diff-fremviser
+
+Tryk på `d` (`diff.switch_source`) for at vælge **All**, **Committed**, **Uncommitted** eller **Last turn** (inde i en session), eller vælg **Base** for at ændre sammenligningsbranchen. Valgene huskes, indtil TUI'en afsluttes. Angiv startomfanget med [`diffs.source` i `cli.json`](/cli/config#diffs).
+
+Rulning, bladring og genveje til start/slut styrer altid diffen. Der er ingen tastaturfokusskift: klik på filer for at åbne dem, klik på mapper for at udvide eller skjule dem, og brug mushjulet til at rulle filtræet.
+
+Brug `n` / `p` eller `alt+down` / `alt+up` (Option på macOS) til at flytte mellem filer. Inde i diff-fremviseren navigerer Alt-genvejene mellem filer i stedet for sessionfaner.
+
+Tryk på `m` for at markere en fil som gennemgået og skjule dens patchtekst. I visningen med alle filer skal du trykke på `m` igen for at fjerne markeringen og åbne patchen igen. Enkeltfilvisningen går automatisk videre til næste fil, når du markerer som gennemgået, men bliver på den sidste fil i stedet for at gå rundt. Fjernelse af en markering går aldrig videre.
+
+Højreklik på en fil i sidebaren eller på dens diff-overskrift for at vælge **Mark complete** (eller **Mark incomplete**). Det ændrer markeringen på samme måde som `m`. Hvis du bruger menuen til at markere en anden fil som gennemgået, ændres den fil, du har åben, ikke.
+
+De alternative tastebindinger med Shift til `diff.help` understøtter terminaler, der registrerer Shift som en del af tastetrykket, når du trykker på `?`.
+
+| ID                       | Standard             | Beskrivelse                              |
+| ------------------------ | ------------------- | ---------------------------------------- |
+| `diff.open`              | `none`              | Åbn diff-fremviseren |
+| `diff.close`             | `escape,q`          | Luk diff-fremviseren |
+| `diff.down`              | `j,down`            | Flyt diff-fremviseren ned |
+| `diff.up`                | `k,up`              | Flyt diff-fremviseren op |
+| `diff.page.down`         | `pagedown,ctrl+f`   | Bladr diff-fremviseren ned |
+| `diff.page.up`           | `pageup,ctrl+b`     | Bladr diff-fremviseren op |
+| `diff.half_page.down`    | `ctrl+d`            | Rul diff-fremviseren en halv side ned |
+| `diff.half_page.up`      | `ctrl+u`            | Rul diff-fremviseren en halv side op |
+| `diff.first`             | `gg,home`           | Gå til starten af diffen |
+| `diff.last`              | `shift+g,end`       | Gå til slutningen af diffen |
+| `diff.next_hunk`         | `]`                 | Spring til næste diff-hunk |
+| `diff.previous_hunk`     | `[`                 | Spring til forrige diff-hunk |
+| `diff.next_file`         | `n,alt+down`        | Spring til næste difffil |
+| `diff.previous_file`     | `p,alt+up`          | Spring til forrige difffil |
+| `diff.toggle_file_tree`  | `b`                 | Slå filtræet i diff-fremviseren til/fra |
+| `diff.single_patch`      | `s`                 | Slå visning af enkelt patch til/fra |
+| `diff.switch_source`     | `d`                 | Vælg omfanget for diff-gennemgang |
+| `diff.toggle_view`       | `v`                 | Skift diff-fremviseren mellem delt og samlet visning |
+| `diff.toggle_fullscreen` | `f`                 | Slå fuldskærm for diff-fremviseren til/fra |
+| `diff.mark_reviewed`     | `m`                 | Markér den valgte difffil som gennemgået eller ej |
+| `diff.help`              | `?,shift+?,shift+/` | Vis flere genveje til diff-fremviseren |
+
+De udgåede konfigurationsposter `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse` og `diff.switch_focus` accepteres stadig, men registrerer ikke længere genveje.
+
+## Udseende og navigation
+
+| ID                         | Standard         | Beskrivelse                              |
+| -------------------------- | --------------- | ---------------------------------------- |
+| `prompt.editor`            | `<leader>e`     | Åbn ekstern editor |
+| `theme.switch`             | `none`          | Vis tilgængelige temaer |
+| `theme.switch_mode`        | `none`          | Skift mellem lyst og mørkt tema |
+| `theme.mode.lock`          | `none`          | Lås eller oplås temastilstand |
+| `session.sidebar.toggle`   | `<leader>b`     | Vis eller skjul sidebaren |
+| `pane.focus.left`          | `<leader>left`  | Fokusér sessionspanelet |
+| `pane.focus.right`         | `<leader>right` | Fokusér højre panel |
+| `terminal.select`          | `<leader>down`  | Vælg terminal |
+| `terminal.toggle`          | `<leader>t`     | Slå terminalpanelet til/fra |
+| `terminal.close`           | `<leader>up`    | Luk terminalpanelet |
+| `session.toggle.scrollbar` | `none`          | Vis eller skjul sessionens rullebjælke |
+| `opencode.status`          | `<leader>s`     | Vis status |
+| `opencode.debug`           | `none`          | Vis debug-oplysninger |
+
+## Sessioner
+
+| ID                                    | Standard                 | Beskrivelse                              |
+| ------------------------------------- | ----------------------- | ---------------------------------------- |
+| `session.export`                      | `<leader>x`             | Eksportér session til editor |
+| `session.copy`                        | `none`                  | Kopiér sessionens samtalelog |
+| `session.copy.id`                     | `none`                  | Kopier session-ID |
+| `session.move`                        | `none`                  | Flyt session |
+| `session.new`                         | `<leader>n`             | Opret en ny session |
+| `session.list`                        | `<leader>l`             | Vis alle sessioner |
+| `open.menu`                           | `ctrl+o`                | Åbn nylige sessioner og projekter |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | Skift til næste åbne sessionfane |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | Skift til forrige åbne sessionfane |
+| `session.tab.history.back`            | `none`                  | Gå tilbage i sessionfanens historik |
+| `session.tab.history.forward`         | `ctrl+i`                | Gå frem i sessionfanens historik |
+| `session.tab.next_unread`             | `alt+shift+down`        | Skift til næste ulæste sessionfane |
+| `session.tab.previous_unread`         | `alt+shift+up`          | Skift til forrige ulæste sessionfane |
+| `session.tab.close`                   | `<leader>w`             | Luk den aktuelle sessionfane |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | Genåbn senest lukkede sessionfane |
+| `session.timeline`                    | `<leader>g`             | Vis sessionens tidslinje |
+| `session.find`                        | `<leader>f,super+f`     | Søg i sessionen |
+| `session.fork`                        | `none`                  | Forgren sessionen fra en besked |
+| `session.rename`                      | `ctrl+r`                | Omdøb session |
+| `session.delete`                      | `ctrl+d`                | Slet session |
+| `session.interrupt`                   | `escape`                | Afbryd den aktuelle session |
+| `session.background`                  | `ctrl+b`                | Send blokerende sessionværktøjer til baggrunden |
+| `session.compact`                     | `<leader>c`             | Komprimér sessionen |
+| `session.aside`                       | `none`                  | Stil et sidespørgsmål |
+| `session.cd`                          | `none`                  | Skift arbejdsmappe |
+| `session.queued_prompts`              | `<leader>q`             | Administrer kølagte prompts |
+| `queued_prompt.undo`                  | `ctrl+u`                | Fortryd kølagt prompt |
+| `queued_prompt.delete`                | `ctrl+d`                | Slet kølagt prompt |
+| `session.toggle.exploration_grouping` | `none`                  | Slå gruppering af relaterede værktøjskald til/fra |
+| `session.verbosity.cycle`             | `none`                  | Skift detaljeringsgrad for samtaleloggen |
+| `session.child.first`                 | `down`                  | Slå subagentvælgeren til/fra |
+| `session.child.next`                  | `right`                 | Gå til næste undersession |
+| `session.child.previous`              | `left`                  | Gå til forrige undersession |
+| `session.parent`                      | `up`                    | Gå til den overordnede session |
+| `session.pin.toggle`                  | `ctrl+f`                | Fastgør eller frigør sessionen i sessionslisten |
+| `session.quick_switch.1`              | `<leader>1`             | Skift til session i hurtigplads 1 |
+| `session.quick_switch.2`              | `<leader>2`             | Skift til session i hurtigplads 2 |
+| `session.quick_switch.3`              | `<leader>3`             | Skift til session i hurtigplads 3 |
+| `session.quick_switch.4`              | `<leader>4`             | Skift til session i hurtigplads 4 |
+| `session.quick_switch.5`              | `<leader>5`             | Skift til session i hurtigplads 5 |
+| `session.quick_switch.6`              | `<leader>6`             | Skift til session i hurtigplads 6 |
+| `session.quick_switch.7`              | `<leader>7`             | Skift til session i hurtigplads 7 |
+| `session.quick_switch.8`              | `<leader>8`             | Skift til session i hurtigplads 8 |
+| `session.quick_switch.9`              | `<leader>9`             | Skift til session i hurtigplads 9 |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | Skift til sessionfane 1 |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | Skift til sessionfane 2 |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | Skift til sessionfane 3 |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | Skift til sessionfane 4 |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | Skift til sessionfane 5 |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | Skift til sessionfane 6 |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | Skift til sessionfane 7 |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | Skift til sessionfane 8 |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | Skift til sessionfane 9 |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | Skift til sessionfane 10 |
+
+## Modeller og agenter
+
+| ID                             | Standard     | Beskrivelse                          |
+| ------------------------------ | ----------- | ------------------------------------ |
+| `stash.delete`                 | `ctrl+d`    | Slet stash-post |
+| `model.dialog.provider`        | `ctrl+a`    | Åbn udbyderlisten fra modeldialogen |
+| `model.dialog.favorite`        | `ctrl+f`    | Slå modellens favoritstatus til/fra |
+| `model.dialog.usage`           | `ctrl+u`    | Åbn forbrugsgrænser fra modeldialogen |
+| `model.list`                   | `<leader>m` | Vis tilgængelige modeller |
+| `model.cycle_recent`           | `f2`        | Næste nyligt brugte model |
+| `model.cycle_recent_reverse`   | `shift+f2`  | Forrige nyligt brugte model |
+| `model.cycle_favorite`         | `none`      | Næste favoritmodel |
+| `model.cycle_favorite_reverse` | `none`      | Forrige favoritmodel |
+| `mcp.list`                     | `none`      | Vis MCP-servere |
+| `usage.show`                   | `none`      | Vis forbrugsgrænser |
+| `provider.connect`             | `none`      | Forbind integration |
+| `agent.list`                   | `<leader>a` | Vis agenter |
+| `agent.cycle`                  | `shift+tab` | Næste agent |
+| `agent.cycle.reverse`          | `none`      | Forrige agent |
+| `variant.cycle`                | `ctrl+t`    | Skift modelvarianter |
+| `variant.list`                 | `none`      | Vis modelvarianter |
+| `speed.cycle`                  | `none`      | Skift modelhastigheder |
+| `speed.list`                   | `none`      | Vis modelhastigheder |
+
+## Sessionsnavigation
+
+| ID                              | Standard                | Beskrivelse                       |
+| ------------------------------- | ---------------------- | --------------------------------- |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | Rul beskeder en side op |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | Rul beskeder en side ned |
+| `session.line.up`               | `ctrl+alt+y`           | Rul beskeder en linje op |
+| `session.line.down`             | `ctrl+alt+e`           | Rul beskeder en linje ned |
+| `session.half.page.up`          | `ctrl+alt+u`           | Rul beskeder en halv side op |
+| `session.half.page.down`        | `ctrl+alt+d`           | Rul beskeder en halv side ned |
+| `session.first`                 | `ctrl+g,home,alt+home` | Naviger til første besked |
+| `session.last`                  | `ctrl+alt+g,end`       | Naviger til sidste besked |
+| `session.message.next`          | `none`                 | Naviger til næste besked |
+| `session.message.previous`      | `none`                 | Naviger til forrige besked |
+| `session.message.user.next`     | `none`                 | Naviger til næste brugerbesked |
+| `session.message.user.previous` | `none`                 | Naviger til forrige brugerbesked |
+| `session.messages_last_user`    | `alt+end`              | Naviger til den sidste brugerbesked |
+| `messages.copy`                 | `<leader>y`            | Kopier besked |
+| `session.undo`                  | `<leader>u`            | Fortryd besked |
+| `session.redo`                  | `<leader>r`            | Gentag besked |
+| `session.toggle.thinking`       | `none`                 | Slå synlighed af thinking-blokke til/fra |
+
+## Promptkommandoer
+
+| ID                            | Standard          | Beskrivelse            |
+| ----------------------------- | ---------------- | ---------------------- |
+| `prompt.submit`               | `none`           | Send prompt |
+| `prompt.queue`                | `<leader>return` | Sæt prompt i kø |
+| `prompt.editor_context.clear` | `none`           | Ryd editor-kontekst |
+| `prompt.images.view`          | `<leader>i`      | Vis billedvedhæftninger |
+| `prompt.skills`               | `none`           | Åbn skillvælgeren |
+| `prompt.stash`                | `none`           | Stash prompten |
+| `prompt.stash.pop`            | `none`           | Tag en stash-prompt ud |
+| `prompt.stash.list`           | `none`           | Vis stash-prompts |
+
+## Inputredigering
+
+| ID                              | Standard                                                                       | Beskrivelse                             |
+| ------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
+| `prompt.clear`                  | `ctrl+c`                                                                      | Ryd inputfeltet |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Indsæt fra udklipsholderen |
+| `input.submit`                  | `return`                                                                      | Send input |
+| `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | Indsæt ny linje i inputfeltet |
+| `input.move.left`               | `left,ctrl+b`                                                                 | Flyt markøren til venstre i inputfeltet |
+| `input.move.right`              | `right,ctrl+f`                                                                | Flyt markøren til højre i inputfeltet |
+| `input.move.up`                 | `up`                                                                          | Flyt markøren op i inputfeltet |
+| `input.move.down`               | `down`                                                                        | Flyt markøren ned i inputfeltet |
+| `input.select.left`             | `shift+left`                                                                  | Markér til venstre i inputfeltet |
+| `input.select.right`            | `shift+right`                                                                 | Markér til højre i inputfeltet |
+| `input.select.up`               | `shift+up`                                                                    | Markér op i inputfeltet |
+| `input.select.down`             | `shift+down`                                                                  | Markér ned i inputfeltet |
+| `input.line.home`               | `ctrl+a`                                                                      | Flyt til starten af linjen i inputfeltet |
+| `input.line.end`                | `ctrl+e`                                                                      | Flyt til slutningen af linjen i inputfeltet |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | Markér til starten af linjen i inputfeltet |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | Markér til slutningen af linjen i inputfeltet |
+| `input.visual.line.home`        | `alt+a`                                                                       | Flyt til starten af den visuelle linje i inputfeltet |
+| `input.visual.line.end`         | `alt+e`                                                                       | Flyt til slutningen af den visuelle linje i inputfeltet |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | Markér til starten af den visuelle linje i inputfeltet |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | Markér til slutningen af den visuelle linje i inputfeltet |
+| `input.buffer.home`             | `none`                                                                        | Flyt til starten af bufferen i inputfeltet |
+| `input.buffer.end`              | `none`                                                                        | Flyt til slutningen af bufferen i inputfeltet |
+| `input.select.buffer.home`      | `shift+home`                                                                  | Markér til starten af bufferen i inputfeltet |
+| `input.select.buffer.end`       | `shift+end`                                                                   | Markér til slutningen af bufferen i inputfeltet |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | Slet linjen i inputfeltet |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | Slet til slutningen af linjen i inputfeltet |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | Slet til starten af linjen i inputfeltet |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | Backspace i inputfeltet |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | Slet tegn i inputfeltet |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | Fortryd i inputfeltet |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | Gentag i inputfeltet |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | Flyt et ord frem i inputfeltet |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | Flyt et ord tilbage i inputfeltet |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | Markér et ord frem i inputfeltet |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | Markér et ord tilbage i inputfeltet |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | Slet et ord frem i inputfeltet |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | Slet et ord tilbage i inputfeltet |
+| `input.select.all`              | `super+a`                                                                     | Markér alt i inputfeltet |
+| `prompt.history.previous`       | `up`                                                                          | Forrige historikpost |
+| `prompt.history.next`           | `down`                                                                        | Næste historikpost |
+
+## Composer
+
+| ID                            | Standard  | Beskrivelse          |
+| ----------------------------- | -------- | -------------------- |
+| `composer.subagent.up`        | `up`     | Forrige subagent |
+| `composer.subagent.down`      | `down`   | Næste subagent |
+| `composer.subagent.select`    | `return` | Naviger til subagent |
+| `composer.subagent.interrupt` | `ctrl+d` | Afbryd subagent |
+| `composer.shell.up`           | `up`     | Forrige shell |
+| `composer.shell.down`         | `down`   | Næste shell |
+| `composer.shell.select`       | `return` | Vis shell-output |
+| `composer.shell.kill`         | `ctrl+d` | Dræb shell-kommando |
+| `composer.terminal.up`        | `up,k`   | Forrige terminal |
+| `composer.terminal.down`      | `down,j` | Næste terminal |
+| `composer.terminal.select`    | `return` | Vælg terminal |
+
+Vælg en kørende kommando i fanen **Shell**, og tryk på **Enter**, eller klik på den, for at se den opsamlede stdout og stderr.
+Brug **↑/↓**, **Page Up/Down** eller **Home** til at rulle, **End** til at følge nyt output og **Esc** til at vende tilbage uden at stoppe kommandoen.
+Fremviseren viser nyligt output og forbliver åben efter afslutning; output, der er omdirigeret til en fil, medtages ikke.
+
+## Dialoger og autocomplete
+
+| ID                             | Standard       | Beskrivelse                         |
+| ------------------------------ | ------------- | ----------------------------------- |
+| `dialog.select.prev`           | `up,ctrl+p`   | Flyt til forrige dialogelement |
+| `dialog.select.next`           | `down,ctrl+n` | Flyt til næste dialogelement |
+| `dialog.select.page_up`        | `pageup`      | Flyt en side op i dialogen |
+| `dialog.select.page_down`      | `pagedown`    | Flyt en side ned i dialogen |
+| `dialog.select.home`           | `home`        | Flyt til første dialogelement |
+| `dialog.select.end`            | `end`         | Flyt til sidste dialogelement |
+| `dialog.select.submit`         | `return`      | Send det valgte dialogelement |
+| `dialog.prompt.submit`         | `return`      | Send dialogprompt |
+| `dialog.integration.rename`    | `ctrl+r`      | Omdøb integrationskonto |
+| `dialog.integration.delete`    | `ctrl+d`      | Slet integrationskonto |
+| `dialog.integration.copy`      | `tab`         | Kopier autorisationslink |
+| `dialog.worktree.generate`     | `tab`         | Generér worktree-navn |
+| `dialog.move_session.new`      | `ctrl+a`      | Ny worktree |
+| `dialog.move_session.move`     | `ctrl+m`      | Flyt session til worktree |
+| `dialog.move_session.delete`   | `ctrl+d`      | Slet worktree |
+| `dialog.move_session.refresh`  | `ctrl+r`      | Opdater worktrees |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | Flyt til forrige autocompleteelement |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | Flyt til næste autocompleteelement |
+| `prompt.autocomplete.hide`     | `escape`      | Skjul autocomplete |
+| `prompt.autocomplete.select`   | `return`      | Vælg autocompleteelement |
+| `prompt.autocomplete.complete` | `tab`         | Fuldfør autocompleteelement |
+| `permission.prompt.fullscreen` | `ctrl+f`      | Slå fuldskærm for tilladelsesprompt til/fra |
+| `plugins.toggle`               | `return`      | Slå plugin til/fra |
+| `dialog.mcp.toggle`            | `space`       | Slå MCP-server til/fra |
+| `dialog.plugins.error`         | `space`       | Vis pluginfejl |
+| `dialog.plugins.update`        | `ctrl+u`      | Opdater plugin fra plugindialogen |
+| `dialog.plugins.check`         | `ctrl+r`      | Kontrollér for pluginopdateringer |
+
+## Terminal og plugins
+
+| ID                      | Standard  | Beskrivelse                |
+| ----------------------- | -------- | -------------------------- |
+| `terminal.suspend`      | `ctrl+z` | Suspender terminalen |
+| `terminal.title.toggle` | `none`   | Slå terminaltitel til/fra |
+| `plugins.list`          | `none`   | Åbn dialogen for pluginadministration |
+
+## Which-Key
+
+| ID                         | Standard                     | Beskrivelse                      |
+| -------------------------- | --------------------------- | -------------------------------- |
+| `which-key.toggle`         | `ctrl+alt+k`                | Slå which-key-panelet til/fra |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`          | Skift which-key-layout |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`          | Slå which-key-forhåndsvisning af påbegyndte tastekombinationer til/fra |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[`  | Forrige which-key-gruppe |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | Næste which-key-gruppe |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`    | Rul which-key op |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n`  | Rul which-key ned |
+| `which-key.page.up`        | `ctrl+alt+pageup`           | Bladr which-key op |
+| `which-key.page.down`      | `ctrl+alt+pagedown`         | Bladr which-key ned |
+| `which-key.home`           | `ctrl+alt+home`             | Spring til første which-key-binding |
+| `which-key.end`            | `ctrl+alt+end`              | Spring til sidste which-key-binding |

@@ -1,0 +1,248 @@
+---
+title: Thèmes
+description: Créez des thèmes personnalisés pour le terminal OpenCode sous forme de fichiers JSON, avec modes clair et sombre, teintes, couleurs d’état et tokens.
+---
+
+Choisissez un thème dans l’interface du terminal en appuyant sur `Ctrl+P`, en sélectionnant **Open settings** et en ouvrant **Theme**. Vous pouvez aussi le définir directement dans votre configuration CLI globale :
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+Les thèmes se configurent dans le client terminal. Sélectionnez le thème dans `cli.json`, pas dans `opencode.json`. Consultez les [réglages du CLI](/cli/config) pour connaître l’emplacement du fichier et les autres réglages du terminal.
+
+## Modes
+
+Utilisez `system` pour suivre l’apparence de votre terminal, ou verrouillez le thème sur un mode :
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| Valeur | Comportement |
+| --- | --- |
+| `system` | Suit le mode clair ou sombre du terminal. |
+| `dark` | Utilise toujours le thème sombre. |
+| `light` | Utilise toujours le thème clair. |
+
+Si un thème personnalisé ne fournit qu’un mode, OpenCode utilise ce mode lorsque l’autre est demandé.
+
+## Thèmes intégrés
+
+Sélectionnez un thème intégré par son nom :
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+Les thèmes disponibles incluent :
+
+- `aura`, `ayu`, `carbonfox`, `cobalt2`, `cursor`, `dracula`, `everforest`, `flexoki`
+- `catppuccin`, `catppuccin-frappe`, `catppuccin-macchiato`
+- `github`, `gruvbox`, `kanagawa`, `material`, `matrix`, `mercury`, `monokai`, `nightowl`, `nord`
+- `one-dark`, `opencode`, `opencode-classic`, `orng`, `lucent-orng`, `osaka-jade`, `palenight`, `rosepine`
+- `solarized`, `synthwave84`, `tokyonight`, `vercel`, `vesper`, `zenburn`
+
+Le thème `system` est disponible lorsque OpenCode peut lire la palette de votre terminal.
+
+## Fichiers
+
+Pour créer un thème global nommé `ocean`, utilisez l’outil de thème pour générer un fichier complet dans le répertoire global des thèmes. Sa structure pertinente ressemble à ceci :
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+Sélectionnez ensuite `ocean` dans les réglages ou définissez `theme.name` sur `ocean` dans `cli.json`. Le nom du fichier, sans `.json`, est le nom du thème.
+
+| Portée | Répertoire |
+| --- | --- |
+| Globale | `~/.config/opencode/themes/` |
+| Projet | `.opencode/themes/` dans l’arborescence du projet |
+
+OpenCode ne lit que les fichiers `.json`. Un thème plus proche du répertoire courant remplace un thème global ou parent du même nom.
+
+## Format
+
+Chaque thème V2 déclare une arborescence de tokens `base` complète et au moins une palette de teintes `light` ou `dark`. Les modes héritent uniquement de la base de ce fichier ; ils n’héritent ni du thème intégré d’OpenCode ni les uns des autres. Utilisez l’outil de thème pour générer une base complète avant de la personnaliser.
+
+Les exemples ci-dessous ne montrent que les sections utiles à chaque concept ; ce ne sont pas des fichiers de thème complets.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## Couleurs
+
+Utilisez une couleur hexadécimale, `transparent` ou une référence à une autre couleur du thème :
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+Les valeurs hexadécimales peuvent comporter 3, 4, 6 ou 8 chiffres. Les références commencent par `$` ; les références de teinte utilisent la forme `$hue.<name>.<step>`.
+
+## Teintes
+
+Remplacez un alias de teinte pour changer d’un coup une famille de couleurs liées :
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| Type | Valeurs |
+| --- | --- |
+| Base | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias | `accent`, `interactive`, `neutral` |
+| Échelon | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+Les échelons de teinte suivent le sens de contraste du mode : les thèmes clairs vont du sombre à `100` au clair à `900`, tandis que les thèmes sombres vont du clair à `100` au sombre à `900`.
+
+`categorical` définit l’ordre des teintes utilisées pour distinguer les agents et les autres éléments répétés. La liste doit contenir au moins une teinte de base ou un alias.
+
+## États
+
+Utilisez les clés d’état pour modifier les couleurs interactives. Les états non spécifiés utilisent la valeur de base la plus proche :
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| Groupe | Valeurs |
+| --- | --- |
+| Actions | `primary`, `secondary`, `destructive` |
+| États | `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled` |
+
+Les champs de formulaire utilisent les mêmes clés d’état directement sous `text.formfield` ou `background.formfield`.
+
+## Tokens
+
+La `base` complète contient tous les groupes de tokens. Un mode peut remplacer n’importe quelle partie après avoir fourni sa palette de teintes complète :
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| Groupe | Rôle |
+| --- | --- |
+| `text` | Texte de base, atténué, discret, de sélection, d’action, de champ de formulaire et de retour |
+| `background` | Remplissages de base, de sélection, de surfaces, d’actions, de champs de formulaire et de retour |
+| `border` | Bordures |
+| `scrollbar` | Barres de défilement |
+| `diff` | Couleurs des ajouts, suppressions, contexte, surlignage et numéros de ligne |
+| `syntax` | Coloration syntaxique du code source |
+| `markdown` | Éléments Markdown |
+
+Les clés de syntaxe sont `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` et `punctuation`. Les clés Markdown sont `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText` et `codeBlock`.
+
+## Surfaces surélevées
+
+Les panneaux, boîtes de dialogue, menus et notifications choisissent leur profondeur à partir de `background.raised`. Les boîtes de dialogue prennent aussi en charge une surface contextuelle `@dialog`. Le TUI résout à nouveau la palette après avoir appliqué `@dialog`, afin que les tokens qui référencent `$background.base` suivent le fond de la boîte de dialogue :
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog` accepte les mêmes groupes de tokens que le mode de base. La `base` contextuelle d’une action devient aussi la valeur de repli de ses états non spécifiés ; un remplacement d’état explicite l’emporte toujours.

@@ -9,9 +9,9 @@ import { productActionMarkdown } from "~/lib/product-markdown"
 
 /** The home page as Markdown, for `/index.md` and the in-page Markdown view. */
 export function homeMarkdown(context: MarkdownContext) {
-  const content = homeContent(context.t, context.route)
-  const links = siteLinks(context.t, context.route)
-  const start = getStarted(context.route)
+  const content = homeContent(context.t, context.route, context.consoleRoute)
+  const links = siteLinks(context.t, context.route, context.consoleRoute)
+  const start = getStarted(context.route, context.consoleRoute)
 
   return blocks(
     `# ${content.hero.title}`,
@@ -35,7 +35,7 @@ export function homeMarkdown(context: MarkdownContext) {
     `${byos.headline} ${richToMarkdown(
       linkPhrases(
         byos.line,
-        byos.planLinks.map((text) => ({ text, href: byos.plansHref })),
+        byos.planLinks.map((text) => ({ text, href: context.consoleRoute(byos.plansHref) })),
       ),
     )}`,
     `## ${content.tools.title}`,

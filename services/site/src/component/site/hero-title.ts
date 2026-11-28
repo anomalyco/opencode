@@ -1,5 +1,5 @@
 /**
- * The hero title's width in OpenTUI Mono cells (hero-title.css sizes the title as --title-chars cells of
+ * The hero title's width in OpenMono cells (hero-title.css sizes the title as --title-chars cells of
  * 0.57em). Each user-perceived character counts as one cell, except scripts that fall back to wider
  * or narrower faces, measured in the site's fonts: CJK ideographs and kana are full width (1em, 1.7
  * cells), Hangul syllables about 1.5 cells, and Arabic letters, set in the sans stack, about 0.7.

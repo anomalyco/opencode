@@ -63,26 +63,6 @@ describe("Claude history branches", () => {
     }),
   )
 
-  it.effect("an unsupported attachment in changed history fails with its own message before forking", () =>
-    Effect.gen(function* () {
-      const claude = FakeClaude.make([
-        FakeClaude.expectStartup(),
-        FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
-      ])
-      const test = yield* TestSessions.start(claude)
-      yield* TestSessions.reply(test.model, first)
-      const edited = TestSessions.followup()
-      edited[2] = { role: "assistant", content: [{ type: "text", text: "An edited reply" }] }
-      edited[3] = { role: "user", content: [{ type: "file", mediaType: "image/svg+xml", data: "PHN2Zy8+" }] }
-      const error = yield* TestSessions.reply(test.model, edited).pipe(Effect.flip)
-      expect(String(error.cause)).toContain("Claude Code does not support image/svg+xml attachments")
-      expect(claude.forks).toHaveLength(0)
-      yield* test.registry.close()
-      claude.check()
-    }),
-  )
-
   it.effect("a fork finds its source after reload and rebuilds safely if that transcript has disappeared", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([

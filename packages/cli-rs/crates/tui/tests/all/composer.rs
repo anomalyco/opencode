@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use base64::Engine;
 use opencode_api::client::Auth;
 use opencode_api::client_mcp;
 use opencode_api::memory::{Logged, Memory, Route as MemoryRoute};
@@ -34,6 +35,9 @@ fn terminal() -> Value {
         "size": { "cols": 80, "rows": 24 }, "output": { "head": 0, "tail": 0 },
     })
 }
+
+/// The screen the terminal restores from its snapshot: what a shown terminal draws, past its picker.
+const TERMINAL_TEXT: &str = "$ vim src/main.rs";
 
 fn shell() -> Value {
     json!({
@@ -82,6 +86,20 @@ fn routes() -> Vec<MemoryRoute> {
                                 "delivery": "queue", "time": { "created": 5 } }] }),
         ),
         MemoryRoute::json("GET", "/api/experimental/session/ses_a/terminal", 200, &json!({ "data": [terminal()] })),
+        MemoryRoute::json(
+            "GET",
+            "/api/experimental/persistent-pty/pty_1/snapshot",
+            200,
+            &json!({ "data": { "info": terminal(), "text": TERMINAL_TEXT,
+                               "checkpoint": base64::engine::general_purpose::STANDARD.encode(TERMINAL_TEXT),
+                               "cursor": { "x": 0, "y": 0 } } }),
+        ),
+        MemoryRoute::json(
+            "POST",
+            "/api/experimental/persistent-pty/pty_1/connect-token",
+            200,
+            &json!({ "data": { "ticket": "tk", "expires_in": 30 } }),
+        ),
         MemoryRoute::json("GET", "/api/shell", 200, &json!({ "location": location, "data": [shell()] })),
         MemoryRoute::json("GET", "/api/shell/sh_1", 200, &json!({ "location": location, "data": shell() })),
         MemoryRoute::json(
@@ -417,8 +435,9 @@ fn a_theme_switch_restyles_the_dock_the_composer_and_the_terminal_in_place() {
             harness.app.press("down");
             harness.app.press("enter");
             assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
+            support::wait_for(&harness.app, TERMINAL_TEXT);
         },
-        |screen| !screen.contains("+ New terminal"),
+        |screen| screen.contains(TERMINAL_TEXT) && !screen.contains("+ New terminal"),
     );
 }
 

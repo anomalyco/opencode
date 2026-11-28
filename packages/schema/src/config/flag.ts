@@ -23,7 +23,7 @@ export const registry = {
   project_overlay:
     "Load a personal config dir for each project from ~/.config/opencode/project/<project-id>/, read like an extra .opencode dir that ranks above the repo's own, and let home memory keep the skills it builds for the user there.",
   opencode_api:
-    'Let Code Mode scripts call the OpenCode HTTP API with fetch("opencode:///api/..."), in-process and already signed in, with no permission checks. Only in local and dev builds, and off there until you opt in with OPENCODE_FLAGS=opencode_api or experimental.opencode_api: true.',
+    'Let Code Mode scripts call the OpenCode HTTP API with fetch("opencode:///api/..."), in-process and already signed in, with calls checked as the equivalent opencode api shell command. On by default in local and dev builds and unavailable in releases.',
   mcp_skills:
     "Load skills from MCP servers that offer them (the io.modelcontextprotocol/skills extension), named <server>:<skill>. A server that offers skills no longer has its instructions included.",
   compaction_jobs:
@@ -38,7 +38,7 @@ export type Key = keyof typeof registry
 /** Flags the server reports to clients at `GET /api/experimental/flag`, so they can adapt their UI. */
 export const ui: readonly Key[] = ["full_codemode"]
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
 export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])

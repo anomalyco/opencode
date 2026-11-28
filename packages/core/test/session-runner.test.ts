@@ -475,21 +475,13 @@ const layer = Layer.unwrap(
       SessionExecution.Service,
       Effect.gen(function* () {
         const sessionRunner = yield* SessionRunner.Service
-        function drain(
-          sessionID: Session.ID,
-          force: boolean,
-          continuation?: SessionRunner.Continuation,
-        ): Effect.Effect<void, SessionRunner.RunError> {
+        function drain(sessionID: Session.ID, at: SessionRunner.Position): Effect.Effect<void, SessionRunner.RunError> {
           return sessionRunner
-            .drain({ sessionID, force, continuation })
-            .pipe(
-              Effect.flatMap((result) =>
-                result._tag === "Complete" ? Effect.void : drain(sessionID, false, result.continuation),
-              ),
-            )
+            .drain({ sessionID, at })
+            .pipe(Effect.flatMap((result) => (result._tag === "Complete" ? Effect.void : drain(sessionID, result.at))))
         }
         const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
-          drain: (sessionID, force) => drain(sessionID, force),
+          drain: (sessionID, force) => drain(sessionID, { _tag: "Fresh", forced: force }),
         })
         return SessionExecution.Service.of({
           active: coordinator.active,
@@ -1001,7 +993,7 @@ function* verifyPartialFlushOnInterruption(s: Scenario, kind: FragmentKind) {
   )
 
   const runner = yield* SessionRunner.Service
-  const fiber = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
+  const fiber = yield* runner.drain({ sessionID, at: { _tag: "Fresh", forced: true } }).pipe(Effect.forkChild)
   yield* Deferred.await(streamed)
   yield* Fiber.interrupt(fiber)
   expect(yield* s.context).toMatchObject([
@@ -1045,7 +1037,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Generated title", "text-title"), Stream.never)
     const renamed = yield* watchRename(sessionID)
     const runner = yield* SessionRunner.Service
-    const fiber = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
+    const fiber = yield* runner.drain({ sessionID, at: { _tag: "Fresh", forced: true } }).pipe(Effect.forkChild)
     yield* Fiber.join(renamed)
 
     expect((yield* s.session.get(sessionID)).title).toBe("Generated title")
@@ -1176,6 +1168,7 @@ describe("SessionRunnerLLM", () => {
         id: Tool.CallID.make("call-location"),
         progress: expect.any(Function),
         cancel: expect.anything(),
+        tool: { call: expect.any(Function) },
       },
     ])
     expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.metadata).toEqual({ phase: "reading" })
@@ -1388,7 +1381,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Before moving")
     yield* s.llm.push(TestLLM.text("Done", "text-done"))
     const stream = yield* s.llm.gate()
-    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    const run = yield* runner.drain({ sessionID }).pipe(Effect.forkChild)
     yield* stream.started
     yield* s.sessionInbox.admit({
       id: SessionMessage.ID.create(),
@@ -1405,12 +1398,12 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
     const moved = yield* Fiber.join(run)
 
-    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ stepped: true }))
+    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ at: { _tag: "BetweenTurns" } }))
     expect(idles).toEqual([])
     if (moved._tag !== "Moved") throw new Error("Expected a Location handoff")
 
     // The destination drain has nothing to promote but still owes the idle hook for the step before the move.
-    yield* runner.drain({ sessionID, force: false, stepped: moved.stepped })
+    yield* runner.drain({ sessionID, at: moved.at })
 
     expect(idles).toEqual([sessionID])
     expect(s.requests).toHaveLength(1)
@@ -1652,7 +1645,9 @@ describe("SessionRunnerLLM", () => {
       },
     })
 
-    expect(yield* runner.drain({ sessionID, force: false })).toEqual(SessionRunner.DrainResult.Moved({}))
+    expect(yield* runner.drain({ sessionID })).toEqual(
+      SessionRunner.DrainResult.Moved({ at: { _tag: "Fresh", forced: false } }),
+    )
 
     // Compaction needs the model and instructions, so it reads them and fails; the move does not.
     expect(reads).toBe(1)
@@ -1787,7 +1782,7 @@ describe("SessionRunnerLLM", () => {
       TestLLM.text("Continued", "entry-continuation"),
     )
     const stream = yield* s.llm.gate()
-    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    const run = yield* runner.drain({ sessionID }).pipe(Effect.forkChild)
     yield* stream.started
     const compaction = yield* s.sessionInbox.admitCompaction({
       id: SessionMessage.ID.create(),
@@ -1809,13 +1804,13 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
     const moved = yield* Fiber.join(run)
 
-    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ continuation: { step: 2 } }))
+    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ at: { _tag: "Continue", step: 2 } }))
     expect(s.requests).toHaveLength(1)
     expect(yield* SessionInbox.find(s.db, compaction.id)).toMatchObject({ id: compaction.id })
     if (moved._tag !== "Moved") throw new Error("Expected a Location handoff")
 
     // Location entry considers queued controls even when model work carries across the move.
-    yield* runner.drain({ sessionID, force: false, continuation: moved.continuation })
+    yield* runner.drain({ sessionID, at: moved.at })
 
     expect(s.requests).toHaveLength(3)
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
@@ -2124,7 +2119,9 @@ describe("SessionRunnerLLM", () => {
     })
     const select = (s: Scenario, agent: Agent.ID) => s.session.switchAgent({ sessionID, agent })
     const texts = (request: LLMRequest) =>
-      request.messages.flatMap((message) => message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])))
+      request.messages.flatMap((message) =>
+        message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+      )
     const prompt = (request: LLMRequest | undefined) => request?.system.map((part) => part.text).join("\n") ?? ""
 
     scenario("puts a starting agent's instructions in the system prompt", function* (s) {
@@ -2802,7 +2799,7 @@ describe("SessionRunnerLLM", () => {
       ])
       // An advisory drain must not redeliver either steer or rerun compaction.
       const runner = yield* SessionRunner.Service
-      yield* runner.drain({ sessionID, force: false })
+      yield* runner.drain({ sessionID })
       expect(s.requests).toHaveLength(3)
     })
   }
@@ -3429,13 +3426,11 @@ describe("SessionRunnerLLM", () => {
         Stream.fail(
           header
             ? new AIError({
-                reason: new TransportError({
-                  message: "Connection closed",
-                  transport: "http",
-                  operation: "read",
+                reason: new RateLimitError({
+                  message: "Slow down",
                   http: new HttpContext({
                     url: "https://example.com",
-                    status: 200,
+                    status: 429,
                     headers: { "x-should-retry": "false" },
                   }),
                 }),
@@ -3449,7 +3444,7 @@ describe("SessionRunnerLLM", () => {
       expect(s.requests).toHaveLength(1)
       expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
         status: "failed",
-        error: { type: header ? "provider.transport" : "provider.invalid-output" },
+        error: { type: header ? "provider.rate-limit" : "provider.invalid-output" },
       })
     })
   }
@@ -4871,7 +4866,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
     const stream = yield* s.llm.gate()
-    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    const run = yield* runner.drain({ sessionID }).pipe(Effect.forkChild)
     yield* stream.started
 
     yield* s.session.prompt({ sessionID, text: "B", delivery: "queue", resume: false })
@@ -4895,7 +4890,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
     const stream = yield* s.llm.gate()
-    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    const run = yield* runner.drain({ sessionID }).pipe(Effect.forkChild)
     yield* stream.started
 
     yield* s.sessionInbox.admit({
@@ -4915,7 +4910,7 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
 
     expect({ result: yield* Fiber.join(run), location: (yield* s.session.get(sessionID)).location }).toEqual({
-      result: SessionRunner.DrainResult.Moved({ stepped: true }),
+      result: SessionRunner.DrainResult.Moved({ at: { _tag: "BetweenTurns" } }),
       location,
     })
     expect(s.requests.map(userTexts)).toEqual([["A"], ["A"]])
@@ -5000,7 +4995,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.stop())
 
     const runner = yield* SessionRunner.Service
-    yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+    yield* runner.drain({ sessionID, promotable: "steer" })
 
     expect(s.requests).toHaveLength(1)
     expect(userTexts(s.requests[0])).toEqual(["Steer now"])
@@ -5017,7 +5012,7 @@ describe("SessionRunnerLLM", () => {
     })
 
     const runner = yield* SessionRunner.Service
-    yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+    yield* runner.drain({ sessionID, promotable: "steer" })
 
     // Control work is scope-independent between turns: the barrier is consumed
     // even though the drain never promotes queued input.
@@ -5038,7 +5033,7 @@ describe("SessionRunnerLLM", () => {
     })
 
     const runner = yield* SessionRunner.Service
-    yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+    yield* runner.drain({ sessionID, promotable: "steer" })
 
     // Enqueue order holds: the queued prompt is next in line, so nothing runs.
     expect(s.requests).toHaveLength(0)
@@ -6103,7 +6098,7 @@ describe("SessionRunnerLLM", () => {
     )
 
     const runner = yield* SessionRunner.Service
-    const run = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
+    const run = yield* runner.drain({ sessionID, at: { _tag: "Fresh", forced: true } }).pipe(Effect.forkChild)
     yield* tools.started
     yield* Fiber.join(streamed)
     yield* Fiber.interrupt(run)
@@ -6177,7 +6172,7 @@ describe("SessionRunnerLLM", () => {
     )
 
     const runner = yield* SessionRunner.Service
-    const run = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
+    const run = yield* runner.drain({ sessionID, at: { _tag: "Fresh", forced: true } }).pipe(Effect.forkChild)
     yield* tools.started
     yield* Deferred.await(streamingSecond)
     yield* Fiber.interrupt(run)

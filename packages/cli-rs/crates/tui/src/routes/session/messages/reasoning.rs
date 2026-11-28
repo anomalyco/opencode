@@ -101,7 +101,7 @@ impl Reasoning {
         let border = border(cx.theme);
         inner.header.border_color(border);
         inner.body.border_color(border);
-        opencode_ui::markdown::restyle(&inner.markdown, colors(cx.theme), cx.thinking_syntax);
+        opencode_ui::markdown::restyle(&inner.markdown, cx.theme, colors(cx.theme), cx.thinking_syntax);
         // The header recolors as on a hover, so a running spinner keeps its frame.
         inner.layout();
     }

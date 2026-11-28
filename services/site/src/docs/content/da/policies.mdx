@@ -1,0 +1,331 @@
+---
+title: "Politikker"
+description: "Tillad eller afvis OpenCode-handlinger på navngivne ressourcer, hvor administreret og organisatorisk politik har forrang over bruger- og projektkonfiguration."
+---
+
+Politikker afgør, om OpenCode må udføre en handling på en navngivet ressource. De skrives
+under `policies` og kan også leveres af et tilsluttet
+[OpenCode Console](/console)-arbejdsområde.
+
+Politikker er adskilt fra [tilladelser](/permissions). Tilladelser er værktøjsregler
+pr. agent, der kan `allow`, `deny` eller `ask`. Politikker er binære, spørger aldrig og
+strammer kun det, som tilladelser og udbydere ellers ville tillade.
+
+## Konfiguration
+
+Afvis én udbyder overalt ved at tilføje en erklæring i `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+En afvist udbyder forsvinder fra kataloget og modelvalget, også når den har
+gyldige legitimationsoplysninger.
+
+Tidligere versioner læste politikker fra `experimental.policies`. Nøglen virker stadig og
+flettes ind i `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Erklæringer
+
+Hver erklæring har tre felter:
+
+| Felt      | Værdier                                                                                                                     | Betydning                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use` | Handlingen, der styres                                 |
+| `resource` | streng eller wildcardmønster                                                                                                | Hvad erklæringen gælder; afhænger af handlingen        |
+| `effect`   | `allow`, `deny`                                                                                                             | Beslutningen, når denne erklæring matcher              |
+
+Erklæringer, der ikke består valideringen, droppes med en advarsel i serverloggen, og
+resten af listen gælder stadig. Tjek loggen, efter du har redigeret en `deny`.
+
+## Matchning
+
+Ressourcer bruger de samme wildcards for hele værdien som tilladelser: `*` matcher nul eller
+flere tegn, og `?` matcher ét.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Dette afviser `company-us` og `company-eu`. Et mønster, der slutter med ` *`, matcher også
+værdien uden argumenter, så `shell:git push *` dækker `git push` alene.
+
+## Rækkefølge
+
+Når flere erklæringer matcher, vinder den sidste. Der er ingen specificitetsregel, så
+læg brede erklæringer først og undtagelser efter dem. Hvis intet matcher, tillades
+handlingen.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Kun Anthropic forbliver tilgængelig.
+
+## Udbydere
+
+`provider.use` styrer, om en udbyder overhovedet kan bruges. Ressourcen er
+udbyder-ID'et: `anthropic`, `openai`, `opencode` eller et brugerdefineret ID fra
+[`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Posten under `providers` konfigurerer endpointet; erklæringerne gør den til den eneste
+udbyder, OpenCode vil bruge. Politikken gælder, uanset hvordan en udbyder blev kendt: katalogdata,
+miljøvariabler, gemte konti, indbyggede plugins eller konfiguration.
+
+Brug `provider.use` i stedet for V1-listerne `enabled_providers` og `disabled_providers`.
+V1-filer indlæses stadig; se
+[Migrér fra V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## Værktøjer
+
+En politikregel for `tool.use` kan blokere en handling ved [tilladelseskontrollen](/permissions). Ressourcen er
+`<action>:<value>` og matches mod hver ressource, som værktøjet kontrollerer.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+En afvist kontrol mislykkes med `Blocked by configuration policy` i stedet for at spørge. Den
+gælder efter agentregler og gemte godkendelser, så den tilsidesætter både en `ask` og en
+“Allow always”-godkendelse.
+
+| Mønster                     | Blokerer                                      |
+| --------------------------- | --------------------------------------------- |
+| `shell:*`                   | Hver shell-kommando                           |
+| `read:*/.ssh/*`             | Læsning af SSH-materiale                      |
+| `external_directory:*`      | Enhver adgang uden for Location eller worktree |
+| `subagent:general`          | Start af én subagent                          |
+| `github_delete_repository:*` | Ét MCP-værktøj                               |
+| `*`                         | Alt, der ikke allerede er afvist              |
+
+En `tool.use`-erklæring med `allow` giver aldrig adgang. Den ophæver kun en tidligere
+bredere `deny`, hvorefter agentens egne regler afgør.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status` falder tilbage til agentens `shell`-regel; enhver anden kommando blokeres.
+
+## Integrationer
+
+En integration er alt, hvad du forbinder i `/connect`: OpenCode Console
+(`opencode`), en udbyder som `anthropic`, en websøgningstjeneste som `exa`
+eller en velkendt konfigurationsorigin som `https://ai.acme.com`. Login på en MCP-
+server påvirkes ikke af integrationspolitikker; brug `mcp.use` til at styre MCP-
+servere.
+
+`integration.connect` styrer, hvilke integrationer `/connect` viser, og hvilke der kan
+forbindes. Ressourcen er integrations-ID'et.
+
+`integration.use` styrer alt, hvad en integration leverer: dens udbydere og
+modeller, dens websøgning samt de MCP-servere og den konfiguration, som et Console-arbejdsområde eller
+en velkendt origin leverer. Ressourcen er `<integration>#<account>`, hvor
+kontoen er den forbundne organisations- eller konto-ID, f.eks.
+`opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`. Uden en forbundet konto er det selve
+integrations-ID'et: gratisniveauet uden login er `opencode`, en `ANTHROPIC_API_KEY`-
+miljøvariabel er `anthropic`, og en udbyder fra `opencode.json` er dens
+udbyder-ID.
+
+Denne MDM-politik kræver ét Console-arbejdsområde og intet andet. Se [Enterprise](/enterprise) for flere eksempler:
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+`/connect` tilbyder kun Console, så medlemmerne kan logge ind. Gratisniveauet, personlige
+Console-konti, andre organisationer, API-nøgler fra miljøet og udbydere fra
+`opencode.json` er alle utilgængelige. Arbejdsområdets udbydere, MCP-servere og
+websøgning virker, og ændring af dem i Console kræver ingen ny MDM-profil.
+
+Kun administrerede politikker kan tilbageholde de MCP-servere og den konfiguration, som en integration
+leverer; dens egne politikker gælder fortsat uanset hvad.
+
+## MCP-servere, skills og plugins
+
+| Handling     | Ressource                                                         |
+| ------------ | ----------------------------------------------------------------- |
+| `mcp.use`    | En [MCP-server](/mcp-servers) efter dens konfigurerede navn        |
+| `skill.use`  | En [skill](/skills) efter dens ID                                 |
+| `plugin.use` | Et [plugin](/plugins) efter pakkenavn uden version eller absolut sti |
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+En afvist MCP-server eller skill fjernes, og et afvist plugin indlæses ikke, uanset
+hvordan det blev konfigureret.
+
+### Opgradering fra `integration.use`
+
+Før OpenCode 2.2.3 dækkede `integration.use` MCP-servere, skills og plugins
+gennem et `mcp:`, `skill:` eller `plugin:`-præfiks. Erklæringer med præfiks indlæses stadig og
+konverteres til `mcp.use`, `skill.use` eller `plugin.use`.
+
+En erklæring uden et af disse præfikser, inklusive et bart `*`, gælder nu i stedet for
+integrationer. En bred deny som
+
+```jsonc
+{ "action": "integration.use", "resource": "*", "effect": "deny" }
+```
+
+blokerer ikke længere MCP-servere, skills eller plugins. I stedet blokerer den hver udbyder,
+inklusive gratisniveauet, medmindre en senere erklæring tillader en integration. Hvis du vil beholde
+den gamle betydning, skal du erstatte den med:
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+Undtagelser flyttes på samme måde: `integration.use` `mcp:github` bliver `mcp.use`
+`github`, og `skill:team:review` bliver `skill.use` `team:review`.
+
+Klienter ældre end 2.2.3 ignorerer `integration.connect`, `integration.use` (i dens nye
+betydning), `mcp.use`, `skill.use` og `plugin.use`, så kræv 2.2.3 eller nyere,
+hvor du er afhængig af dem.
+
+## Websøgning
+
+`websearch.use` styrer de websøgeudbydere, som `websearch`-værktøjet kan bruge. Ressourcen
+er udbyder-ID'et: `opencode` for OpenCode Web Search fra Console, en
+indbygget udbyder som `exa`, `firecrawl`, `parallel`, `tavily` eller `tinyfish` eller
+ID'et for en udbyder, som et plugin tilføjer.
+
+```jsonc
+{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}
+```
+
+Afviste udbydere fjernes, også når de virker uden en API-nøgle, som Exa og
+TinyFish. Når hver udbyder er afvist, tilbydes `websearch`-værktøjet ikke længere.
+Klienter ældre end 2.2.6 ignorerer `websearch.use`.
+
+## Prioritet
+
+Almindelige indstillinger lader den nærmeste konfiguration vinde. Politikker vender det om: erklæringer
+fra bredere konfiguration evalueres senere, så de tilsidesætter snævrere. Administreret
+konfiguration og den tilsluttede Console har altid forrang over bruger- og projektfiler.
+
+| Prioritet   | Kilde                                                                                                          |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (højest)  | macOS-administrerede præferencer (`/Library/Managed Preferences/ai.opencode.managed.plist`)                    |
+| 2           | Systemets `opencode.json(c)` (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 3           | Tilsluttet OpenCode Console-arbejdsområde                                                                      |
+| 4           | Global `~/.config/opencode/opencode.json(c)`                                                                   |
+| 5           | Direkte `opencode.json(c)`; ydre mapper vinder over indre                                                       |
+| 6 (lavest)  | `.opencode/opencode.json(c)`; ydre mapper vinder over indre                                                     |
+
+Et repository kan ikke genaktivere en udbyder, som du afviser globalt:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` forbliver afvist. Inden for én fil beholder erklæringerne deres skrevne rækkefølge.
+
+## Console
+
+Et arbejdsområde i [OpenCode Console](/console) kompilerer sine politikker for udbydere og værktøjer
+til almindelige `policies`-erklæringer i arbejdsområdets konfiguration. OpenCode
+fletter den konfiguration som en konfigurationsfil, der rangerer lige under administrerede
+præferencer og systemfilen, så en organisatorisk `deny` ikke kan ophæves af et
+repositorys eller en brugers `allow`, og en organisatorisk `allow` ophæver en `deny` med lavere
+myndighed. Administrerede præferencer og systemfilen tilsidesætter stadig arbejdsområdet.
+
+Afvisninger fra disse erklæringer angiver arbejdsområdet:
+
+```text
+Blocked by Acme's policy
+```
+
+Erklæringerne følger den forbundne konto.
+
+| Hændelse                      | Resultat                                            |
+| ----------------------------- | --------------------------------------------------- |
+| Ændringer i Console-politikker | Anvendes ved næste hentning, cirka hvert femte minut |
+| Skift til et andet arbejdsområde | Erklæringer erstattes med det arbejdsområdes     |
+| Afbryd forbindelsen           | Erklæringer ryddes                                  |
+| Console utilgængelig          | De seneste erklæringer for den forbindelse forbliver i kraft |
+
+Console-pluginnet og politik-pluginnet kan ikke deaktiveres fra `plugins`; se
+[pluginkontrol](/plugins#control).
+
+<Callout type="note">
+  Politikker konfigurerer ikke endpoints eller legitimationsoplysninger og kan ikke gøre en ubrugelig udbyder brugbar. De
+  sandboxer heller ikke pluginkode: en afvist udbyder blokeres på den normale udbyder- og modelsti.
+</Callout>

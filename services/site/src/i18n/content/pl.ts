@@ -7,7 +7,7 @@ export const content = {
       link: "Zobacz nowości w 2.2",
     },
     "desktop-terminals-now-survive-restarts": {
-      text: "Terminale w Desktop przetrwają teraz restart.",
+      text: "Terminale w Desktop działają dalej po restarcie.",
       link: "Zobacz v2.2.4",
     },
     "agents-can-now-generate-images": {
@@ -31,103 +31,65 @@ export const content = {
     },
     mobile: {
       name: "Mobile",
-      body: "Uruchamiaj, prowadź i zatwierdzaj sesje z telefonu, gdziekolwiek jesteś.",
+      body: "Uruchamiaj sesje, steruj nimi i zatwierdzaj działania z telefonu, gdziekolwiek jesteś.",
       action: "Pobierz",
     },
     terminal: {
       name: "Terminal",
       body: "Szybki interfejs terminalowy, który działa w każdej powłoce, edytorze i na zdalnym serwerze.",
-      action: "Instaluj",
+      action: "Zainstaluj",
     },
     sdk: {
       name: "SDK",
       body: "Steruj OpenCode z własnych skryptów, zadań CI i narzędzi.",
-      action: "Czytaj docs",
+      action: "Dokumentacja",
     },
     mini: {
       name: "Mini",
-      body: "Minimalny interfejs terminalowy. Odpowiedzi trafiają do historii terminala, a pod nimi jest jeden prompt.",
-      action: "Instaluj",
+      body: "Minimalistyczny interfejs terminalowy. Odpowiedzi trafiają do historii przewijania, a pod nimi jest jedno pole na prompt.",
+      action: "Zainstaluj",
     },
   },
   productDetails: {
     desktop: {
       title: "OpenCode | Aplikacja desktopowa na macOS, Windows i Linux",
       description:
-        "Uruchamiaj równolegle tylu agentów OpenCode, ilu chcesz, oglądaj każdą zmianę w przeglądarce obok i kontynuuj na dowolnym urządzeniu. Na macOS, Windows i Linux.",
+        "Uruchamiaj dowolną liczbę agentów OpenCode równolegle, sprawdzaj każdą zmianę w przeglądarce obok sesji i wracaj do pracy na dowolnym urządzeniu. Na macOS, Windows i Linux.",
       intro:
         "Uruchamiaj kilku agentów naraz, każdą sesję w osobnej karcie. Przeglądaj każdą zmianę jako diff, komentuj dowolną linię i sprawdzaj wynik we wbudowanej przeglądarce. Na macOS, Windows i Linux.",
       showcase: {
         "parallel-agents": {
-          title: "Agenci równolegle",
+          title: "Równoległa praca agentów",
           body: "Uruchom tylu agentów, ilu chcesz, i pozwól im pracować równolegle. Przełączaj się między nimi, gdy kończą.",
         },
         "see-it-in-the-browser": {
           title: "Zobacz w przeglądarce",
-          body: "Twoja aplikacja otwiera się w przeglądarce obok agenta, więc oboje widzicie każdą zmianę na bieżąco.",
+          body: "Twoja aplikacja otwiera się w przeglądarce obok sesji. Ty i agent widzicie każdą zmianę na bieżąco.",
         },
         "on-every-device": {
           title: "Na każdym urządzeniu",
           body: "Uruchamiaj agentów na wszystkich swoich urządzeniach i kontynuuj w aplikacji desktopowej, terminalu lub na telefonie.",
         },
         "extend-it": {
-          title: "Rozszerzaj",
-          body: "Podłącz swoje narzędzia i usługi, aby agent mógł pracować ze wszystkim. Albo pozwól OpenCode zbudować wtyczki dla samego siebie, z własnym interfejsem w panelu bocznym.",
+          title: "Rozszerzaj OpenCode",
+          body: "Podłącz swoje narzędzia i usługi, by agent mógł z nich korzystać. Możesz też zlecić OpenCode napisanie pluginów do samego OpenCode, z własnym interfejsem na pasku bocznym.",
         },
       },
     },
     mobile: {
-      title: "OpenCode | Mobile, Twoje sesje programowania na telefonie",
+      title: "OpenCode | Mobile – sesje programowania na telefonie",
       description:
-        "Uruchamiaj i prowadź sesje OpenCode z telefonu. Rozmawiaj z agentem, gdy działa na Twoim komputerze.",
+        "Uruchamiaj sesje OpenCode i steruj nimi z telefonu. Rozmawiaj z agentem, który pracuje na Twoim komputerze.",
       intro:
-        "Uruchamiaj i prowadź sesje z telefonu, gdziekolwiek jesteś. Zadzwoń do sesji i rozmawiaj z agentem albo otwórz sesję i kontynuuj od miejsca, w którym skończyłeś, wszystko z OpenCode na Twoim komputerze.",
-      features: {
-        "notify-when-done": {
-          title: "Powiadomienia",
-          body: "Dostań krótkie podsumowanie, gdy uruchomiona przez Ciebie sesja się skończy.",
-        },
-        "pair-from-anywhere": {
-          title: "Paruj skądkolwiek",
-          body: "Łącz się z dowolnej sieci przez opencode pair --remote.",
-        },
-        "every-computer": {
-          title: "Każdy komputer",
-          body: "Przełączaj się między sparowanymi komputerami jednym dotknięciem.",
-        },
-        "siri-and-shortcuts": {
-          title: "Siri i Skróty",
-          body: "Zacznij rozmowę lub sesję z Siri albo z centrum sterowania.",
-        },
-        "follow-along": {
-          title: "Na bieżąco",
-          body: "Patrz, jak oś czasu się aktualizuje, gdy agent pracuje.",
-        },
-        "your-computer": {
-          title: "Twój komputer",
-          body: "Łączy się z OpenCode działającym na Twojej maszynie.",
-        },
-        "share-sheet": {
-          title: "Udostępnianie",
-          body: "Udostępniaj cokolwiek do sesji bez otwierania aplikacji.",
-        },
-        "mute-sessions": {
-          title: "Wycisz sesje",
-          body: "Zostaw sesję na liście bez jej powiadomień.",
-        },
-      },
+        "Uruchamiaj sesje i steruj nimi z telefonu, gdziekolwiek jesteś. Połącz się głosowo z agentem albo otwórz dowolną sesję i wróć do pracy. Wszystko nadal działa w OpenCode na Twoim komputerze.",
       showcase: {
         voice: {
           title: "Głos",
-          body: "Zadzwoń do sesji i powiedz, czego chcesz. Agent odpowie na głos.",
+          body: "Połącz się głosowo z sesją i powiedz, czego potrzebujesz. Agent odpowie na głos.",
         },
         sessions: {
           title: "Sesje",
-          body: "Otwórz dowolną sesję, sprawdź jej stan i kontynuuj, gdzie skończyłeś.",
-        },
-        steer: {
-          title: "Prowadź",
-          body: "Wyślij kolejną wiadomość, aby zmienić kierunek w trakcie sesji.",
+          body: "Otwórz dowolną sesję, sprawdź postępy i wróć do pracy.",
         },
         results: {
           title: "Wyniki",
@@ -136,43 +98,43 @@ export const content = {
       },
     },
     terminal: {
-      title: "OpenCode | Interfejs terminalowy agenta open source",
+      title: "OpenCode | Interfejs terminalowy agenta open source do programowania",
       description:
-        "Szybki interfejs terminalowy OpenCode, który działa w każdej powłoce, edytorze i na zdalnym serwerze. Opisz, czego chcesz, oglądaj każdą edycję jako diff i zatwierdzaj polecenia.",
+        "Szybki interfejs terminalowy OpenCode działa w każdej powłoce, w edytorze lub na zdalnym serwerze. Opisz zadanie, przeglądaj zmiany w widoku Diff i zatwierdzaj polecenia.",
       intro:
-        "Szybki interfejs terminalowy, który działa w każdej powłoce, edytorze i na zdalnym serwerze. Opisz zwykłymi słowami, czego chcesz, patrz, jak każda edycja pojawia się jako diff, i wybierz, które polecenia uruchamiają się same.",
+        "Szybki interfejs terminalowy działa w każdej powłoce, w edytorze lub na zdalnym serwerze. Opisz zadanie własnymi słowami, śledź zmiany w widoku Diff i wybierz, które polecenia mają się uruchamiać automatycznie.",
       features: {
         "any-terminal": {
           title: "Każdy terminal",
           body: "Działa w każdej powłoce, w terminalu edytora i na zdalnym serwerze.",
         },
         "diffs-in-the-timeline": {
-          title: "Diffy na osi",
-          body: "Oglądaj każdą edycję jako diff na osi czasu, gdy agent ją wprowadza.",
+          title: "Zmiany na osi czasu",
+          body: "Gdy agent wprowadza zmianę, od razu zobaczysz jej diff na osi czasu.",
         },
         "pick-up-later": {
           title: "Wróć później",
-          body: "Kontynuuj ostatnią sesję z -c albo dowolną z -s.",
+          body: "Wznów ostatnią sesję za pomocą -c lub wybierz dowolną sesję za pomocą -s.",
         },
         "one-off-runs": {
-          title: "Jednorazowo",
+          title: "Jednorazowe uruchomienia",
           body: "opencode run wysyła jedną wiadomość i wypisuje odpowiedź.",
         },
         "agents-and-commands": {
           title: "Agenci i polecenia",
-          body: "Zmieniaj agentów przez shift+tab i otwieraj wszystkie polecenia przez ctrl+p.",
+          body: "Przełączaj agentów skrótem shift+tab i otwieraj listę poleceń skrótem ctrl+p.",
         },
         "auto-approve": {
-          title: "Autozgoda",
-          body: "Uruchom z --auto, aby zezwolić na każdą akcję, której nie zablokowałeś.",
+          title: "Autozatwierdzanie",
+          body: "Uruchom z flagą --auto, aby zezwolić na wszystkie niezablokowane działania.",
         },
         "any-server": {
           title: "Każdy serwer",
-          body: "Połącz się z serwerem OpenCode przez URL z --server.",
+          body: "Podaj URL serwera OpenCode z flagą --server, aby się z nim połączyć.",
         },
         "usage-stats": {
-          title: "Statystyki",
-          body: "opencode stats pokazuje statystyki użycia do udostępnienia.",
+          title: "Statystyki użycia",
+          body: "Polecenie opencode stats pokazuje statystyki użycia, które możesz udostępnić.",
         },
       },
       showcase: {
@@ -182,7 +144,7 @@ export const content = {
         },
         "approve-what-runs": {
           title: "Zatwierdzaj polecenia",
-          body: "Edycje wyświetlają się jako diffy, a polecenia czekają na Twoją zgodę.",
+          body: "Zmiany widać w widoku Diff, a polecenia czekają na Twoją zgodę.",
         },
         "make-it-yours": {
           title: "Po swojemu",
@@ -190,7 +152,7 @@ export const content = {
         },
         mini: {
           title: "Mini",
-          body: "Uruchom opencode mini, a odpowiedzi trafią do historii terminala.",
+          body: "Uruchom opencode mini, a odpowiedzi trafią do historii przewijania terminala.",
         },
       },
     },
@@ -214,7 +176,7 @@ export const content = {
           body: "Używa modeli skonfigurowanych w Twoim OpenCode.",
         },
         "npm-or-bun": {
-          title: "npm lub bun",
+          title: "npm lub Bun",
           body: "Zainstaluj przez npm i @opencode/sdk lub bun add @opencode/sdk.",
         },
         "in-process-host": {
@@ -237,15 +199,15 @@ export const content = {
       showcase: {
         "fix-ci-from-code": {
           title: "Napraw CI z kodu",
-          body: "Skrypt prosi OpenCode o naprawę nieudanych testów i uruchamia je ponownie.",
+          body: "Krótki skrypt zleca OpenCode naprawę testów, które nie przeszły, i uruchamia je ponownie.",
         },
         "follow-every-step": {
           title: "Śledź każdy krok",
-          body: "Strumieniuj zdarzenia, by na bieżąco widzieć każde narzędzie, którego używa agent.",
+          body: "Odbieraj strumień zdarzeń, aby na bieżąco widzieć każde wywołanie narzędzia przez agenta.",
         },
         "build-your-own-tools": {
-          title: "Własne narzędzia",
-          body: "Podłącz OpenCode do botów, dashboardów i workflowów w kilku linijkach.",
+          title: "Twórz własne narzędzia",
+          body: "Wystarczy kilka linii kodu, by podłączyć OpenCode do botów, paneli i procesów.",
         },
         "in-your-process": {
           title: "W Twoim procesie",
@@ -256,29 +218,29 @@ export const content = {
     mini: {
       title: "OpenCode | Mini, minimalny interfejs terminalowy dla agenta",
       description:
-        "Mini uruchamia OpenCode w minimalnym interfejsie terminalowym. Odpowiedzi trafiają do historii terminala, a na dole zostają tylko prompt i linia statusu.",
+        "Mini uruchamia OpenCode w minimalistycznym interfejsie terminalowym. Odpowiedzi trafiają do historii przewijania, a na dole zostają tylko pole na prompt i wiersz stanu.",
       intro:
-        "Minimalny interfejs terminalowy dla OpenCode. Uruchom opencode mini, a odpowiedzi trafią prosto do historii Twojego terminala, więc przewijasz, wyszukujesz i kopiujesz je jak każde inne wyjście. Na dole zostają tylko prompt i linia statusu.",
+        "Minimalistyczny interfejs terminalowy OpenCode. Uruchom opencode mini, a odpowiedzi trafią wprost do historii przewijania terminala. Przewijaj, wyszukuj i kopiuj je jak każdy inny wynik. Na dole zostają tylko pole na prompt i wiersz stanu.",
       features: {
         "your-scrollback": {
-          title: "Twoja historia",
-          body: "Odpowiedzi stają się zwykłą historią terminala.",
+          title: "Historia przewijania",
+          body: "Odpowiedzi trafiają do zwykłej historii przewijania terminala.",
         },
         "one-prompt": {
           title: "Jeden prompt",
-          body: "Agent, model, kontekst i koszt w jednej linii statusu.",
+          body: "Agent, model, kontekst i koszt w jednym wierszu stanu.",
         },
         permissions: {
           title: "Uprawnienia",
-          body: "Zezwalaj na edycje i polecenia z obszaru promptu.",
+          body: "Zatwierdzaj zmiany i polecenia z pola na prompt.",
         },
         "how-much-shows": {
-          title: "Ile widać",
-          body: "Cicho, domyślnie lub wszystko, dla myślenia i wyjścia narzędzi.",
+          title: "Zakres wyświetlania",
+          body: "Myślenie i wyniki narzędzi w trybie cichym, domyślnym lub pełnym.",
         },
         "pick-up-later": {
           title: "Wróć później",
-          body: "Kontynuuj ostatnią sesję z -c albo dowolną z -s.",
+          body: "Wznów ostatnią sesję za pomocą -c lub wybierz dowolną sesję za pomocą -s.",
         },
         "same-opencode": {
           title: "Ten sam OpenCode",
@@ -289,7 +251,7 @@ export const content = {
           body: "Zmieniaj agentów prosto z promptu.",
         },
         compact: {
-          title: "Skracanie",
+          title: "Kompaktowanie",
           body: "Skróć długą sesję poleceniem /compact.",
         },
       },
@@ -297,37 +259,37 @@ export const content = {
   },
   extensionCard: {
     name: "Rozszerzenia",
-    body: "Używaj OpenCode w VS Code albo w Zedzie i innych edytorach przez ACP.",
-    action: "Instaluj",
+    body: "Używaj OpenCode w VS Code lub przez ACP w Zed i innych edytorach.",
+    action: "Zainstaluj",
   },
   extensions: {
     browse: {
       name: "Browse",
       body: "Pozwól agentom korzystać z Twojej przeglądarki.",
-      title: "OpenCode | Browse, Twoja prawdziwa przeglądarka dla agentów",
+      title: "OpenCode | Browse – Twoja przeglądarka dla agentów kodujących",
       description:
-        "Browse pozwala OpenCode i innym klientom MCP korzystać z Twojej prawdziwej przeglądarki. Agenci czytają, klikają, piszą, robią zrzuty, nagrywają karty i oddają Ci logowanie i 2FA.",
+        "Browse pozwala OpenCode i innym klientom MCP korzystać z Twojej przeglądarki. Agenci czytają strony, klikają, wpisują tekst, robią zrzuty ekranu i nagrywają karty. Gdy trzeba się zalogować lub przejść 2FA, przekazują Ci kartę.",
       intro:
-        "Serwer MCP i rozszerzenie Chromium, dzięki którym agenci korzystają z Twojej prawdziwej przeglądarki, z Twoimi kartami, logowaniami i rozszerzeniami. Otwierają karty w tle, zgrupowane tak, by Ci nie przeszkadzały, i czytają strony, klikają, piszą, robią zrzuty ekranu i nagrywają karty. Gdy przychodzi Twoja kolej, przy logowaniu, kodzie 2FA czy płatności, oddają Ci kartę i działają dalej, gdy klikniesz Continue.",
+        "Serwer MCP i rozszerzenie Chromium pozwalają agentom korzystać z Twojej własnej przeglądarki, wraz z kartami, aktywnymi logowaniami i rozszerzeniami. Agenci otwierają karty w grupach w tle, czytają strony, klikają, wpisują tekst, robią zrzuty ekranu i nagrywają karty. Gdy trzeba się zalogować, przejść 2FA lub zapłacić, przekazują Ci kartę i wznawiają pracę po kliknięciu Continue.",
       features: {
         "your-real-browser": {
           title: "Twoja przeglądarka",
           body: "Chrome, Edge, Brave, Arc, Helium, Vivaldi, Opera i Chromium.",
         },
         "out-of-your-way": {
-          title: "Nie przeszkadza",
+          title: "Karty w tle",
           body: "Karty agentów otwierają się w tle, w zwiniętych grupach.",
         },
         handoffs: {
-          title: "Przekazanie",
-          body: "Zaloguj się lub przejdź 2FA samodzielnie, potem kliknij Continue.",
+          title: "Przejmij kartę",
+          body: "Zaloguj się lub przejdź weryfikację 2FA, a potem kliknij Continue.",
         },
         "lend-a-tab": {
-          title: "Użycz karty",
+          title: "Udostępnij kartę",
           body: "Kliknij przycisk na pasku, aby przekazać agentowi otwartą kartę.",
         },
         "record-and-capture": {
-          title: "Nagrania",
+          title: "Nagrania i zrzuty",
           body: "Zrzuty ekranu, nagrania kart i ruch sieciowy.",
         },
         "any-mcp-client": {
@@ -335,22 +297,22 @@ export const content = {
           body: "OpenCode, Claude Code, Cursor, Codex, Zed i wiele innych.",
         },
         "all-your-logins": {
-          title: "Wszystkie twoje logowania",
-          body: "Agenci korzystają ze stron, na których już jesteś zalogowany. Bez kluczy, bez konfiguracji.",
+          title: "Twoje aktywne logowania",
+          body: "Agenci korzystają ze stron, na których masz już aktywne logowanie. Bez kluczy i konfiguracji.",
         },
         "allowed-sites": {
           title: "Dozwolone strony",
-          body: "Trzymaj kartę agenta na wskazanych przez Ciebie stronach.",
+          body: "Ogranicz dostęp agenta w karcie do wskazanych stron.",
         },
       },
       install:
-        "Najpierw zainstaluj [rozszerzenie Chrome]. Przeprowadzi cię przez pozostałe kroki. Aby zainstalować CLI bezpośrednio (nie powinno to być potrzebne), użyj jednego z tych poleceń.",
+        "Najpierw zainstaluj [rozszerzenie Chrome]. Przeprowadzi Cię przez kolejne kroki. Jeśli mimo wszystko musisz zainstalować CLI bezpośrednio, użyj jednego z tych poleceń.",
     },
   },
   apps: {
     browse: {
       category: "Sterowanie przeglądarką dla agentów",
-      body: "Pozwól agentowi korzystać z Twojej prawdziwej przeglądarki, z Twoimi logowaniami i kartami.",
+      body: "Pozwól agentowi korzystać z Twojej przeglądarki, aktywnych logowań i kart.",
     },
     hex: {
       category: "Dyktowanie głosowe",
@@ -367,10 +329,10 @@ export const content = {
   },
   getStarted: {
     title: "Zacznij",
-    lead: "Najprościej zacząć, gdy pobierzesz OpenCode i użyjesz darmowych modeli. Konto nie jest potrzebne. Jeśli chcesz więcej, użyj własnej subskrypcji albo OpenCode Go.",
+    lead: "Najłatwiej zacząć od pobrania OpenCode i użycia darmowych modeli. Nie potrzebujesz konta. Jeśli chcesz więcej, skorzystaj z własnej subskrypcji lub wybierz OpenCode Go.",
     phrases: {
       "download-opencode": {
-        text: "pobierzesz OpenCode",
+        text: "pobrania OpenCode",
       },
       "free-models": {
         text: "darmowych modeli",
@@ -407,20 +369,20 @@ export const content = {
         line: "Desktop, terminal lub telefon.",
       },
       "use-free-models": {
-        title: "Darmowe modele",
+        title: "Używaj darmowych modeli",
         line: "OpenCode ma zestaw darmowych modeli. Konto nie jest potrzebne.",
       },
       "add-more-models": {
         title: "Więcej modeli",
-        line: "Użyj własnej subskrypcji albo wybranych modeli OpenCode Go od 10 $ miesięcznie.",
+        line: "Skorzystaj z własnej subskrypcji lub z wybranych modeli OpenCode Go od $10 miesięcznie.",
       },
     },
     sentence:
       "Pobierz OpenCode, zacznij od darmowych modeli, a gdy zechcesz więcej, użyj własnej subskrypcji lub OpenCode Go.",
   },
   byos: {
-    title: "Własne subskrypcje",
-    headline: "Używaj subskrypcji, które już masz.",
+    title: "Twoja subskrypcja",
+    headline: "Korzystaj z subskrypcji, które już masz.",
     line: "Zaloguj się przez ChatGPT Plus lub Pro albo GitHub Copilot. Możesz też wybrać subskrypcję OpenCode.",
     yours: {
       label: "Twoja subskrypcja",
@@ -448,12 +410,12 @@ export const content = {
     naming: {
       title: "Nazwa",
       body: "Pisz OpenCode jako jedno słowo, z wielkim O i wielkim C. Nie pisz Opencode, Open Code, OpenCode AI ani Open-Code.",
-      code: "Małych liter `opencode` używaj tylko w kodzie i nazwach pakietów, takich jak `opencode-figma` czy `@acme/opencode-plugin`.",
+      code: "Zapisu `opencode` małymi literami używaj tylko w kodzie i nazwach pakietów, takich jak `opencode-figma` czy `@acme/opencode-plugin`.",
     },
     families: {
       logo: {
         title: "Logo",
-        body: "Samo logo, do ikon aplikacji, awatarów i innych małych miejsc. Wersje kwadratowe mają margines dla miejsc, które przycinają do kwadratu.",
+        body: "Samo logo sprawdzi się w ikonach aplikacji, awatarach i wszędzie tam, gdzie jest mało miejsca. Wersje kwadratowe mają margines na wypadek kadrowania do kwadratu.",
         assets: {
           light: {
             name: "Jasne",
@@ -462,16 +424,16 @@ export const content = {
             name: "Ciemne",
           },
           "square-light": {
-            name: "Kwadrat, jasne",
+            name: "Jasne, kwadratowe",
           },
           "square-dark": {
-            name: "Kwadrat, ciemne",
+            name: "Ciemne, kwadratowe",
           },
         },
       },
       wordmark: {
         title: "Logotyp",
-        body: "Pełna nazwa zapisana literami OpenCode. Używaj go wszędzie, gdzie jest miejsce na całą nazwę.",
+        body: "Pełna nazwa zapisana charakterystycznymi literami OpenCode. Używaj logotypu, gdy masz miejsce na całą nazwę.",
         assets: {
           light: {
             name: "Jasny",
@@ -483,7 +445,7 @@ export const content = {
       },
       "simple-wordmark": {
         title: "Prosty logotyp",
-        body: "Jednokolorowa wersja logotypu, do druku, haftu i miejsc, które pozwalają tylko na jeden kolor.",
+        body: "Jednokolorowy logotyp do druku, haftu i wszędzie tam, gdzie można użyć tylko jednego koloru.",
         assets: {
           light: {
             name: "Jasny",
@@ -496,7 +458,7 @@ export const content = {
     },
     icons: {
       title: "Awatary",
-      body: "Kwadratowe awatary 1024px dla Slacka, Discorda, GitHuba i innych profili. Tło wypełnia cały kwadrat, a logo leży głęboko w okręgu, więc przetrwają okrągłe przycięcie.",
+      body: "Kwadratowe awatary 1024 px do profili w Slack, Discord, GitHub i innych serwisach. Tło wypełnia cały kwadrat, a logo mieści się z zapasem w okręgu, więc kadrowanie do koła go nie przytnie.",
       items: {
         dark: {
           name: "Ciemny",
@@ -584,7 +546,7 @@ export const content = {
         },
         simple: {
           name: "Prosty",
-          body: "Jeden kolor, z otwartymi światłami liter i bez wewnętrznego odcienia. Używaj go na płaskich kolorowych tłach, w druku jednokolorowym i wszędzie, gdzie nie możesz użyć szarości. Prosty ciemny na jasnych kolorach, prosty jasny na ciemnych.",
+          body: "Jeden kolor, z otwartymi światłami liter i bez wewnętrznego odcienia. Używaj tego wariantu na jednolitych kolorowych tłach, w druku jednokolorowym i wszędzie tam, gdzie szarości się nie sprawdzą. Na jasnym tle wybierz ciemny wariant, a na ciemnym jasny.",
           rows: {
             wordmark: {
               title: "Logotyp",
@@ -602,20 +564,20 @@ export const content = {
       },
     },
     usage: {
-      title: "Użycie",
+      title: "Zasady użycia",
       body: "Używaj jasnych wersji na jasnych tłach i ciemnych wersji na ciemnych tłach. Logo i logotyp są osobne. Używaj jednego albo drugiego, nigdy obu razem.",
       stroke: {
         title: "Jedna kreska",
         body: "Odstępy na tej stronie mierzymy w kreskach. Jedna kreska to grubość obrysu logo, czyli jedna czwarta jego szerokości, więc logo ma 4 kreski szerokości i 5 kresek wysokości.",
       },
       clearSpace: {
-        title: "Margines",
+        title: "Pole ochronne",
         body: "Zostaw co najmniej dwie kreski odstępu z każdej strony logo i logotypu. W logo kreska to grubość obrysu, jedna czwarta szerokości. W logotypie to grubość liter, jedna siódma wysokości.",
       },
       pixels: {
-        title: "Pełne piksele",
-        body: "Proporcje logo są stałe, 4:5, a jedna kreska to jedna czwarta szerokości. Skaluj je co 4 × 5px, aby każda krawędź i każda kreska wypadała na pełnym pikselu.",
-        do: "trzymaj każdą krawędź i kreskę 4px na pełnych pikselach.",
+        title: "Siatka pikseli",
+        body: "Logo ma stałe proporcje 4:5, a jedna kreska to jedna czwarta jego szerokości. Skaluj je co 4 × 5 px, tak aby każda krawędź i kreska pokrywała się z siatką pikseli.",
+        do: "wyrównuj każdą krawędź i kreskę o grubości 4 px do siatki pikseli.",
         dont: "zmieniaj proporcji 4:5, bo krawędzie wypadną między pikselami i się rozmyją.",
         sizes: {
           logo: {
@@ -643,7 +605,7 @@ export const content = {
       body: "Częste błędy, których warto unikać przy używaniu logo i logotypu.",
       examples: {
         "two-tone": {
-          caption: "zmieniaj kolorów logo na nowe.",
+          caption: "zmieniaj kolorów logo.",
         },
         bright: {
           caption: "używaj jednego jaskrawego koloru.",
@@ -655,7 +617,7 @@ export const content = {
           caption: "zamieniaj odcieni miejscami.",
         },
         stretch: {
-          caption: "rozciągaj ani nie spłaszczaj logo.",
+          caption: "rozciągaj ani spłaszczaj logo.",
         },
         shadow: {
           caption: "dodawaj cieni.",
@@ -670,17 +632,17 @@ export const content = {
           caption: "używaj szarego na szarym przy niskim kontraście.",
         },
         color: {
-          caption: "kładź szarego dwutonowego logo na kolorowym tle, gdzie szarości stają się brudne.",
+          caption: "umieszczaj dwutonowego szarego logo na kolorowym tle, bo odcienie szarości tracą na wyrazistości.",
         },
       },
     },
     integrations: {
       title: "Integracje",
-      body: "Pluginy, dostawcy i narzędzia, które działają z OpenCode, oraz projekty z jego użyciem mogą o tym mówić. Użyj odznaki albo lockupu partnerskiego i nazwij projekt tak, aby było jasne, że jest Twój.",
+      body: "Za pomocą odznaki lub zestawienia logotypów pokaż, że Twój plugin, narzędzie lub usługa współpracują z OpenCode albo że Twój projekt z niego korzysta. Nazwij projekt tak, by było jasne, że jest Twój.",
       badges: {
-        body: "Umieść odznakę w README, dokumentacji lub na stronie i podlinkuj ją do opencode.ai. Wybierz plik jasny lub ciemny pod swoje tło (HTML przełącza się sam) i nie zmieniaj kolorów ani tekstu.",
-        sizes: "Każdy styl jest w rozmiarach 20, 32 i 44px (Shields tylko 20px), jako SVG i PNG w 2×.",
-        mono: "Każdy plik ma też wersję z tekstem OpenTUI Mono. Dodaj -mono przed rozszerzeniem, jak w opencode-works-with-a-light-20-mono.svg, albo -mono-caps dla OpenTUI Mono wielkimi literami.",
+        body: "Umieść odznakę w README, dokumentacji lub na stronie i ustaw odsyłacz do opencode.ai. Dobierz jasny lub ciemny plik do tła (HTML przełącza wersje automatycznie). Nie zmieniaj kolorów ani tekstu.",
+        sizes: "Każdy styl jest dostępny w rozmiarach 20, 32 i 44 px (Shields tylko 20 px), w formacie SVG i jako PNG w skali 2×.",
+        mono: "Każdy plik ma też wersję z napisem krojem OpenMono. Dodaj -mono przed rozszerzeniem, np. opencode-works-with-a-light-20-mono.svg, lub -mono-caps, jeśli chcesz napis wielkimi literami.",
         groups: {
           "works-with": {
             title: "Działa z",
@@ -709,8 +671,8 @@ export const content = {
         },
       },
       lockup: {
-        title: "Lockup partnerski",
-        body: "Ustaw logo OpenCode i logo partnera obok siebie, z × pomiędzy. Zostaw 3 kreski odstępu po obu stronach ×, dobierz rozmiar logo partnera tak, by wyglądało na tak wysokie jak logo OpenCode, i zachowaj wolną przestrzeń wokół całości.",
+        title: "Zestawienie logo partnerów",
+        body: "Umieść logo OpenCode obok logo partnera i oddziel je znakiem ×. Zostaw po 3 kreski odstępu z obu stron znaku. Dobierz rozmiar logo partnera tak, by optycznie miało tę samą wysokość co logo OpenCode. Zachowaj pole ochronne wokół całości.",
         partners: {
           github: {
             name: "GitHub",
@@ -733,26 +695,26 @@ export const content = {
     },
   },
   press: {
-    title: "OpenCode | Materiały prasowe, fakty o firmie i zasoby marki",
+    title: "OpenCode | Materiały prasowe, informacje o firmie i zasoby marki",
     description:
-      "Materiały prasowe OpenCode, z faktami o OpenCode i Anomaly, firmie, która za nim stoi, oraz logo i logotypami do pobrania i kontaktem dla prasy.",
+      "Materiały prasowe OpenCode: informacje o OpenCode i firmie Anomaly, logo i logotypy do pobrania oraz kontakt dla prasy.",
     hero: {
       title: "Prasa",
-      body: "Fakty, zasoby marki i kontakty dla piszących o OpenCode i Anomaly.",
+      body: "Informacje, zasoby marki i kontakty dla osób piszących o OpenCode i Anomaly.",
     },
     company: {
       title: "O Anomaly",
       lead: "Anomaly to firma, która stoi za OpenCode. Tworzy narzędzia open source dla programistów.",
-      more: "Inne projekty to między innymi SST i OpenTUI, wszystkie open source na [GitHubie](github).",
+      more: "Pozostałe projekty, m.in. SST i OpenTUI, mają otwarty kod dostępny na [GitHub](github).",
       learnMore: "Więcej informacji znajdziesz na [anoma.ly](site).",
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "Open source'owy agent do programowania, z aplikacjami na desktop, terminal i telefon oraz SDK. Licencja MIT, ponad 220 000 gwiazdek na GitHubie.",
+          body: "Agent do programowania z otwartym kodem źródłowym, dostępny jako aplikacja desktopowa, terminalowa i mobilna oraz SDK. Licencja MIT i ponad 220 000 gwiazdek na GitHubie.",
         },
         sst: {
           name: "SST",
-          body: "Framework do budowania aplikacji full-stack na własnej infrastrukturze. Licencja MIT, otwarty od 2020 roku, ponad 26 000 gwiazdek na GitHubie.",
+          body: "Framework do budowania aplikacji full-stack na własnej infrastrukturze. Otwarty kod od 2020 r., licencja MIT i ponad 26 000 gwiazdek na GitHubie.",
         },
         opentui: {
           name: "OpenTUI",
@@ -760,15 +722,15 @@ export const content = {
         },
         "models-dev": {
           name: "Models.dev",
-          body: "Otwarta baza specyfikacji, cen i możliwości modeli AI, z publicznym API. Zawiera ponad 8900 modeli od ponad 200 dostawców.",
+          body: "Baza open source ze specyfikacjami, cenami i możliwościami modeli AI, dostępna przez publiczne API. Zawiera ponad 8900 modeli od ponad 200 dostawców.",
         },
         hex: {
           name: "Hex",
-          body: "Dyktowanie głosowe na Maca, Windows i Linuksa. Hex transkrybuje na Twoim urządzeniu i wkleja do dowolnej aplikacji, więc dźwięk nigdy go nie opuszcza.",
+          body: "Dyktowanie głosowe na Mac, Windows i Linux. Hex zamienia mowę na tekst na Twoim urządzeniu i wkleja go do dowolnej aplikacji. Dźwięk nigdy nie opuszcza urządzenia.",
         },
         opentunnel: {
           name: "OpenTunnel",
-          body: "CLI i SDK, które dają aplikacjom na Twojej maszynie publiczny adres HTTPS. TLS kończy się na Twojej maszynie, więc przekaźnik nigdy nie widzi jawnego tekstu.",
+          body: "CLI i SDK, które nadają aplikacjom na Twoim komputerze publiczny URL HTTPS. Połączenie TLS kończy się na Twoim komputerze, więc serwer pośredniczący nigdy nie widzi danych w postaci jawnej.",
         },
       },
     },
@@ -776,22 +738,22 @@ export const content = {
       title: "O OpenCode",
       body: "Opisy OpenCode i jego produktów w wersji długiej i krótkiej, gotowe do skopiowania.",
       boilerplate: {
-        long: "OpenCode to open source'owy agent do programowania. Jest dostępny jako aplikacja desktopowa, interfejs terminalowy, aplikacja mobilna i SDK, i działa z modelami dowolnego dostawcy, w tym Claude, GPT i Gemini. OpenCode ma licencję MIT i jest tworzony przez Anomaly. Ma ponad 220 000 gwiazdek na GitHubie i ponad 1000 współtwórców, a co miesiąc korzysta z niego ponad 22 miliony programistów.",
+        long: "OpenCode to agent do programowania z otwartym kodem źródłowym. Jest dostępny jako aplikacja desktopowa, interfejs terminalowy, aplikacja mobilna i SDK. Działa z modelami dowolnego dostawcy, w tym Claude, GPT i Gemini. Anomaly rozwija OpenCode na licencji MIT. Projekt ma ponad 220 000 gwiazdek na GitHubie i ponad 1000 współtwórców. Co miesiąc korzysta z niego ponad 22 mln programistów.",
         short:
-          "OpenCode to open source'owy agent do programowania od Anomaly, z aplikacjami na desktop, terminal i telefon oraz SDK.",
+          "OpenCode to agent do programowania z otwartym kodem źródłowym od Anomaly. Jest dostępny w aplikacji desktopowej, terminalu, na telefonie i przez SDK.",
       },
       products: {
         "opencode-console": {
           name: "OpenCode Console",
-          long: "OpenCode Console to aplikacja webowa, w której programiści i zespoły kupują dostęp do modeli AI dla OpenCode i innych agentów do programowania oraz nim zarządzają. Oferuje inferencję pay-as-you-go dla modeli frontier i open-weight, rozliczaną za żądanie z przedpłaconych kredytów, oraz subskrypcje OpenCode Go. Zespoły dostają przestrzenie robocze z rolami Member, Admin i Owner, limity wydatków dla przestrzeni i użytkowników, logowanie jednokrotne przez Okta, Microsoft Entra ID lub Google Workspace oraz SCIM. Console obsługuje ponad 30 dostawców, więc zespoły mogą podłączyć konta, które już mają, a własna inferencja jest opcjonalna. Działa pod adresem opencode.ai/console.",
+          long: "OpenCode Console to aplikacja webowa, w której programiści i zespoły kupują dostęp do modeli AI dla OpenCode i innych agentów kodujących oraz nim zarządzają. Oferuje subskrypcje OpenCode Go oraz inferencję z najnowocześniejszymi modelami i modelami z otwartymi wagami. W rozliczeniu za użycie opłata za każde żądanie jest pobierana z wcześniej doładowanego salda. Zespoły mają do dyspozycji obszary robocze z rolami Member, Admin i Owner, limity wydatków dla obszaru roboczego i poszczególnych użytkowników, logowanie jednokrotne przez Okta, Microsoft Entra ID lub Google Workspace oraz SCIM. Console obsługuje ponad 30 dostawców, więc zespoły mogą podłączyć swoje dotychczasowe konta. Inferencja OpenCode jest opcjonalna. Adres: opencode.ai/console.",
           short:
-            "OpenCode Console to aplikacja webowa Anomaly do dostępu do modeli AI w modelu pay-as-you-go, subskrypcji OpenCode Go i kontroli zespołowych, takich jak budżety i logowanie jednokrotne.",
+            "OpenCode Console to aplikacja webowa Anomaly. Oferuje dostęp do modeli AI z rozliczeniem za użycie, subskrypcje OpenCode Go i funkcje dla zespołów, takie jak budżety i logowanie jednokrotne.",
         },
         "opencode-go": {
           name: "OpenCode Go",
-          long: "OpenCode Go to subskrypcja dla programistów, którzy chcą stałej miesięcznej ceny za modele do programowania. Go kosztuje 10 $ miesięcznie, Go Plus 40 $ miesięcznie z wyższymi limitami, a Go Teams 20 $ miesięcznie za członka. Każdy plan obejmuje wybrany zestaw modeli przetestowanych pod kątem programowania z agentami. Limity użycia to miesięczne kwoty w dolarach dla każdego modelu, z kroczącymi limitami 5-godzinnymi i tygodniowymi wynoszącymi 20% i 50% limitu miesięcznego. Subskrybenci mogą doładować kredyty, przejść na saldo pay-as-you-go i zrezygnować w każdej chwili. Go działa z OpenCode i innymi agentami. Działa pod adresem opencode.ai/console/go.",
+          long: "OpenCode Go to subskrypcja dla programistów, którzy wolą stałą miesięczną opłatę za dostęp do modeli do programowania. Go kosztuje $10 miesięcznie, Go Plus z wyższymi limitami kosztuje $40 miesięcznie, a Go Teams $20 miesięcznie za członka. Każdy plan obejmuje wybrane modele przetestowane z myślą o agentach kodujących. Limit miesięczny dla każdego modelu jest wyrażony w dolarach. W oknach kroczących limit wynosi 20% miesięcznej kwoty na 5 godzin i 50% na tydzień. Subskrybenci mogą doładować saldo, z którego pobierane są opłaty za użycie poza limitem, i zrezygnować w każdej chwili. Go działa z OpenCode i innymi agentami. Adres: opencode.ai/console/go.",
           short:
-            "OpenCode Go to miesięczna subskrypcja od Anomaly, która daje programistom miesięczne limity użycia wybranego zestawu modeli do programowania, od 10 $ miesięcznie.",
+            "OpenCode Go to miesięczna subskrypcja Anomaly dla programistów. Obejmuje wybrane modele do programowania z miesięcznymi limitami użycia. Cena od $10 miesięcznie.",
         },
         "opencode-data": {
           name: "OpenCode Data",
@@ -816,7 +778,7 @@ export const content = {
       },
     },
     milestones: {
-      title: "Etapy",
+      title: "Kamienie milowe",
       items: {
         "first-release-v0-0-1": {
           date: "Kwi 2025",
@@ -832,7 +794,7 @@ export const content = {
         },
         "desktop-app-ships": {
           date: "Gru 2025",
-          text: "Premiera Desktop",
+          text: "Premiera aplikacji Desktop",
         },
         "10-million-downloads": {
           date: "Sty 2026",
@@ -844,13 +806,13 @@ export const content = {
         },
         "220-000-github-stars": {
           date: "Lis 2026",
-          text: "220 000+ gwiazdek",
+          text: "220 000+ gwiazdek na GitHubie",
         },
       },
     },
     news: {
       title: "Najnowsze wydania",
-      intro: "OpenCode wydaje nowe wersje często. Oto najnowsze wydania z nowymi funkcjami.",
+      intro: "Często wydajemy nowe wersje OpenCode. Oto najnowsze wydania, które wprowadzają nowe funkcje.",
       changelog: {
         text: "Dziennik zmian",
       },
@@ -883,13 +845,13 @@ export const content = {
               title: "Zrzut Desktop 4",
             },
             "feature-1": {
-              title: "Sesje w kartach",
+              title: "Równoległa praca agentów",
             },
             "feature-2": {
-              title: "Przeglądaj i komentuj",
+              title: "Zobacz w przeglądarce",
             },
             "feature-3": {
-              title: "Zobacz w przeglądarce",
+              title: "Na każdym urządzeniu",
             },
             "locked-portrait": {
               title: "Film Desktop, pion",
@@ -915,10 +877,10 @@ export const content = {
               title: "Głos",
             },
             "feature-2": {
-              title: "Zgody",
+              title: "Sesje",
             },
             "feature-3": {
-              title: "Sesje",
+              title: "Wyniki",
             },
             "locked-portrait": {
               title: "Film Mobile, pion",
@@ -982,7 +944,7 @@ export const content = {
               title: "Śledź każdy krok",
             },
             "feature-3": {
-              title: "Własne narzędzia",
+              title: "Twórz własne narzędzia",
             },
             "locked-portrait": {
               title: "Film SDK, pion",
@@ -1009,6 +971,13 @@ export const content = {
         },
         "wordmark-white": {
           name: "Logotyp, biały",
+        },
+      },
+      avatars: {
+        body: "Kwadratowe awatary dla X, GitHuba, Slacka, LinkedIna i innych profili. Znak leży głęboko w okręgu, więc przetrwa okrągłe przycięcie. Pliki PNG mają 1024 i 400 px szerokości.",
+        items: {
+          "avatar-dark": { name: "Awatar, ciemny" },
+          "avatar-light": { name: "Awatar, jasny" },
         },
       },
       all: {
@@ -1038,7 +1007,7 @@ export const content = {
         },
         mobile: {
           name: "Mobile",
-          body: "Najnowsza aplikacja OpenCode. Zadzwoń do sesji, aby porozmawiać z agentem, a potem przeglądaj i zatwierdzaj jego zmiany z telefonu, gdziekolwiek jesteś.",
+          body: "Najnowsza aplikacja OpenCode. Połącz się głosowo z agentem w sesji, a potem przeglądaj i zatwierdzaj jego zmiany z telefonu, gdziekolwiek jesteś.",
         },
         terminal: {
           name: "Terminal",
@@ -1058,11 +1027,11 @@ export const content = {
           body: "Dla dziennikarzy i analityków. Odpowiadamy tylko na zapytania mediów.",
         },
         support: {
-          title: "Wsparcie",
-          body: "Jeśli potrzebujesz pomocy z OpenCode, zgłoś issue lub zapytaj społeczność. W sprawach konta i płatności napisz do nas.",
+          title: "Pomoc",
+          body: "Aby uzyskać pomoc z OpenCode, dodaj zgłoszenie lub zapytaj społeczność. W sprawie konta i rozliczeń napisz do nas.",
           links: {
             "github-issues": {
-              text: "Zgłoszenia GitHub",
+              text: "Zgłoszenia na GitHubie",
             },
             "help-anoma-ly": {
               text: "help@anoma.ly",
@@ -1155,15 +1124,15 @@ export const content = {
     title: "Połącz telefon",
     cardTitle: "Sparuj telefon jednym poleceniem",
     intro:
-      "OpenCode Mobile to pilot do OpenCode na Twoim komputerze. Sesje działają dalej na komputerze, a aplikacja je pokazuje i pozwala nimi sterować.",
+      "OpenCode Mobile pozwala zdalnie sterować OpenCode na Twoim komputerze. Sesje nadal działają na komputerze. W aplikacji możesz je przeglądać i nimi sterować.",
     steps: {
       "get-the-app": {
         title: "Pobierz aplikację",
-        body: "Zainstaluj betę OpenCode na iPhonie z TestFlight. Aplikacja na Androida pojawi się wkrótce.",
+        body: "Zainstaluj OpenCode na iPhonie z App Store lub na telefonie z systemem Android z Google Play.",
       },
       "run-this-on-your-computer": {
-        title: "Uruchom to na komputerze",
-        body: "Polecenie wypisze jednorazowy link i kod QR. Działają raz i wygasają po 5 minutach.",
+        title: "Uruchom polecenie na komputerze",
+        body: "Polecenie wyświetli jednorazowy link i kod QR. Możesz użyć ich tylko raz, w ciągu 5 minut.",
       },
       "scan-the-code": {
         title: "Zeskanuj kod",

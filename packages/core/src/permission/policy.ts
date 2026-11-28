@@ -7,9 +7,13 @@ import { Wildcard } from "../util/wildcard.js"
 export const pathActions = ["external_directory", "read", "edit"] as const
 
 /** macOS volumes ignore case by default, so `.OPENCODE/x` opens `.opencode/x`; rules for file paths must match it too. */
-export function ignoresCase(action: string) {
-  return process.platform === "darwin" && pathActions.some((item) => item === action)
+export function ignoresCase(action: string, resource?: string) {
+  if (!pathActions.some((item) => item === action)) return false
+  // A Windows machine's paths (`win:C:/…`, `win://server/…`) ignore case too, whatever this server runs on.
+  return process.platform === "darwin" || (resource !== undefined && WINDOWS_MACHINE_PATH.test(resource))
 }
+
+const WINDOWS_MACHINE_PATH = /^[a-z][a-z0-9-]{1,62}:(?:[A-Za-z]:\/|\/\/)/
 
 /**
  * True when `pattern` matches every possible string under `Wildcard.match`:
@@ -72,7 +76,7 @@ export function fallback(base: Policy, secondary: Policy): Policy {
 }
 
 function matchLast(rules: Permission.Ruleset, action: string, resource: string): Permission.Rule | undefined {
-  const ignoreCase = ignoresCase(action)
+  const ignoreCase = ignoresCase(action, resource)
   return rules.findLast(
     (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
   )
@@ -85,7 +89,7 @@ function evaluateRule(policy: Policy, action: string, resource: string): Permiss
     case "override":
       return matchLast(policy.next, action, resource) ?? evaluateRule(policy.base, action, resource)
     case "restrict": {
-      const ignoreCase = ignoresCase(action)
+      const ignoreCase = ignoresCase(action, resource)
       const denied = policy.denies.findLast(
         (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
       )

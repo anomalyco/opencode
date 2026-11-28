@@ -298,10 +298,8 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
-  ExperimentalSpaceSetInput,
-  ExperimentalSpaceSetOutput,
-  ExperimentalSpaceDeleteInput,
-  ExperimentalSpaceDeleteOutput,
+  ExperimentalSpaceWriteInput,
+  ExperimentalSpaceWriteOutput,
   ExperimentalSpaceSyncInput,
   ExperimentalSpaceSyncOutput,
   ExperimentalSpaceSubscribeInput,
@@ -1912,26 +1910,15 @@ const EndpointExperimentalPushSettingsSet =
       ),
     )
 
-const EndpointExperimentalSpaceSet = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSetInput) =>
-  preserveEffect<ExperimentalSpaceSetOutput>()(
-    raw["space.set"]({ params: { space: input["space"], key: input["key"] }, payload: { value: input["value"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
-  )
-
-const EndpointExperimentalSpaceDelete =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceDeleteInput) =>
-    preserveEffect<ExperimentalSpaceDeleteOutput>()(
-      raw["space.delete"]({ params: { space: input["space"], key: input["key"] } }).pipe(
-        Effect.mapError(mapClientError),
-      ),
+const EndpointExperimentalSpaceWrite =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceWriteInput) =>
+    preserveEffect<ExperimentalSpaceWriteOutput>()(
+      raw["space.write"]({ payload: { changes: input["changes"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
 const EndpointExperimentalSpaceSync = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSyncInput) =>
   preserveEffect<ExperimentalSpaceSyncOutput>()(
-    raw["space.sync"]({ params: { space: input["space"] }, query: { cursor: input["cursor"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["space.sync"]({ payload: { spaces: input["spaces"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointExperimentalSpaceSubscribe =
@@ -2004,8 +1991,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     settings: { set: EndpointExperimentalPushSettingsSet(raw) },
   },
   space: {
-    set: EndpointExperimentalSpaceSet(raw),
-    delete: EndpointExperimentalSpaceDelete(raw),
+    write: EndpointExperimentalSpaceWrite(raw),
     sync: EndpointExperimentalSpaceSync(raw),
     subscribe: EndpointExperimentalSpaceSubscribe(raw),
     unsubscribe: EndpointExperimentalSpaceUnsubscribe(raw),

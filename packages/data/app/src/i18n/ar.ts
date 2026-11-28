@@ -1,3 +1,5 @@
+import type { Key } from "../i18n"
+
 export const dict = {
   "app.title": "ترتيب استخدام نماذج الذكاء الاصطناعي | OpenCode Data",
   "app.description":
@@ -124,6 +126,29 @@ export const dict = {
   "home.noSessionCostTitle": "لا توجد بيانات تكلفة الجلسة",
   "home.noSessionCostDescription": "لم تطابق أي صفوف نماذج ذات جلسات هذا المنتج.",
   "home.costSession": "التكلفة/الجلسة",
+  "home.newModelsTitle": "النماذج الجديدة",
+  "home.newModelsDescription": "أكبر إطلاق خلال آخر 30 يومًا.",
+  "home.retentionDescription": "المستخدمون الذين يعودون في الأسبوع التالي.",
+  "home.noRetentionTitle": "لا توجد بيانات احتفاظ",
+  "home.noRetentionDescription": "تظهر بيانات الاحتفاظ بعد توفر أسبوع عودة مكتمل.",
+  "home.comparisonsTitle": "مقارنات النماذج",
+  "home.comparisonsDescription": "أزواج النماذج الشائعة من لوحة الترتيب.",
+  "table.rank": "الترتيب",
+  "newModels.releasedBy": "{{author}}، صدر في {{date}}",
+  "newModels.released": "صدر في {{date}}",
+  "newModels.free": "مجاني على OpenCode",
+  "newModels.tokensSinceLaunch": "رموز منذ الإطلاق",
+  "newModels.usersTried": "مستخدمون جرّبوه",
+  "newModels.alsoNew": "جديد أيضًا",
+  "newModels.dailyUsage": "الاستخدام اليومي لـ {{model}}",
+  "retention.marker": "الاحتفاظ",
+  "retention.rate": "النسبة",
+  "retention.eligible": "المؤهلة",
+  "retention.aria": "{{model}}، احتفاظ أسبوعي {{rate}}، {{users}} أسابيع مستخدم مؤهلة",
+  "compare.detail.topTwo": "أفضل نموذجين حسب الاستخدام الأخير",
+  "compare.detail.leaderChallenger": "المتصدر مقابل المنافس",
+  "compare.detail.adjacent": "زوج متجاور في لوحة الترتيب",
+  "compare.detail.topAlternative": "أفضل بديل للنموذج",
   "lab.title": "استخدام وترتيب نماذج {{lab}} للذكاء الاصطناعي | OpenCode Data",
   "lab.description":
     "قارن نماذج {{lab}} المستخدمة في OpenCode، بما في ذلك استخدام الرموز، وترتيب النماذج، ونوافذ السياق، وتواريخ الإصدار، والتكاليف، والبيانات الخاصة بكل نموذج.",
@@ -370,4 +395,4 @@ export const dict = {
   "share.calendar.previous": "الشهر السابق",
   "share.calendar.next": "الشهر التالي",
   "share.calendar.wholeRange": "النطاق الكامل",
-} as const
+} satisfies Record<Key, string>

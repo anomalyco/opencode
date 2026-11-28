@@ -120,6 +120,7 @@ fn tokens(input: &Map<String, Value>, complete: bool) -> Check {
         "border"?: field(input, "border", complete, single)?,
         "scrollbar"?: field(input, "scrollbar", complete, single)?,
         "diff"?: field(input, "diff", complete, |value| diff(value, complete))?,
+        "find"?: field(input, "find", false, find)?,
         "syntax"?: field(input, "syntax", complete, |value| record(value, &SYNTAX, complete))?,
         "markdown"?: field(input, "markdown", complete, |value| record(value, &MARKDOWN, complete))?,
     })
@@ -132,6 +133,7 @@ fn text(value: &Value, complete: bool) -> Check {
         "base"?: field(input, "base", complete, color)?,
         "muted"?: field(input, "muted", complete, color)?,
         "faint"?: field(input, "faint", false, color)?,
+        "selection"?: field(input, "selection", false, color)?,
         "action"?: field(input, "action", complete, |value| actions(value, complete))?,
         "formfield"?: field(input, "formfield", complete, |value| stateful(value, complete))?,
         "feedback"?: field(input, "feedback", complete, |value| feedback(value, complete, feedback_color))?,
@@ -144,6 +146,7 @@ fn background(value: &Value, complete: bool) -> Check {
     let feedback_color = |value: &Value| strict(value, &[("base", complete)], color);
     Ok(json_object! {
         "base"?: field(input, "base", complete, color)?,
+        "selection"?: field(input, "selection", false, color)?,
         "raised"?: field(input, "raised", complete, raised)?,
         "action"?: field(input, "action", complete, |value| actions(value, complete))?,
         "formfield"?: field(input, "formfield", complete, |value| stateful(value, complete))?,
@@ -167,6 +170,16 @@ fn diff(value: &Value, complete: bool) -> Check {
         "background"?: field(input, "background", complete, |value| strict(value, &text[..3], color))?,
         "highlight"?: field(input, "highlight", complete, pair)?,
         "lineNumber"?: field(input, "lineNumber", complete, line_number)?,
+    })
+}
+
+fn find(value: &Value) -> Check {
+    let input = object(value)?;
+    let text = |value: &Value| strict(value, &[("current", false)], color);
+    let background = |value: &Value| strict(value, &[("match", false), ("current", false)], color);
+    Ok(json_object! {
+        "text"?: field(input, "text", false, text)?,
+        "background"?: field(input, "background", false, background)?,
     })
 }
 

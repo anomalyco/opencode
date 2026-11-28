@@ -1,0 +1,123 @@
+---
+title: Fournisseurs du CLI
+description: Connectez des comptes de fournisseurs et gérez les identifiants depuis le CLI et le TUI.
+---
+
+Connectez un fournisseur dans le TUI, puis choisissez l’un de ses modèles :
+
+```text
+/connect
+/models
+```
+
+`/connect` liste les intégrations disponibles depuis le serveur et le projet actuels. Sélectionnez un fournisseur, choisissez une méthode d’authentification lorsqu’il en propose plusieurs, et suivez les instructions.
+
+## TUI
+
+Le TUI prend en charge les clés d’API, OAuth et les commandes d’authentification des fournisseurs. OAuth ouvre une URL d’autorisation ou affiche un code à saisir ; appuyez sur `o` pour ouvrir l’URL et sur `c` pour copier les détails d’autorisation.
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+Relancez `/connect` pour ajouter un autre compte. Sélectionner un fournisseur déjà connecté ouvre sa liste de comptes, où vous pouvez activer, renommer ou supprimer un compte enregistré.
+
+## CLI
+
+Utilisez `auth login` pour accéder aux mêmes méthodes d’authentification sans ouvrir le TUI. Si vous n’indiquez pas de fournisseur, la commande vous propose d’en choisir un.
+
+```bash
+opencode auth login
+```
+
+Passez un ID ou un nom d’intégration pour sauter le premier sélecteur. Utilisez `--method key` pour choisir explicitement la saisie d’une clé d’API.
+
+```bash
+opencode auth login anthropic --method key
+```
+
+Les ID de méthode sont propres à chaque fournisseur. Lancez la commande sans `--method` pour voir les méthodes disponibles lorsqu’un fournisseur en a plusieurs.
+
+```bash
+opencode auth login openai
+```
+
+La saisie de clé d’API et les formulaires de fournisseur nécessitent un terminal interactif. Les méthodes OAuth qui vous demandent de coller un code d’autorisation en nécessitent un aussi.
+
+## Méthodes
+
+OpenCode reçoit les identifiants des fournisseurs via quatre méthodes d’intégration :
+
+| Méthode | Comportement |
+| --- | --- |
+| Clé d’API | Demande un secret et l’enregistre comme compte de fournisseur. |
+| OAuth | Fournit une URL de navigateur, un code d’appareil ou une invite de code d’autorisation, puis enregistre les tokens et les rafraîchit lorsque c’est pris en charge. |
+| Commande | Exécute une commande d’authentification fournie par le fournisseur et enregistre sa sortie standard comme clé. |
+| Environnement | Lit une variable prise en charge depuis le processus serveur sans l’enregistrer. |
+
+Les fournisseurs peuvent ajouter des formulaires aux méthodes par clé d’API et OAuth pour des détails requis comme un nom de ressource Azure ou un domaine GitHub Enterprise. Le CLI et le TUI affichent ces formulaires avant de démarrer l’authentification.
+
+## Environnement
+
+Définissez la variable d’environnement prise en charge par un fournisseur sur le processus serveur qui exécute les requêtes de modèle. Pour un serveur privé ponctuel, passez-la au démarrage en mode autonome.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+Pour le serveur d’arrière-plan partagé, ajoutez la variable à son environnement géré. Cela arrête un service en cours ; la prochaine commande OpenCode le démarre avec la nouvelle valeur.
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+Les connexions par environnement apparaissent dans `auth list` avec le type `environment`. Ce ne sont pas des comptes : `auth logout` ne peut pas les supprimer, il faut donc retirer la variable pour vous déconnecter. Un compte enregistré prime sur une connexion par environnement pour la même intégration.
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+Certains fournisseurs peuvent aussi rechercher des identifiants dans leurs sources habituelles au lieu d’utiliser une variable contenant une clé d’API :
+
+- Amazon Bedrock prend en charge la chaîne d’identifiants par défaut d’AWS, y compris les profils, les environnements de clé d’accès, l’identité web et les identifiants de conteneur. Il prend aussi en charge `AWS_BEARER_TOKEN_BEDROCK`.
+- Google Vertex utilise les Application Default Credentials et un projet résolvable. Par exemple, authentifiez-vous avec `gcloud auth application-default login` et définissez `GOOGLE_CLOUD_PROJECT`.
+- Azure expose **Microsoft Entra ID (Azure CLI)** comme méthode de connexion lorsque `az` est installé. Lancez d’abord `az login`, puis sélectionnez cette méthode dans `/connect` ou `auth login azure`.
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+Consultez [Fournisseurs](/providers) pour la configuration propre à chaque fournisseur et côté serveur.
+
+## Comptes
+
+Chaque connexion réussie par clé d’API, OAuth ou commande crée un compte enregistré. Le compte le plus récent devient actif ; changez de compte actif par son libellé ou son ID d’identifiant.
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+Supprimez un compte enregistré avec `auth logout`. Les deux commandes ouvrent des sélecteurs lorsque leurs arguments sont omis.
+
+```bash
+opencode auth logout anthropic work
+```
+
+Dans le TUI, `/connect` propose les mêmes opérations d’ajout, d’activation, de renommage et de suppression pour les comptes enregistrés.
+
+## Stockage
+
+Le serveur conserve les clés d’API et les tokens OAuth enregistrés dans sa base de données SQLite. Pour afficher le chemin de la base de données du serveur local :
+
+```bash
+opencode debug paths db
+```
+
+Le chemin habituel de la version est `~/.local/share/opencode/opencode.db` ; `XDG_DATA_HOME`, le canal de version et `OPENCODE_DB` peuvent le changer. Ne modifiez pas la base de données pour gérer les identifiants ; utilisez `/connect` ou les commandes `auth`.
+
+V2 importe les identifiants pris en charge depuis l’ancien `auth.json` du répertoire de données OpenCode lors de sa migration de base de données. Les identifiants nouveaux et mis à jour sont stockés dans SQLite plutôt que réécrits dans ce fichier.

@@ -44,10 +44,11 @@ export const AnthropicPlugin = make(
 export const ArceePlugin = make("opencode.prompt.arcee", (model) =>
   model.id.toLowerCase().includes("trinity") ? PROMPT_TRINITY : undefined,
 )
-export const MetaPlugin = make("opencode.prompt.meta", (model) => {
-  if (!model.id.toLowerCase().includes("muse")) return undefined
-  return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
-})
+export const MetaPlugin = make(
+  "opencode.prompt.meta",
+  (model) => (model.id.toLowerCase().includes("muse") ? PROMPT_META : undefined),
+  "append",
+)
 
 export const Plugins = [OpenAIPlugin, AnthropicPlugin, ArceePlugin, MetaPlugin] as const
 

@@ -1,0 +1,113 @@
+---
+title: "Nettsøk"
+description: "La OpenCode søke på nettet med Exa, Firecrawl, Parallel, Tavily, TinyFish eller Claude-abonnementet ditt, og velg leverandør og tillatelser for søk."
+---
+
+Be OpenCode om oppdatert informasjon, så kan den søke på nettet, lese resultatene og ta med kildelenker i svaret.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Første gang du søker, ber OpenCode deg om å tillate nettsøk og velge leverandør. OpenCode husker valget ditt til senere økter.
+
+## Leverandører
+
+OpenCode inkluderer fem søkeleverandører:
+
+| Leverandør | ID | Miljøvariabel |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (valgfri) |
+
+Koble til en konto fra TUI-en med `/connect`, eller angi leverandørens miljøvariabel før du starter OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+Når [Claude Agent](/claude-agent) er tilkoblet, tilbyr den også en søkeleverandør med ID-en `claude-agent`. Den bruker Claude Codes WebSearch, så søkene går av kvoten i Claude-abonnementet, og du trenger ingen egen API-nøkkel for søk. Alle modeller kan bruke den, ikke bare Claude.
+
+Claude Agent velges aldri automatisk. Velg den i `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch returnerer sideinnhold kryptert, så en Claude-modell må kjøre hvert søk. Haiku kjører det, og det korte sammendraget av resultatene kommer først, etterfulgt av lenkene. Søk bruker tilkoblingsinnstillingene til Claude Agent-leverandøren og kontoen chattene dine brukte sist.
+
+## Valg
+
+Angi en leverandør i `opencode.jsonc` for å hoppe over valgspørsmålet.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Bruk `"random"` for å velge en tilgjengelig leverandør automatisk. Hver økt fortsetter å bruke den valgte leverandøren til den leverandøren blir hastighetsbegrenset.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Grenser
+
+Når en leverandør returnerer HTTP 429, prøver OpenCode ved tilfeldig leverandørvalg igjen med en annen tilgjengelig leverandør. Leverandøren som har nådd hastighetsgrensen, brukes ikke igjen før det har gått så lang tid som angitt i `Retry-After`, eller 60 sekunder hvis svaret ikke angir en gyldig ventetid.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Hvis alle leverandørene er midlertidig utilgjengelige etter å ha nådd hastighetsgrensen, mislykkes søket med én gang. Hvis du flytter en økt eller starter øktens server på nytt, nullstilles leverandørvalget. Ventetiden gjelder på tvers av økter i samme arbeidsområde.
+
+## Tillatelser
+
+Nettsøk bruker tillatelseshandlingen `websearch` og søkespørringen som ressurs. Spør før søk som ikke er eksplisitt tillatt.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Se [Tillatelser](/permissions) for regelrekkefølge og samsvar.
+
+## Slå av
+
+Angi `websearch` til `false` for å fjerne nettsøkverktøyet fra modellforespørsler.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

@@ -1,0 +1,251 @@
+---
+title: "RPC плагинов"
+description: "Предоставляйте пользовательские методы и события плагина другим плагинам и клиентам."
+---
+
+Плагины могут предоставлять пользовательские методы и события, которые выполняются на сервере и могут вызываться другими плагинами или клиентами.
+
+## Определение
+
+Используйте `Rpc.define`, чтобы перечислить методы, ошибки и события RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Проверка
+
+Определение RPC описывает структуру входных и выходных данных методов, событий и ошибок. Поддерживаются два формата схем:
+
+- JSON Schema — простой, без зависимостей.
+- Любой валидатор, совместимый со Standard Schema
+  - Zod
+  - Valibot
+  - ArkType
+
+### Вход и выход
+
+Каждому методу нужны схема `input` для аргумента и схема `output` для возвращаемого значения. Если метод не принимает аргумент или ничего не возвращает, задайте для соответствующей стороны схему пустого объекта: передавайте `{}` при вызове без аргумента и возвращайте `{}`, если результата нет.
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Если метод возвращает `undefined`, вызов завершается ошибкой `rpc.invalid_output`.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+Значения JSON Schema в TypeScript имеют тип `unknown`, поэтому сужайте их перед использованием. Standard Schema выводит типы входа и выхода.
+
+### Ошибки
+
+Добавьте карту `errors` методу для ожидаемых сбоев. Каждый ключ становится `type` ошибки, а его схема определяет `data` ошибки.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+Имена ошибок, начинающиеся с `rpc.`, зарезервированы OpenCode.
+
+### События
+
+Добавьте события в объект `events` верхнего уровня. Для каждого события задаётся схема данных, которые получают подписчики. Объект обязателен: если у RPC нет событий, укажите `events: {}`.
+
+Данные события должны быть объектом. Используйте пустую схему объекта, когда данных нет:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Скаляры, массивы, `null` и `undefined` не являются допустимыми данными события.
+
+## Реализация
+
+Зарегистрируйте реализацию внутри `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+После регистрации RPC тот же плагин может вызвать его через `ctx.rpc(Acme)`.
+
+Второй аргумент включает `signal` для отмены и `context.error(...)` для объявленных ошибок. Ошибку можно вернуть или бросить.
+
+Один плагин может зарегистрировать несколько RPC. При освобождении регистрации соответствующий RPC становится недоступен.
+
+## Вызов
+
+После регистрации RPC можно вызывать по HTTP или из другого плагина.
+
+### HTTP
+
+Создайте клиент OpenCode, затем используйте `client.rpc`, чтобы создать подклиент для RPC:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Плагин
+
+У плагинов уже есть клиент OpenCode. Например, плагин TUI может создать тот же подклиент RPC из `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+[Плагин GUI](/build/plugins/gui) читает клиент собственного сервера десктопного приложения из `ctx.client`:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+Читайте `ctx.client` в месте вызова: он меняется после перезапуска сервера. Пока сервер недоступен, каждый вызов отклоняется.
+
+### Подписка
+
+Используйте `events.on` для обратного вызова и отписывайтесь, когда слушатель больше не нужен:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+Для асинхронного итератора используйте `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Подписки доставляют только новые события: события, произошедшие в отсутствие подписчика, не доставляются.
+
+- Подписывайтесь по локальному имени, например `updated`.
+- Полученный тип имеет префикс, например `rpc.acme.updated`.
+- Каждое событие включает `data` и `location`.
+- Выгрузка плагина закрывает его подписки.
+
+Внешние клиенты получают события из всех локаций, поэтому при необходимости проверяйте `event.location`. Серверный плагин по-прежнему должен быть настроен и запущен.

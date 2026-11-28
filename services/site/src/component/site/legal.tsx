@@ -8,6 +8,7 @@ import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd } from "~/component/structured-data"
 import { useI18n } from "~/context/i18n"
+import { sentenceGap } from "~/i18n/rich"
 import type { MarkdownContext } from "~/lib/markdown"
 import { useLanguage } from "~/context/language"
 import {
@@ -245,7 +246,7 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
         </span>
       </nav>
       <Show when={language.locale() !== "en"}>
-        <p data-component="legal-notice">{`${i18n.t("legal.englishOnly")} ${i18n.t("legal.englishGoverns")}`}</p>
+        <p data-component="legal-notice">{`${i18n.t("legal.englishOnly")}${sentenceGap(i18n.t("legal.englishOnly"))}${i18n.t("legal.englishGoverns")}`}</p>
       </Show>
       <section ref={hero} data-component="hero" data-slot="legal-header" data-view={view()} lang="en" dir="ltr">
         <h1>{props.document.title}</h1>
@@ -834,7 +835,7 @@ export function LegalHub(props: {
         <p>The legal documents for the OpenCode website and hosted services.</p>
       </section>
       <Show when={language.locale() !== "en"}>
-        <p data-component="legal-notice">{`${i18n.t("legal.englishOnly")} ${i18n.t("legal.englishGoverns")}`}</p>
+        <p data-component="legal-notice">{`${i18n.t("legal.englishOnly")}${sentenceGap(i18n.t("legal.englishOnly"))}${i18n.t("legal.englishGoverns")}`}</p>
       </Show>
       {/* The list is the page: no section titles. In "grouped" the group names are its only headings. */}
       <div data-component="legal-hub" lang="en" dir="ltr">

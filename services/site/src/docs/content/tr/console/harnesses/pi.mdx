@@ -1,0 +1,71 @@
+---
+title: "Pi"
+description: "Console ve Go modellerini Pi kodlama agent'ında kullanın."
+---
+
+[Pi](https://pi.dev), OpenCode'un kullandıkça öde ve Go sağlayıcılarını hazır olarak sunar. Her ücretli model veya Go modeli için uygun API'yi otomatik olarak seçer. Ücretsiz sohbet modelleri yalnızca OpenCode'da kullanılabilir. Pi'den bu modellere yapılan istekler HTTP `403` ile reddedilir.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) Pi'yi tek komutla, çalışma alanının politikaları, MCP sunucuları,
+  skill'leri ve talimatları dahil kurar. `npx @opencode/console setup pi` çalıştırın. Aşağıdaki adımlar elle kurulum
+  içindir.
+</Callout>
+
+| Sağlayıcı     | Plan           |
+| ------------- | -------------- |
+| `opencode`    | Kullandıkça öde |
+| `opencode-go` | Go             |
+
+## Yapılandırma
+
+İki sağlayıcı da anahtarı `OPENCODE_API_KEY` üzerinden okur. Bir
+[kişisel API anahtarı](/console/harnesses#get-an-api-key) oluşturun.
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+Pi içinde `/login` çalıştırıp sağlayıcıyı da seçebilirsiniz. Pi anahtarı `~/.pi/agent/auth.json` içinde saklar.
+
+```text
+/login opencode
+```
+
+## Go
+
+[Go](/console/go) aboneliği olan bir çalışma alanından alınan anahtarla `opencode-go` sağlayıcısını kullanın.
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## Modeller
+
+Bir modeli `<provider>/<model-id>` olarak, [Console](/console/models#endpoints) veya [Go](/console/go#endpoints)
+tablosundaki kimliklerle seçin. Pi'nin bildiği modelleri `--list-models` ile listeleyin.
+
+```bash
+pi --list-models opencode-go
+```
+
+`~/.pi/agent/settings.json` içinde bir varsayılan ayarlayın veya `/model` seçicide `Ctrl+S` tuşlarına basın.
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+Yeni bir Console modeli henüz görünmüyorsa `pi update --models` çalıştırın.
+
+## Console MCP
+
+Pi v0.99.0 ve üstü MCP destekler. [Console MCP](/console/harnesses#console-mcp) sunucusunu ekleyin, ardından
+tarayıcıdan oturum açın.
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```

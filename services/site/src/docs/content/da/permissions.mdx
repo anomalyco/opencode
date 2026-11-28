@@ -1,0 +1,309 @@
+---
+title: "Tilladelser"
+description: "Styr, hvad OpenCode-agenter må, med allow-, deny- og ask-regler i en bestemt rækkefølge. Reglerne matcher handlinger og ressourcer som stier og kommandoer."
+---
+
+Tilladelser styrer, om en agent må udføre en handling på en ressource.
+
+## Konfiguration
+
+En almindelig opsætning er at bede om godkendelse, før der køres shellkommandoer, tillade rutinemæssige opslag i Git
+og altid blokere pushes. Tilføj reglerne i denne rækkefølge i `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+Den sidste regel, der matcher, gælder, så specifikke undtagelser skal stå efter den generelle regel.
+
+<Callout type="warning">
+  V1 bruger andre felt- og handlingsnavne. I V2 skal du bruge `permissions`, `shell` og `subagent` i stedet for `permission`,
+  `bash` og `task`.
+</Callout>
+
+## Regler
+
+Hver regel kræver tre strengfelter:
+
+| Felt      | Betydning                                                                    |
+| --------- | ---------------------------------------------------------------------------- |
+| `action`   | Den værktøjshandling, reglen gælder for                                      |
+| `resource` | Den værdi, handlingen bruger, f.eks. en sti, kommando, URL, forespørgsel, skill-ID eller agent-ID |
+| `effect`   | `allow`, `deny` eller `ask`                                                  |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| Effekt  | Resultat                            |
+| ------- | ----------------------------------- |
+| `allow` | Fortsæt uden at spørge              |
+| `deny`  | Blokér handlingen                   |
+| `ask`   | Vent på en beslutning fra klienten  |
+
+Hvis ingen regel matcher, bruger OpenCode `ask`.
+
+## Matchning
+
+Du kan bruge enkle jokertegn til at matche hele værdien for en handling eller ressource:
+
+| Mønster | Match                                    |
+| ------- | ---------------------------------------- |
+| `*`     | Nul eller flere tegn, inklusive `/`      |
+| `?`     | Præcis ét tegn                           |
+| Andet   | Det bogstavelige tegn                    |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+Dette mønster matcher hele den normaliserede sti. Omvendte skråstreger bliver til
+skråstreger, og på Windows skelnes der ikke mellem store og små bogstaver.
+
+Et shellmønster, der slutter med ` *`, matcher også kommandoen uden argumenter:
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+Dette matcher både `git status` og `git status --short`.
+
+OpenCode samler reglerne i rækkefølge og bruger den sidste, der matcher. Konfigurationer med lavere prioritet
+indlæses først, efterfulgt af globale regler og til sidst agentregler.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+En handling kan omfatte flere ressourcer, f.eks. hvis en patch ændrer flere
+filer. Hvis bare én ressource giver `deny`, afvises hele handlingen. Hvis ingen afvises, men mindst én giver `ask`, spørger OpenCode. Ellers tillades handlingen.
+
+## Handlinger
+
+V2-handlingsnavne er strenge, så plugins kan definere flere handlinger. Indbyggede værktøjer
+bruger i øjeblikket disse handlinger og ressourcer:
+
+| Handling               | Ressource                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `read`                 | Intern sti relativ til den aktive Location eller kanonisk, absolut ekstern sti |
+| `edit`                 | Målsti for `edit`, `write` og `patch`                                        |
+| `glob`                 | Det ønskede globmønster                                                      |
+| `grep`                 | Det ønskede regulære udtryk, ikke søgestien                                   |
+| `shell`                | Kommandostreng fra shellscanneren; sammensatte kommandoer kan give flere     |
+| `subagent`             | ID'et på den agent, der skal startes                                         |
+| `skill`                | Skill-ID                                                                     |
+| `question`             | `*`                                                                          |
+| `webfetch`             | Den ønskede URL                                                              |
+| `websearch`            | Søgeforespørgsel                                                             |
+| `generate_image`       | Den valgte billedmodel som `providerID/modelID` plus `#variant`, når den er angivet |
+| `external_directory`   | Kanonisk grænse for ekstern mappe, normalt med `/*` til sidst                |
+| `<server>_<tool>`      | `*` for et MCP-værktøj. Bogstaver, cifre, `_` og `-` bevares i begge navne, mens alle andre tegn erstattes med `_`. |
+| `opencode_list_mcp_resources` | MCP-servernavn                                                         |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                       |
+| `execute`              | `*`; ved afvisning deaktiveres Code Mode, og værktøjerne vises direkte. Indlejrede værktøjer håndhæver fortsat deres egne regler. |
+
+MCP-handlinger bevarer bindestreger, så værktøjer fra en server med navnet `mcp-atlassian` matcher `mcp-atlassian_*`, ikke
+`mcp_atlassian_*`.
+
+Tillad f.eks. én skill og afvis alle andre skills:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` og `lsp` bruges ikke længere som tilladelseshandlinger i V2 Core.
+
+## Mapper
+
+Hvis en sti ligger uden for både den aktive Location og projektets worktree (forudsat at worktreen ikke er filsystemets rod),
+kontrollerer OpenCode `external_directory` før reglerne for `read` eller `edit`. Standardpolitikken
+tillader `external_directory`, så OpenCode ikke beder om godkendelse til eksterne stier, medmindre du tilføjer en regel.
+Brug følgende for at blive spurgt, hver gang en agent vil tilgå noget uden for projektet:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+Du kan tilføje mere specifikke regler bagefter for at tillade eller afvise adgang til bestemte mapper:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+Dette gælder for eksterne stier, der bruges af `read`, `edit`, `write` og `patch`.
+Shell kontrollerer sin eksterne arbejdsmappe og mapper, som scanneren udleder,
+før den kontrollerer `shell`-ressourcer.
+
+For `external_directory`, `read` og `edit` udvides et indledende `~`, `~/`, `$HOME` eller
+`$HOME/`, når konfigurationen indlæses:
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+Shell-ressourcer forbliver rå kommandotekst og udvides ikke med hjemmemappen.
+
+<Callout type="warning">
+  `shell` kører med værtssystemets brugers filsystem-, proces- og netværksrettigheder. OpenCode kan ikke altid udlede mapperne
+  af kommandoteksten, så brug en snæver liste over tilladte shellkommandoer frem for mønstre, der skal genkende alle farlige kommandoer.
+</Callout>
+
+Relative stier til ændringer kan pege uden for den aktive Location, men stadig inden for
+projektets worktree. OpenCode omsætter eksplicitte eksterne stier til deres kanoniske form, før de matches mod reglerne,
+så giv kun adgang til mapper, du har tillid til.
+
+## Scanner
+
+OpenCode bruger sin indbyggede shellscanner til at kontrollere tilladelser i Bash, Zsh, POSIX `sh` og PowerShell. Kommandoer med f.eks. ugyldig syntaks eller dynamisk evaluering som `eval` kan ikke analyseres sikkert. Hvis en afvisningsregel for `shell` gælder, stopper kommandoen med en scannerfejl, fordi underkommandoerne ikke kan kontrolleres mod reglen. Ellers kræves der godkendelse af hele kommandoen som én `shell`-ressource og af `external_directory` `*`. Den anden godkendelse kan kun komme fra brugeren eller en regel, der tillader alle mapper. Ingen af godkendelserne gemmes som mønster.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}
+```
+
+OpenCode anvender tilladelsesregler og gemte godkendelsesmønstre på hver udtrukket underkommando og hvert `cd`-mål og forsøger at udlede de relevante mapper. Der er ingen særskilt godkendelsestilstand eller generel begrænsning for ukendte mapper.
+
+## Standarder
+
+Alle agenter, også brugerdefinerede agenter, starter med disse grundregler i den viste rækkefølge:
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+Medfølgende agenter tilføjer disse politikker:
+
+| Agent        | Ekstra politik                                                                 |
+| ------------ | ------------------------------------------------------------------------------- |
+| `build`      | Tillader spørgsmål                                                              |
+| `plan`       | Tillader spørgsmål. Tillader kun at redigere filer under `~/.opencode/plan`. |
+| `general`    | Afviser spørgsmål og start af subagenter                                        |
+| `explore`    | Afviser alt undtagen shellkommandoer, fillæsning, globs, grep, hentning fra nettet, websøgning og adgang til eksterne mapper. Spørger før læsning af `.env`. |
+| `title`      | Afviser alle handlinger                                                         |
+| `summary`    | Afviser alle handlinger                                                         |
+| `compaction` | Beholder basispolitikken                                                        |
+
+Da ingen standardregel kræver godkendelse for `external_directory`, sker læsning og redigering uden for
+Location og worktree uden en godkendelsesprompt. Tilføj en regel for `external_directory` med `ask` eller `deny`,
+som vist under [Mapper](#directories), for at bede om godkendelse igen eller blokere adgangen til eksterne stier.
+Senere globale regler og agentregler tilsidesætter disse standarder.
+
+## Agenter
+
+Læg fælles regler på topniveau og mere specifikke regler under
+`agents.<id>.permissions`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+Agentregler tilføjes efter globale regler; de erstatter ikke det globale
+array. En brugerdefineret subagent bruger sine egne tilladelser og arver ikke et udsnit af den overordnede agents tilladelser.
+
+## Godkendelser
+
+Når en regel giver `ask`, kan klienter svare med:
+
+| Valg         | Svar       | Resultat                                                             |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| Allow once   | `once`     | Godkend kun den ventende anmodning                                  |
+| Allow always | `always`   | Godkend anmodningen, og gem de mønstre, værktøjet foreslår, for projektet |
+| Reject       | `reject`   | Afvis anmodningen og alle andre ventende tilladelsesanmodninger i sessionen |
+
+Hvis du f.eks. vælger **Allow always** for `git status --short`, kan det gemme et
+shell-præfiks, der dækker senere `git status`-kommandoer:
+
+```text
+shell: git status * → allow
+```
+
+Gemte godkendelser er varige `allow`-regler afgrænset til projektet. De tilsidesætter aldrig
+en konfigureret `deny`. Værktøjerne foreslår selv, hvilket mønster der skal gemmes: Nogle foreslår `*`,
+shellværktøjet foreslår kommandopræfikser, og værktøjet til at hente websider foreslår webstedet fra URL'en (f.eks.
+`https://opencode.ai/*`), og skills og subagenter foreslår deres ID'er.
+Gennemgå brede godkendelser, og fjern dem, der ikke længere er nødvendige.
+
+Klienter kan vedhæfte feedback, når de afviser. Ikke-interaktive klienter skal beslutte,
+hvordan de håndterer godkendelsesanmodninger; konfigurerede `deny`-regler håndhæves altid.
+
+## Politikker
+
+En [politik](/policies) kan blokere en handling, efter at OpenCode har evalueret disse regler og gemte
+godkendelser. Den ændrer `allow` eller `ask` til `deny` og giver aldrig adgang.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+Globale politikker og politikker administreret i Console tilsidesætter projektkonfigurationen. På den måde kan en
+organisation blokere en kommando, som et repository ellers ville tillade.

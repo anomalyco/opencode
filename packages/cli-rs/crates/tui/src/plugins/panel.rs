@@ -1347,7 +1347,7 @@ impl Live {
                     return tui.markdown(text).as_any();
                 }
                 let renderers = super::host::code_blocks(tui);
-                let markdown = super::host::markdown_with(tui, &renderers);
+                let markdown = super::host::markdown_in(tui, &self.cx.theme, &renderers);
                 links.borrow_mut().push(session_links::attach(tui, &markdown, &renderers));
                 markdown.set_markdown(text).as_any()
             },

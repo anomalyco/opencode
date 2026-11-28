@@ -1,0 +1,46 @@
+---
+title: "Console 웹 검색"
+description: "Console에서 제공하는 호스팅 웹 검색을 OpenCode에서 사용하세요."
+---
+
+Console은 연결된 OpenCode 사용자에게 호스팅 웹 검색을 제공합니다. 워크스페이스 소유자나 관리자가 한 번만
+활성화하면 모든 멤버가 별도의 검색 제공자 키 없이 사용할 수 있습니다.
+
+검색이 성공할 때마다 워크스페이스 잔액에서 **$0.01**이 차감되며, 해당 비용은 멤버의 지출 한도에도 반영됩니다.
+
+## 활성화
+
+1. 워크스페이스 소유자 또는 관리자 계정으로 [Console](https://opencode.ai/console)에 로그인하세요.
+2. **Integrations**를 열고 **Hosted Web Search**에서 **Set up**을 클릭하세요.
+3. **Enable**을 클릭하세요.
+
+그다음 각 멤버가 `/connect`로 OpenCode를 워크스페이스에 연결합니다.
+
+```text
+/connect
+```
+
+워크스페이스 구성은 **OpenCode Web Search**를 기본 제공자로 선택합니다. 멤버는 `websearch.provider`를 설정하거나 제공자 API 키를 추가할 필요가 없습니다. 직접 `websearch.provider`를 설정한 멤버는 대신 그 선택을 유지합니다.
+
+## 검색
+
+프롬프트에서 OpenCode에 최신 정보를 요청하세요. 검색은 Console의 대화형 페이지가 아니라 OpenCode에서 실행됩니다.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+호스팅 제공자는 공개 웹을 검색해 최대 8개의 결과를 반환합니다. OpenCode는 이 결과로 프롬프트에 답하고 출처를 인용합니다.
+
+권한을 구성하거나 도구를 비활성화하려면 [웹 검색 가이드](/websearch)를 참고하세요.
+
+## 결제
+
+검색이 유효한 결과를 반환하면 Console이 **$0.01**을 청구합니다. 검색에 실패하거나 요청 한도에 걸리면 요금이
+청구되지 않습니다.
+
+웹 검색은 **Activity › Usage**, **Activity › Overview**, 멤버 활동, 청구서, CSV 내보내기에서 모델 사용량과 별도로 표시됩니다. 해당되는 전체 지출 예산 정책에는 웹 검색 요금이 포함됩니다.
+
+## 개인정보
+
+호스팅 웹 검색은 데이터를 보존하지 않습니다. Console과 호스팅 검색 제공자는 각 쿼리와 결과를 처리할 때 그 내용을 저장하지 않습니다.

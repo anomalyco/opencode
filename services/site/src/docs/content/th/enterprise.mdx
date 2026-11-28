@@ -1,0 +1,125 @@
+---
+title: "Enterprise"
+description: "ควบคุมว่าโมเดล ผู้ให้บริการ และการเชื่อมต่อใดที่ผู้คนในองค์กรของคุณใช้ได้ใน OpenCode"
+---
+
+ใช้ [นโยบาย](/policies) เพื่อควบคุมสิ่งที่ OpenCode ใช้ได้บนเครื่องขององค์กร กำหนดนโยบายผ่านการตั้งค่าที่ผู้ดูแลจัดการ เพื่อไม่ให้ผู้ใช้หรือโปรเจกต์เปลี่ยนนโยบายได้
+
+## การนำไปใช้
+
+วางนโยบายในไฟล์กำหนดค่าระบบ
+
+| แพลตฟอร์ม | ไฟล์                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+บน macOS คุณยังเผยแพร่ผ่าน MDM เป็นค่ากำหนดแบบมีการจัดการสำหรับโดเมน `ai.opencode.managed` ได้ ดู
+[ตำแหน่งการกำหนดค่า](/config#locations)
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+นโยบายในไฟล์เหล่านี้มีลำดับสูงกว่าการกำหนดค่าของผู้ใช้และโปรเจกต์ ผู้ใช้หรือรีโพจึงอนุญาตสิ่งที่คุณปฏิเสธไม่ได้
+ดู[ลำดับความสำคัญ](/policies#precedence)
+
+## บล็อกโมเดลฟรี
+
+บล็อกการใช้งานระดับฟรีแบบไม่ลงชื่อเข้าใช้ ส่วนอื่นยังใช้งานได้ตามปกติ และผู้ใช้ยังเชื่อมต่อผู้ให้บริการและบัญชีของตนเองได้
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+ระดับฟรีคือการเชื่อมต่อ `opencode` ที่ไม่มีบัญชี บัญชี Console ที่ลงชื่อเข้าใช้คือ `opencode#<account>` ข้อกำหนดนี้
+จึงไม่มีผลกับบัญชีเหล่านั้น
+
+เวิร์กสเปซของ Console ยังเสนอโมเดลฟรีได้ หากต้องการบล็อก
+
+- ในเวิร์กสเปซของคุณเอง ให้ปิด **Free models** ในแท็บ Models ของ Console ดู [OpenCode Models](/console/providers#opencode-models)
+- หากต้องการซ่อนโมเดลฟรีในทุกบัญชี ให้ตั้ง `OPENCODE_DISABLE_FREE_MODELS=1` ในบริการ OpenCode ดู
+  [โมเดลฟรี](/models#free-models)
+
+## กำหนดให้ใช้เวิร์กสเปซ Console ของคุณ
+
+อนุญาตเฉพาะเวิร์กสเปซ Console ขององค์กรคุณ ไม่มีสิ่งอื่นเชื่อมต่อหรือใช้งานได้
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` แสดงเฉพาะ OpenCode Console ผู้คนจึงลงชื่อเข้าใช้ได้
+- เฉพาะเวิร์กสเปซของคุณเท่านั้นที่ใช้ได้ ระดับฟรี บัญชี Console ส่วนตัว องค์กรอื่น คีย์ API จากตัวแปร
+  สภาพแวดล้อม และผู้ให้บริการจาก `opencode.json` จะถูกบล็อก
+- โมเดล เซิร์ฟเวอร์ MCP และการค้นหาเว็บของเวิร์กสเปซคุณทำงานได้ เปลี่ยนได้ใน Console โดยไม่ต้องเผยแพร่นโยบายใหม่
+
+แทนที่ `org_01M3CAP8H43Z49CER6NT0Y3ZF1` ด้วย ID องค์กรของเวิร์กสเปซคุณ หากต้องการบล็อกโมเดลฟรีในเวิร์กสเปซ
+ด้วย ให้ปิด **Free models** ใน Console
+
+## อนุญาตเฉพาะผู้ให้บริการที่อนุมัติ
+
+ปฏิเสธผู้ให้บริการทั้งหมด แล้วอนุญาตเฉพาะรายที่อนุมัติ ตัวอย่างนี้อนุญาตเฉพาะเกตเวย์ OpenAI-compatible
+ภายใน
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+ผู้ให้บริการที่ถูกปฏิเสธจะถูกนำออกแม้ใครจะมีข้อมูลรับรองก็ตาม ดู[ผู้ให้บริการ](/policies#providers)
+
+## จำกัดเซิร์ฟเวอร์ MCP และเครื่องมือ
+
+อนุญาตเฉพาะเซิร์ฟเวอร์ MCP ที่อนุมัติ และบล็อกเครื่องมือที่คุณไม่ต้องการให้เอเจนต์รัน
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+ดู[เซิร์ฟเวอร์ MCP สกิล และปลั๊กอิน](/policies#mcp-servers-skills-and-plugins)และ[เครื่องมือ](/policies#tools)
+
+## ตรวจสอบว่าทำงาน
+
+- รัน `/connect` และ `/models` ในฐานะผู้ใช้ แล้วยืนยันว่าแสดงเฉพาะสิ่งที่คุณอนุญาต
+- ตรวจดูคำเตือนในบันทึกของเซิร์ฟเวอร์ ระบบจะข้ามข้อกำหนดที่ตรวจสอบไม่ผ่าน ส่วนข้อกำหนดที่เหลือยังมีผล
+- การเรียกเครื่องมือที่ถูกบล็อกจะล้มเหลวด้วย `Blocked by configuration policy`
+
+## เวอร์ชัน
+
+| การกระทำ                                                                    | ต้องใช้ |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+ไคลเอนต์รุ่นเก่าจะเพิกเฉยต่อข้อกำหนดเหล่านี้

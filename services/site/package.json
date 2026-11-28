@@ -24,6 +24,7 @@
     "@ibm/plex": "6.4.1",
     "@kitlangton/rolling-number": "0.4.1",
     "@opencode/nav-menus": "workspace:*",
+    "@opencode/locale": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",

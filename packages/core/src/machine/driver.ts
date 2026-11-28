@@ -1,5 +1,5 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
-import { posix } from "node:path"
+import { posix, win32 } from "node:path"
 import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { Environment } from "../environment/index.js"
@@ -55,6 +55,12 @@ export class PeerFailed extends Schema.TaggedError<PeerFailed>()("Machine.PeerFa
   }
 }
 
+/** The path rules and shell of the machine that sent `hello`: Node names Windows `win32`. None is a POSIX `sh`. */
+export const rules = (hello: Partial<Pick<Hello, "os" | "shell">>) => ({
+  path: hello.os === "win32" ? win32 : posix,
+  shell: hello.shell ?? "sh",
+})
+
 /** A peer request as the home asks for it, before it is given a `req`. */
 export type PeerRequest<M = PeerCall> = M extends unknown ? Omit<M, "req"> : never
 
@@ -76,6 +82,10 @@ export interface Connection {
 }
 
 export interface Interface {
+  /**
+   * The machine's environment, the same handle for its whole life. Its path rules and shell are those of the newest
+   * hello, kept while the machine is offline; before any hello it is a POSIX machine running `sh`.
+   */
   readonly environment: Environment.Interface
   /**
    * Serves one connection until it is lost. A newer connection replaces it: the one being served counts as lost the
@@ -140,6 +150,8 @@ export const make = (id: Environment.ID): Interface => {
   let next = Deferred.makeUnsafe<Link>()
   /** The worker behind the newest connection. Every process in `processes` was started on it. */
   let instance: Instance | undefined
+  /** The newest hello, which says what kind of machine this is, kept while it is offline. */
+  let reported: Hello | undefined
   let req = 0
   const online = Effect.suspend(() => (link ? Effect.succeed(link) : Deferred.await(next)))
   const platform = (method: string) => (cause: Error) =>
@@ -189,6 +201,7 @@ export const make = (id: Environment.ID): Interface => {
       }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
+      reported = connection.hello
       const listed = new Map(connection.hello.processes.map((entry) => [entry.id, entry]))
       // Nothing here will ever read a process this home does not know, so it is stopped and forgotten. The worker
       // signals at once and the release drops it, so its exit is never reported. A release is safe to repeat.
@@ -518,32 +531,39 @@ export const make = (id: Environment.ID): Interface => {
     links: () => link?.links ?? new Set(),
     hello: () => link?.hello,
     describe: () => link?.describe?.(),
-    environment: Environment.make(
-      id,
-      {
-        spawner,
-        overrides: {
-          stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
-          list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
-          read: (path, range) =>
-            call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
-          write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
-          append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
-          remove: (path) => call<void>(path, { call: "remove", path }),
-          mkdir: (path) => call<void>(path, { call: "mkdir", path }),
-          move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+    // Its driver runs only argv, cwd and env, under the shell the worker names: `sh -c` when it names none, which is
+    // the contract every worker can meet. The path rules and shell are read on each use, so a handle taken before the
+    // worker first connected follows the machine it turns out to be.
+    environment: {
+      ...Environment.make(
+        id,
+        {
+          spawner,
+          overrides: {
+            stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
+            list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
+            read: (path, range) =>
+              call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
+            write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
+            append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
+            remove: (path) => call<void>(path, { call: "remove", path }),
+            mkdir: (path) => call<void>(path, { call: "mkdir", path }),
+            move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+          },
         },
+        {
+          home: Effect.suspend(() =>
+            link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
+          ),
+        },
+      ),
+      get path() {
+        return rules(reported ?? {}).path
       },
-      // A worker is a POSIX machine with none of this server's shell paths, and its driver runs only argv, cwd and
-      // env: `sh -c` is the contract every worker can meet.
-      {
-        path: posix,
-        shell: "sh",
-        home: Effect.suspend(() =>
-          link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
-        ),
+      get shell() {
+        return rules(reported ?? {}).shell
       },
-    ),
+    },
   }
 }
 

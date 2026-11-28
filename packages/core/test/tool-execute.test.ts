@@ -23,6 +23,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
+import { noToolCalls } from "./lib/tool"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -30,6 +31,7 @@ const context = {
   messageID: SessionMessage.ID.make("msg_execute"),
   id: Tool.CallID.make("call_execute"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 }
 
 const allowAll = permissionService({ assert: () => Effect.void })
@@ -66,6 +68,33 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
   )
   expect(JSON.parse(calls.output.output)).toEqual(["first", "second"])
   expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+})
+
+test("execute rows cap long input strings, and cut them to a preview once a script's rows hold 1M chars", async () => {
+  const input = Schema.Struct({ text: Schema.String })
+  const received: Array<number> = []
+  const echo = {
+    name: "echo",
+    description: "Echo text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.sync(() => received.push(text.length)).pipe(Effect.as({ output: "ok" })),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const result = await Effect.runPromise(
+    createCodeMode(new Map([["echo", echo]])).execute(
+      {
+        code: 'for (let i = 0; i < 64; i++) await tools.echo({ text: "x".repeat(20000) })\nawait tools.echo({ text: "short" })',
+      },
+      context,
+    ),
+  )
+  const texts = result.output.toolCalls.map((call) => call.input?.text)
+  expect(received).toEqual([...Array(64).fill(20000), 5])
+  expect(texts[0]).toBe(`${"x".repeat(16000)}… [4000 more chars]`)
+  expect(texts[62]).toBe(texts[0])
+  expect(texts[63]).toBe(`${"x".repeat(200)}… [19800 more chars]`)
+  expect(texts[64]).toBe("short")
+  expect(result.metadata).toEqual({ toolCalls: result.output.toolCalls })
 })
 
 test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
@@ -995,7 +1024,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   await Effect.runPromise(
     createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
   )
-  expect(conversions).toBe(2)
+  expect(conversions).toBe(1)
 })
 
 const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<void>) =>

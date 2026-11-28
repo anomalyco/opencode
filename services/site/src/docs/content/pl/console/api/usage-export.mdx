@@ -1,0 +1,114 @@
+---
+title: "API eksportu użycia"
+description: "Pobieraj dzienne użycie obszaru roboczego jako CSV, z żądaniami, tokenami i kosztem dla każdego dnia, osoby, dostawcy i modelu."
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export` zwraca użycie obszaru roboczego jako CSV, z jednym wierszem
+na dzień UTC, członka lub konto usługowe, dostawcę i model. To ten sam plik, który pobiera przycisk **Export usage**
+w **Activity › Usage**.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## Uwierzytelnianie
+
+Wyślij [klucz API](/console/api#api-keys) jako token bearer. Możesz nim wyeksportować dane użycia obszaru roboczego, w którym został utworzony.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+Klucz potrzebuje **Usage › Read**. Klucze z **All** lub **Read only** je mają. Klucz ograniczony potrzebuje:
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+Do zaplanowanych eksportów użyj [klucza konta usługowego](/console/api#service-accounts) albo
+[osobistego klucza API](/console/api#personal-api-keys) właściciela lub administratora. Członkowie nie mogą odczytywać
+użycia obszaru roboczego, więc ich klucze zwracają `403`.
+
+## Żądanie
+
+| Parametr  | Wymagany | Wartość                                                                                                               |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `range`   | Tak      | `7d`, `30d` lub `90d`.                                                                                                |
+| `user_id` | Nie      | ID członka (`user_...`) lub konta usługowego (`svcacct_...`). Zwraca tylko wiersze tego członka lub konta usługowego. |
+
+Zakres `range` obejmuje dni według UTC, w tym bieżący dzień. Wartość `7d` oznacza więc dziś i sześć poprzednich dni.
+Dane za bieżący dzień są aktualizowane aż do północy UTC.
+
+Aby wyeksportować użycie jednego konta usługowego, przekaż jego ID z kolumny `user_id` wcześniejszego eksportu:
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+ID spoza obszaru roboczego zwraca tylko wiersz nagłówka.
+
+## Odpowiedź
+
+Udane żądanie zwraca `200` z `Content-Type: text/csv; charset=utf-8`. Pierwsza linia to nagłówek. Następnie pojawiają
+się wiersze, od najnowszego dnia.
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- Linie kończą się `\r\n`.
+- Dni bez użycia nie mają wierszy.
+- Odpowiedź jest plikiem do pobrania (`Content-Disposition: attachment; filename="usage-30d.csv"`) i nigdy nie jest
+  cache'owana (`Cache-Control: private, no-store`).
+- Komórka tekstowa rozpoczynająca się od `=`, `+`, `-` lub `@` otrzymuje wiodący `'`, aby arkusze kalkulacyjne nie
+  uruchamiały jej jako formuły.
+
+### Kolumny
+
+| Kolumna                 | Znaczenie                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `day`                   | Data UTC w formacie `YYYY-MM-DD`.                                                                             |
+| `user_type`             | `member` lub `service_account`.                                                                               |
+| `user_id`               | ID członka lub konta usługowego.                                                                              |
+| `user_name`             | Adres e-mail członka lub nazwa konta usługowego. Może być pusty.                                              |
+| `provider`              | Dostawca, który obsłużył żądania, na przykład `opencode` dla [OpenCode Models](/console/models).              |
+| `model`                 | Identyfikator modelu.                                                                                         |
+| `requests`              | Liczba żądań.                                                                                                 |
+| `input_tokens`          | Tokeny wejściowe.                                                                                             |
+| `output_tokens`         | Tokeny wyjściowe.                                                                                             |
+| `cache_read_tokens`     | Tokeny odczytane z cache promptu.                                                                             |
+| `cache_write_5m_tokens` | Tokeny zapisane do cache promptu z czasem życia 5 minut.                                                      |
+| `cache_write_1h_tokens` | Tokeny zapisane do cache promptu z czasem życia 1 godziny.                                                    |
+| `cost_micro_cents`      | Koszt jako całkowita liczba mikrocentów. Jeden dolar amerykański to `100000000`.                              |
+| `cost_usd`              | Ten sam koszt w dolarach amerykańskich, jako dokładna liczba dziesiętna z co najmniej dwoma miejscami po przecinku, na przykład `2.145` lub `0.00`. |
+
+### Co jest uwzględniane
+
+- Każde żądanie modelu wykonane przez członków i konta usługowe obszaru roboczego.
+- Żądania do darmowych modeli oraz żądania, które członkowie wykonują przez własne subskrypcje Claude Code, Codex lub
+  OpenCode, są uwzględniane z ich tokenami po zerowym koszcie.
+- [Wyszukiwanie w internecie](/console/websearch) i inne hostowane usługi nie są uwzględniane.
+- Sumy mogą pozostawać za nowymi żądaniami o około minutę.
+
+## Limity
+
+- Eksport obejmuje maksymalnie 90 dni. Aby zachować dłuższą historię, zapisuj pliki według harmonogramu.
+- Żądania liczą się do limitu API Console wynoszącego 300 żądań na minutę na konto, współdzielonego z innymi jego
+  endpointami. Osobiste klucze API są liczone względem członka, do którego należą.
+
+## Błędy
+
+| Status | Znaczenie                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| `400`  | Brakuje `range` lub nie jest to `7d`, `30d` ani `90d`, albo `user_id` nie jest ID członka lub konta usługowego. |
+| `401`  | Brak poświadczeń albo klucz wygasł lub został unieważniony.                                           |
+| `403`  | Klucz nie ma **Usage › Read** albo należy do członka, który nie jest właścicielem ani administratorem. |
+| `429`  | Przekroczono limit zapytań. Ponów po liczbie sekund podanej w nagłówku `Retry-After`.                  |
+| `503`  | Dzienne sumy nie są jeszcze dostępne. Ponów żądanie później.                                          |

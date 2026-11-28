@@ -1,0 +1,135 @@
+---
+title: "指示"
+description: "AGENTS.md で OpenCode にプロジェクトの継続的な指示を与えます。適用範囲、読み込み順序、CLAUDE.md のフォールバックの仕組みを説明します。"
+---
+
+`AGENTS.md` を追加すると、OpenCode がプロジェクトで継続して従う指示を指定できます。ビルドコマンド、アーキテクチャのメモ、コード規約、検証の要件などを記載します。
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+プロジェクトの指示ファイルはコミットし、リポジトリで作業する全員が同じ指示を使えるようにします。
+
+## 適用範囲
+
+`AGENTS.md` は、そのガイダンスを適用するディレクトリに置きます。OpenCode はグローバルファイルを読み込み、続いて現在のワークスペースディレクトリからホームディレクトリに向かって各 `AGENTS.md` を読み込みます。ホームディレクトリの外にあるワークスペースでは、プロジェクトルートで停止します。
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+この例では、4 つのファイルがすべて読み込まれます。それらは次の順序で結合されます。
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+どこにでも適用されるガイダンスはグローバルファイルに置きます。リポジトリ全体のガイダンスはプロジェクトルートに、より具体的なガイダンスは対象のコードに近い場所に置きます。OpenCode はファイルを結合し、ファイル間の競合は解決しません。
+
+ワークスペースがプロジェクトルートの外にある場合、読み込まれるのはグローバルファイルだけです。`OPENCODE_DISABLE_PROJECT_CONFIG=1` を設定すると、グローバルファイルを無効にせずにプロジェクトの `AGENTS.md` の検出をスキップできます。
+
+### CLAUDE.md のフォールバック
+
+`AGENTS.md` のないディレクトリでは、OpenCode は代わりに `CLAUDE.md` を読み取ります。グローバルの `~/.config/opencode/AGENTS.md` がない場合は、`~/.claude/CLAUDE.md` を読み取ります。ディレクトリの `AGENTS.md` は常にその `CLAUDE.md` より優先されるため、両者の間のシンボリックリンクは 1 回だけ読み込まれます。
+
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` を設定するとすべての `CLAUDE.md` をスキップし、`OPENCODE_DISABLE_CLAUDE_CODE=1` を設定すると `.claude` のスキルもスキップします。サーバーは起動時に両方を読み取ります。バックグラウンドサービスでは、`opencode service set env` で設定を永続化し、`opencode service restart` を実行してください。
+
+## 検出
+
+ワークスペースより下の指示ファイルは、エージェントがプロジェクトを探索する中で検出されます。ファイルを読み取るかディレクトリを一覧表示すると、その対象とワークスペースの間にある `AGENTS.md` ファイルが読み込まれます。
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+ネストしたファイルは最も近いものから読み込まれ、その指示エントリがモデルから見える履歴に残っている間は重複排除されます。同じ領域を再度読み取っても、通常は再度挿入されません。コンパクションや元に戻す操作でそのエントリが削除された場合、後から読み取るとファイルが再度読み込まれることがあります。
+
+読み込み後にネストしたファイルを編集しても、自動的には検出されません。更新したテキストをすぐに適用する必要がある場合は、新しいセッションを開始してください。
+
+## 順序
+
+選択されたエージェントまたはプロバイダーのシステムプロンプトが最初に送信されます。その後、OpenCode は次の順序で初期の指示を組み立てます。
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+これらのソースは上書きではなく結合されます。後から検出されたネストした `AGENTS.md` ファイルは、検出順にセッション履歴に追加されます。
+
+## 更新
+
+セッションの実行中にグローバルまたは上位で検出された `AGENTS.md` を編集すると、そのガイダンスを更新できます。
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+次のモデルリクエストの前に、OpenCode は変更を検出し、保留中の入力を配信する前に指示の更新を追加します。
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- グローバルの `AGENTS.md` と、カレントディレクトリから上に向かって検出する同名ファイルをすべて削除すると、それらの指示が適用されなくなったことがセッションに伝わります。
+- 一時的な読み取り失敗では、指示を削除されたものとして扱わず、最後に確認された指示を保持します。
+- セッションを移動しても指示の状態は保持されるため、移動先の指示は既存の指示への更新として追加されます。
+- セッションの元に戻す操作をコミットすると、指示の状態がクリアされ、次のプロンプトの前に指示が再読み込みされます。
+
+指示の値は非公開のままです。クライアントはどのソースが変更されたかは確認できますが、その内容は確認できません。
+
+## 設定
+
+`instructions` 配列を使って、検出された `AGENTS.md` ファイルに加えて、ファイル、glob パターン、HTTP(S) の URL を追加します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+設定された指示は `AGENTS.md` ファイルの後に、一覧の順序で読み込まれます。すべての設定ドキュメントのエントリが結合されます。
+
+| エントリ                        | 解決方法                                                       |
+| ------------------------------- | -------------------------------------------------------------- |
+| 相対パスまたは glob             | ワークスペースからプロジェクトルートまでの各ディレクトリで検索 |
+| `~/` パス                       | ホームディレクトリを基準に解決                                 |
+| 絶対パス                        | 記述どおりに使用。ファイル名は glob でも可                     |
+| `http://` または `https://`     | 設定の読み込み時に取得。タイムアウトは 5 秒                    |
+
+- ローカルファイルは、変更されると `AGENTS.md` と同様に更新されます。glob に一致する新しいファイルは、次に設定が変更されたときに読み込まれます。
+- 存在しないファイルはスキップされます。取得できない URL はスキップされるか、最後に取得した内容が保持されます。
+- `OPENCODE_DISABLE_PROJECT_CONFIG=1` の場合、またはワークスペースがプロジェクトの外にある場合、相対パスはグローバル設定ディレクトリを基準に解決します。
+
+接続した [OpenCode Console](/console) のワークスペースからも指示を共有できます。
+
+設定の場所と優先順位は[設定](/config)を参照してください。

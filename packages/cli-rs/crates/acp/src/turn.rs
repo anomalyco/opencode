@@ -12,7 +12,8 @@ use opencode_api::client::Client;
 use opencode_api::events::CONNECTED;
 use opencode_api::generated::{
     PromptInputFileAttachment, SessionCommandInput, SessionCompactInput, SessionGetInput, SessionID,
-    SessionInboxDelivery, SessionInterruptInput, SessionMessageID, SessionPromptInput, SessionSyntheticInput,
+    SessionInboxDelivery, SessionInterruptInput, SessionListInput, SessionMessageID, SessionPromptInput,
+    SessionSyntheticInput, SessionsCursor,
 };
 use opencode_util::lock;
 use serde_json::{Value, json};
@@ -89,6 +90,33 @@ pub struct Turns {
     scope: CancellationToken,
 }
 
+fn subagent_cost<'a>(client: &'a Client, session_id: &'a str) -> BoxFuture<'a, Result<f64, Failure>> {
+    Box::pin(async move {
+        let mut total = 0.0;
+        let mut cursor: Option<SessionsCursor> = None;
+        loop {
+            let input = match cursor.take() {
+                Some(cursor) => {
+                    SessionListInput { cursor: Some(cursor), limit: Some(100), ..SessionListInput::default() }
+                }
+                None => SessionListInput {
+                    parent_id: Some(Some(SessionID(session_id.to_owned()))),
+                    limit: Some(100),
+                    ..SessionListInput::default()
+                },
+            };
+            let page = check(client.session_list(&input).await)?;
+            for child in &page.data {
+                total += child.cost + subagent_cost(client, &child.id.0).await?;
+            }
+            match page.cursor.next.flatten().filter(|next| !next.0.is_empty()) {
+                Some(next) => cursor = Some(next),
+                None => return Ok(total),
+            }
+        }
+    })
+}
+
 fn files(prepared: &Prepared) -> Vec<PromptInputFileAttachment> {
     prepared
         .files
@@ -141,6 +169,8 @@ impl Turns {
                 safe_message: format!("Session already has an active ACP prompt: {session_id}"),
                 service: Some("session".to_owned()),
                 error_name: None,
+                status: None,
+                retry_after_ms: None,
             });
         }
         let serial = self.serial.fetch_add(1, Ordering::Relaxed);
@@ -202,6 +232,7 @@ impl Turns {
         responded: watch::Receiver<bool>,
     ) -> Result<Value, Failure> {
         let attached = self.sessions.require(session_id)?;
+        self.sessions.restore_mcp(&attached).await?;
         let prepared = prompt::prepare(&self.catalogs.get(&attached.cwd).await?, content).await?;
         let capabilities = *lock(&self.capabilities);
         let turn = self
@@ -356,6 +387,7 @@ impl Turns {
                     id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
                     text: prepared.text.clone(),
                     files: Some(files(&prepared)),
+                    skills: (!prepared.skills.is_empty()).then(|| prepared.skills.clone()),
                     delivery: Some(Some(SessionInboxDelivery::Steer)),
                     resume: Some(Some(false)),
                     ..SessionPromptInput::default()
@@ -421,6 +453,7 @@ impl Turns {
                     id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
                     text: prepared.text.clone(),
                     files,
+                    skills: (!prepared.skills.is_empty()).then(|| prepared.skills.clone()),
                     delivery: Some(Some(SessionInboxDelivery::Steer)),
                     ..SessionPromptInput::default()
                 })
@@ -550,15 +583,19 @@ impl Turns {
         let catalog = self.catalogs.get(&attached.cwd).await?;
         let model = find_model(&catalog.models, &current_model(&catalog, &attached.selection()));
         let Some(size) = model.map(|model| model.limit.context).filter(|size| *size != 0) else { return Ok(()) };
-        let info =
-            check(self.client.session_get(&SessionGetInput { session_id: SessionID(attached.id.clone()) }).await)?;
+        let session_input = SessionGetInput { session_id: SessionID(attached.id.clone()) };
+        let (info, subagents) =
+            tokio::join!(self.client.session_get(&session_input), subagent_cost(&self.client, &attached.id),);
+        let info = check(info)?;
+        let subagents = subagents?;
         self.connection.session_update(
             &attached.id,
             &json!({
                 "sessionUpdate": "usage_update",
                 "used": translate::number(used),
                 "size": size,
-                "cost": { "amount": translate::number(info.cost), "currency": "USD" },
+                // Subagents record their spend on their own sessions; the session's cost includes them, as the TUI's does.
+                "cost": { "amount": translate::number(info.cost + subagents), "currency": "USD" },
             }),
         )
     }

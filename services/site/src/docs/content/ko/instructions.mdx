@@ -1,0 +1,141 @@
+---
+title: "지침"
+description: "AGENTS.md 파일로 OpenCode에 지속적인 프로젝트 지침을 제공하고, 적용 범위와 로드 순서, CLAUDE.md 대체 동작을 확인하세요."
+---
+
+`AGENTS.md` 파일을 추가하면 OpenCode에 지속적인 프로젝트 지침을 줄 수 있습니다. 빌드 명령, 아키텍처 설명, 코드 규칙, 검증 요구 사항에 사용하세요.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+프로젝트 지침 파일을 커밋해 저장소에서 작업하는 모든 사람이 같은 지침을 받게 하세요.
+
+## 범위
+
+지침이 적용되어야 하는 디렉터리에 `AGENTS.md`를 두세요. OpenCode는 전역 파일을 로드한 다음 현재 워크스페이스 디렉터리에서 홈 디렉터리 방향으로 각 `AGENTS.md`를 로드합니다. 홈 디렉터리 밖의 워크스페이스에서는 프로젝트 루트에서 멈춥니다.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+이 예제에서는 네 파일이 모두 로드되며 다음 순서로 결합됩니다.
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+어디에나 적용되는 지침은 전역 파일에 두세요. 저장소 전체 지침은 프로젝트 루트에, 더 구체적인 지침은 해당 코드에 가깝게 두세요. OpenCode는 파일을 결합할 뿐 서로 충돌하는 내용을 해결하지 않습니다.
+
+워크스페이스가 프로젝트 루트 밖에 있으면 전역 파일만 로드됩니다. `OPENCODE_DISABLE_PROJECT_CONFIG=1`을 설정하면 전역 파일은 그대로 두고 프로젝트 `AGENTS.md` 탐색만 건너뜁니다.
+
+### CLAUDE.md 대체
+
+`AGENTS.md`가 없는 디렉터리에서는 OpenCode가 대신 `CLAUDE.md`를 읽습니다. 전역
+`~/.config/opencode/AGENTS.md`가 없으면 `~/.claude/CLAUDE.md`를 읽습니다. 디렉터리의 `AGENTS.md`는 항상 해당
+`CLAUDE.md`보다 우선하므로, 둘을 심볼릭 링크로 연결하면 한 번만 로드됩니다.
+
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1`을 설정하면 모든 `CLAUDE.md`를 건너뛰고,
+`OPENCODE_DISABLE_CLAUDE_CODE=1`을 설정하면 `.claude` 스킬까지 건너뜁니다. 서버는 시작할 때 두 변수를 읽습니다. 백그라운드 서비스에는
+`opencode service set env`로 저장하고 `opencode service restart`를 실행하세요.
+
+## 탐색
+
+워크스페이스 아래의 지침 파일은 에이전트가 프로젝트를 탐색하면서 발견됩니다. 파일을 읽거나 디렉터리를 나열하면 그 대상과 워크스페이스 사이의 모든 `AGENTS.md` 파일이 로드됩니다.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+중첩 파일은 가까운 것부터 로드되고, 모델이 볼 수 있는 기록에 해당 지침이 남아 있으면 중복해서 로드하지 않습니다. 같은 영역을 다시 읽어도 보통 다시 주입되지 않습니다. 압축이나 되돌리기로 해당 항목이 제거되면 이후 읽기에서 파일이 다시 로드될 수 있습니다.
+
+중첩 파일을 로드한 뒤의 편집은 자동으로 감지되지 않습니다. 업데이트된 텍스트를 즉시 적용해야 하면 새 세션을 시작하세요.
+
+## 순서
+
+선택한 에이전트나 제공자의 시스템 프롬프트가 먼저 전송됩니다. 그다음 OpenCode가 다음 순서로 초기 지침을 구성합니다.
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+이 소스들은 덮어쓰기가 아니라 결합됩니다. 나중에 발견된 중첩 `AGENTS.md` 파일은 발견 순서대로 세션 기록에 추가됩니다.
+
+## 업데이트
+
+세션이 실행 중일 때 전역 또는 상위 디렉터리의 `AGENTS.md`를 편집하면 지침을 업데이트할 수 있습니다.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+다음 모델 요청 전에 OpenCode가 변경을 감지하고 대기 중인 입력을 전달하기 전에 지침 업데이트를 추가합니다.
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- 세션 시작 시 자동으로 로드되는 `AGENTS.md`를 모두 제거하면, 세션에 해당 지침이 더 이상 적용되지 않는다고 알립니다.
+- 일시적인 읽기 실패는 삭제된 것으로 처리하지 않고 마지막으로 알려진 지침을 유지합니다.
+- 세션을 이동해도 지침 상태가 유지되므로, 이동한 위치의 지침이 업데이트로 반영됩니다.
+- 세션 되돌리기를 확정하면 지침 상태가 지워지고 다음 프롬프트 전에 지침을 다시 로드합니다.
+
+지침 값은 계속 비공개로 유지됩니다. 클라이언트는 어떤 소스가 변경되었는지는 볼 수 있지만 그 내용은 볼 수 없습니다.
+
+## 구성
+
+`instructions` 배열을 사용하면 발견된 `AGENTS.md` 파일과 함께 파일, 글롭 패턴, HTTP(S) URL을 추가할 수 있습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+구성된 지침은 `AGENTS.md` 파일 다음에 나열된 순서대로 로드됩니다. 모든 구성 문서의 항목이 결합됩니다.
+
+| 항목                    | 확인 방식                                                            |
+| ----------------------- | -------------------------------------------------------------------- |
+| 상대 경로 또는 글롭     | 워크스페이스에서 프로젝트 루트까지 각 디렉터리에서 검색              |
+| `~/` 경로               | 홈 디렉터리 기준으로 확인                                            |
+| 절대 경로               | 그대로 사용하며, 파일 이름은 글롭일 수 있음                          |
+| `http://` 또는 `https://` | 구성 로드 시 5초 타임아웃으로 가져옴                               |
+
+- 로컬 파일은 변경되면 `AGENTS.md`처럼 업데이트됩니다. 글롭에 맞는 새 파일은 다음 구성 변경 시 로드됩니다.
+- 없는 파일은 건너뜁니다. 가져올 수 없는 URL은 건너뛰거나 마지막으로 가져온 내용을 유지합니다.
+- `OPENCODE_DISABLE_PROJECT_CONFIG=1`이거나 워크스페이스가 프로젝트 밖에 있으면 상대 항목은 전역 구성
+  디렉터리 기준으로 확인됩니다.
+
+연결된 [OpenCode Console](/console) 워크스페이스도 지침을 공유할 수 있습니다.
+
+구성 위치와 우선순위는 [구성](/config)을 참고하세요.
+

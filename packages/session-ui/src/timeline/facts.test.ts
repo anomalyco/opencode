@@ -55,6 +55,91 @@ describe("timeline facts", () => {
     })
   })
 
+  test("counts a script's steps in place of the script with scriptSteps", () => {
+    const step = (tool: string, input: Record<string, JsonValue>) => ({ tool, status: "completed", input })
+
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            step("read", { path: "/repo/a.ts" }),
+            step("read", { path: "/repo/b.ts" }),
+            step("shell", { command: "ls" }),
+            step("edit", { path: "/repo/c.ts" }),
+            step("Bun", { method: "write", path: "/repo/c.ts" }),
+            step("Bun", { method: "file", path: "/repo/a.ts" }),
+            step("Bun", { method: "other", path: "/repo/d.ts" }),
+          ],
+          files: [{ file: "/repo/c.ts", additions: 1 }],
+        },
+      },
+    )
+
+    const facts = factsOf([script], true, true)
+
+    expect(facts.flatMap((fact) => (fact.kind === "call" ? [[fact.tool, fact.mode]] : []))).toEqual([
+      ["read", "explore"],
+      ["read", "explore"],
+      ["shell", "run"],
+      ["edit", "edit"],
+      ["edit", "edit"],
+      ["read", "explore"],
+    ])
+    expect(summarize(facts)).toMatchObject({
+      calls: 6,
+      reads: 2,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      modes: { explore: 3, edit: 2, run: 1, tool: 0 },
+    })
+    expect(summarize(factsOf([script], true, false))).toMatchObject({
+      calls: 1,
+      reads: 0,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      toolNames: [{ tool: "execute" }],
+    })
+
+    const direct = [
+      storyTool("r1", "read", "completed", { path: "/repo/a.ts" }),
+      storyTool("e1", "edit", "completed", { path: "/repo/c.ts" }),
+    ]
+
+    expect(factsOf(direct, true, true)).toEqual(factsOf(direct))
+  })
+
+  test("counts live Bun steps as recorded", () => {
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            { tool: "read", status: "completed", input: { path: "/repo/a.ts" } },
+            { tool: "write", status: "completed", input: { path: "/repo/b.ts" } },
+            { tool: "glob", status: "completed", input: { pattern: "src/**/*.ts" } },
+          ],
+          files: [{ file: "/repo/b.ts" }],
+        },
+      },
+    )
+
+    expect(summarize(factsOf([script], true, true))).toMatchObject({
+      calls: 3,
+      reads: 1,
+      searches: 1,
+      commands: 0,
+      files: ["/repo/b.ts"],
+      modes: { explore: 2, edit: 1, run: 0, tool: 0 },
+    })
+  })
+
   test("follows a part updated in place", () => {
     const part = storyTool("s1", "shell", "running", { command: "false" })
     const before = summarize(factsOf([part]))

@@ -1,6 +1,5 @@
 export * as FileSystem from "./filesystem.js"
 
-import path from "node:path"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -140,7 +139,7 @@ const baseLayer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
-    const envPath = environment.path ?? path
+    const envPath = environment.path
 
     // Directories outside the server host do not live on the host filesystem,
     // so a host realpath probe at boot would consult the wrong filesystem and

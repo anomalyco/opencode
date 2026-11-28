@@ -298,3 +298,37 @@ fn service_config_validation_matches_typescript() {
         }
     }
 }
+
+#[test]
+fn invalid_service_config_errors_match_typescript() {
+    if !with_modules() || bun(&[]).is_none() {
+        return;
+    }
+    let samples = [
+        "{\"hostname\":\"0.0.0.0\",\"port\":\"4096\",\"password\":\"keep-me\",\"env\":{\"KEEP\":\"1\"}}\n",
+        r#"{"port": 4096,"#,
+        r#"{"remote":true,"port":"4096","password":"keep-me"}"#,
+        r#"{"port":0}"#,
+        r#"{"port":65536}"#,
+        r#"{"port":1.5}"#,
+        r#"{"port":0.5}"#,
+        r#"{"remote":{"route":1}}"#,
+        r#"{"remote":{}}"#,
+        r#"{"remoteAccepted":false}"#,
+        r#"{"cors":[1,"ok",true]}"#,
+        r#"{"env":{"A":1,"B":null}}"#,
+        r#"{"hostname":null}"#,
+        r#"{"port":"x","env":{"A":1},"disabled":1}"#,
+        "[]",
+    ];
+    for raw in samples {
+        let home = Home::new();
+        let file = home.config().file;
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, raw).unwrap();
+        let ts = home.ts(&["get"]).unwrap_err();
+        let rust = home.config().get(None, None).unwrap_err().to_string();
+        assert_eq!(rust, ts, "{raw}");
+        assert_eq!(fs::read_to_string(&file).unwrap(), raw, "{raw}");
+    }
+}

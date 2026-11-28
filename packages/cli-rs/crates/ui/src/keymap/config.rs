@@ -86,8 +86,14 @@ fn binding_value<T>(value: &Value) -> Result<BindingValue<T>, String> {
     match value {
         Value::Bool(false) => Ok(BindingValue::Disabled),
         Value::String(text) if text == "none" => Ok(BindingValue::Disabled),
-        Value::Array(items) if items.is_empty() => Ok(BindingValue::Disabled),
-        Value::Array(items) => items.iter().map(binding_item).collect::<Result<_, _>>().map(BindingValue::Items),
+        Value::Array(items) => {
+            // "none" inside an array disables that entry instead of becoming the key sequence n-o-n-e.
+            let items: Vec<&Value> = items.iter().filter(|item| item.as_str() != Some("none")).collect();
+            if items.is_empty() {
+                return Ok(BindingValue::Disabled);
+            }
+            items.into_iter().map(binding_item).collect::<Result<_, _>>().map(BindingValue::Items)
+        }
         item => Ok(BindingValue::Items(vec![binding_item(item)?])),
     }
 }

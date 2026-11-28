@@ -8,7 +8,8 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit, ManagedRuntime } from "effect"
+import { McpTarget } from "@opencode/core/mcp/target"
+import { Cause, Effect, Exit, ManagedRuntime, Result } from "effect"
 import { TestClock } from "effect/testing"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tmpdir } from "./fixture/tmpdir"
@@ -20,6 +21,7 @@ const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
+const target = (config: ConfigMCP.Remote) => Result.getOrThrow(McpTarget.remote("test", config))
 
 const credential = (input: { access: string; refresh: string; expires?: number; url: string }) =>
   new Credential.Info({
@@ -90,18 +92,20 @@ const authorizationServer = (metadata: Record<string, unknown>) => {
 }
 
 const start = (
-  target: string | ReturnType<typeof Bun.serve>,
+  server: string | ReturnType<typeof Bun.serve>,
   oauth?: ConfigMCP.OAuth,
   store: ReturnType<typeof memoryCredentials> = memoryCredentials([]),
 ) =>
   Effect.gen(function* () {
     const authorization = yield* McpOAuth.authorize({
       name: "test",
-      config: new ConfigMCP.Remote({
-        type: "remote",
-        url: typeof target === "string" ? target : target.url.href,
-        ...(oauth ? { oauth } : {}),
-      }),
+      target: target(
+        new ConfigMCP.Remote({
+          type: "remote",
+          url: typeof server === "string" ? server : server.url.href,
+          ...(oauth ? { oauth } : {}),
+        }),
+      ),
       integrationID,
       methodID,
     })
@@ -281,10 +285,6 @@ describe("MCP OAuth", () => {
     expect(await authorize(redirect)).toBe(redirect)
   })
 
-  test("rejects an invalid redirect URL", async () => {
-    await expect(authorize("not a URL")).rejects.toThrow(TypeError)
-  })
-
   test("rejects an authorization endpoint that is not http or https", async () => {
     const { server } = authorizationServer({ authorization_endpoint: "file:///tmp/authorize" })
 
@@ -404,6 +404,112 @@ describe("MCP OAuth", () => {
     ).finally(() => server.stop(true))
     expect(url.searchParams.get("scope")).toBe("read offline_access")
     expect(url.searchParams.has("prompt")).toBe(false)
+  })
+
+  test("keeps the requested scope when the token response leaves it out (#58319)", async () => {
+    const { server } = authorizationServer({ scopes_supported: ["read", "offline_access"] })
+    const credential = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url } = yield* start(server, { client_id: "client", scope: "read" })
+          const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "accepted")
+          redirect.searchParams.set("state", url.searchParams.get("state") ?? "")
+          yield* Effect.promise(() => fetch(redirect))
+          return yield* authorization.callback
+        }),
+      ),
+    ).finally(() => server.stop(true))
+    expect(credential.metadata?.scope).toBe("read offline_access")
+  })
+
+  test("accepts an issuer that adds a trailing slash to the authorization server it was discovered at (#50036)", async () => {
+    // The resource names the authorization server without a slash; its metadata names itself with one, or not at all.
+    const state = { issuer: (origin: string) => `${origin}/` }
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/mcp")
+          return new Response(null, {
+            status: 401,
+            headers: { "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/prm"` },
+          })
+        if (url.pathname === "/prm")
+          return Response.json({ resource: `${url.origin}/mcp`, authorization_servers: [url.origin] })
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: state.issuer(url.origin),
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+    const signIn = () =>
+      Effect.runPromiseExit(Effect.scoped(start(`${server.url.origin}/mcp`, { client_id: "client" })))
+
+    const accepted = await signIn()
+    expect(Exit.isSuccess(accepted) && accepted.value.url.pathname).toBe("/authorize")
+    state.issuer = (origin) => `${origin}/other`
+    const rejected = await signIn().finally(() => server.stop(true))
+    expect(Exit.isFailure(rejected) && String(Cause.squash(rejected.cause))).toContain("Issuer mismatch")
+  })
+
+  test("asks Google for offline access so it issues a refresh token (#59820)", async () => {
+    const { server } = authorizationServer({ authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth" })
+    const { url } = await Effect.runPromise(Effect.scoped(start(server, { client_id: "client" }))).finally(() =>
+      server.stop(true),
+    )
+    expect(url.searchParams.get("access_type")).toBe("offline")
+
+    const { server: other } = authorizationServer({})
+    const { url: plain } = await Effect.runPromise(Effect.scoped(start(other, { client_id: "client" }))).finally(() =>
+      other.stop(true),
+    )
+    expect(plain.searchParams.has("access_type")).toBe(false)
+  })
+
+  test("signs in again on the port a registered client names, or registers again when it is taken (#62331)", async () => {
+    const free = Bun.serve({ port: 0, fetch: () => new Response(null) })
+    const port = free.port
+    free.stop(true)
+    const client = {
+      client_id: "registered-before",
+      redirect_uris: [`http://127.0.0.1:${port}/callback`, `http://localhost:${port}/callback`],
+    }
+    const previous = new Credential.Info({
+      id: Credential.ID.make("cred_previous"),
+      integrationID,
+      label: "test",
+      value: {
+        type: "oauth",
+        methodID,
+        access: "expired",
+        refresh: "",
+        expires: 0,
+        metadata: { serverUrl: "unused", tokenType: "Bearer", client },
+      },
+    })
+    const signIn = async () => {
+      const { server, registrations } = authorizationServer({})
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, undefined, memoryCredentials([previous]))),
+      ).finally(() => server.stop(true))
+      return { url, registrations }
+    }
+
+    const reused = await signIn()
+    expect(new URL(reused.url.searchParams.get("redirect_uri") ?? "").port).toBe(String(port))
+    expect(reused.url.searchParams.get("client_id")).toBe("registered-before")
+    expect(reused.registrations).toEqual([])
+
+    const holder = Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response(null) })
+    const registered = await signIn().finally(() => holder.stop(true))
+    expect(new URL(registered.url.searchParams.get("redirect_uri") ?? "").port).not.toBe(String(port))
+    expect(registered.url.searchParams.get("client_id")).toBe("registered")
+    expect(registered.registrations).toHaveLength(1)
   })
 
   test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {
@@ -548,7 +654,11 @@ describe("MCP OAuth connections", () => {
         Credential.Service.use((credentials) =>
           credentials
             .get(id)
-            .pipe(Effect.flatMap((credential) => McpOAuth.connectProvider({ server: "test", config, credential }))),
+            .pipe(
+              Effect.flatMap((credential) =>
+                McpOAuth.connectProvider({ server: "test", target: target(config), credential }),
+              ),
+            ),
         ),
       )
     return {
@@ -573,7 +683,12 @@ describe("MCP OAuth connections", () => {
   const connect = (provider: AuthProvider, url: string, config = remote(url)) =>
     Effect.runPromise(
       Effect.scoped(
-        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: provider }),
+        McpClient.connect({
+          server: "test",
+          target: target(config),
+          directory: import.meta.dir,
+          authProvider: provider,
+        }),
       ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
     )
 
@@ -756,7 +871,7 @@ describe("MCP OAuth connections", () => {
     })
     const url = `${server.url.origin}/mcp`
     const provider = await Effect.runPromise(
-      McpOAuth.connectProvider({ server: "test", config: remote(url), credential: undefined }).pipe(
+      McpOAuth.connectProvider({ server: "test", target: target(remote(url)), credential: undefined }).pipe(
         Effect.provideService(Credential.Service, memoryCredentials([]).service),
       ),
     )
@@ -1130,7 +1245,7 @@ describe("MCP OAuth connections", () => {
             const credentials = yield* Credential.Service
             const provider = yield* McpOAuth.connectProvider({
               server: "test",
-              config: remote(url),
+              target: target(remote(url)),
               credential: yield* credentials.get(id),
             })
             yield* Effect.promise(() => provider.token())
@@ -1268,6 +1383,40 @@ describe("MCP OAuth connections", () => {
       expect(tokenRequests).toEqual(["/token"])
       expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
     })
+  })
+
+  test("sends the granted scope with a refresh (#66175)", async () => {
+    const scopes: Array<string | null> = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
+        scopes.push(new URLSearchParams(await request.text()).get("scope"))
+        return Response.json({ access_token: "a2", token_type: "Bearer", refresh_token: "r2", expires_in: 3600 })
+      },
+    })
+    const url = `${server.url.origin}/mcp`
+    await using processes = await setup(url, {
+      expires: Date.now() + 10_000,
+      metadata: {
+        scope: "api://app/.default offline_access",
+        discovery: { authorizationServer: server.url.origin, resource: url },
+      },
+    })
+
+    expect(await (await processes.provider(processes.first)).token().finally(() => server.stop(true))).toBe("a2")
+    expect(scopes).toEqual(["api://app/.default offline_access"])
+    const value = (await processes.second.runPromise(Credential.Service.use((credentials) => credentials.get(id))))
+      ?.value
+    expect(value?.type === "oauth" && value.metadata?.scope).toBe("api://app/.default offline_access")
   })
 
   test("reports needs_auth when the server asks for more scope", async () => {

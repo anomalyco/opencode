@@ -275,6 +275,74 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
   await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveCount(0)
 })
 
+test("closing side tabs with the mouse keeps the next close button under the pointer until it leaves the strip", async ({
+  page,
+}) => {
+  // Wide enough for every tab, narrow enough that they shrink below their titles.
+  await page.setViewportSize({ width: 1600, height: 700 })
+  const directory = "C:/OpenCode/CloseWidths"
+  const key = `local\u0000${base64Encode(directory)}/ses_closewidths`
+  // A short tab before the last one keeps its own width while the long ones fill the strip.
+  const files = [...Array.from({ length: 6 }, (_, index) => `notes-file-${index}.md`), "b.md", "notes-file-7.md"]
+
+  await openSession(page, {
+    name: "CloseWidths",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_closewidths: { review: true, sessionWidth: 640 } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: files.map((file) => `file://${file}`), active: `file://${files[0]}` } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const tabs = side.locator('[data-pane-strip="side"] [data-pane-tab]')
+
+  const close = (file: string) =>
+    side.locator(`[data-pane-tab="file://${file}"] [data-slot="tabs-trigger-close-button"]`)
+
+  const center = async (file: string) => {
+    const box = (await close(file).boundingBox())!
+
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  }
+
+  const under = (point: { x: number; y: number }) =>
+    page.evaluate(
+      (point) =>
+        document
+          .elementFromPoint(point.x, point.y)
+          ?.closest('[data-slot="tabs-trigger-close-button"]')
+          ?.closest<HTMLElement>("[data-pane-tab]")?.dataset.paneTab,
+      point,
+    )
+
+  await expect(tabs).toHaveCount(files.length)
+  await expect(side.getByRole("tab", { name: files[0], exact: true })).toHaveAttribute("aria-selected", "true")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const width = (await tabs.nth(1).boundingBox())!.width
+
+  // The next tab slides under the pointer at its old width.
+  const middle = await center(files[2])
+  await page.mouse.click(middle.x, middle.y)
+  await expect(tabs).toHaveCount(files.length - 1)
+  await expect.poll(() => under(middle)).toBe(`file://${files[3]}`)
+
+  // Closing the last tab brings the one before it under the pointer.
+  const last = await center(files[7])
+  await page.mouse.click(last.x, last.y)
+  await expect(tabs).toHaveCount(files.length - 2)
+  await expect.poll(() => under(last)).toBe("file://b.md")
+
+  // Once the pointer leaves the strip, the tabs fill it again.
+  await page.mouse.move(middle.x, middle.y + 200)
+  await expect.poll(async () => (await tabs.nth(1).boundingBox())!.width).toBeGreaterThan(width + 1)
+})
+
 test("a reopened side tab returns to where it closed", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/ReopenPlace"

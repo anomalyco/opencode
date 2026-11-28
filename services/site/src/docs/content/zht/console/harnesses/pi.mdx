@@ -1,0 +1,70 @@
+---
+title: "Pi"
+description: "從 Pi 編碼 agent 使用控制台與 Go 模型。"
+---
+
+[Pi](https://pi.dev) 內建按用量計費與 Go 的 OpenCode 供應商。它會為每個付費或 Go
+模型選擇正確的 API。免費方案聊天模型只能在 OpenCode 中使用；從 Pi 使用會回傳 HTTP `403`。
+
+<Callout>
+  [控制台 CLI](/console/harnesses#console-cli) 可用一個指令設定 Pi，包括工作區的原則、MCP
+  伺服器、技能與指示。請執行 `npx @opencode/console setup pi`。下列步驟為手動設定。
+</Callout>
+
+| 供應商 | 方案 |
+| --- | --- |
+| `opencode` | 按用量計費 |
+| `opencode-go` | Go |
+
+## 設定
+
+兩個供應商都會從 `OPENCODE_API_KEY` 讀取金鑰。請建立[個人 API 金鑰](/console/harnesses#get-an-api-key)。
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+你也可以在 Pi 中執行 `/login` 並選擇供應商。Pi 會將金鑰儲存在 `~/.pi/agent/auth.json`。
+
+```text
+/login opencode
+```
+
+## Go
+
+請使用 `opencode-go` 供應商，並搭配具有 [Go](/console/go) 訂閱之工作區的金鑰。
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## 模型
+
+以 `<provider>/<model-id>` 選取模型，使用[控制台](/console/models#endpoints)或
+[Go](/console/go#endpoints) 表中的 ID。使用 `--list-models` 可列出 Pi 能辨識的模型。
+
+```bash
+pi --list-models opencode-go
+```
+
+在 `~/.pi/agent/settings.json` 中設定預設值，或在 `/model` 選取器中按 `Ctrl+S`。
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+當新的控制台模型尚未出現時，請執行 `pi update --models`。
+
+## 控制台 MCP
+
+Pi v0.99.0 與更新版本支援 MCP。新增[控制台 MCP](/console/harnesses#console-mcp) 伺服器，然後從
+瀏覽器登入。
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```

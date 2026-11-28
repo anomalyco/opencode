@@ -155,13 +155,13 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
           </li>
           <li>
-            <A href="/console/models">{i18n.t("nav.zen")}</A>
+            <A href={language.consoleRoute("/console/models")}>{i18n.t("nav.zen")}</A>
           </li>
           <li>
-            <A href="/console/go">{i18n.t("nav.go")}</A>
+            <A href={language.consoleRoute("/console/go")}>{i18n.t("nav.go")}</A>
           </li>
           <li>
-            <A href="/console/enterprise">{i18n.t("nav.enterprise")}</A>
+            <A href={language.consoleRoute("/console/enterprise")}>{i18n.t("nav.enterprise")}</A>
           </li>
           <Show when={props.zen || props.go}>
             <li>
@@ -256,16 +256,16 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                 </li>
                 <Show when={!props.zen}>
                   <li>
-                    <A href="/console/models">{i18n.t("nav.zen")}</A>
+                    <A href={language.consoleRoute("/console/models")}>{i18n.t("nav.zen")}</A>
                   </li>
                 </Show>
                 <Show when={!props.go}>
                   <li>
-                    <A href="/console/go">{i18n.t("nav.go")}</A>
+                    <A href={language.consoleRoute("/console/go")}>{i18n.t("nav.go")}</A>
                   </li>
                 </Show>
                 <li>
-                  <A href="/console/enterprise">{i18n.t("nav.enterprise")}</A>
+                  <A href={language.consoleRoute("/console/enterprise")}>{i18n.t("nav.enterprise")}</A>
                 </li>
                 <Show when={props.zen || props.go}>
                   <li>

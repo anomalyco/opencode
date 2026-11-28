@@ -28,7 +28,7 @@
   letter-spacing: normal !important;
 }
 
-/* Arabic titles are set in the sans stack: in OpenTUI Mono every space is a monospaced cell, which leaves
+/* Arabic titles are set in the sans stack: in OpenMono every space is a monospaced cell, which leaves
    wide gaps between Arabic words, and Latin names sit better with Arabic in Inter. */
 [data-site]:is(:lang(ar), :lang(fa)) :is(h1, h2, h3):is(:lang(ar), :lang(fa)) {
   font-family: var(--font-sans);

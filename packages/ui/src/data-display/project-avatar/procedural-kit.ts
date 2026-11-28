@@ -1,5 +1,5 @@
 // Shared pieces of the experimental project icon styles in procedural.ts: the style definition, the pixel grid that
-// most styles paint, and color, random and dithering helpers. Only the components lab imports these modules.
+// most styles paint, and color, random and dithering helpers. Only the Lab imports these modules.
 
 import { PALETTES, valueNoise } from "./generated"
 

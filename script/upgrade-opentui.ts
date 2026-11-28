@@ -39,7 +39,7 @@ const skip = new Set([".git", ".opencode", ".turbo", "dist", "node_modules"])
 const keys = ["@opentui/core", "@opentui/keymap", "@opentui/solid"] as const
 
 const files = (await Array.fromAsync(new Bun.Glob("**/package.json").scan({ cwd: root }))).filter(
-  (file) => !file.split("/").some((part) => skip.has(part)),
+  (file) => !file.split(/[\\/]/).some((part) => skip.has(part)),
 )
 
 const setVersion = (cur: string) => {

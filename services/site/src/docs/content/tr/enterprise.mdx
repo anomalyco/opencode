@@ -1,0 +1,129 @@
+---
+title: "Kurumsal"
+description: "Kuruluşunuzdaki kişilerin OpenCode'da hangi modelleri, sağlayıcıları ve entegrasyonları kullanabileceğini denetleyin."
+---
+
+OpenCode'un kuruluşunuzun makinelerinde neleri kullanabileceğini denetlemek için [politikaları](/policies) kullanın. Bunları
+yönetilen yapılandırmaya koyun; böylece kullanıcılar ve projeler onları değiştiremez.
+
+## Dağıtım
+
+Politikaları sistem yapılandırma dosyasına koyun:
+
+| Platform | Dosya                                                 |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+macOS'ta bunları MDM ile `ai.opencode.managed` alanı için yönetilen tercihler olarak da dağıtabilirsiniz. Bkz.
+[yapılandırma konumları](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Bu dosyalardaki politikalar kullanıcı ve proje yapılandırmasının önüne geçer; bu nedenle bir kullanıcı veya depo,
+reddettiğiniz bir şeye izin veremez. Bkz. [öncelik sırası](/policies#precedence).
+
+## Ücretsiz modelleri engelleme
+
+Oturum açmadan kullanılan ücretsiz katmanı reddedin. Diğer her şey çalışmaya devam eder ve kişiler kendi sağlayıcılarını
+ve hesaplarını bağlayabilir.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Ücretsiz katman, hesap gerektirmeyen `opencode` entegrasyonudur. Oturum açmış Console hesapları `opencode#<account>`
+biçimindedir; bu nedenle bu ifade onları etkilemez.
+
+Bir Console çalışma alanı da ücretsiz modeller sunabilir. Bunları engellemek için:
+
+- Kendi çalışma alanınızda Console'un Models sekmesinde **Free models** seçeneğini kapatın. Bkz.
+  [OpenCode modelleri](/console/providers#opencode-models).
+- Ücretsiz modelleri her hesapta gizlemek için OpenCode hizmetinde `OPENCODE_DISABLE_FREE_MODELS=1` ayarlayın. Bkz.
+  [ücretsiz modeller](/models#free-models).
+
+## Console çalışma alanınızı zorunlu kılma
+
+Yalnızca kuruluşunuzun Console çalışma alanına izin verin. Başka hiçbir şey bağlanamaz veya kullanılamaz.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` yalnızca OpenCode Console'u listeler; böylece kişiler oturum açabilir.
+- Yalnızca sizin çalışma alanınız çalışır. Ücretsiz katman, kişisel Console hesapları, diğer kuruluşlar, ortam
+  değişkenlerinden gelen API anahtarları ve `opencode.json` içindeki sağlayıcılar engellenir.
+- Çalışma alanınızın modelleri, MCP sunucuları ve web araması çalışır. Bunları politikayı yeniden dağıtmadan Console'da
+  değiştirin.
+
+`org_01M3CAP8H43Z49CER6NT0Y3ZF1` değerini çalışma alanınızın kuruluş kimliğiyle değiştirin. Çalışma alanında ücretsiz
+modelleri de engellemek için Console'da **Free models** seçeneğini kapatın.
+
+## Yalnızca onaylı sağlayıcılara izin verme
+
+Tüm sağlayıcıları reddedin, ardından onayladıklarınıza izin verin. Bu örnek yalnızca dahili bir OpenAI uyumlu ağ geçidine
+izin verir.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Bir kullanıcının kimlik bilgileri olsa bile engellenen sağlayıcı kaldırılır. Bkz. [sağlayıcılar](/policies#providers).
+
+## MCP sunucularını ve araçları kısıtlama
+
+Yalnızca onaylı MCP sunucularına izin verin ve agent'ların çalıştırmasını istemediğiniz araçları engelleyin.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+Bkz. [MCP sunucuları, skill'ler ve eklentiler](/policies#mcp-servers-skills-and-plugins) ve [araçlar](/policies#tools).
+
+## Çalıştığını doğrulama
+
+- Bir kullanıcı olarak `/connect` ve `/models` çalıştırın ve yalnızca izin verdiklerinizin göründüğünü doğrulayın.
+- Uyarı olup olmadığını sunucu günlüğünden kontrol edin. Doğrulamadan geçmeyen ifade yok sayılır; diğerleri uygulanmaya devam eder.
+- Engellenen bir araç çağrısı `Blocked by configuration policy` hatasıyla başarısız olur.
+
+## Sürümler
+
+| Eylem                                                                     | Gereken |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+Daha eski istemciler bu ifadeleri yok sayar.

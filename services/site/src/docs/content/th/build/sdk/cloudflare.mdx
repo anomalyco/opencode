@@ -1,0 +1,102 @@
+---
+title: "Cloudflare"
+description: "รัน OpenCode ใน Cloudflare Durable Object ด้วย @opencode/sdk/workerd โดยใช้ที่เก็บ SQLite ของออบเจกต์"
+---
+
+ใช้ `@opencode/sdk/workerd` ใน Cloudflare Durable Object โดย profile นี้ใช้ที่เก็บ SQLite ของออบเจกต์เพื่อบันทึกอีเวนต์ถาวรและกู้คืนได้เมื่อระบบนำออบเจกต์ออกจากหน่วยความจำ
+นอกจากนี้ยังใช้บริการทดแทนระบบไฟล์และโปรเซสในเครื่องที่ไม่พร้อมใช้งาน
+
+```sh
+bun add @opencode/sdk
+```
+
+ถือโฮสต์หนึ่งตัวตลอดอายุของอินสแตนซ์ Durable Object แทนการสร้างใหม่ทุกคำขอ
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` กันอีเวนต์ Durable Object ทั้งหมดไว้จนโฮสต์พร้อม และรีเซ็ตออบเจกต์หาก
+การเริ่มต้นล้มเหลว Promise ที่เก็บไว้ทำให้ตัวจัดการคำขอเข้าถึงโฮสต์เดียวกันได้โดยตรงหลังเริ่มทำงาน
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler ใช้เงื่อนไขแพ็กเกจ `workerd` เพื่อเลือกส่วนของ OpenCode ที่ทำงานร่วมกับ Workerd ได้ เนื่องจาก Cloudflare อาจนำ Durable Object ออกจากหน่วยความจำโดยไม่รันขั้นตอนคืนทรัพยากร ระบบจึงทำงานได้ถูกต้องแม้ไม่เรียก `close()`
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## กำหนดเส้นทางคำขอขาออก
+
+ส่ง `fetch` เพื่อกำหนดเส้นทางคำขอ HTTP ขาออกของ OpenCode (การกำหนดค่า OpenCode Console คำขอโมเดล การดึงและ
+ค้นหาเว็บ การกำหนดค่า well-known และเซิร์ฟเวอร์ MCP ระยะไกล) ผ่านตัวจัดการกำหนดเองเช่น Service Binding โค้ดเอเจนต์ใน
+Code Mode ยังใช้ `globalThis.fetch`
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## ปรับแต่ง
+
+ปรับแต่งอินสแตนซ์ OpenCode ของคุณด้วยการลงทะเบียนปลั๊กอินที่บันเดิลกับ
+Worker ส่งปลั๊กอินให้ `OpenCodeWorkerd.create()` เพื่อปรับแต่งเอเจนต์ โมเดล
+เครื่องมือ และพฤติกรรมอื่น
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+ดู[เอกสารปลั๊กอินฉบับเต็ม](/build/plugins/server)สำหรับฮุก การแปลง เครื่องมือ และบริบทปลั๊กอินทั้งหมด

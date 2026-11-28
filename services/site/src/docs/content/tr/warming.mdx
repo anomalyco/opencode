@@ -1,0 +1,197 @@
+---
+title: "Isıtma"
+description: "Promptlar arasında duraklarken bir oturumun sağlayıcı prompt önbelleğinin süresinin dolmasını önlemek için düzenli istekler gönderin."
+---
+
+Oturum ısıtma, promptlar arasında duraklarken sağlayıcı tarafındaki prompt önbelleklerini veya diğer kısa ömürlü durumu
+korumak için düzenli model istekleri gönderir. Varsayılan olarak kapalıdır.
+
+Isıtmayı herhangi bir [OpenCode yapılandırma dosyasında](/config) etkinleştirin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Bu yapılandırmayla OpenCode, son etkin oturumu prompt önbelleğinin süresi dolmadan hemen önce ısıtır: modelin
+[`cache.ttl`](/models#cache-lifetime) değerinin %90'ında veya modelde bu ayar yoksa her dört dakikada bir. Son ısıtma
+dışı istekten bu yana 30 dakika geçene kadar devam eder.
+
+## Seçenekler
+
+Isıtma promptunu, boşta kalma aralığını veya etkin pencereyi değiştirmek için nesne biçimini kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Alan | Varsayılan | Amaç |
+| --- | --- | --- |
+| `prompt` | Canlı tutma talimatı | Her ısıtma isteği için geçici bir kullanıcı mesajı olarak eklenir. Varsayılan, modelden hiçbir iş yapmamasını, araç kullanmamasını ve `OK` yanıtı vermesini ister. |
+| `interval` | `"auto"` | Sonraki ısıtma isteğinden önceki boşta kalma süresi. `"auto"`, modelin `cache.ttl` değerinin %90'ını veya bu ayar yoksa dört dakikayı kullanır. |
+| `duration` | `"30 minutes"` | Son ısıtma dışı model isteğinden itibaren ölçülen ısıtma penceresi. |
+
+Belirtilmeyen nesne alanları varsayılanlarını korur. Örneğin bu yalnızca aralığı değiştirir:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Otomatik aralık
+
+Varsayılan olarak `interval` değeri `"auto"`dur; bu, her modelin prompt önbelleğinin süresi dolmadan hemen önce ısıtır.
+OpenCode modelin [`cache.ttl`](/models#cache-lifetime) ayarının %90'ını kullanır; bu nedenle `"5m"` bir önbellek her 4,5
+dakikada bir ısıtılır. `cache.ttl` değeri olmayan modeller her dört dakikada bir ısıtılır.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+`duration` değerinden uzun süren bir önbellek, örneğin 30 dakikalık varsayılanla `"1h"`, ısıtılmaz; çünkü zaten ısıtma
+penceresinden daha uzun yaşar. OpenCode bunu oturum başına bir kez günlüğe yazar. Isıtmak için `duration` değerini artırın.
+
+## Sağlayıcı ve model başına
+
+Önbelleği yalnızca belirli bir sağlayıcının veya modelin oturumlarında sıcak tutmak ya da bu oturumlara ayrı bir zamanlama
+vermek için o sağlayıcıda veya modelde `settings.cache.warming` ayarlayın. Bu ayar, `prompt` dışında üst düzey `warming`
+ile aynı değerleri kabul eder ve onun önüne geçer.
+Model ayarı sağlayıcı ayarını geçersiz kılar.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Burada Anthropic oturumları Claude Haiku 5.5 hariç her 4,5 dakikada bir ısıtılır ve diğer sağlayıcılar ısıtılmaz. Nesne
+biçiminde belirtilmeyen alanlar üst düzey `warming` değerinden, sonra varsayılanlardan gelir. Geçersiz bir ayar uyarı
+günlüğe yazar ve üst düzey `warming` değerine geri döner.
+
+## Süreler
+
+`interval` ve `duration` süre dizeleri kabul eder. İkisi de sıfırdan büyük sonlu değerlere çözümlenmelidir ve `interval`
+`duration` değerinden kısa olmalıdır. Aksi hâlde OpenCode ısıtmayı atlar ve günlüğe bir uyarı yazar.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Zamanlama
+
+Isıtma, üst düzey bir oturumdaki ısıtma dışı bir model isteğinden sonra başlar. Subagent oturumları ısıtılmaz. Her aralık,
+yanıtın bitmesinden değil son isteğin veya ısıtma isteğinin gönderilmesinden itibaren sayılır; çünkü bir sağlayıcının
+önbellek ömrü istek ona ulaştığında başlar. Bir ısıtma isteği etkin pencereyi uzatmaz.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Sıkıştırma dahil yeni bir ısıtma dışı model etkinliği iki zamanlayıcıyı da sıfırlar. Süreye eşit veya ondan uzun açık bir
+aralık uyarıyla reddedilir ve o kadar uzun bir `"auto"` aralık, önbellek pencereden uzun yaşadığı için ısıtmayı atlar.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode, sıkıştırma dahil bir model isteği çalışırken asla ısıtma isteği göndermez. Aralık geldiğinde hâlâ biri çalışıyorsa
+ısıtma onun bitmesini bekler ve ardından, o istekten kalan önbellek süresi dolmadığı sürece hemen gönderir. Dolmuşsa
+ısıtma sonraki normal isteğe kadar durur.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## İstekler
+
+Bir ısıtma isteği oturumun geçerli modelini, agent'ını, talimatlarını ve konuşma bağlamını kullanır. OpenCode yapılandırılmış
+promptu geçici olarak ekler, bir model çağrısı yapar ve yanıtı atar.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+İstek girdi kabul etmez, geçmişe mesaj eklemez veya kalıcı oturum durumunu değiştirmez. OpenCode yerel araç çağrılarını
+göndermez ve bir araç döngüsünü sürdürmez; varsayılan prompt da modele araç kullanmamasını söyler.
+
+## Hatalar
+
+Isıtma hataları oturumu başarısız kılmadan veya değiştirmeden günlüğe yazılır. OpenCode yeniden denemeden önce sonraki
+aralığı bekler; özgün etkin pencere geri saymaya devam eder.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+Önbelleği ıskalayan, yani okuduğu önbellek yazdığından az olan bir ısıtma isteği, o oturum için sonraki ısıtma dışı isteğe
+kadar ısıtmayı durdurur. Önbellek kullanımı bildirmeyen sağlayıcılar hiçbir zaman ıskalama sayılmaz.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Maliyetler
+
+Isıtma istekleri gerçek sağlayıcı istekleridir. Token tüketebilir, maliyet doğurabilir, hız limitlerine sayılabilir ve diğer
+model istekleri gibi başarısız olabilir.
+
+- Daha kısa aralıklar istek hacmini artırır.
+- Daha uzun süreler daha fazla ısıtma isteğine olanak tanır.
+- Isıtmayı yalnızca sağlayıcı tarafındaki faydası ek kullanıma değdiğinde etkinleştirin.
+
+Örneğin `cache.ttl` değeri olmayan bir modelde varsayılanlar, kesintisiz tek bir 30 dakikalık pencerede en fazla yedi
+ısıtma denemesine izin verir: 4, 8, 12, 16, 20, 24 ve 28. dakikalarda.
+
+## Devre dışı bırakma
+
+Açıkça kapatmak için `warming` değerini `false` yapın. Alanı belirtmemek de ısıtmayı kapalı bırakır.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

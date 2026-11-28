@@ -1,3 +1,5 @@
+import type { Key } from "../i18n"
+
 export const dict = {
   "app.title": "Yapay Zeka Model Kullanım Sıralamaları | OpenCode Data",
   "app.description":
@@ -125,6 +127,29 @@ export const dict = {
   "home.noSessionCostTitle": "Oturum maliyeti verisi yok",
   "home.noSessionCostDescription": "Bu ürünle eşleşen oturum içeren model satırı yok.",
   "home.costSession": "Maliyet/Oturum",
+  "home.newModelsTitle": "Yeni Modeller",
+  "home.newModelsDescription": "Son 30 günün en büyük lansmanı.",
+  "home.retentionDescription": "Bir haftadaki kullanıcıların ertesi hafta geri dönme oranı.",
+  "home.noRetentionTitle": "Elde tutma verisi yok",
+  "home.noRetentionDescription": "Elde tutma verileri, tam bir geri dönüş haftası tamamlandığında görünür.",
+  "home.comparisonsTitle": "Model Karşılaştırmaları",
+  "home.comparisonsDescription": "Sıralamadaki popüler model çiftleri.",
+  "table.rank": "Sıra",
+  "newModels.releasedBy": "{{author}}, {{date}} tarihinde yayınlandı",
+  "newModels.released": "{{date}} tarihinde yayınlandı",
+  "newModels.free": "OpenCode'da ücretsiz",
+  "newModels.tokensSinceLaunch": "lansmandan bu yana token",
+  "newModels.usersTried": "deneyen kullanıcı",
+  "newModels.alsoNew": "Diğer yeniler",
+  "newModels.dailyUsage": "{{model}} günlük kullanımı",
+  "retention.marker": "Elde tutma",
+  "retention.rate": "Oran",
+  "retention.eligible": "Uygun",
+  "retention.aria": "{{model}}, haftalık elde tutma {{rate}}, uygun kullanıcı-hafta {{users}}",
+  "compare.detail.topTwo": "Son kullanıma göre ilk iki",
+  "compare.detail.leaderChallenger": "Lider karşı rakip",
+  "compare.detail.adjacent": "Sıralamada komşu ikili",
+  "compare.detail.topAlternative": "En iyi modele alternatif",
   "lab.title": "{{lab}} Yapay Zeka Model Kullanımı ve Sıralamaları | OpenCode Data",
   "lab.description":
     "OpenCode'da kullanılan {{lab}} modellerini karşılaştırın: token kullanımı, model sıralamaları, bağlam pencereleri, yayın tarihleri, maliyetler ve modele özel veriler.",
@@ -305,7 +330,7 @@ export const dict = {
   "share.comparison.cache": "Önbellekten girdi",
   "share.card.outro": "Dünyanın en büyük\nçıkarım altyapısı",
   "share.card.tokens": "Token",
-  "share.card.versus": "vs",
+  "share.card.versus": "karşı",
   "share.card.updated": "Güncelleme: {{date}}",
   "share.embed.missing": "Bu yerleştirme mevcut değil.",
   "share.embed.open": "OpenCode Data'da {{title}}",
@@ -376,4 +401,4 @@ export const dict = {
   "share.calendar.previous": "Önceki ay",
   "share.calendar.next": "Sonraki ay",
   "share.calendar.wholeRange": "Tüm aralık",
-} as const
+} satisfies Record<Key, string>

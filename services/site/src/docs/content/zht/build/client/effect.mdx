@@ -1,0 +1,153 @@
+---
+title: "Effect 用戶端"
+description: "使用 @opencode/client/effect 從 Effect 呼叫 OpenCode HTTP API，它會回傳具型別的 Effect 與 Stream。"
+---
+
+`@opencode/client/effect` 是 OpenCode HTTP API 的 Effect 原生用戶端。它會回傳具型別的 Effect 與 Stream，
+並將回應解碼為 OpenCode schema 值。
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## 建立用戶端
+
+以伺服器 URL 建立用戶端，然後呼叫依 API 資源分組的方法。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## 標頭與請求
+
+在所提供 `HttpClient` 上設定預設標頭。原生操作使用
+正常的 Effect 中斷來取消。RPC 方法還接受
+每次呼叫的 location、header 與 signal 選項。
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## 串流事件
+
+`event.subscribe()` 與 `experimental.session.log()` 等串流操作會回傳 Effect Stream。
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+同一個用戶端的原生與 RPC 事件 Stream 共用一條按需建立的連線。建立
+Stream 時不會連線，要等到開始取用才會連線。停止其中一個取用者不影響其他取用者，直到最後一個離開才會關閉來源。
+來源遇到 EOF 或發生錯誤時，目前的訂閱就會結束，不會自動重試或重播。稍後才開始取用原生事件時，
+會先收到目前的連線標記，再收到即時事件。
+
+## 外掛 RPC
+
+使用與 Promise 用戶端及伺服器外掛相同的共用契約：
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+方法引數與結果會從契約推斷。第二個選用的
+引數包含 `location`、`signal` 與 `headers`；省略 location 時使用
+一般請求預設值。取用結果的 Effect 中斷時，呼叫也會跟著中斷。
+方法錯誤對照表會在 Effect 錯誤通道中推斷。宣告的錯誤會
+透過其資料 schema 解碼。具型別子用戶端會移除通用的 HTTP
+RPC 錯誤包裝；保留的 `rpc.*` 型別用於識別框架失敗。
+
+RPC 事件是具型別的 Stream，而不是回呼式的 `on` 監聽器。它們會接收
+該 RPC 在所有 location 的事件，每個事件都有必要的 `location` 與正常
+前綴型別，例如 `rpc.acme.updated`。這與伺服器外掛控制代碼不同，
+後者固定於其自己的 location。定義、schema、註冊與即時訂閱語意請參閱 [Effect 外掛 RPC](/build/plugins/effect/rpc)。
+
+## 本機背景服務
+
+僅限 Node 的 `@opencode/client/effect/service` 進入點會以 Effect 探索、啟動、驗證並停止本機
+背景服務。
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+為確認已在執行的服務建立已驗證的用戶端。
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+找出服務而不啟動它，或停止註冊時所記錄的那個服務執行個體。
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

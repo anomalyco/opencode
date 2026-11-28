@@ -7,11 +7,11 @@ export const content = {
       link: "2.2'deki yenilikler",
     },
     "desktop-terminals-now-survive-restarts": {
-      text: "Masaüstü terminalleri artık yeniden başlatmalarda kapanmıyor.",
+      text: "Desktop'ta açık terminaller artık yeniden başlattığınızda da korunur.",
       link: "v2.2.4'e bakın",
     },
     "agents-can-now-generate-images": {
-      text: "Ajanlar artık görsel üretebiliyor.",
+      text: "Agent'lar artık görsel üretebiliyor.",
       link: "v2.2.1'e bakın",
     },
     "steer-your-sessions-from-your-phone": {
@@ -26,7 +26,7 @@ export const content = {
   products: {
     desktop: {
       name: "Desktop",
-      body: "macOS, Windows ve Linux'ta oturumlar, sekmeler, diff'ler, yerleşik tarayıcı ve eklentiler.",
+      body: "macOS, Windows ve Linux'ta oturumlar, sekmeler, değişiklik farkları, yerleşik tarayıcı ve eklentiler.",
       action: "İndir",
     },
     mobile: {
@@ -42,11 +42,11 @@ export const content = {
     sdk: {
       name: "SDK",
       body: "OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin.",
-      action: "Dokümanlar",
+      action: "Belgeleri oku",
     },
     mini: {
       name: "Mini",
-      body: "Minimal bir terminal arayüzü. Yanıtlar kaydırma geçmişinize yazılır, altta tek bir prompt kalır.",
+      body: "Sade bir terminal arayüzü. Yanıtlar kaydırma geçmişine yazılır, altta tek bir prompt kalır.",
       action: "Kur",
     },
   },
@@ -54,34 +54,34 @@ export const content = {
     desktop: {
       title: "OpenCode | macOS, Windows ve Linux için masaüstü uygulaması",
       description:
-        "İstediğiniz kadar OpenCode ajanını paralel çalıştırın, her değişikliği yanlarındaki tarayıcıda görün ve her cihazdan devam edin. macOS, Windows ve Linux için.",
+        "Dilediğiniz kadar OpenCode agent'ını paralel çalıştırın. Her değişikliği yan taraftaki tarayıcıda görün ve istediğiniz cihazdan devam edin. macOS, Windows ve Linux için.",
       intro:
-        "Birden fazla ajanı aynı anda, her oturumu kendi sekmesinde çalıştırın. Her değişikliği diff olarak inceleyin, istediğiniz satıra yorum yapın ve sonucu yerleşik tarayıcıda kontrol edin. macOS, Windows ve Linux için.",
+        "Birden fazla agent'ı aynı anda çalıştırın, her oturum kendi sekmesinde kalsın. Değişiklik farklarını inceleyin, dilediğiniz satıra yorum bırakın ve sonucu yerleşik tarayıcıda kontrol edin. macOS, Windows ve Linux için.",
       showcase: {
         "parallel-agents": {
-          title: "Paralel ajanlar",
-          body: "İstediğiniz kadar ajan başlatın ve hepsinin paralel çalışmasına izin verin. Bitirdikçe aralarında geçiş yapın.",
+          title: "Paralel agent'lar",
+          body: "Dilediğiniz kadar agent başlatın ve hepsini paralel çalıştırın. İşleri bittikçe aralarında geçiş yapın.",
         },
         "see-it-in-the-browser": {
           title: "Tarayıcıda gör",
-          body: "Uygulamanız ajanın yanında bir tarayıcıda açılır, böylece ikiniz de her değişikliği anında görürsünüz.",
+          body: "Uygulamanız agent'ın yanındaki tarayıcıda açılır. Böylece hem siz hem de agent her değişikliği anında görür.",
         },
         "on-every-device": {
           title: "Her cihazda",
-          body: "Tüm cihazlarınızda ajan başlatın ve masaüstü uygulamasından, terminalden ya da telefonunuzdan devam edin.",
+          body: "Tüm cihazlarınızdan agent başlatın. Masaüstü uygulamasında, terminalde veya telefonunuzda kaldığınız yerden devam edin.",
         },
         "extend-it": {
           title: "Genişletin",
-          body: "Araçlarınızı ve hizmetlerinizi bağlayın, ajan her şeyle çalışabilsin. Ya da OpenCode'un kendisi için kenar çubuğunda kendi arayüzü olan eklentiler yapmasını sağlayın.",
+          body: "Araçlarınızı ve hizmetlerinizi bağlayıp agent'ın bunları kullanmasını sağlayın. Dilerseniz OpenCode'a, kenar çubuğunda kendi arayüzü olan eklentiler yazdırın.",
         },
       },
     },
     mobile: {
       title: "OpenCode | Mobile, kodlama oturumlarınız telefonunuzda",
       description:
-        "OpenCode oturumlarını telefonunuzdan başlatın ve yönetin. Ajan bilgisayarınızda çalışırken onunla konuşun.",
+        "OpenCode oturumlarını telefonunuzdan başlatıp yönlendirin. Agent bilgisayarınızda çalışırken onunla konuşun.",
       intro:
-        "Nerede olursanız olun oturumları telefonunuzdan başlatın ve yönetin. Bir oturumu arayıp ajanla konuşun ya da bir oturum açıp kaldığınız yerden devam edin, hepsi kendi bilgisayarınızdaki OpenCode üzerinde.",
+        "Nerede olursanız olun, oturumları telefonunuzdan başlatıp yönlendirin. Oturumu arayarak agent'la konuşun ya da dilediğiniz oturumu açıp kaldığınız yerden devam edin. OpenCode tüm bu işlemlerde kendi bilgisayarınızda çalışır.",
       features: {
         "notify-when-done": {
           title: "Bitince haber ver",
@@ -101,7 +101,7 @@ export const content = {
         },
         "follow-along": {
           title: "Canlı takip",
-          body: "Ajan çalışırken zaman çizelgesinin güncellenmesini izleyin.",
+          body: "Agent çalışırken zaman çizelgesindeki güncellemeleri anında görün.",
         },
         "your-computer": {
           title: "Bilgisayarınız",
@@ -119,48 +119,44 @@ export const content = {
       showcase: {
         voice: {
           title: "Ses",
-          body: "Oturumu arayın, ne istediğinizi söyleyin. Ajan sesli yanıt verir.",
+          body: "Oturumu arayıp ne istediğinizi söyleyin. Agent size sesli yanıt verir.",
         },
         sessions: {
           title: "Oturumlar",
           body: "Herhangi bir oturumu açıp durumunu görün ve kaldığınız yerden devam edin.",
         },
-        steer: {
-          title: "Yönet",
-          body: "Oturumun ortasında yön değiştirmek için yeni bir mesaj gönderin.",
-        },
         results: {
           title: "Sonuçlar",
-          body: "İstediğiniz iş bitince arama size neyin değiştiğini anlatır.",
+          body: "İstediğiniz iş tamamlandığında nelerin değiştiğini görüşmede dinleyin.",
         },
       },
     },
     terminal: {
-      title: "OpenCode | Açık kaynaklı kodlama ajanı için terminal arayüzü",
+      title: "OpenCode | Açık kaynaklı kodlama agent'ı için terminal arayüzü",
       description:
-        "OpenCode için her kabukta, editörde ya da uzak sunucuda çalışan hızlı bir terminal arayüzü. Ne istediğinizi anlatın, her düzenlemeyi diff olarak görün ve komutları onaylayın.",
+        "OpenCode için her kabukta, editörde veya uzak sunucuda çalışan hızlı bir terminal arayüzü. Ne istediğinizi anlatın, değişiklik farklarını görün ve komutları onaylayın.",
       intro:
-        "Her kabukta, editörde ya da uzak sunucuda çalışan hızlı bir terminal arayüzü. Ne istediğinizi sade bir dille anlatın, her düzenlemenin diff olarak gelişini izleyin ve hangi komutların kendiliğinden çalışacağını seçin.",
+        "Her kabukta, editörde veya uzak sunucuda çalışan hızlı bir terminal arayüzü. Ne istediğinizi sade bir dille anlatın, değişiklik farklarını anında görün ve hangi komutların otomatik çalışacağını seçin.",
       features: {
         "any-terminal": {
           title: "Her terminal",
           body: "Her kabukta, editörünüzün terminalinde ya da uzak sunucuda çalışır.",
         },
         "diffs-in-the-timeline": {
-          title: "Akışta diff'ler",
-          body: "Ajan düzenleme yaptıkça her birini zaman çizelgesinde diff olarak görün.",
+          title: "Akışta değişiklik farkları",
+          body: "Agent düzenleme yaptıkça değişiklik farklarını zaman çizelgesinde görün.",
         },
         "pick-up-later": {
           title: "Sonra devam et",
-          body: "Son oturuma -c ile, herhangi birine -s ile devam edin.",
+          body: "Son oturuma -c ile, dilediğiniz oturuma -s ile devam edin.",
         },
         "one-off-runs": {
-          title: "Tek seferlik",
+          title: "Tek seferlik çalıştırma",
           body: "opencode run tek bir mesaj gönderir ve yanıtı yazdırır.",
         },
         "agents-and-commands": {
-          title: "Ajan ve komutlar",
-          body: "shift+tab ile ajan değiştirin, ctrl+p ile tüm komutları açın.",
+          title: "Agent ve komutlar",
+          body: "shift+tab ile agent değiştirin, ctrl+p ile tüm komutları açın.",
         },
         "auto-approve": {
           title: "Otomatik onay",
@@ -171,26 +167,26 @@ export const content = {
           body: "--server ile bir OpenCode sunucusuna URL üzerinden bağlanın.",
         },
         "usage-stats": {
-          title: "İstatistikler",
-          body: "opencode stats paylaşılabilir kullanım istatistikleri gösterir.",
+          title: "Kullanım istatistikleri",
+          body: "opencode stats komutu paylaşılabilir kullanım istatistiklerini gösterir.",
         },
       },
       showcase: {
         "ask-in-plain-words": {
-          title: "Sade bir dille sor",
-          body: "Ne istediğinizi yazın, ajan çalışırken planını gösterir.",
+          title: "Sade bir dille anlatın",
+          body: "Ne istediğinizi yazın. Agent çalışırken planını gösterir.",
         },
         "approve-what-runs": {
-          title: "Çalışanı onayla",
-          body: "Düzenlemeler diff olarak görünür, komutlar izninizi bekler.",
+          title: "Komutlara siz onay verin",
+          body: "Düzenlemeleri farklarıyla görün. Komutlar onayınızı bekler.",
         },
         "make-it-yours": {
           title: "Size özel",
-          body: "Tek tuşla tema değiştirin, varsayılandan tokyonight'a ve daha fazlasına.",
+          body: "Varsayılan tema, tokyonight ve diğer temalar arasında tek tuşla geçiş yapın.",
         },
         mini: {
           title: "Mini",
-          body: "opencode mini'yi çalıştırın, yanıtlar kaydırma geçmişinize yazılır.",
+          body: "opencode mini komutunu çalıştırdığınızda yanıtlar terminalinizin kaydırma geçmişine yazılır.",
         },
       },
     },
@@ -199,14 +195,14 @@ export const content = {
       description:
         "OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin. Tipli TypeScript istemcisi oturum oluşturur, prompt gönderir ve her olayı anında aktarır.",
       intro:
-        "OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin. SDK, OpenCode'u kendi yapılandırmanız ve modellerinizle sürecinizin içinde çalıştırır. Tipli istemcisi oturum oluşturur, prompt gönderir ve her olayı aktarır.",
+        "OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin. SDK, OpenCode'u yapılandırmanız ve modellerinizle aynı süreçte çalıştırır. Tipli istemcisi oturum oluşturur, prompt gönderir ve tüm olayları akış olarak iletir.",
       features: {
         "typescript-client": {
           title: "TypeScript istemcisi",
           body: "@opencode/client ile aynı değerlere sahip tipli istekler ve olaylar.",
         },
         "sessions-from-code": {
-          title: "Koddan oturumlar",
+          title: "Koddan oturum başlatma",
           body: "Herhangi bir betikten oturum oluşturun ve prompt gönderin.",
         },
         "any-model": {
@@ -214,16 +210,16 @@ export const content = {
           body: "OpenCode kurulumunuzdaki modelleri kullanır.",
         },
         "npm-or-bun": {
-          title: "npm ya da bun",
+          title: "npm ya da Bun",
           body: "npm i @opencode/sdk ya da bun add @opencode/sdk ile kurun.",
         },
         "in-process-host": {
           title: "Süreç içi host",
-          body: "OpenCode'u ağ adımı olmadan bellekte çalıştırır.",
+          body: "OpenCode'u ağa çıkmadan bellekte çalıştırır.",
         },
         "your-plugins": {
           title: "Eklentileriniz",
-          body: "Süreç içi host'u oluştururken kendi eklentilerinizi verin.",
+          body: "Süreç içi host'u oluştururken kendi eklentilerinizi parametre olarak geçin.",
         },
         "promise-or-effect": {
           title: "Promise ya da Effect",
@@ -236,61 +232,61 @@ export const content = {
       },
       showcase: {
         "fix-ci-from-code": {
-          title: "CI'ı koddan düzelt",
+          title: "CI sorunlarını koddan düzeltin",
           body: "Kısa bir betik OpenCode'dan başarısız testleri düzeltmesini ister ve testleri yeniden çalıştırır.",
         },
         "follow-every-step": {
-          title: "Her adımı izle",
-          body: "Ajanın çağırdığı her aracı anında görmek için olayları aktarın.",
+          title: "Her adımı izleyin",
+          body: "Olay akışından agent'ın çağırdığı her aracı anında görün.",
         },
         "build-your-own-tools": {
-          title: "Kendi araçların",
+          title: "Kendi araçlarınızı geliştirin",
           body: "OpenCode'u birkaç satırla botlara, panolara ve iş akışlarına bağlayın.",
         },
         "in-your-process": {
           title: "Kendi sürecinizde",
-          body: "OpenCode'u kendi yapılandırmanız ve modellerinizle sürecinizin içinde çalıştırır.",
+          body: "OpenCode'u kendi yapılandırmanız ve modellerinizle uygulamanızın sürecinde çalıştırır.",
         },
       },
     },
     mini: {
-      title: "OpenCode | Mini, ajan için minimal bir terminal arayüzü",
+      title: "OpenCode | Mini, agent için sade bir terminal arayüzü",
       description:
-        "Mini, OpenCode'u minimal bir terminal arayüzünde çalıştırır. Yanıtlar terminalin kendi kaydırma geçmişine yazılır, altta yalnızca bir prompt ve bir durum satırı kalır.",
+        "Mini, OpenCode'u sade bir terminal arayüzünde çalıştırır. Yanıtlar terminalin kendi kaydırma geçmişine yazılır. Altta yalnızca prompt ve durum satırı kalır.",
       intro:
-        "OpenCode için minimal bir terminal arayüzü. opencode mini'yi çalıştırın, yanıtlar doğrudan terminalinizin kaydırma geçmişine yazılsın. Onları diğer çıktılar gibi kaydırır, arar ve kopyalarsınız. Altta yalnızca prompt ve bir durum satırı kalır.",
+        "OpenCode için sade bir terminal arayüzü. opencode mini komutunu çalıştırın. Yanıtlar doğrudan terminalin kaydırma geçmişine yazılır. Diğer çıktılarda olduğu gibi yanıtları kaydırarak inceleyebilir, içinde arama yapabilir ve kopyalayabilirsiniz. Altta yalnızca prompt ve durum satırı kalır.",
       features: {
         "your-scrollback": {
           title: "Kaydırma geçmişi",
-          body: "Yanıtlar sıradan terminal geçmişine dönüşür.",
+          body: "Yanıtlar normal terminal çıktısı olarak kaydırma geçmişine eklenir.",
         },
         "one-prompt": {
           title: "Tek prompt",
-          body: "Ajan, model, bağlam ve maliyet tek bir durum satırında.",
+          body: "Agent, model, bağlam ve maliyet tek durum satırında.",
         },
         permissions: {
           title: "İzinler",
-          body: "Düzenlemelere ve komutlara prompt alanından izin verin.",
+          body: "Düzenlemelere ve komutlara giriş alanından izin verin.",
         },
         "how-much-shows": {
-          title: "Ne kadar görünür",
-          body: "Düşünme ve araç çıktısı için sessiz, varsayılan ya da tümü.",
+          title: "Görünüm ayarları",
+          body: "Düşünme ve araç çıktıları için sessiz, varsayılan veya tümünü göster modunu seçin.",
         },
         "pick-up-later": {
           title: "Sonra devam et",
-          body: "Son oturuma -c ile, herhangi birine -s ile devam edin.",
+          body: "Son oturuma -c ile, dilediğiniz oturuma -s ile devam edin.",
         },
         "same-opencode": {
           title: "Aynı OpenCode",
-          body: "Diğer uygulamalarla aynı sunucu, ajanlar ve modeller.",
+          body: "Diğer uygulamalarla aynı sunucu, agent'lar ve modeller.",
         },
         agents: {
-          title: "Ajanlar",
-          body: "Ajanları doğrudan prompt'tan değiştirin.",
+          title: "Agent'lar",
+          body: "Giriş alanından doğrudan başka bir agent'a geçin.",
         },
         compact: {
           title: "Sıkıştır",
-          body: "Uzun bir oturumu /compact ile küçültün.",
+          body: "Uzun oturumları /compact ile sıkıştırın.",
         },
       },
     },
@@ -303,31 +299,31 @@ export const content = {
   extensions: {
     browse: {
       name: "Browse",
-      body: "Ajanlar gerçek tarayıcınızı kullansın.",
-      title: "OpenCode | Browse, kodlama ajanları için gerçek tarayıcınız",
+      body: "Agent'lar gerçek tarayıcınızı kullansın.",
+      title: "OpenCode | Browse, kodlama agent'ları için gerçek tarayıcınız",
       description:
-        "Browse, OpenCode'un ve diğer MCP istemcilerinin gerçek tarayıcınızı kullanmasını sağlar. Ajanlar okur, tıklar, yazar, ekran görüntüsü alır, sekme kaydeder ve girişleri ve 2FA'yı size bırakır.",
+        "Browse, OpenCode ve diğer MCP istemcilerinin gerçek tarayıcınızı kullanmasını sağlar. Agent'lar sayfaları okur, tıklar, yazı yazar, ekran görüntüsü alıp sekmeleri kaydeder. Oturum açma ve 2FA adımlarını size bırakır.",
       intro:
-        "Ajanlarınızın gerçek tarayıcınızı, yani sekmelerinizi, oturum açmış hesaplarınızı ve eklentilerinizi kullanmasını sağlayan bir MCP sunucusu ve bir Chromium eklentisi. Sekmeleri arka planda, yolunuzdan uzakta gruplanmış olarak açarlar; sayfaları okur, tıklar, yazar, ekran görüntüsü alır ve sekme kaydederler. Sıra size geldiğinde, örneğin bir giriş, 2FA istemi ya da ödeme için, sekmeyi size verirler ve siz Continue'ya tıklayınca devam ederler.",
+        "Agent'larınızın gerçek tarayıcınızı açık sekmeleriniz, oturumlarınız ve eklentilerinizle birlikte kullanmasını sağlayan bir MCP sunucusu ve Chromium eklentisi. Agent'lar sekmeleri arka planda gruplandırarak açar, böylece işiniz bölünmez. Sayfaları okur, tıklar, yazı yazar, ekran görüntüsü alıp sekmeleri kaydederler. Oturum açma, 2FA veya ödeme için sıra size geldiğinde sekmeyi size devrederler. Continue düğmesine tıkladığınızda kaldıkları yerden devam ederler.",
       features: {
         "your-real-browser": {
           title: "Gerçek tarayıcınız",
           body: "Chrome, Edge, Brave, Arc, Helium, Vivaldi, Opera ve Chromium.",
         },
         "out-of-your-way": {
-          title: "Yolunuzda değil",
-          body: "Ajan sekmeleri arka planda, daraltılmış gruplarda açılır.",
+          title: "İşinizi bölmez",
+          body: "Agent sekmeleri arka planda, daraltılmış gruplar hâlinde açılır.",
         },
         handoffs: {
-          title: "Devir",
-          body: "Girişi ya da 2FA adımını kendiniz yapın, sonra Continue'ya tıklayın.",
+          title: "Sıra sizde",
+          body: "Oturum açma veya 2FA adımını kendiniz tamamlayın, ardından Continue düğmesine tıklayın.",
         },
         "lend-a-tab": {
           title: "Sekme ver",
-          body: "Açık bir sekmeyi ajana vermek için araç çubuğu düğmesine tıklayın.",
+          body: "Açık sekmeyi agent'a devretmek için araç çubuğundaki düğmeye tıklayın.",
         },
         "record-and-capture": {
-          title: "Kaydet ve yakala",
+          title: "Kayıt ve ekran görüntüsü",
           body: "Ekran görüntüleri, sekme kayıtları ve ağ trafiği.",
         },
         "any-mcp-client": {
@@ -335,26 +331,26 @@ export const content = {
           body: "OpenCode, Claude Code, Cursor, Codex, Zed ve çok daha fazlası.",
         },
         "all-your-logins": {
-          title: "Tüm oturum açmalarınız",
-          body: "Ajanlar zaten oturum açtığınız siteleri kullanır. Anahtar yok, kurulum yok.",
+          title: "Açık oturumlarınız",
+          body: "Agent'lar oturum açtığınız siteleri kullanır. Anahtar da kurulum da gerekmez.",
         },
         "allowed-sites": {
           title: "İzin verilen siteler",
-          body: "Bir ajanın sekmesini belirttiğiniz sitelerde tutun.",
+          body: "Agent'ın sekmesinde açabileceği siteleri siz belirleyin.",
         },
       },
       install:
-        "Önce [Chrome uzantısını] yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için (buna ihtiyacınız olmamalı) bunlardan birini kullanın.",
+        "Önce [Chrome uzantısını] kurun. Kalan adımları uzantı gösterir. Normalde gerekmez ama CLI'yi doğrudan kurmak isterseniz bu yöntemlerden birini kullanın.",
     },
   },
   apps: {
     browse: {
-      category: "Ajanlar için tarayıcı kontrolü",
-      body: "Ajanınız gerçek tarayıcınızı, oturumlarınız ve sekmelerinizle kullansın.",
+      category: "Agent'lar için tarayıcı kontrolü",
+      body: "Agent'ınız gerçek tarayıcınızı açık oturumlarınız ve sekmelerinizle birlikte kullansın.",
     },
     hex: {
       category: "Sesle dikte",
-      body: "Her uygulama için cihaz üzerinde sesle dikte.",
+      body: "Her uygulamada, doğrudan cihazınızda sesle dikte.",
     },
     opentunnel: {
       category: "Yerel tüneller",
@@ -367,7 +363,7 @@ export const content = {
   },
   getStarted: {
     title: "Başlayın",
-    lead: "Başlamanın en kolay yolu OpenCode'u indirip ücretsiz modelleri kullanmak. Hesap gerekmez. Daha fazlası için kendi aboneliğinizi getirin ya da OpenCode Go kullanın.",
+    lead: "Başlamanın en kolay yolu OpenCode'u indirip ücretsiz modelleri kullanmak. Hesap gerekmez. Daha fazla model için kendi aboneliğinizi bağlayın veya OpenCode Go kullanın.",
     phrases: {
       "download-opencode": {
         text: "OpenCode'u indirip",
@@ -407,21 +403,21 @@ export const content = {
         line: "Masaüstü, terminal ya da mobil.",
       },
       "use-free-models": {
-        title: "Ücretsiz modeller",
+        title: "Ücretsiz modelleri kullan",
         line: "OpenCode bir dizi ücretsiz modelle gelir. Hesap gerekmez.",
       },
       "add-more-models": {
-        title: "Model ekle",
-        line: "Kendi aboneliğinizi getirin ya da aylık 10 $'dan başlayan OpenCode Go seçkisini kullanın.",
+        title: "Daha fazla model ekle",
+        line: "Kendi aboneliğinizi bağlayın veya ayda 10 $'dan başlayan OpenCode Go ile özenle seçilmiş modelleri kullanın.",
       },
     },
     sentence:
-      "OpenCode'u indirin, ücretsiz modellerle başlayın, daha fazlasını istediğinizde kendi aboneliğinizi ya da OpenCode Go'yu kullanın.",
+      "OpenCode'u indirin ve ücretsiz modellerle başlayın. Daha fazla model istediğinizde kendi aboneliğinizi veya OpenCode Go'yu kullanın.",
   },
   byos: {
-    title: "Kendi aboneliğinizi getirin",
-    headline: "Zaten sahip olduğunuz abonelikleri kullanın.",
-    line: "ChatGPT Plus ya da Pro veya GitHub Copilot ile giriş yapın. Ya da bir OpenCode aboneliği kullanın.",
+    title: "Kendi aboneliğinizi bağlayın",
+    headline: "Mevcut aboneliklerinizi kullanın.",
+    line: "ChatGPT Plus or Pro veya GitHub Copilot hesabınızla oturum açın. Dilerseniz OpenCode aboneliği kullanın.",
     yours: {
       label: "Aboneliğiniz",
       items: {
@@ -441,19 +437,19 @@ export const content = {
   brand: {
     hero: {
       copy: {
-        text: "Ajan için kurallar",
-        copied: "Kopyalandı",
+        text: "Agent için kurallar",
+        copied: "Kurallar kopyalandı",
       },
     },
     naming: {
-      title: "Ad",
+      title: "Adlandırma",
       body: "OpenCode'u büyük O ve büyük C ile tek kelime olarak yazın. Opencode, Open Code, OpenCode AI ya da Open-Code yazmayın.",
       code: "Küçük harfli `opencode` adını yalnızca kodda ve `opencode-figma` ya da `@acme/opencode-plugin` gibi paket adlarında kullanın.",
     },
     families: {
       logo: {
         title: "Logo",
-        body: "Uygulama simgeleri, avatarlar ve diğer küçük alanlar için tek başına logo. Kare sürümler, kareye kırpan yerler için kenar boşluğu ekler.",
+        body: "Uygulama simgeleri, avatarlar ve diğer küçük alanlar için tek başına logo. Kare sürümlerde, kare biçiminde kırpan platformlar için kenar boşluğu vardır.",
         assets: {
           light: {
             name: "Açık",
@@ -471,7 +467,7 @@ export const content = {
       },
       wordmark: {
         title: "Yazı logosu",
-        body: "OpenCode harf biçimleriyle yazılmış tam ad. Adı tam yazacak yer olan her yerde kullanın.",
+        body: "OpenCode'un kendine özgü harfleriyle yazılan tam ad. Adın tamamına yer olan her yerde kullanın.",
         assets: {
           light: {
             name: "Açık",
@@ -496,7 +492,7 @@ export const content = {
     },
     icons: {
       title: "Avatarlar",
-      body: "Slack, Discord, GitHub ve diğer profiller için 1024px kare avatarlar. Arka plan tüm kareyi doldurur ve logo dairenin epey içinde durur, böylece yuvarlak kırpmada da bozulmaz.",
+      body: "Slack, Discord, GitHub ve diğer profiller için 1024 px boyutunda kare avatarlar. Arka plan karenin tamamını doldurur. Logo, yuvarlak kırpmada da kesilmemesi için dairenin içinde kalır.",
       items: {
         dark: {
           name: "Koyu",
@@ -508,7 +504,7 @@ export const content = {
     },
     colors: {
       title: "Renkler",
-      body: "Logo ve yazı logosu tek bir mürekkebi üç opaklıkta kullanır, koyu arka planlar için daha açık bir mürekkep vardır. Aşağıdaki değerler standart dosyalardaki renklerdir. Bunları yalnızca logo ve yazı logosu için kullanın; diğer metinlerde veya arka planlarda kullanmayın. Kopyalamak için bir değere tıklayın.",
+      body: "Logo ve yazı logosu tek bir mürekkep rengini üç opaklık düzeyinde kullanır. Koyu arka planlar için daha açık bir mürekkep rengi vardır. Aşağıda standart dosyalardaki renkler yer alıyor. Bunları yalnızca logo ve yazı logosunda kullanın, başka metinlere veya arka planlara uygulamayın. Kopyalamak için değere tıklayın.",
       palettes: {
         light: {
           name: "Açık",
@@ -552,11 +548,11 @@ export const content = {
     },
     variants: {
       title: "Varyantlar",
-      body: "Logoyu arka planınızda net gösteren sürümü seçin, açık arka planda koyu, koyu arka planda açık. Logo ve yazı logosu ayrı dosyalardır, ikisinden birini kullanın.",
+      body: "Logonun net görünmesi için açık zeminde koyu, koyu zeminde açık sürümü seçin. Logo ve yazı logosu ayrı dosyalardır. Yalnızca birini kullanın.",
       groups: {
         default: {
           name: "Varsayılan",
-          body: "Neredeyse her yerde kullanılacak logo. İç tonu saydamdır. Beyaz ya da siyah üzerinde iki tonlu grilerle tamamen aynı görünür, fotoğraf, gradyan ve renkler üzerinde ise arka plan içinden görünür.",
+          body: "Çoğu yerde bu logoyu kullanın. İç tonu saydamdır. Beyaz veya siyah zeminde iki tonlu gri logo gibi görünür. Fotoğraflarda, gradyanlarda ve renkli zeminlerde ise arka plan logonun içinden görünür.",
           rows: {
             logo: {
               title: "Logo",
@@ -584,7 +580,7 @@ export const content = {
         },
         simple: {
           name: "Sade",
-          body: "Tek renk, açık harf içleri, iç ton yok. Düz renkli arka planlarda, tek renkli baskıda ve grilerin kullanılamadığı her yerde kullanın. Açık renklerde sade koyu, koyu renklerde sade açık.",
+          body: "Tek renklidir. Harflerin içi boştur, logonun iç tonu yoktur. Düz renkli zeminlerde, tek renkli baskıda ve gri tonları kullanamadığınız her yerde bu sürümü kullanın. Açık zeminde sade koyu sürümü, koyu zeminde sade açık sürümü seçin.",
           rows: {
             wordmark: {
               title: "Yazı logosu",
@@ -614,9 +610,9 @@ export const content = {
       },
       pixels: {
         title: "Tam pikseller",
-        body: "Logonun oranları 4:5'te sabittir ve bir çizgi genişliğinin dörtte biridir. Her kenar ve her çizgi tam bir piksele denk gelsin diye 4 × 5px adımlarla ölçekleyin.",
-        do: "her kenar ve 4px çizgi tam piksellerde.",
-        dont: "logoyu 4:5 dışında boyutlandırmak, kenarlar piksel aralarına düşer ve bulanıklaşır.",
+        body: "Logonun oranı 4:5'tir. Bir çizgi, logo genişliğinin dörtte biridir. Kenarların ve çizgilerin piksel sınırlarına denk gelmesi için logoyu 4 × 5px'in katlarıyla ölçekleyin.",
+        do: "Her kenarı ve 4px'lik çizgiyi piksel sınırlarına hizalayın.",
+        dont: "4:5 oranını bozmayın. Kenarlar piksel aralarına denk gelirse bulanıklaşır.",
         sizes: {
           logo: {
             title: "Logo",
@@ -655,7 +651,7 @@ export const content = {
           caption: "tonların yerini değiştirmek.",
         },
         stretch: {
-          caption: "logoyu germek ya da basmak.",
+          caption: "logonun en-boy oranını bozmak.",
         },
         shadow: {
           caption: "gölge eklemek.",
@@ -670,17 +666,17 @@ export const content = {
           caption: "düşük kontrastlı gri üstüne gri kullanmak.",
         },
         color: {
-          caption: "iki tonlu gri logoyu renkli arka plana koymak, orada griler bulanık görünür.",
+          caption: "iki tonlu gri logoyu renkli zemine yerleştirmek. Gri tonlar bu zeminde donuk görünür.",
         },
       },
     },
     integrations: {
       title: "Entegrasyonlar",
-      body: "OpenCode ile çalışan eklentiler, sağlayıcılar ve araçlar ile onunla yapılmış projeler bunu belirtebilir. Bir rozet ya da ortaklık logosu kullanın ve projenize sizin olduğu açıkça anlaşılacak bir ad verin.",
+      body: "OpenCode ile uyumlu eklentiler, sağlayıcılar ve araçlar ya da OpenCode ile geliştirilen projeler bu bağı gösterebilir. Bir rozet veya ortak logo kullanın ve proje adında projenin size ait olduğunu açıkça belirtin.",
       badges: {
         body: "README'nize, dokümanlarınıza ya da sitenize bir rozet koyun ve opencode.ai'ye bağlayın. Arka planınıza göre açık ya da koyu dosyayı seçin (HTML kendiliğinden geçiş yapar) ve renkleri ya da metni değiştirmeyin.",
         sizes: "Her stil 20, 32 ve 44px boyutlarında (Shields yalnızca 20px), SVG ve 2× PNG olarak gelir.",
-        mono: "Her dosyanın OpenTUI Mono metinli bir sürümü de var. Uzantıdan önce -mono ekleyin, örneğin opencode-works-with-a-light-20-mono.svg, ya da büyük harfli OpenTUI Mono için -mono-caps.",
+        mono: "Her dosyanın metni OpenMono ile yazılmış bir sürümü de var. Dosya uzantısından önce -mono ekleyin (örneğin opencode-works-with-a-light-20-mono.svg). OpenMono metnin tamamı büyük harf olsun istiyorsanız -mono-caps ekleyin.",
         groups: {
           "works-with": {
             title: "Uyumlu",
@@ -688,9 +684,9 @@ export const content = {
             body: "OpenCode ile çalışan eklentiler, sağlayıcılar ve araçlar için.",
           },
           "built-with": {
-            title: "Yapıldı",
-            alt: "OpenCode ile yapıldı",
-            body: "OpenCode ile yapılmış projeler için.",
+            title: "Geliştirildi",
+            alt: "OpenCode ile geliştirildi",
+            body: "OpenCode ile geliştirilen projeler için.",
           },
         },
         styles: {
@@ -710,7 +706,7 @@ export const content = {
       },
       lockup: {
         title: "Ortak logo",
-        body: "OpenCode logosunu ve ortak logosunu aralarında bir × ile yan yana koyun. ×'in her iki yanında 3 çizgi boşluk bırakın, ortak logosunu OpenCode logosu kadar yüksek görünecek şekilde boyutlandırın ve tüm bileşimin çevresinde boş alan bırakın.",
+        body: "OpenCode ile iş ortağının logosunu, aralarına × işareti koyarak yan yana yerleştirin. İşaretin her iki tarafında 3 çizgi boşluk bırakın. İş ortağının logosunu OpenCode logosuyla aynı yükseklikte görünecek şekilde boyutlandırın ve tüm düzenin çevresinde boşluk bırakın.",
         partners: {
           github: {
             name: "GitHub",
@@ -727,8 +723,8 @@ export const content = {
       title: "Markalar",
       body: "OpenCode ve OpenCode logosu Anomaly'nin ticari markalarıdır. Bunları Anomaly'nin sizi desteklediğini ya da sponsorluğunu yaptığını ima edecek şekilde, ürün ya da şirket adınızda ya da izinsiz ürünlerde kullanmayın.",
       contact: {
-        before: "Sorularınız için e-posta gönderin, ",
-        after: ".",
+        before: "Sorularınız için ",
+        after: " adresine yazın.",
       },
     },
   },
@@ -738,25 +734,25 @@ export const content = {
       "OpenCode basın kiti. OpenCode ve onu geliştiren şirket Anomaly hakkında bilgiler, indirilebilir logolar ve yazı logoları, basın soruları için bir iletişim adresi.",
     hero: {
       title: "Basın",
-      body: "OpenCode ve Anomaly hakkında yazmak için bilgiler, marka dosyaları ve iletişim.",
+      body: "OpenCode ve Anomaly hakkında yazacaklar için bilgiler, marka dosyaları ve iletişim adresleri.",
     },
     company: {
       title: "Anomaly hakkında",
-      lead: "Anomaly, OpenCode'u geliştiren şirkettir. Geliştiriciler için açık kaynak araçlar yapar.",
-      more: "Diğer projeler arasında SST ve OpenTUI var, hepsi [GitHub](github) üzerinde açık kaynak.",
+      lead: "Anomaly, OpenCode'un arkasındaki şirkettir. Geliştiriciler için açık kaynaklı araçlar geliştirir.",
+      more: "SST ve OpenTUI da Anomaly'nin projelerinden. Hepsi [GitHub](github) üzerinde açık kaynaklı.",
       learnMore: "Daha fazlası için [anoma.ly](site) adresine gidin.",
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "Masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanı. MIT lisanslı, 220.000'den fazla GitHub yıldızı.",
+          body: "Masaüstü, terminal ve mobil uygulamaları ile SDK'sı olan açık kaynaklı kodlama agent'ı. MIT lisanslı, GitHub'da 220.000'den fazla yıldızı var.",
         },
         sst: {
           name: "SST",
-          body: "Kendi altyapınızda full-stack uygulamalar kurmak için bir framework. MIT lisanslı, 2020'den beri açık, 26.000'den fazla GitHub yıldızı.",
+          body: "Kendi altyapınızda full-stack uygulamalar geliştirmek için bir framework. MIT lisanslı, 2020'den beri açık kaynaklı. GitHub'da 26.000'den fazla yıldızı var.",
         },
         opentui: {
           name: "OpenTUI",
-          body: "Zig ile yazılmış bir çekirdekle TypeScript, React ya da Solid'de terminal arayüzleri için bir kitaplık. OpenCode onu üretimde kullanır. 13.000'den fazla GitHub yıldızı.",
+          body: "TypeScript, React veya Solid ile terminal arayüzleri geliştirmek için, çekirdeği Zig ile yazılmış bir kitaplık. OpenCode bu kitaplığı üretimde kullanır. GitHub'da 13.000'den fazla yıldızı var.",
         },
         "models-dev": {
           name: "Models.dev",
@@ -764,7 +760,7 @@ export const content = {
         },
         hex: {
           name: "Hex",
-          body: "Mac, Windows ve Linux için sesle dikte. Hex cihazınızda yazıya döker ve her uygulamaya yapıştırır, böylece ses cihazdan hiç çıkmaz.",
+          body: "Mac, Windows ve Linux için sesle dikte. Hex söylediklerinizi cihazınızda yazıya döker ve dilediğiniz uygulamaya yapıştırır. Ses cihazınızdan çıkmaz.",
         },
         opentunnel: {
           name: "OpenTunnel",
@@ -776,20 +772,20 @@ export const content = {
       title: "OpenCode hakkında",
       body: "OpenCode ve ürünleri için uzun ve kısa sürümlerde, kopyalanmaya hazır tanıtım metinleri.",
       boilerplate: {
-        long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
+        long: "OpenCode açık kaynaklı bir kodlama agent'ıdır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak kullanılabilir. Claude, GPT ve Gemini dahil, tüm sağlayıcıların modelleriyle çalışır. Anomaly'nin geliştirdiği OpenCode, MIT lisanslıdır. GitHub'da 220.000'den fazla yıldızı ve 1.000'den fazla katkı sağlayanı var. Her ay 22 milyondan fazla geliştirici OpenCode kullanıyor.",
         short:
-          "OpenCode, Anomaly'nin masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanıdır.",
+          "OpenCode, Anomaly'nin geliştirdiği açık kaynaklı kodlama agent'ıdır. Masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı vardır.",
       },
       products: {
         "opencode-console": {
           name: "OpenCode Console",
-          long: "OpenCode Console, geliştiricilerin ve ekiplerin OpenCode ve diğer kodlama ajanları için AI model erişimi satın alıp yönettiği web uygulamasıdır. Sınır modeller ve açık ağırlıklı modeller için ön ödemeli kredilerden istek başına ücretlendirilen kullandıkça öde çıkarımı ve OpenCode Go abonelikleri sunar. Ekipler Member, Admin ve Owner rollerine sahip çalışma alanları, çalışma alanı ve kullanıcı başına harcama limitleri, Okta, Microsoft Entra ID ya da Google Workspace ile tek oturum açma ve SCIM elde eder. Console 30'dan fazla sağlayıcıyı destekler, böylece ekipler mevcut sağlayıcı hesaplarını bağlayabilir ve Console'un kendi çıkarımı isteğe bağlıdır. Adresi opencode.ai/console.",
+          long: "OpenCode Console, geliştiricilerin ve ekiplerin OpenCode ve diğer kodlama agent'ları için AI modellerine erişim satın alıp bu erişimi yönettiği web uygulamasıdır. En gelişmiş modeller ve açık ağırlıklı modeller için istek ücretini ön ödemeli krediden düşen bir kullandıkça öde inference hizmeti ve OpenCode Go abonelikleri sunar. Ekipler çalışma alanlarında Member, Admin ve Owner rollerini, çalışma alanı ve kullanıcı bazında harcama limitlerini, Okta, Microsoft Entra ID veya Google Workspace ile tek oturum açmayı ve SCIM'i kullanabilir. Console 30'dan fazla sağlayıcıyı destekler. Ekipler mevcut sağlayıcı hesaplarını bağlayabilir, Console'un inference hizmetini kullanmak zorunda değildir. Adresi opencode.ai/console.",
           short:
             "OpenCode Console, Anomaly'nin kullandıkça öde AI model erişimi, OpenCode Go abonelikleri ve bütçe ile tek oturum açma gibi ekip denetimleri sunan web uygulamasıdır.",
         },
         "opencode-go": {
           name: "OpenCode Go",
-          long: "OpenCode Go, kodlama modelleri için sabit aylık fiyat isteyen geliştiricilere yönelik bir aboneliktir. Go aylık 10 $, daha yüksek limitli Go Plus aylık 40 $, Go Teams ise üye başına aylık 20 $'dır. Her plan, ajanlı kodlama için test edilmiş seçkin bir model kümesi içerir. Kullanım limitleri her model için aylık dolar tutarlarıdır, aylık limitin %20'si ve %50'si olan kayan 5 saatlik ve haftalık paylarla birlikte. Aboneler kredi yükleyebilir, kullandıkça öde bakiyesine geçebilir ve istedikleri zaman iptal edebilir. Go, OpenCode ve diğer ajanlarla çalışır. Adresi opencode.ai/console/go.",
+          long: "OpenCode Go, kodlama modellerini sabit aylık ücretle kullanmak isteyen geliştiricilere yönelik bir aboneliktir. Go aylık 10 $, daha yüksek limitli Go Plus aylık 40 $, Go Teams ise üye başına aylık 20 $. Her plan agent ile kodlama için test edilmiş, özenle seçilmiş modeller içerir. Her modelin aylık kullanım limiti dolar cinsinden belirlenir. Kayan 5 saatlik ve haftalık dönemlerde aylık limitin sırasıyla %20'si ve %50'si kullanılabilir. Aboneler kredi yükleyebilir, limitlerine ulaştıklarında kullandıkça öde bakiyelerine geçebilir ve aboneliklerini istedikleri zaman iptal edebilir. Go, OpenCode ve diğer agent'larla çalışır. Adresi opencode.ai/console/go.",
           short:
             "OpenCode Go, Anomaly'nin geliştiricilere seçkin kodlama modellerinde aylık kullanım limitleri veren, aylık 10 $'dan başlayan aboneliğidir.",
         },
@@ -850,7 +846,7 @@ export const content = {
     },
     news: {
       title: "Son sürümler",
-      intro: "OpenCode sık sık sürüm çıkarır. Yeni özellikler içeren en yeni sürümler bunlar.",
+      intro: "OpenCode sık sık güncellenir. Yeni özellikler getiren son sürümler burada.",
       changelog: {
         text: "Tüm sürüm notları",
       },
@@ -861,7 +857,7 @@ export const content = {
     media: {
       title: "Medya",
       intro:
-        "Her uygulamanın gerçek üründen kaydedilmiş görselleri ve kısa videoları. OpenCode hakkında yazarken kullanabilirsiniz.",
+        "Uygulamalardan alınan ekran görüntülerini ve kısa videoları OpenCode hakkında yazarken kullanabilirsiniz.",
       note: "Tüm kayıtlar koyu temayı kullanır. Görseller ve kapaklar en fazla 1920 × 1080, dikeyde 1080 × 1350 boyutunda JPG'lerdir. Videolar sessiz MP4 kliplerdir.",
       products: {
         desktop: {
@@ -883,13 +879,13 @@ export const content = {
               title: "Desktop görseli 4",
             },
             "feature-1": {
-              title: "Sekmelerde oturumlar",
+              title: "Paralel agent'lar",
             },
             "feature-2": {
-              title: "İncele ve yorumla",
+              title: "Tarayıcıda gör",
             },
             "feature-3": {
-              title: "Tarayıcıda gör",
+              title: "Her cihazda",
             },
             "locked-portrait": {
               title: "Desktop filmi, dikey",
@@ -915,10 +911,10 @@ export const content = {
               title: "Ses",
             },
             "feature-2": {
-              title: "Onaylar",
+              title: "Oturumlar",
             },
             "feature-3": {
-              title: "Oturumlar",
+              title: "Sonuçlar",
             },
             "locked-portrait": {
               title: "Mobile filmi, dikey",
@@ -944,10 +940,10 @@ export const content = {
               title: "Terminal görseli 4",
             },
             "feature-1": {
-              title: "Sade bir dille sor",
+              title: "Sade bir dille anlatın",
             },
             "feature-2": {
-              title: "Çalışanı onayla",
+              title: "Komutlara siz onay verin",
             },
             "feature-3": {
               title: "Size özel",
@@ -976,13 +972,13 @@ export const content = {
               title: "SDK görseli 4",
             },
             "feature-1": {
-              title: "CI'ı koddan düzelt",
+              title: "CI sorunlarını koddan düzeltin",
             },
             "feature-2": {
-              title: "Her adımı izle",
+              title: "Her adımı izleyin",
             },
             "feature-3": {
-              title: "Kendi araçların",
+              title: "Kendi araçlarınızı geliştirin",
             },
             "locked-portrait": {
               title: "SDK filmi, dikey",
@@ -1011,6 +1007,13 @@ export const content = {
           name: "Yazı logosu, beyaz",
         },
       },
+      avatars: {
+        body: "X, GitHub, Slack, LinkedIn ve diğer profiller için kare avatarlar. Amblem dairenin epey içinde durur, böylece yuvarlak kırpmada da bozulmaz. PNG'ler 1024 ve 400 px genişliğindedir.",
+        items: {
+          "avatar-dark": { name: "Avatar, koyu" },
+          "avatar-light": { name: "Avatar, açık" },
+        },
+      },
       all: {
         text: "Tümünü indir",
       },
@@ -1034,19 +1037,19 @@ export const content = {
       items: {
         desktop: {
           name: "Desktop",
-          body: "macOS, Windows ve Linux'ta birden fazla ajanı aynı anda, her birini kendi sekmesinde çalıştırın. Her değişikliği diff olarak inceleyin ve önizleyin.",
+          body: "macOS, Windows ve Linux'ta birden fazla agent'ı ayrı sekmelerde aynı anda çalıştırın. Değişiklik farklarını inceleyip sonuçları önizleyin.",
         },
         mobile: {
           name: "Mobile",
-          body: "En yeni OpenCode uygulaması. Ajanla konuşmak için bir oturumu arayın, ardından değişikliklerini her yerden telefonunuzla inceleyip onaylayın.",
+          body: "En yeni OpenCode uygulaması. Oturumu arayıp agent'la konuşun. Nerede olursanız olun, yaptığı değişiklikleri telefonunuzdan inceleyip onaylayın.",
         },
         terminal: {
           name: "Terminal",
-          body: "Her kabukta, editörde ya da uzak sunucuda çalışan bir terminal arayüzü. Her düzenlemeyi diff olarak görün ve hangi komutların kendiliğinden çalışacağını seçin.",
+          body: "Her kabukta, editörde veya uzak sunucuda çalışan bir terminal arayüzü. Değişiklik farklarını görün ve hangi komutların otomatik çalışacağını seçin.",
         },
         sdk: {
           name: "SDK",
-          body: "Betikler, CI işleri ve kendi araçlarınız için tipli bir TypeScript istemcisi. Oturum oluşturun, prompt gönderin ve her olayı geldikçe aktarın.",
+          body: "Betikler, CI işleri ve kendi araçlarınız için tipli bir TypeScript istemcisi. Oturum oluşturun, prompt gönderin ve olayları gerçekleştiği anda akış olarak alın.",
         },
       },
     },
@@ -1059,7 +1062,7 @@ export const content = {
         },
         support: {
           title: "Destek",
-          body: "OpenCode ile ilgili yardım için bir issue açın ya da topluluğa sorun. Hesap ve faturalama soruları için bize e-posta gönderin.",
+          body: "OpenCode ile ilgili yardım için issue açın veya topluluğa danışın. Hesap ve faturalandırma soruları için bize e-posta gönderin.",
           links: {
             "github-issues": {
               text: "GitHub issue'ları",
@@ -1132,7 +1135,7 @@ export const content = {
   productDownloads: {
     sdk: {
       more: {
-        label: "SDK dokümanlarını okuyun",
+        label: "SDK belgelerini okuyun",
       },
     },
     mini: {
@@ -1155,27 +1158,27 @@ export const content = {
     title: "Telefonunuzu bağlayın",
     cardTitle: "Telefonunuzu tek komutla eşleyin",
     intro:
-      "OpenCode Mobile, bilgisayarınızdaki OpenCode için bir uzaktan kumandadır. Oturumlarınız orada çalışmaya devam eder, uygulama onları gösterir ve yönlendirmenizi sağlar.",
+      "OpenCode Mobile ile bilgisayarınızdaki OpenCode'u uzaktan yönetin. Oturumlar bilgisayarınızda çalışmaya devam eder. Uygulamadan oturumları görüp yönlendirebilirsiniz.",
     steps: {
       "get-the-app": {
         title: "Uygulamayı edinin",
-        body: "OpenCode betasını TestFlight üzerinden iPhone'unuza kurun. Android uygulaması çok yakında.",
+        body: "OpenCode'u iPhone'unuza App Store'dan veya Android telefonunuza Google Play'den yükleyin.",
       },
       "run-this-on-your-computer": {
         title: "Bunu bilgisayarda çalıştırın",
-        body: "Tek kullanımlık bir bağlantı ve bir QR kodu yazdırır. İkisi de bir kez çalışır ve 5 dakikada sona erer.",
+        body: "Komut, tek kullanımlık bir bağlantı ve QR kodu verir. İkisi de 5 dakika sonra geçerliliğini yitirir.",
       },
       "scan-the-code": {
         title: "Kodu okutun",
         body: "QR kodunu uygulamayla okutun ya da bağlantıyı yapıştırın. Bilgisayarınızın son oturumları telefonunuzda açılır.",
       },
     },
-    note: "--remote bir OpenTunnel adresi üzerinden bağlanır, bu yüzden her ağdan çalışır. Aynı Wi-Fi'daysanız bir kez opencode service set hostname 0.0.0.0, ardından opencode pair çalıştırın.",
+    note: "--remote, OpenTunnel adresi üzerinden bağlandığı için eşleme her ağda çalışır. Aynı Wi-Fi ağındaysanız önce bir kez opencode service set hostname 0.0.0.0, ardından opencode pair komutunu çalıştırın.",
     facts: [
-      "Eşleme her ağdan çalışır, çünkü --remote bir OpenTunnel adresi üzerinden bağlanır.",
-      "Bağlantı ve kod bir kez çalışır ve 5 dakikada sona erer.",
-      "Bilgisayarı açık tutun, çünkü ajan telefonda değil, orada çalışır.",
-      "Aynı Wi-Fi'daysanız bir kez opencode service set hostname 0.0.0.0, ardından opencode pair çalıştırın.",
+      "--remote, OpenTunnel adresi üzerinden bağlandığı için eşleme her ağda çalışır.",
+      "Bağlantı ve kod tek kullanımlıktır. İkisi de 5 dakika sonra geçerliliğini yitirir.",
+      "Bilgisayarı açık tutun. Agent telefonda değil, bilgisayarınızda çalışır.",
+      "Aynı Wi-Fi ağındaysanız önce bir kez opencode service set hostname 0.0.0.0, ardından opencode pair komutunu çalıştırın.",
     ],
   },
 } satisfies ContentOverlay

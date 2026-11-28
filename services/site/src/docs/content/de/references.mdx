@@ -1,0 +1,291 @@
+---
+title: "Referenzen"
+description: "Gib OpenCode benannten Zugriff auf lokale Verzeichnisse und Git-Repositories außerhalb des aktuellen Projekts und hänge sie an Prompts an."
+---
+
+Referenzen geben OpenCode benannten Zugriff auf Verzeichnisse außerhalb des aktuellen
+Projekts. Füge eine in `opencode.json` oder `opencode.jsonc` hinzu und hänge ihren Alias in
+deinem Client an, wenn du sie brauchst.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Nachdem du `docs` angehängt hast, bitte den Agenten, den relevanten Pfad zu prüfen:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Nutze Referenzen für Dokumentation, gemeinsame Bibliotheken, Beispiele oder Quellcode aus
+einem anderen Repository.
+
+## Lokal
+
+Nutze `path` für ein lokales Verzeichnis:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Pfade verhalten sich so:
+
+- Relative Pfade werden vom Verzeichnis der Konfigurationsdatei aus aufgelöst.
+- Absolute Pfade werden unterstützt.
+- Home-relative Pfade wie `~/docs` werden unterstützt.
+
+Nutze die String-Kurzform, wenn keine weiteren Felder nötig sind:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  Ein String in Kurzform ist nur dann ein lokaler Pfad, wenn er mit `.`, `/` oder `~` beginnt. Nutze `./docs`, nicht
+  `docs`; ein reiner Wert `docs` wird als Git-Repository interpretiert.
+</Callout>
+
+## Git
+
+Nutze `repository` für ein entferntes Git-Repository:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Unterstützte Remote-Formen sind:
+
+- GitHub-Kurzform `owner/repo`
+- Git-URLs
+- Host/Pfad-Formen
+- SCP-artige Remotes
+
+Lokale `file:`-Repositories werden nicht unterstützt.
+
+Nutze die String-Kurzform, um dem Standardbranch des Remotes zu folgen:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Ohne `branch` checkt OpenCode den Standardbranch des Remotes aus und aktualisiert ihn.
+Branch-Namen dürfen Buchstaben, Zahlen, `/`, `_`, `.` und `-` enthalten, aber nicht
+mit `-` beginnen oder `..` enthalten.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Speicherung
+
+OpenCode normalisiert jedes Remote und speichert einen Checkout pro Remote und Branch
+unter seinem globalen Datenverzeichnis. Ohne ausdrücklichen Branch nutzt der Pfad diese
+Form:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+Bei einer typischen Linux-Installation wird `Effect-TS/effect` gespeichert unter:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+Ein ausdrücklicher Branch ergänzt ein kodiertes Suffix `@<branch>`:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Aktualisieren
+
+Fehlende Repositories werden asynchron geklont. Bestehende Checkouts werden im
+Hintergrund geprüft, wenn Referenzen laden oder neu laden und nachdem ein neuer Nutzer-Prompt
+in ihrer Location angenommen wurde.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+OpenCode kann einen Checkout aktualisieren, wenn der letzte Versuch mindestens 24 Stunden zurückliegt oder noch kein
+Versuch aufgezeichnet wurde. Dabei ruft OpenCode den konfigurierten Branch oder den Standardbranch des Remotes ab und
+setzt den Checkout darauf zurück.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+Das Aktualisierungsverhalten folgt diesen Regeln:
+
+- Zeitstempel bleiben über Neustarts des Dienstes erhalten.
+- Locations, die denselben Checkout nutzen, teilen seinen Zeitstempel.
+- Fehlgeschlagene Versuche werden protokolliert und bleiben dem 24-Stunden-Limit unterworfen.
+- Es gibt kein periodisches Polling, solange eine Location ungenutzt ist.
+- Fehler beim Klonen oder Aktualisieren hindern andere Referenzen nicht am Laden.
+
+Prompts warten nicht auf Klonen oder Aktualisieren. Ein Anhang kann ältere
+Inhalte enthalten, selbst wenn ein späterer Tool-Lesevorgang den aktualisierten Checkout sieht, und eine neue Referenz
+kann erscheinen, bevor ihr Checkout bereit ist.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Gespeicherte Checkouts werden geteilt und können sich aktualisieren, während ein Agent sie nutzt. Vermeide Änderungen
+  an gespeicherten Checkouts, weil eine Aktualisierung sie zurücksetzt.
+</Callout>
+
+## Anleitung
+
+`description` sagt Agenten, wann eine Referenz relevant ist. Referenzen mit einer
+Beschreibung erscheinen in den Agentenanweisungen mit ihrem Alias und aufgelösten Pfad.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Referenzen ohne Beschreibung bleiben für Clients verfügbar, werden aber nicht
+automatisch angekündigt.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Sichtbarkeit
+
+Setze `hidden` auf `true`, um eine Referenz aus interaktiven Client-Auswahlen zu entfernen:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` betrifft nur die interaktive Sichtbarkeit. Die Referenz bleibt in der
+Referenz-API und, wenn sie eine Beschreibung hat, in den Agentenanweisungen.
+
+## Verwendung
+
+Clients hängen eine Referenz über den Alias ihres Wurzelverzeichnisses an. Der Anhang listet nur die Dateien und
+Unterverzeichnisse direkt im Wurzelverzeichnis auf.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Bitte den Agenten, einen bestimmten Pfad zu prüfen, wenn du Inhalte unterhalb der Wurzel brauchst.
+
+## Berechtigungen
+
+Referenzen gewähren keine zusätzlichen Tool-Berechtigungen. Zugriff außerhalb der aktiven
+Location folgt weiterhin den normalen Tool-Regeln und der `external_directory`-
+Berechtigung; Ändern erfordert außerdem die zutreffende Edit-Berechtigung.
+
+```text
+Read ../product-docs/api.md
+```
+
+Die Anfrage gelingt nur, wenn die aktiven Berechtigungen diesen externen Lesevorgang erlauben.
+
+## Felder
+
+| Feld          | Lokal    | Git      | Beschreibung                                   |
+| ------------- | -------- | -------- | ---------------------------------------------- |
+| `path`        | Erforderlich | Nein | Pfad des lokalen Verzeichnisses                |
+| `repository`  | Nein     | Erforderlich | Entferntes Git-Repository                  |
+| `branch`      | Nein     | Optional | Abzurufender und auszucheckender Branch        |
+| `description` | Optional | Optional | Anleitung, wann Agenten sie nutzen sollen      |
+| `hidden`      | Optional | Optional | Vor interaktiven Client-Auswahlen verbergen    |
+
+Ein vollständiger Git-Eintrag kann jedes Git-kompatible Feld nutzen:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Aliase
+
+Ein Alias darf nicht leer sein oder `/`, `\`, Leerraum, einen Backtick oder ein
+Komma enthalten.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

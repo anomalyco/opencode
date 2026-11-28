@@ -1,12 +1,10 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import path, { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import { dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { FileAccess } from "../../file-access.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
@@ -53,8 +51,6 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const environment = yield* Environment.Service
     const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
 
@@ -62,7 +58,7 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: flags.resolve(loaded.entries).full_codemode.enabled
+          options: flags.current().full_codemode.enabled
             ? { codemode: { pinned: true, description: description(true) } }
             : { codemode: false },
           description: description(false),
@@ -82,8 +78,7 @@ export const Plugin = {
                 const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
-                  resources: [skill.id],
-                  save: [skill.id],
+                  ...(yield* skills.approval(skill.id)),
                   ...Permission.invocation(context),
                 })
                 yield* permission.assert({
@@ -151,10 +146,12 @@ export const Plugin = {
                         ),
                       )
                       if (content.type === "directory") return yield* missing({ input: input.path, requested, context })
+                      // Shown as written, by the rules of the machine the file is on.
+                      const rules = requested.environment.path
                       return {
                         content,
                         target,
-                        path: join(dirname(input.path), basename(alternate)),
+                        path: rules.join(rules.dirname(input.path), rules.basename(alternate)),
                       }
                     }),
                 ),
@@ -214,13 +211,13 @@ export const Plugin = {
       .pipe(Effect.orDie)
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (target: FileAccess.Target) {
-      const base = canonical(basename(target.absolute))
-      const matches = (yield* target.environment.files.list(AbsolutePath.make(dirname(target.absolute)))).filter(
+      // The path follows its environment's rules, whatever this server's platform joins with.
+      const rules = target.environment.path
+      const base = canonical(rules.basename(target.absolute))
+      const matches = (yield* target.environment.files.list(AbsolutePath.make(rules.dirname(target.absolute)))).filter(
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
-      // The path follows its environment's rules, whatever this server's platform joins with.
-      const rules = target.environment.path ?? path
       return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 
@@ -262,13 +259,17 @@ export const Plugin = {
       folder: string,
       moved: string[],
     ) {
+      const rules = miss.requested.environment.path
       let child = folder
-      let parent = dirname(folder)
+      let parent = rules.dirname(folder)
       while (parent !== child) {
         const found = yield* listing(miss.requested.environment.files, parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
-          const suggestions = [...moved, ...similar(found.names, basename(child)).map((entry) => join(parent, entry))]
+          const suggestions = [
+            ...moved,
+            ...similar(found.names, rules.basename(child)).map((entry) => rules.join(parent, entry)),
+          ]
           const message = [
             `File not found: ${miss.input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
@@ -277,7 +278,7 @@ export const Plugin = {
           return yield* new ToolFailure({ message })
         }
         child = parent
-        parent = dirname(parent)
+        parent = rules.dirname(parent)
       }
       return yield* new ToolFailure({
         message: [`File not found: ${miss.input}`, ...didYouMean(moved)].join("\n\n"),
@@ -286,13 +287,17 @@ export const Plugin = {
 
     const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
       const moved = yield* reroot(miss).pipe(Effect.orElseSucceed(() => []))
-      const folder = dirname(miss.requested.absolute)
+      // The folders are the requested machine's, by its own path rules.
+      const rules = miss.requested.environment.path
+      const folder = rules.dirname(miss.requested.absolute)
       const found = yield* listing(miss.requested.environment.files, folder)
       if (found.type === "missing") return yield* missingFolder(miss, folder, moved)
       const suggestions = [
         ...moved,
         ...(found.type === "found"
-          ? similar(found.names, basename(miss.input)).map((entry) => join(dirname(miss.input), entry))
+          ? similar(found.names, rules.basename(miss.input)).map((entry) =>
+              rules.join(rules.dirname(miss.input), entry),
+            )
           : []),
       ]
       return yield* new ToolFailure({

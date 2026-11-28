@@ -5,7 +5,7 @@ import { localize } from "~/i18n/content"
 import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { productDetailsSource } from "~/i18n/content/areas/product-details"
 import { productsSource } from "~/i18n/content/areas/products"
-import type { Locale } from "~/lib/language"
+import { consoleRoute, type Locale } from "~/lib/language"
 import { brandContent, brandMarkdown } from "~/lib/brand-content"
 import { brandAssets } from "~/lib/media"
 import type { ChangelogRelease } from "~/lib/changelog"
@@ -60,7 +60,7 @@ export function buildSearchIndex(
   locale: Locale,
   dev: boolean,
 ): SearchItem[] {
-  const home = homeContent(t, route)
+  const home = homeContent(t, route, (path) => consoleRoute(locale, path))
   const download = localize(locale, "download", downloadContent(t, route))
   const press = localize(locale, "press", pressContent(t, route))
   const brand = localize(locale, "brand", brandContent(t))
@@ -132,9 +132,17 @@ export function buildSearchIndex(
     }),
   )
   const external: SearchItem[] = [
-    { title: t("site.nav.console"), href: "/console", keywords: "models subscriptions zen go" },
-    { title: t("site.nav.subscriptions"), href: "/console/go", keywords: "go go plus plans pricing subscribe" },
-    { title: t("nav.enterprise"), href: "/console/enterprise", keywords: "sales business teams" },
+    { title: t("site.nav.console"), href: consoleRoute(locale, "/console"), keywords: "models subscriptions zen go" },
+    {
+      title: t("site.nav.subscriptions"),
+      href: consoleRoute(locale, "/console/go"),
+      keywords: "go go plus plans pricing subscribe",
+    },
+    {
+      title: t("nav.enterprise"),
+      href: consoleRoute(locale, "/console/enterprise"),
+      keywords: "sales business teams",
+    },
     { title: "GitHub", href: config.github.repoUrl, keywords: "source repo code" },
   ].map((page) => ({ id: `page:${page.href}`, group: "Pages", context: page.href, ...page }))
 
@@ -177,7 +185,7 @@ export function buildSearchIndex(
       content.products.mobile.name,
       "/mobile#download",
       t("download.action.download"),
-      "iOS iPhone TestFlight beta Android Google Play",
+      "iOS iPhone App Store Android Google Play",
     ),
     section(
       names.product,
@@ -311,7 +319,7 @@ export function buildSearchIndex(
 
 /** The brand page as Markdown, as its "Copy rules for your agent" button copies it. */
 export function brandRules(t: Translate, route: (path: string) => string) {
-  return markdownDocument("/brand", brandMarkdown, { t, route })
+  return markdownDocument("/brand", brandMarkdown, { t, route, consoleRoute: route })
 }
 
 /** Changelog entries and their versions, from the same JSON the changelog serves. */

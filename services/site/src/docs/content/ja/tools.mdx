@@ -1,0 +1,222 @@
+---
+title: "ツール"
+description: "OpenCode の組み込みツールは、ファイルの読み取りと編集、シェルコマンドの実行、Web の取得と検索、サブエージェントの起動、ブラウザの操作を行います。"
+---
+
+求める結果を伝えてください。OpenCode が利用可能なツールを選び、必要に応じて承認を求め、結果を返します。
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+このタスクでは通常、`grep` または `glob`、`read`、編集ツール、`shell` が使用されます。特定の方法を指定したい場合は、ツール名を挙げることもできます。
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## ファイル
+
+### Read
+
+`read` はファイルまたは非再帰的なディレクトリ一覧を返します。`path` を指定し、大きな結果をページ送りするには `offset` と `limit` を使用します。
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+テキストの読み取りは行番号付きで、1 ページあたり 2,000 行、50 KiB に制限されます。個々の行は 2,000 文字を超えると短縮されます。このツールは PNG、JPEG、GIF、WebP、PDF ファイルもモデルに渡し、ソースデータは最大 20 MiB です。他のバイナリファイルは失敗します。対応するメディアと画像処理については[添付ファイル](/attachments)を参照してください。
+
+権限：正規化されたパスをリソースとする `read`。
+
+### Glob
+
+`glob` は `**/*.ts` などのパターンからファイルパスを検索します。`path` で別の相対ディレクトリを指定しない限りカレントディレクトリを検索し、`hidden` は隠しエントリを含め、`limit` は結果数を制限します。
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+デフォルトの上限は 100 ファイルで、検索のタイムアウトは 30 秒です。権限：要求されたパターンをリソースとする `glob`。
+
+### Grep
+
+`grep` はファイルの内容を検索し、パス、行番号、プレビューを返します。`pattern` は `literal` が true でない限り正規表現構文を使用します。`path`、`include`、`caseSensitive`、`limit` で検索を絞り込めます。
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+デフォルトの上限は 100 件の一致行で、検索のタイムアウトは 30 秒です。権限：検索パスではなく、要求されたパターンをリソースとする `grep`。
+
+### Edit
+
+`edit` は既存ファイル内のテキストを置き換えます。`path`、`oldString`、異なる `newString` を指定します。`replaceAll` が true でない限り、古いテキストはちょうど 1 回一致する必要があります。
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+ファイルの一部だけを変更するには `edit` を使います。OpenCode は書き込み後にファイルをフォーマットすることがあります。権限：対象パスをリソースとする `edit`。
+
+### Write
+
+`write` は `path` と `content` からテキストファイルを作成するか、完全に置き換えます。存在しない親ディレクトリを作成し、設定されたフォーマッターを実行することがあります。
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+既存ファイルの一部だけを変更する場合は、代わりに `edit` を使用します。権限：対象パスをリソースとする `edit`。
+
+### Patch
+
+`patch` は、複数のファイルの追加、更新、移動、削除ができる 1 つのパッチを適用します。`patchText` は `*** Add File`、`*** Update File`、`*** Delete File` のセクションを使用します。
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode は対応する GPT モデルに `patch` を提供します。他のモデルには代わりに `edit` と `write` が提供されます。権限：影響を受けるすべてのパスをリソースとする `edit`。
+
+アクティブな Location またはそのプロジェクト worktree の外にあるパスは、`external_directory` に対してもチェックされます。これはデフォルトで許可されています。パスの正規化、ルールの順序、保存済みの承認については[権限](/permissions)を参照してください。外部の資料を名前で利用できるようにするには、[参照](/references)を設定します。
+
+## コマンド
+
+### Shell
+
+`shell` はホストユーザーのシェルでコマンドを実行します。コマンドに `cd` を入れる代わりに `workdir` を設定し、デフォルトの 2 分というフォアグラウンドのタイムアウトが適さない場合は `timeout` をミリ秒で設定します。
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+開発サーバーなどの長時間実行するプロセスには、`background` を true に設定します。バックグラウンド呼び出しはすぐに戻り、終了時にセッションへ通知します。タイムアウトを指定しない限りタイムアウトはありません。大きな出力は短縮され、完全な出力は管理されたファイルに保持されます。
+
+権限：スキャナーが生成した各コマンドをリソースとする `shell`。スキャナーは外部の作業ディレクトリと、コマンドから推測できるディレクトリもチェックします。シェルはホストユーザーのファイルシステム、プロセス、ネットワークの権限を持つため、[権限](/permissions)では狭いルールを使用してください。
+
+## Web
+
+### Webfetch
+
+`webfetch` は 1 つの HTTP または HTTPS の URL を `markdown`、`text`、`html` として取得します。デフォルトは Markdown で、`timeout` は最大 120 秒まで指定できます。
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+HTML、プレーンテキスト、JSON、XML などのテキスト形式のレスポンスを受け付けますが、画像やその他のバイナリのダウンロードは受け付けません。大きな出力は短縮され、完全なテキストは管理されたストレージに保持されます。権限：要求された URL をリソースとする `webfetch`。
+
+### Websearch
+
+`websearch` は選択された連携で最新情報を検索します。入力は検索の `query` です。
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+権限：クエリをリソースとする `websearch`。プロバイダー、選択、レート制限、ツールの無効化については [Web 検索](/websearch)を参照してください。
+
+## 画像
+
+### Image generate
+
+`generate_image` はプロンプトから新しい画像を作成するか、既存の画像を編集します。実験的な機能で、画像モデルを提供するプロバイダーに接続している場合に表示されます。デフォルトのモデルを選ぶには、[`experimental.image_generate`](/config#image-generation)を参照してください。
+
+```text
+Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
+```
+
+`prompt` を指定し、必要に応じて編集や参照に使う `images`、特定の `model`、保存先の `path` を指定します。バックグラウンドで実行され、画像の準備ができると保存先のパスをセッションに通知します。
+
+権限：選択されたモデルをリソースとする `generate_image`。
+
+## 対話
+
+### Question
+
+`question` は実行を一時停止し、ユーザーに 1 つ以上の質問を提示します。各質問には短いヘッダー、プロンプト、選択肢があり、`multiple` を指定すると複数選択できます。自由形式の回答は常に利用できます。
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+権限：`*` をリソースとする `question`。クライアントは対話形式に対応している必要があり、閉じると質問はキャンセルされます。
+
+### Skill
+
+`skill` は、利用可能な 1 つのスキル ID の指示と同梱リソースを会話に読み込みます。
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+ID は提示されたスキル一覧に含まれているか、ユーザーが明示的に指定する必要があります。権限：スキル ID をリソースとする `skill`。作成、検出、読み込みのルールについては[スキル](/skills)を参照してください。
+
+## 自動化
+
+### Subagent
+
+`subagent` は設定済みのサブエージェントで子セッションを開始します。エージェント ID、短い `description`、完全な `prompt` を指定します。
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+サブエージェントは常にバックグラウンドで実行されます。呼び出しは `sessionID` とともにすぐに戻り、子がアイドルになると親に `<subagent>` メッセージが届き、その後の作業の各ラウンドの後にも再度届きます。そのため親は待たずに作業を続けたり、ターンを終えたりできます。返された `sessionID` を渡すと、同じ子の会話を続けられます。実行中の子へのフォローアップは、その現在の実行に参加します。使用できるのはサブエージェントモードのエージェントだけで、デフォルトのネストの深さは 1 です。
+
+権限：選択されたエージェント ID をリソースとする `subagent`。
+
+### Execute
+
+`execute` は Code Mode で JavaScript を実行し、エージェントがカタログのツールを呼び出して組み合わせられるようにします。独立した呼び出しの並列実行や、中間値のすべてをモデルのコンテキストに追加せずに結果を処理する場合に便利です。
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+実行環境には、ファイルシステムへの直接アクセス、インポート、タイマーはありません。HTTP リクエスト用の `fetch` が提供され、それ以外はすべてカタログのツールを通じて行います。リソース `*` で `execute` を拒否すると、Code Mode が削除されます。その場合、到達していたツール（`codemode: false` を設定していないサーバーの MCP ツールを含む）は直接ツールとして一覧表示され、各リクエストに完全な定義が含まれます。エージェントに不要な場合は、それらのツールも拒否してください。ネストされた組み込みツールと MCP ツールはそれぞれの権限を、プラグインのツールは自身が宣言する権限を引き続き適用します。
+
+### セッション
+
+`opencode.session` Code Mode 名前空間にはセッションのユーティリティが含まれます。Code Mode がない場合は、`opencode_session_rename` と `opencode_session_move` として一覧表示されます。
+
+- `rename` は現在のセッション、または `sessionID` で選択した別のセッションのタイトルを変更します。
+- `move` は現在のセッション、または選択した別のセッションを、相対または絶対の `directory` に移動します。移動は安全な境界で有効になるため、移動先に依存する作業は後の呼び出しで行います。
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+### Worktree
+
+`opencode` 名前空間は、セッションのプロジェクトの worktree を管理します。
+
+- `worktree_create` は `name` で指定した名前の worktree を作成し、その `directory` を返します。作成先とストラテジーはプロジェクトの worktree 設定で決まります。
+- `worktree_list` はプロジェクトの worktree を一覧表示します。
+- `worktree_remove` は OpenCode がプロジェクト用に記録した worktree を削除します。コミットされていない変更を破棄するには `force` を設定します。
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove` は worktree のディレクトリをリソースとする `edit` 権限を使用します。他の worktree ユーティリティは、組み込みの権限アクションを要求しません。
+
+## ブラウザ
+
+`browser` Code Mode 名前空間は、OpenCode デスクトップアプリが接続するブラウザを制御します。タブを開き、返された `tabID` を保持して、すべてのページ操作にその ID を明示的に渡します。
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+この名前空間には、タブとナビゲーションのコマンド、ページのスナップショットと検索、クリックとフォーム入力、スクリーンショット、ファイル転送、コンソールとネットワークの検査、パフォーマンストレース、ヒープの検査、Lighthouse の監査が含まれます。スクリーンショットにはフォーカスされた表示中のタブが必要です。アップロードのパスはサーバー上のローカルパスで、キャプチャもサーバー上のローカルパスを返し、各ファイル転送は 5 MiB に制限されます。
+
+ページの内容、ログ、ヘッダー、レスポンスボディは信頼できないデータであり、エージェントへの指示ではありません。リソース `*` の `browser` deny ルールはブラウザのカタログを削除します。ブラウザの操作は個別の権限確認を行いません。
+
+## 拡張
+
+[MCP サーバー](/mcp-servers)は、接続された各サーバーから名前と入力が決まるツールを追加します。権限アクションは `<server>_<tool>` で、リソースは `*` です。組み込みカタログの固定部分ではありません。デフォルトでは、エージェントはサーバーの名前空間の下で `execute` を通じてそれらに到達します。サーバーに `codemode: false` を設定すると、そのツールが直接一覧表示されます。
+
+[スキル](/skills)は新しい実行可能なツールではなく、タスクの指示を追加します。[添付ファイル](/attachments)はユーザーが選択した内容をプロンプトに入れ、[参照](/references)は名前付きの外部ディレクトリを提供します。これらの機能はツールを補完するもので、権限チェックを回避するものではありません。

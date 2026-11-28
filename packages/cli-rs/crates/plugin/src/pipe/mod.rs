@@ -743,9 +743,9 @@ pub struct Scripts {
     /// Each plugin's listeners of every key that can take a key now, as its JS activation said; the others only
     /// hear a key, which goes on at once. Its JS state's, so it goes with the activation or the JS host.
     taking: RefCell<HashMap<String, HashSet<proto::Listener>>>,
-    /// A key command's hold ran out and the JS host has sent nothing since: a key that runs a JS command goes on at once
-    /// as declined, and the command runs late, so typing never waits on a JS host that is stalled.
-    stalled: Cell<bool>,
+    /// The call whose key's hold ran out and which the JS host has not answered: a key that runs a JS command goes on
+    /// at once as declined, and the command runs late, so typing never waits on a JS host that is stalled.
+    stalled: Cell<Option<u64>>,
     /// What the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
     held: RefCell<Option<Vec<Up>>>,
     /// The fault armed for the next handler's message, and a message a swap holds back.
@@ -933,7 +933,7 @@ impl Scripts {
             replayed: RefCell::default(),
             recent: RefCell::default(),
             taking: RefCell::default(),
-            stalled: Cell::new(false),
+            stalled: Cell::new(None),
             held: RefCell::default(),
             fault: Cell::new(None),
             swapped: RefCell::default(),
@@ -1068,6 +1068,15 @@ impl Scripts {
             .flatten()
             .map(|up| serde_json::to_value(up).ok().and_then(|value| value["type"].as_str().map(str::to_owned)));
         types.map(Option::unwrap_or_default).collect()
+    }
+
+    /// Holds what the host sends the JS host, as one that reads nothing does, while `held`: the child's queue stays
+    /// full, so the host's overflow does not drain behind a test that needs it full.
+    #[doc(hidden)]
+    pub fn hold_input(&self, held: bool) {
+        if let Some(child) = self.child.borrow().as_ref() {
+            child.hold_input(held);
+        }
     }
 
     /// Holds what the JS host sends, unhandled and in order, while `held`; then handles it. A test closes a mount
@@ -1759,11 +1768,6 @@ impl Scripts {
     }
 
     fn up(self: &Rc<Self>, up: Up) {
-        // The JS host answers again: a key's command is sent to it again. Not by an acknowledgement or a start, which it
-        // sends as it reads a message, before the handler that stalls it runs.
-        if !matches!(up, Up::Ack { .. } | Up::Started { .. }) {
-            self.stalled.set(false);
-        }
         match up {
             Up::Hello { .. } | Up::Ack { .. } => {}
             Up::Started { seq } => {
@@ -1808,6 +1812,12 @@ impl Scripts {
             Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
             Up::Entered { id } => *self.entered.borrow_mut() = id,
             Up::Done { seq, effects, mounts, error, declined } => {
+                // The call whose hold ran out is answered: a key's command is held again. Not by an entry or a log the
+                // JS host sends as it begins the handler that stalls it, so the keys typed while that handler runs
+                // do not start fresh holds.
+                if self.stalled.get() == Some(seq) {
+                    self.stalled.set(None);
+                }
                 // A call that threw has no answer for its key: it goes on, as for an end of the JS host.
                 let error_seen = error.is_some();
                 self.started.borrow_mut().remove(&seq);
@@ -2207,7 +2217,7 @@ impl Scripts {
         let (guest, bound) = (Rc::downgrade(guest), key.clone());
         let call = Call { guest, plugin: id, activation, export, user, request, owner, mount, key };
         // The owner is in place before the send: a send refused at once ends it as a refusal, once.
-        let stalled = self.stalled.get();
+        let stalled = self.stalled.get().is_some();
         if (hold || bound.is_some()) && !(stalled && bound.is_some()) {
             self.hold_for(seq, bound.clone());
         }
@@ -2216,9 +2226,9 @@ impl Scripts {
         if self.stopped.borrow().is_some() && self.waiting.borrow_mut().remove(&seq).is_some() {
             self.refused(seq);
         }
-        // The JS host has not answered since a hold ran out: the key goes on at once, as declined, after the turn, and
-        // the input after it waits for it. The command still runs, late, in its order on the JS host; nothing owns its
-        // answer.
+        // The JS host has not answered the call whose hold ran out: the key goes on at once, as declined, after the
+        // turn, and the input after it waits for it. The command still runs, late, in its order on the JS host; nothing
+        // owns its answer.
         if stalled && let Some(keyed) = bound {
             let mut held = self.hold.borrow_mut();
             held.put_back(keyed);
@@ -2350,6 +2360,10 @@ impl Scripts {
 
     /// Owner `seq`'s call never reaches the JS host: it declines its key, which goes on after the turn.
     fn refused(&self, seq: u64) {
+        // A call the JS host never runs cannot be what stalls it.
+        if self.stalled.get() == Some(seq) {
+            self.stalled.set(None);
+        }
         let timer = {
             let mut hold = self.hold.borrow_mut();
             let Some(timer) = hold.end(seq, true) else { return };
@@ -2384,18 +2398,24 @@ impl Scripts {
             hold.end(seq, true);
             bound
         };
-        if bound && !self.stalled.replace(true) {
-            log::warn!(
-                "the JS host did not answer a key's command within {} ms: its key went on, and keys are not held \
-                 until it answers",
-                self.config.hold.as_millis()
-            );
+        if bound {
+            let first = self.stalled.get().is_none();
+            self.stalled.set(Some(seq));
+            if first {
+                log::warn!(
+                    "the JS host did not answer a key's command within {} ms: its key went on, and keys are not held \
+                     until it answers",
+                    self.config.hold.as_millis()
+                );
+            }
         }
         self.release();
     }
 
     /// The JS host ended: every owner ends, its key back as declined, and the input goes on (after what settles).
     fn end_holds(&self) {
+        // Its call never answers: the next JS host holds a key's command again.
+        self.stalled.set(None);
         let timers: Vec<TimerId> = {
             let mut hold = self.hold.borrow_mut();
             let owners = std::mem::take(&mut hold.owners);
@@ -3428,6 +3448,28 @@ mod tests {
 
     fn typed(typed: &Rc<RefCell<Vec<String>>>) -> Vec<String> {
         std::mem::take(&mut *typed.borrow_mut())
+    }
+
+    /// A stall is remembered until the call it ran out on is answered: what the JS host sends as it begins that call's
+    /// handler, or while it runs, does not make the next bound key wait again.
+    #[test]
+    fn a_stall_is_remembered_until_its_call_is_answered() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        host.app.press("a");
+        host.app.advance(Duration::from_millis(51));
+        assert_eq!(typed(&seen), ["%", "a"]);
+        assert_eq!(scripts.stalled.get(), Some(1));
+        // The host begins the handler that stalls it, and says so: its entry, and a log line from it.
+        scripts.up(Up::Entered { id: Some("p".into()) });
+        scripts.up(Up::Log { id: Some("p".into()), level: opencode_plugin_abi::Level::Info, message: "x".into() });
+        assert_eq!(scripts.stalled.get(), Some(1), "a message that is not its answer ended the stall");
+        // Another call's answer is not its own.
+        scripts.up(Up::Done { seq: 2, effects: Vec::new(), mounts: Vec::new(), error: None, declined: false });
+        assert_eq!(scripts.stalled.get(), Some(1));
+        // Its answer ends the stall: the next bound key waits for its command again.
+        scripts.up(Up::Done { seq: 1, effects: Vec::new(), mounts: Vec::new(), error: None, declined: true });
+        assert_eq!(scripts.stalled.get(), None);
     }
 
     #[test]

@@ -212,3 +212,54 @@ fn broken_custom_themes_fail_with_the_typescript_message() {
     }
     report(failures, errors.len());
 }
+
+#[test]
+fn text_selection_defaults_to_focused_primary_action_unless_set() {
+    let mut catalog = Catalog::default();
+    let fallback = catalog.load("opencode", ThemeMode::Dark).unwrap().theme;
+    assert_eq!(fallback.text.selection, fallback.text.action.primary.focused);
+    assert_eq!(fallback.background.selection, fallback.background.action.primary.focused);
+    assert_ne!(fallback.background.selection, fallback.text.selection);
+
+    let mut document: Value = serde_json::from_str(include_str!("../../src/theme/generated/themes.json")).unwrap();
+    let mut custom = document["themes"]
+        .as_array_mut()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["name"] == "opencode")
+        .unwrap()["document"]
+        .clone();
+    custom["base"]["text"]["selection"] = serde_json::json!("#123456");
+    custom["base"]["background"]["selection"] = serde_json::json!("#abcdef");
+    catalog.set_custom(IndexMap::from([("selection-test".to_owned(), custom)]));
+    let explicit = catalog.load("selection-test", ThemeMode::Dark).unwrap().theme;
+    assert_eq!(explicit.text.selection, Color::rgba(0x12, 0x34, 0x56, 255));
+    assert_eq!(explicit.background.selection, Color::rgba(0xab, 0xcd, 0xef, 255));
+}
+
+#[test]
+fn find_tokens_default_to_raised_and_focused_unless_set() {
+    let mut catalog = Catalog::default();
+    let fallback = catalog.load("opencode", ThemeMode::Dark).unwrap().theme;
+    assert_eq!(fallback.find.text.current, fallback.text.action.primary.focused);
+    assert_eq!(fallback.find.background.r#match, fallback.background.raised.max);
+    assert_eq!(fallback.find.background.current, fallback.background.action.primary.focused);
+
+    let mut document: Value = serde_json::from_str(include_str!("../../src/theme/generated/themes.json")).unwrap();
+    let mut custom = document["themes"]
+        .as_array_mut()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["name"] == "opencode")
+        .unwrap()["document"]
+        .clone();
+    custom["base"]["find"] = serde_json::json!({
+        "text": { "current": "#112233" },
+        "background": { "match": "#445566" },
+    });
+    catalog.set_custom(IndexMap::from([("find-test".to_owned(), custom)]));
+    let explicit = catalog.load("find-test", ThemeMode::Dark).unwrap().theme;
+    assert_eq!(explicit.find.text.current, Color::rgba(0x11, 0x22, 0x33, 255));
+    assert_eq!(explicit.find.background.r#match, Color::rgba(0x44, 0x55, 0x66, 255));
+    assert_eq!(explicit.find.background.current, explicit.background.action.primary.focused);
+}

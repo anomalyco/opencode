@@ -11,6 +11,7 @@ export type RichText = Inline[]
 export type MarkdownContext = {
   t: Translate
   route: (path: string) => string
+  consoleRoute: (path: string) => string
   changelog?: ChangelogView
   /** The releases as they come from GitHub, for pages that read them directly (the press kit). */
   releases?: ChangelogRelease[]

@@ -1181,6 +1181,67 @@ test("ignores catalog updates for unloaded locations while refreshing loaded loc
   }
 })
 
+test("an agent update without a location refreshes the agents of every loaded location", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: string[] = []
+  const current = { agent: "build" }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      requests.push(`${url.pathname} ${directory}`)
+      if (url.pathname !== "/api/agent") throw new Error(`Unexpected request: ${url}`)
+      return Response.json({
+        location: { directory, project: { id: directory, directory, canonical: directory } },
+        data: [
+          {
+            id: current.agent,
+            name: current.agent,
+            mode: "primary",
+            hidden: false,
+            request: { headers: {}, body: {} },
+            permissions: [],
+          },
+        ],
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  const project = { directory: "/project" }
+  const other = { directory: "/other" }
+
+  try {
+    await Promise.all([setup.data.location.agent.sync(project), setup.data.location.agent.sync(other)])
+    requests.length = 0
+    current.agent = "orchestrator"
+    const event: OpenCodeEvent = { id: "evt_agents_registered", created: 1, type: "agent.updated", data: {} }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    await wait(
+      () =>
+        setup.data.location.agent.list(project)?.[0]?.id === "orchestrator" &&
+        setup.data.location.agent.list(other)?.[0]?.id === "orchestrator",
+    )
+    expect(requests.toSorted()).toEqual(["/api/agent /other", "/api/agent /project"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates model discovery when an update overtakes an in-flight model list", async () => {
   const started = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()

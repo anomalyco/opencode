@@ -387,6 +387,7 @@ export function CurrentContextToolGroup(props: {
   patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
 }) {
   const i18n = useI18n()
+  const data = useData()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
 
   const pending = createMemo(
@@ -434,7 +435,7 @@ export function CurrentContextToolGroup(props: {
       return { text, title: text, before: "", count: undefined, between: "", after: "" }
     }
 
-    return contextGroupLabel(props.parts, i18n)
+    return contextGroupLabel(props.parts, i18n, data.flag("full_codemode"))
   })
 
   const items = createMemo(() =>
@@ -1137,10 +1138,42 @@ function scriptChangePartID(file: FileFact) {
   return file.id.slice(file.id.indexOf(":") + 1)
 }
 
+// A script change as the patch view draws it, or undefined for one it can't: no diff, past the size cap, binary, a
+// copy or a delete.
+function scriptChangeDiff(file: FileFact): FileDiffInfo | undefined {
+  const value = {
+    file: file.path,
+    patch: file.patch,
+    additions: file.additions ?? 0,
+    deletions: file.deletions ?? 0,
+    status: file.change ?? "modified",
+  }
+
+  return changedFileDiff(value) ? value : undefined
+}
+
+type ScriptChangeRun = { type: "patch"; files: FileFact[] } | { type: "counts"; file: FileFact }
+
+// Changes with a diff that follow one another share one group, as a patch's files do; each other change stands alone.
+function scriptChangeRuns(files: readonly FileFact[]): ScriptChangeRun[] {
+  const runs: ScriptChangeRun[] = []
+
+  for (const file of files) {
+    const last = runs.at(-1)
+
+    if (!scriptChangeDiff(file)) runs.push({ type: "counts", file })
+    else if (last?.type === "patch") last.files.push(file)
+    else runs.push({ type: "patch", files: [file] })
+  }
+
+  return runs
+}
+
 /**
- * The changes a script made, in order, one card each: the same file changed twice is two cards. A change without a
- * diff, past the size cap, to a binary file, a copy or a delete, shows what it did as a patch's file header does. Each
- * card opens by the change's own id.
+ * The changes a script made, in order. Changes with a diff that follow one another share one group, a row per file, as
+ * a patch's files do: a script that changes a file more than once lists it once per change, and the group draws each
+ * of those diffs under the file's one row. A change without a diff shows what it did as a patch's file header does.
+ * Each file opens by the id of its first change.
  */
 export function ScriptChanges(props: {
   files: readonly FileFact[]
@@ -1149,7 +1182,6 @@ export function ScriptChanges(props: {
   onFileOpenChange?: (key: string, open: boolean) => void
   onSizeChange?: () => void
 }) {
-  const i18n = useI18n()
   const placement = useContext(ScriptOutputContext)
 
   // The Output row of a script whose last change this is, when its changes are drawn right after it.
@@ -1161,94 +1193,38 @@ export function ScriptChanges(props: {
       : undefined
   }
 
+  const runs = createMemo(() => scriptChangeRuns(props.files))
+
   // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
   return (
     <div data-component="tool-part-wrapper" data-script-changes="">
-      <Index each={props.files}>
-        {(file) => {
-          const diff = createMemo(
-            () => {
-              const value = {
-                file: file().path,
-                patch: file().patch,
-                additions: file().additions ?? 0,
-                deletions: file().deletions ?? 0,
-                status: file().change ?? "modified",
-              }
+      <Index each={runs()}>
+        {(run) => {
+          const group = createMemo(() => {
+            const value = run()
 
-              return changedFileDiff(value) ? value : undefined
-            },
-            undefined,
-            // A progress report reads each change again; the same diff keeps its parsed view.
-            {
-              equals: (previous, next) =>
-                previous === next ||
-                (!!previous &&
-                  !!next &&
-                  previous.file === next.file &&
-                  previous.patch === next.patch &&
-                  previous.additions === next.additions &&
-                  previous.deletions === next.deletions &&
-                  previous.status === next.status),
-            },
-          )
+            return value.type === "patch" ? value.files : undefined
+          })
+
+          const single = createMemo(() => {
+            const value = run()
+
+            return value.type === "counts" ? value.file : undefined
+          })
 
           return (
             <Show
-              when={diff()}
-              fallback={
-                <div
-                  data-component="file-counts"
-                  data-type={file().change}
-                  data-timeline-part-id={scriptChangePartID(file())}
-                >
-                  <FileIcon node={{ path: file().path, type: "file" }} />
-                  <span data-slot="file-counts-name">
-                    <Show when={file().path.includes("/")}>
-                      <span data-slot="file-counts-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
-                    </Show>
-                    <span data-slot="file-counts-filename">{getFilename(file().path)}</span>
-                  </span>
-                  <Switch>
-                    <Match when={file().change === "added"}>
-                      <span data-component="diff-changes" data-appearance="standard">
-                        <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
-                      </span>
-                    </Match>
-                    <Match when={file().change === "deleted"}>
-                      <span data-component="diff-changes" data-appearance="standard">
-                        <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
-                      </span>
-                    </Match>
-                    <Match when={(file().additions ?? 0) + (file().deletions ?? 0) > 0}>
-                      <DiffChanges
-                        appearance="standard"
-                        markEmpty
-                        changes={{ additions: file().additions ?? 0, deletions: file().deletions ?? 0 }}
-                      />
-                    </Match>
-                  </Switch>
-                </div>
-              }
+              when={group()}
+              fallback={<Show when={single()}>{(file) => <ScriptChangeCounts file={file()} />}</Show>}
             >
-              {(value) => (
-                <div data-script-change="patch" data-timeline-part-id={scriptChangePartID(file())}>
-                  <Dynamic
-                    component={props.render}
-                    tool="patch"
-                    input={{}}
-                    metadata={{ files: [value()] }}
-                    status="completed"
-                    fileOpen={props.fileOpen && (() => props.fileOpen?.(file().id))}
-                    onFileOpenChange={
-                      props.onFileOpenChange &&
-                      ((_: string, open: boolean) => props.onFileOpenChange?.(file().id, open))
-                    }
-                    deferContent
-                    virtualizeDiff={false}
-                    onContentRendered={props.onSizeChange}
-                  />
-                </div>
+              {(files) => (
+                <ScriptChangeGroup
+                  files={files()}
+                  render={props.render}
+                  fileOpen={props.fileOpen}
+                  onFileOpenChange={props.onFileOpenChange}
+                  onSizeChange={props.onSizeChange}
+                />
               )}
             </Show>
           )
@@ -1261,6 +1237,96 @@ export function ScriptChanges(props: {
           </div>
         )}
       </Show>
+    </div>
+  )
+}
+
+// Changes with a diff that follow one another, drawn as one patch's files are: a row per file, its diffs under it.
+function ScriptChangeGroup(props: {
+  files: readonly FileFact[]
+  render: Component<ToolProps>
+  fileOpen?: (key: string) => boolean | undefined
+  onFileOpenChange?: (key: string, open: boolean) => void
+  onSizeChange?: () => void
+}) {
+  const diffs = createMemo(
+    () =>
+      props.files.flatMap((file) => {
+        const diff = scriptChangeDiff(file)
+
+        return diff ? [diff] : []
+      }),
+    [],
+    {
+      // A progress report reads each change again; the same diffs keep their parsed views.
+      equals: (previous, next) =>
+        previous.length === next.length && previous.every((value, index) => samePatchFile(value, next[index]!)),
+    },
+  )
+
+  // A file's row opens by the id of its first change, so a later change to it keeps the row as it was.
+  const key = (path: string) => props.files.find((file) => file.path === path)?.id ?? path
+
+  return (
+    <div
+      data-script-change="patch"
+      data-timeline-part-id={scriptChangePartID(props.files[0]!)}
+      data-timeline-part-ids={props.files.length > 1 ? props.files.map(scriptChangePartID).join(",") : undefined}
+    >
+      <Dynamic
+        component={props.render}
+        tool="patch"
+        input={{}}
+        metadata={{ files: diffs() }}
+        status="completed"
+        fileOpen={props.fileOpen && ((path: string) => props.fileOpen?.(key(path)))}
+        onFileOpenChange={
+          props.onFileOpenChange && ((path: string, open: boolean) => props.onFileOpenChange?.(key(path), open))
+        }
+        deferContent
+        virtualizeDiff={false}
+        onContentRendered={props.onSizeChange}
+      />
+    </div>
+  )
+}
+
+// A change without a diff, shown as a patch's file header shows what it did.
+function ScriptChangeCounts(props: { file: FileFact }) {
+  const i18n = useI18n()
+
+  return (
+    <div
+      data-component="file-counts"
+      data-type={props.file.change}
+      data-timeline-part-id={scriptChangePartID(props.file)}
+    >
+      <FileIcon node={{ path: props.file.path, type: "file" }} />
+      <span data-slot="file-counts-name">
+        <Show when={props.file.path.includes("/")}>
+          <span data-slot="file-counts-directory">{`\u202A${displayDirectory(props.file.path)}\u202C`}</span>
+        </Show>
+        <span data-slot="file-counts-filename">{getFilename(props.file.path)}</span>
+      </span>
+      <Switch>
+        <Match when={props.file.change === "added"}>
+          <span data-component="diff-changes" data-appearance="standard">
+            <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
+          </span>
+        </Match>
+        <Match when={props.file.change === "deleted"}>
+          <span data-component="diff-changes" data-appearance="standard">
+            <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
+          </span>
+        </Match>
+        <Match when={(props.file.additions ?? 0) + (props.file.deletions ?? 0) > 0}>
+          <DiffChanges
+            appearance="standard"
+            markEmpty
+            changes={{ additions: props.file.additions ?? 0, deletions: props.file.deletions ?? 0 }}
+          />
+        </Match>
+      </Switch>
     </div>
   )
 }
@@ -2322,12 +2388,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; s
   )
 }
 
-function ExecuteDetailsSection(props: {
-  label: string
-  copy: string
-  copyLabel: string
-  children: JSX.Element
-}) {
+function ExecuteDetailsSection(props: { label: string; copy: string; copyLabel: string; children: JSX.Element }) {
   const i18n = useI18n()
   const copy = createCopyFeedback()
 

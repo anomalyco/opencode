@@ -1,4 +1,4 @@
-// Experimental generators for the default project avatar, compared side by side in the components lab. Each keeps the
+// Experimental generators for the default project avatar, compared side by side in the Lab. Each keeps the
 // mesh's contract (see generated.ts): the values that define an icon are resolved once from a key, so a stored icon
 // never changes, and drawing is a CPU pass on a 2D canvas clipped to the same rounded tile. Most styles paint a small
 // grid of pixels that is scaled up nearest-neighbour, with limited palettes and ordered dithering. Only the components
@@ -1495,6 +1495,7 @@ function turned(cells: number[][], turns: number) {
     (list) => list.map(([x, y]) => [-y, x]),
     cells,
   )
+
   const minX = Math.min(...rotated.map(([x]) => x))
   const minY = Math.min(...rotated.map(([, y]) => y))
 

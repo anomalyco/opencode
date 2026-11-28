@@ -110,6 +110,7 @@ tokens! {
         pub base: Color,
         pub muted: Color,
         pub faint: Color,
+        pub selection: Color,
         pub action: Actions,
         pub formfield: Stateful,
         pub feedback: Feedback<TextFeedback>,
@@ -123,6 +124,7 @@ tokens! {
 
     pub struct Background {
         pub base: Color,
+        pub selection: Color,
         pub raised: Raised,
         pub action: Actions,
         pub formfield: Stateful,
@@ -157,6 +159,20 @@ tokens! {
         pub background: DiffBackground,
         pub highlight: DiffPair,
         pub line_number: DiffLineNumber,
+    }
+
+    pub struct FindText {
+        pub current: Color,
+    }
+
+    pub struct FindBackground {
+        pub r#match: Color,
+        pub current: Color,
+    }
+
+    pub struct Find {
+        pub text: FindText,
+        pub background: FindBackground,
     }
 
     pub struct Syntax {
@@ -195,6 +211,7 @@ tokens! {
         pub border: Base,
         pub scrollbar: Base,
         pub diff: Diff,
+        pub find: Find,
         pub syntax: Syntax,
         pub markdown: Markdown,
     }
@@ -224,6 +241,7 @@ macro_rules! visit_tokens {
         f("text.base", & $($m)* text.base);
         f("text.muted", & $($m)* text.muted);
         f("text.faint", & $($m)* text.faint);
+        f("text.selection", & $($m)* text.selection);
         visit_actions!("text.action", & $($m)* text.action, f, $($m)*);
         visit_stateful!("text.formfield", & $($m)* text.formfield, f, $($m)*);
         for (kind, feedback) in [("error", & $($m)* text.feedback.error), ("warning", & $($m)* text.feedback.warning), ("success", & $($m)* text.feedback.success), ("info", & $($m)* text.feedback.info)] {
@@ -232,6 +250,7 @@ macro_rules! visit_tokens {
         }
         let background = & $($m)* $tokens.background;
         f("background.base", & $($m)* background.base);
+        f("background.selection", & $($m)* background.selection);
         f("background.raised.base", & $($m)* background.raised.base);
         f("background.raised.high", & $($m)* background.raised.high);
         f("background.raised.max", & $($m)* background.raised.max);
@@ -255,6 +274,10 @@ macro_rules! visit_tokens {
         f("diff.lineNumber.text", & $($m)* diff.line_number.text);
         f("diff.lineNumber.background.added", & $($m)* diff.line_number.background.added);
         f("diff.lineNumber.background.removed", & $($m)* diff.line_number.background.removed);
+        let find = & $($m)* $tokens.find;
+        f("find.text.current", & $($m)* find.text.current);
+        f("find.background.match", & $($m)* find.background.r#match);
+        f("find.background.current", & $($m)* find.background.current);
         let syntax = & $($m)* $tokens.syntax;
         f("syntax.comment", & $($m)* syntax.comment);
         f("syntax.keyword", & $($m)* syntax.keyword);

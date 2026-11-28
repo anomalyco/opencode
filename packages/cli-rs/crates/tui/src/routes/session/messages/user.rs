@@ -1,12 +1,23 @@
 //! User prompts, attachments, and mention chips.
 
+use std::sync::LazyLock;
+
 use opencode_api::generated::{PromptFileSource, SessionInboxDelivery, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
+use regex::Regex;
 
+use super::super::find::{FindMatch, FindPartKey, find_ranges, paint_spans, wrapped_row};
 use super::images::{self, Images};
 use super::list::Context;
 
 use crate::prelude::*;
+
+#[derive(PartialEq)]
+struct UserFind {
+    pattern_key: String,
+    current: Option<usize>,
+    colors: (Color, Color, Color),
+}
 
 pub struct User {
     root: View,
@@ -16,6 +27,8 @@ pub struct User {
     images: Images,
     color: Cell<Option<Color>>,
     rendered: RefCell<Option<SessionMessageUser>>,
+    find_applied: Cell<bool>,
+    find_state: RefCell<Option<Box<UserFind>>>,
     hover: Rc<Cell<bool>>,
     id: Rc<RefCell<String>>,
     /// The box its hover handler restyles. The handler holds it weakly: a widget whose handler holds the widget
@@ -59,6 +72,10 @@ impl User {
             if tui.app.selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
+            // The app opens the clicked link.
+            if crate::features::links::link_at(&tui.app, event.x, event.y).is_some() {
+                return;
+            }
             let message = clicked.borrow().clone();
             let delivery = tui.data.read(|state| crate::routes::session::queued::delivery(state, &session, &message));
             if delivery == Some(SessionInboxDelivery::Steer) {
@@ -83,6 +100,8 @@ impl User {
             images,
             color: Cell::new(None),
             rendered: RefCell::default(),
+            find_applied: Cell::new(false),
+            find_state: RefCell::default(),
             hover,
             id,
             _body: body,
@@ -100,6 +119,7 @@ impl User {
         paint_body(&self._body, cx.theme, self.hover.get());
         self.color.set(None);
         self.rendered.take();
+        self.find_state.take();
         self.images.restyle(cx.theme);
     }
 
@@ -114,13 +134,20 @@ impl User {
             self.root.border_color(color);
         }
         if self.rendered.borrow().as_ref() == Some(message) {
+            self.update_find(cx, message);
             return;
         }
         let files = message.files.as_deref().unwrap_or_default();
         self.images.update(cx, images::user_images(files));
         let skills = message.skills.as_deref().unwrap_or_default();
         self.root.visible(!message.text.trim().is_empty() || !files.is_empty() || !skills.is_empty());
-        self.text.set_text(message.text.as_str());
+        self.find_state.take();
+        if cx.find.is_some() {
+            self.paint_find(cx, message);
+        } else {
+            self.find_applied.set(false);
+            self.text.set_text(linked(&message.text, cx.theme.markdown.link));
+        }
 
         self.skills.clear();
         self.skills.visible(!skills.is_empty());
@@ -140,6 +167,70 @@ impl User {
         }
         *self.rendered.borrow_mut() = Some(message.clone());
     }
+
+    pub fn update_find(&self, cx: &Context<'_>, message: &SessionMessageUser) {
+        if cx.find.is_none() && !self.find_applied.get() {
+            return;
+        }
+        self.paint_find(cx, message);
+    }
+
+    fn paint_find(&self, cx: &Context<'_>, message: &SessionMessageUser) {
+        let Some(active) = cx.find else {
+            if self.find_applied.replace(false) {
+                self.find_state.take();
+                self.text.set_text(linked(&message.text, cx.theme.markdown.link));
+            }
+            return;
+        };
+        let key = FindPartKey::message(&message.id.0);
+        let current = active.current_occurrence(&key);
+        let colors = (cx.theme.find.text.current, cx.theme.find.background.r#match, cx.theme.find.background.current);
+        let next = UserFind { pattern_key: active.pattern.key.clone(), current, colors };
+        if self.find_applied.get() && self.find_state.borrow().as_deref() == Some(&next) {
+            return;
+        }
+        let ranges = find_ranges(&message.text, Some(&active.pattern));
+        let spans = paint_spans(linked(&message.text, cx.theme.markdown.link), &ranges, 0, current, cx.theme);
+        self.text.set_text(spans);
+        self.find_applied.set(true);
+        *self.find_state.borrow_mut() = Some(Box::new(next));
+        if let Some(occurrence) = current
+            && let Some(range) = ranges.get(occurrence)
+        {
+            let widget = self.text.downgrade();
+            let text = message.text.clone();
+            let offset = range.start;
+            active.located(FindMatch { key, occurrence }, move || {
+                let widget = widget.upgrade()?;
+                let rect = widget.rect();
+                (rect.height > 0.0).then(|| rect.screen_y + f64::from(wrapped_row(&text, offset, rect.width as u16)))
+            });
+        }
+    }
+}
+
+/// The prompt as written, with its http(s) URLs as links, split like the web app's linked text.
+fn linked(text: &str, link: Color) -> Vec<Span<'static>> {
+    static URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"https?://[^\s<>"'`]+"#).expect("valid regex"));
+    let mut spans = Vec::new();
+    let mut last = 0;
+    for found in URL.find_iter(text) {
+        // Sentence punctuation and closing brackets after a URL are almost never part of it.
+        let href = found.as_str().trim_end_matches([')', ',', '.', ';', ':', '!', '?', ']']);
+        if opencode_api::js::parse_url(href).is_err() {
+            continue;
+        }
+        if found.start() > last {
+            spans.push(Span::raw(text[last..found.start()].to_owned()));
+        }
+        spans.push(Span::styled(href.to_owned(), Style::new().fg(link).underline()).link(href.to_owned()));
+        last = found.start() + href.len();
+    }
+    if last < text.len() {
+        spans.push(Span::raw(text[last..].to_owned()));
+    }
+    spans
 }
 
 fn paint_body(body: &View, theme: &Theme, hover: bool) {

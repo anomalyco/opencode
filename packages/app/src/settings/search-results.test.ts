@@ -82,9 +82,9 @@ describe("settings search index", () => {
       page: "Preferences / Timeline",
       view: { tab: "general", target: "settings-fold-user-messages" },
     })
-    expect(rankSettings("new question UI", items)[0].view).toMatchObject({
+    expect(rankSettings("new timeline", items)[0].view).toMatchObject({
       tab: "experimental",
-      target: "settings-new-question-ui",
+      target: "settings-new-timeline",
     })
     expect(rankSettings("capsule", items)[0].view).toMatchObject({
       tab: "general",

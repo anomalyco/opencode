@@ -1,0 +1,1886 @@
+---
+title: "الخادم"
+description: "ابنِ جزء الخادم من ملحق OpenCode: الأدوات والخطافات والتكاملات والأوامر والوكلاء."
+---
+
+يعمل جزء الخادم من الملحق في خادم OpenCode. وهو يعدّل سلوك OpenCode ويضيف ميزات: الأدوات
+والخطافات والتكاملات والأوامر والوكلاء. راجع [النظرة العامة](/build/plugins) لبنية حزمة الملحق
+وتحميلها ونشرها.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+## دورة الحياة
+
+يعمل `setup` عند تحميل الملحق. وقد يعيد دالة لتحرير الموارد تُستدعى عند إلغاء تحميله.
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### السياق
+
+يستند سياق الملحق إلى [عميل خادم OpenCode](/build/client).
+تستخدم طرق القراءة وتنفيذ الإجراءات فيه المدخلات والاستجابات نفسها التي يستخدمها العميل. ويضيف السياق
+طرقًا خاصة بالملحقات للتحويلات وخطافات وقت التشغيل وإعادة التحميل والتسجيلات
+وخيارات الملحق.
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+ويصف `ctx.location` الموقع الذي حُمِّلت فيه نسخة الملحق هذه. ويضم
+`directory` و`workspaceID` اختياريًا وبيانات `project` الوصفية (`id`
+و`directory` و`canonical`). وهو متاح في ملحقات Promise وEffect معًا.
+وهو موقع نسخة الملحق، لا موقع كل جلسة تستطيع
+الوصول إليها أو كل حدث تتلقاه.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### الخيارات
+
+مرّر خيارات الملحق بصيغة الكائن في `opencode.json(c)`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+واقرأ تلك القيم من `ctx.options` أثناء `setup`.
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## التحويلات
+
+التحويلات تعديلات متزامنة لحالة نطاقات OpenCode، وكل منها يبني على التسجيلات السابقة في نطاقه.
+وتعكس قراءات السجل مثل `ctx.model.list()` كل تسجيل حتى الآن، بما في ذلك أثناء إعداد الملحق؛
+فعند بدء التشغيل لا يُجمَّع سوى إشعارات التحديث، ولا يتأخّر ظهور التسجيلات عند قراءة السجل. وتظلّ واجهات API لحالة الموارد
+تعرض حالة تشغيلها الفعلية. فتسجيل التعريف لا يعني اكتمال الاتصال بالمورد أو انتهاء العمليات
+الأخرى المتعلقة به.
+
+وتسهم المصادر بمزوّدين وتعريفات نماذج غير قابلة للتغيير عبر `ctx.provider.transform`.
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+يُوسَم السجل بأنه تغيّر عند أيّ تسجيل أو إزالة أو استدعاء لـ `reload()`. ويُعاد بناؤه عند القراءة التالية بتطبيق كل
+تحويل نشط على قيمة جديدة، حسب ترتيب التسجيل. احرص على أن تكون التحويلات قليلة الكلفة وقابلة لإعادة التطبيق. ولا تؤثّر أيّ إعادة بناء لاحقة
+في القيم التي سبق أن قرأتها.
+
+بعد تطبيق تحويلات المزوّدين وتحديد المتاح منهم، ينشئ OpenCode مجموعة نماذج المزوّدين النشطين ويعيد تطبيق
+جميع تحويلات النماذج بالترتيب. ويمكن لسياسة النماذج فحص المجموعة الكاملة للنماذج المرشّحة، بما فيها نماذج المصادر
+التي حُدّثت مؤخرًا.
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+ولا تُراقب المدخلات الملتقطة تلقائيًا. فحمّل البيانات الخارجية قبل رد النداء المتزامن، ثم استدعِ
+`reload()` بعد تغيّر تلك المدخلات. وهنا، تعيد `loadFromSource()`
+إدخالات `{ info: Provider.Info, models: readonly Model.Info[] }`.
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+وتُبطل تغييرات المزوّد نتيجة النماذج النشطة كلها، فتواصل سياسة سعر الإخراج تصفية النماذج المحدّثة.
+واستخدم `ctx.model.reload()` عندما يتغيّر مدخل التقطه تحويل نموذج وحده.
+
+## API
+
+### الوكيل
+
+اقرأ كل الوكلاء أو اجلب وكيلًا بمعرّفه.
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+سجّل تحويلًا لفحص الوكلاء أو إنشائهم أو تحديثهم أو إزالتهم أو اختيار الوكيل الافتراضي.
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+سجّل وكيلًا جديدًا باستخدام `editor.update`. إذا كان المعرّف موجودًا بالفعل، تُعدِّل هذه الطريقة الوكيل المقابل. وإلا فإنها تُنشئ وكيلًا باستخدام `Agent.Info.default(id)` قبل استدعاء دالة رد النداء.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
+})
+```
+
+وأعد تحميل الوكلاء بعد تغيّر حالة خارجية يستخدمها تحويل.
+
+```ts
+await ctx.agent.reload()
+```
+
+#### المرجع
+
+المخطّط: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### المزوّدون
+
+اقرأ المزوّدين المتاحين أو افحص بيانات مزوّد واحد الوصفية بمعرّفه.
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+وتعدّل تحويلات المزوّد إعدادات المزوّد وتعريفات المصادر. وتضم قراءات المحرّر المزوّدين غير النشطين وتعرض
+تعريفات غير قابلة للتغيير؛ ويعدّل `models.update` نسخة مملوكة من نموذج مصدر.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-5-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+واستبدل جرد مصادر المزوّد بـ`models.set`، ثم أعد التحميل بعد تغيّر التعريفات الملتقطة.
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+وللاكتشاف الخاص بحساب، مرّر الاتصال المستخدم لتحميل الجرد كـ`sourceConnection`. ويستبعد OpenCode
+ذلك المزوّد ما دام اتصال آخر مختارًا، حتى ينشر ملحقك جرده المحدّث.
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### المرجع
+
+المخطّطات: [`Provider.Info`](/api#schema-Provider.Info)، [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### النماذج
+
+اقرأ النماذج المتاحة والاختيار الافتراضي.
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+تعدّل تحويلات النماذج المجموعة الكاملة للنماذج المرشّحة لدى المزوّدين النشطين. ويمكن تعديل النماذج المعطّلة إلى أن تنتهي كل
+التحويلات، ولا يستطيع `update` إضافة نموذج إلا إلى مزوّد متاح.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-5-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+تعدّل دوال ردّ النداء قيم النموذج قبل دمجها مع الإعدادات الافتراضية للمزوّد. يدمج OpenCode تلك الإعدادات مرة واحدة عند اعتماد النتيجة،
+ويعيد استخدامها في القراءات اللاحقة ما لم تتغيّر. ويعرض `editor.provider` تعريفات المصادر غير القابلة للتغيير، بما فيها القوالب غير النشطة، ولا يعرض
+مخرجات تحويل النموذج.
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### المرجع
+
+المخطّط: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### الأوامر
+
+اقرأ الأوامر المتاحة في موقع.
+
+```ts
+const commands = await ctx.command.list()
+```
+
+وسجّل الأوامر بتحويل. ويتلقى المنفّذ الجلسة ومرفقات المطالبة ووضع التسليم المطلوب.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+وأعد تحميل الأوامر بعد تغيّر حالة خارجية يستخدمها تحويل.
+
+```ts
+await ctx.command.reload()
+```
+
+#### المرجع
+
+المخطّطات: [`Command.Info`](/api#schema-Command.Info)،
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### التكاملات
+
+اقرأ التكاملات وافحص بيانات الاعتماد النشطة.
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+واربط التكاملات بمفتاح API.
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+وابدأ محاولة اتصال OAuth أو افحصها أو أكملها أو ألغها.
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+وتوفّر الاتصالات القائمة على الأوامر العمليات نفسها لبدء الاتصال وفحص حالته وإلغائه.
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+سجّل تحويلًا لفحص التكاملات وإدارة طرق مصادقتها.
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+وأعد تحميل التكاملات بعد تغيّر حالة خارجية يستخدمها تحويل.
+
+```ts
+await ctx.integration.reload()
+```
+
+#### المرجع
+
+المخطّطات: [`Integration.Info`](/api#schema-Integration.Info)، [`Integration.Method`](/api#schema-Integration.Method)،
+[`Connection.Info`](/api#schema-Connection.Info)، [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### بيانات الاعتماد
+
+اجعل بيانات اعتماد محفوظة هي النشطة لتكاملها.
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### المرجع
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+اسرد خوادم MCP وحالة اتصالها الحالية.
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+ولا تدير الملحقات خوادم MCP إلا عبر التحويلات. واستخدم `editor.set` لإضافة خادم أو استبداله، و`editor.update`
+لتغيير إعداده، و`editor.remove` لإزالته. وافحص الإعداد بـ`editor.list` و`editor.get`.
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+واضبط `disabled: true` في تحويل لتعطيل خادم وقطع اتصاله، أو `disabled: false` لتفعيله والسماح
+لـ OpenCode بالاتصال به. ويضبط OpenCode دورة حياة الخادم وفق الإعدادات الناتجة عن التحويل.
+
+واستدعِ `reload()` بعد تغيّر حالة خارجية يستخدمها تحويل لإعادة تطبيق التحويلات ومواءمة الخوادم.
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### المرجع
+
+المخطّطات: [`Mcp.Server`](/api#schema-Mcp.Server)، [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded)،
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### الملحقات
+
+اسرد الملحقات النشطة حاليًا في موقع.
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### المرجع
+
+المخطّطات: [`Plugin.Info`](/api#schema-Plugin.Info)، [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### المراجع
+
+اقرأ المراجع المتاحة في موقع.
+
+```ts
+const references = await ctx.reference.list()
+```
+
+وسجّل تحويلًا لفحص المراجع المحلية ومراجع Git أو إضافتها أو إزالتها. ويعيد `get(name)` المصدر المضبوط الحالي،
+أو `undefined` عندما يغيب الاسم.
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+وأعد تحميل المراجع بعد تغيّر حالة خارجية يستخدمها تحويل.
+
+```ts
+await ctx.reference.reload()
+```
+
+#### المرجع
+
+المخطّطات: [`Reference.Info`](/api#schema-Reference.Info)، [`Reference.LocalSource`](/api#schema-Reference.LocalSource)،
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### التوليد (تجريبي)
+
+ولّد بنموذج مختار دون إنشاء جلسة أو استدعاء أدوات أو إضافة إلى سجل الجلسة. وقد تتغير هذه الواجهات.
+لا يزال `ctx.generate.text` يعمل، لكن يُنصح باستخدام `ctx.experimental.generate.text` بدلًا منه.
+
+```ts
+const review = await ctx.experimental.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+  prompt: "Review this proposed action.",
+})
+
+const { images } = await ctx.experimental.generate.image({
+  model: { providerID: "openai", id: "gpt-image-1-mini" },
+  prompt: "A watercolor fox in the snow",
+  aspect: "16:9",
+})
+
+const { answers } = await ctx.experimental.generate.decisions({
+  model: { providerID: "opencode", id: "jev-1.13" },
+  input: [{ type: "text", text: "I was charged twice, please refund one." }],
+  questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
+})
+```
+
+### الأذونات
+
+اطلب الإذن قبل تنفيذ إجراء. ويقيّم `assert` [قواعد الأذونات](/permissions) في الجلسة،
+بما في ذلك الموافقات المحفوظة، ويطلب من المستخدم الموافقة إذا أسفر تقييم القواعد عن `ask`. وينجح الاستدعاء بمجرد السماح بالإجراء.
+
+```ts
+execute: async (input, context) => {
+  await ctx.permission.assert({
+    sessionID: context.sessionID,
+    agent: context.agent,
+    source: { type: "tool", messageID: context.messageID, id: context.id },
+    action: "deploy",
+    resources: [input.environment],
+    save: [input.environment],
+  })
+  return { content: await deploy(input.environment) }
+}
+```
+
+- يُطابَق `action` و`resources` مع القواعد. تمنع أيّ نتيجة `deny` تنفيذ الإجراء؛ وفي غيابها، تؤدي أيّ نتيجة `ask` إلى طلب موافقة المستخدم.
+- ويسرد `save` الأنماط المحفوظة عندما يختار المستخدم السماح دائمًا.
+- يحدّد `agent` الوكيل الذي تُطبَّق قواعده. إذا لم تحدّده، تُطبَّق قواعد وكيل الجلسة. ويربط `source` طلب الإذن باستدعاء أداة.
+- ويمرّر `metadata` تفاصيل إضافية إلى مطالبات الأذونات وخطافات `evaluate`.
+
+إذا منعت قاعدةٌ الإجراء أو رفضه المستخدم مع إبداء ملاحظات، يفشل الاستدعاء بخطأ `Tool.Error` يتضمّن السبب، فيتلقّاه النموذج
+ويواصل عمله. أما الرفض من دون ملاحظات فينهي الخطوة الحالية. دع الأخطاء تنتقل إلى المستدعي بدلًا من إرجاعها على أنها مخرجات
+الأداة.
+
+افحص طلبات الأذونات المعلّقة أو اتخذ قرارًا بشأنها.
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
+```
+
+استبدل قواعد الأذونات الخاصة بالجلسة. وتُقيَّم بعد قواعد الوكيل، وتُطبّق القاعدة
+المطابقة الأخيرة. وترث الجلسات الفرعية القواعد السارية عند إنشائها.
+
+```ts
+await ctx.session.update({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### الجلسات
+
+أنشئ جلسة أو اقرأها.
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+اسرد الجلسات صفحةً صفحة. وللحصول على الصفحة التالية، مرّر `cursor.next` مجددًا كـ`cursor`. ويتذكّر المؤشر
+مرشّحاتك، فلا تحتاج إلى تكرارها.
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20 })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+```
+
+غيّر الوكيل أو النموذج الذي تستخدمه الطلبات اللاحقة.
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
+```
+
+أرسل مطالبات مستخدم أو طلبات توليد عابرة أو أوامر أو رسائل تركيبية.
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+await ctx.session.command({ sessionID, name: "review", text: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+ويعيد `generate` النص `text` مع `tokens` و`cost` الخاصة بالاستدعاء، بالشكل نفسه الذي
+تفيد به رسالة المساعد.
+
+أعد تسمية جلسة أو قاطعها أو انتظرها.
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, resume: false })
+await ctx.session.wait({ sessionID })
+```
+
+وأزل جلسة مؤقتة بـ`remove`. فالإزالة توقف التنفيذ النشط وتحذف الجلسات الفرعية تكراريًا.
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+واطلب ضغط السياق بـ`compact`. فهو يعيد عنصر صندوق الوارد المقبول، لا ملخصًا مكتملًا؛ ويعمل الضغط عند
+حدّ الخطوة التالي افتراضيًا. ومرّر `delivery: "queue"` للحفاظ على ترتيب قائمة الانتظار بدلًا من ذلك.
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+وأرفق إدخالات تعليمات الجلسة المفتاحية أو اسردها أو أزلها بـ`instructions.entry`. وتُعرض الإدخالات ككتل `<context key="...">` في تعليمات الجلسة، وتُعلن التحديثات أو الإزالات عند حدّ الخطوة التالي دون وضع دورة رسالة في قائمة الانتظار.
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
+#### المرجع
+
+المخطّطات: [`Session.Info`](/api#schema-Session.Info)، [`Model.Ref`](/api#schema-Model.Ref)،
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User)، [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)،
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: ExperimentalSessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<void>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### المهارات
+
+اقرأ المهارات المتاحة في موقع.
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+وسجّل تحويلًا لفحص المهارات أو إضافتها أو تحديثها أو إزالتها. ويعيد `get(id)` إدخال المحرّر الحالي، أو `undefined`
+عندما تغيب المهارة.
+
+```ts
+import { Skill } from "@opencode/plugin"
+
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: Skill.ID.make("review"),
+    name: Skill.Name.make("Review"),
+    description: "Review the current changes",
+    path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+وأعد تحميل المهارات بعد تغيّر حالة خارجية يستخدمها تحويل.
+
+```ts
+await ctx.skill.reload()
+```
+
+#### المرجع
+
+المخطّط: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### التخزين
+
+خزّن قيم JSON دائمة محدودة النطاق بالملحق أو اقرأها أو أزلها.
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+استعرض المفاتيح المطابقة لبادئة معيّنة، مع إمكانية تقسيم النتائج إلى صفحات والتنقّل بينها باستخدام المؤشّر.
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### المرجع
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### الأدوات
+
+اقرأ الأدوات المسجّلة حاليًا، بعد كل تحويل، خارج رد نداء تحويل. ولكل أداة `id`
+يحتوي اسمها الفعّال.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+وسجّل الأدوات وحدّثها وأزلها بتحويل متزامن، بما في ذلك في ملحقات Promise. وحمّل البيانات الخارجية
+قبل التسجيل أو إعادة التحميل. ويسود تسجيل صالح لاحق على اسم الأداة الفعّال نفسه.
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+يتلقّى منفّذو أدوات Promise قيمة `context.signal`. مرّرها إلى العمليات القابلة للإلغاء، مثل `fetch`، حتى يتوقّف تنفيذها أيضًا
+عند مقاطعة الجلسة.
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+#### إدخال الأدوات الحر
+
+الأداة المباشرة التي لها حقل نصي مطلوب واحد بالضبط يمكن أن تدع النموذج يكتب ذلك النص دون غلاف JSON. فاضبط `freeform` على `{ type: "text" }` أو `{ type: "regex", pattern }` أو `{ type: "lark", grammar }`.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+إذا كانت `regex` ضمن الصيغ المدعومة في API النموذج المختار على models.dev، أمكن للنموذج كتابة `OPS-42` مباشرةً. وإلا حذف Core `freeform` **وحده**؛ فتظلّ الأداة `ticket` متاحة للنموذج ويستدعيها باستخدام `{"id":"OPS-42"}`. وغياب قائمة الصيغ أو خلوّها يعني أن الإدخال الحر غير مدعوم. ويتلقّى المنفّذ `{ id }` في الحالتين.
+
+وداخل Code Mode (`codemode: true`)، تأخذ الأداة الحرة نصها مباشرةً، كما في `await tools.ticket("OPS-42")`. ويعمل أيضًا `await tools.ticket({ id: "OPS-42" })`.
+
+واستدعِ `reload()` بعد تغيير بيانات المصدر التي التقطها رد النداء. فإعادة التحميل تعيد تشغيل التحويلات النشطة دون
+تغيير ترتيبها؛ وهي لا تعيد تشغيل إعداد الملحق.
+
+```ts
+await ctx.tool.reload()
+```
+
+واستخدم `list()` و`get()` لفحص الأدوات الموجودة في المحرّر حاليًا. وللأدوات `id` يحتوي اسمها الفعّال،
+ويعيد `get()` القيمة `undefined` عندما يغيب ذلك المعرّف. واستخدم `update` و`remove` باسم الأداة الفعّال،
+بما في ذلك نطاقها (`acme_greeting` أعلاه). تُستبدل النقاط في النطاقات بـ`_`. وفي أسماء الأدوات، تبقى الحروف والأرقام و`_` و`-` كما هي، ويُستبدل أي محرف آخر بـ`_`. وتُتجاهل الأسماء الغائبة؛ وإنشاء أداة يحتاج
+`add` بتعريف كامل. وتحفظ التحديثات الاسم والنطاق. وعيّن مخططات أو خيارات جديدة لتستبدلها
+بدل تعديل القيم المتداخلة. وتُسجّل التحديثات غير الصالحة وتُبقي التعريف السابق سليمًا.
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+وتُعاد التحديثات والإزالات بالترتيب مع الإضافات، بما في ذلك بعد تحديثات كتالوج MCP. والتخلص من
+تسجيلها يزيل تلك التغييرات ويعيد البناء من التحويلات المتبقية.
+
+ألغِ التسجيل لإزالة تحويله وإعادة البناء من التحويلات المتبقية، فيعود أيّ تعريف سابق
+حلّ التحويل محلّه. ولا يترتّب على تكرار الإلغاء أيّ أثر إضافي. ويؤدّي إلغاء تحميل الملحق أيضًا إلى إلغاء تسجيلاته.
+
+```ts
+await registration.dispose()
+```
+
+يأخذ كل طلب إلى النموذج لقطة ثابتة للأدوات القابلة للتنفيذ. ولا تؤثّر التحويلات أو إعادة التحميل أو إلغاء التسجيل لاحقًا إلا في اللقطات
+المستقبلية، لا في التعريفات أو أوصاف نطاقات Code Mode أو دوال التنفيذ التي سبق أخذها في لقطة. لكن دوال التنفيذ التي تشير
+إلى بيانات ملحق قابلة للتغيير تظل ترى أحدث قيمها. إذا أردت إبقاء قيمة مرتبطة بالتعريف، فاحفظها داخل التحويل نفسه.
+
+#### المرجع
+
+المخطّطات: [`Tool.Content`](/api#schema-Tool.Content)، [`Tool.TextContent`](/api#schema-Tool.TextContent)،
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+اقرأ معلومات المستودع أو حالة نسخة العمل أو فروق الملفات.
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branch.list({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+وسجّل مزوّد VCS محدود النطاق بالموقع بتحويل. ويُختار المزوّد المطابق لنوع المستودع المكتشف
+تلقائيًا؛ واستخدم `editor.default.set` لاختيار مزوّد آخر.
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+وتتلقى ردود نداء المزوّد الموقع الحالي وجذر نسخة العمل وجذر المشروع الأساسي ومخزن المستودع
+الاختياري. وتتلقى ردود نداء الفروق أيضًا الوضع المختار والسياق المطلوب وميزانية بايتات الإخراج. ويواصل اكتشاف المستودع
+استخدام أدوات كشف Git وMercurial المدمجة في OpenCode.
+
+يمكن للمزوّدين تنفيذ `init(scope, { signal })` اختياريًا لإنشاء مستودع في `scope.worktree`. وتختار عملية التهيئة
+المزوّد بحسب معرّفه (Git افتراضيًا)، لا بحسب نوع المستودع المكتشف. ويمكنك تسجيل مزوّد ينفّذ `init` حتى
+عندما لا يكون للموقع مستودع بعد؛ فيتحقق OpenCode من وجود المجلد وخلوّه من مستودع قبل استدعائه،
+ثم يعيد اكتشاف المشروع. ولا تزال صيغ المستودعات الجديدة تحتاج دعم اكتشاف يتجاوز رد النداء هذا.
+
+#### المرجع
+
+المخطّطات: [`Vcs.Info`](/api#schema-Vcs.Info)، [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)،
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branch: {
+    list(input?: VcsBranchListInput, requestOptions?: RequestOptions): Promise<VcsBranchListOutput>
+  }
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### مجلدات worktree
+
+سجّل استراتيجية worktree محلية باستخدام دورة حياة الملحق المعتادة. في هذا المثال، تتولّى وحدة التنفيذ
+التحقّق من الخيارات وعمليات `create` و`remove` و`list` في الواجهة الخلفية.
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+وحمّل الملحق عبر `plugins` وأعدّ الوجهة المشتركة على حدة:
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- تُختار الاستراتيجية تلقائيًا عند إضافتها. وتكون الأولوية لآخر تسجيل نشط، فلا حاجة إلى إعداد لاختيار الاستراتيجية.
+- يُعيد إلغاء تسجيل الاستراتيجية أو إلغاء تحميل الملحق التنفيذَ السابق، وصولًا إلى استراتيجية Git المدمجة.
+- و`reload()` يعيد تشغيل التحويلات بعد تغيّر المدخلات الملتقطة؛ ولا يعيد تشغيل إعداد الملحق.
+- لا يُعاد الإنشاء عبر Git عند فشله. وتظلّ مجلدات worktree القائمة مرتبطة باستراتيجياتها المسجّلة حتى لو تغيّرت الاستراتيجية الافتراضية.
+- تدير الاستراتيجيات مجلدات محلية. ولا تشمل هذه الواجهة إعداد مساحات عمل بعيدة.
+
+#### العمليات
+
+ويعرض سياق الملحق عمليات worktree القائمة على المشروع نفسها التي يعرضها العميل. وتشترط كل عملية
+`projectID`. ويقرأ `list` الجرد المحفوظ وحده، بما في ذلك نسخ السحب المعروفة للمشروع نفسه؛ ولا يحمّل
+الإعداد ولا يبدأ الملحقات ولا يكتشف تغييرات نظام الملفات.
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+ويحمّل الإنشاء الإعداد والملحقات من مجلد المشروع المحفوظ `canonical` ويستخدم استراتيجيتها المختارة.
+وتقبل العملية خيارات `directory` للمجلد الأب، و`from` للمصدر، و`branch` للفرع المبدئي، و`name` للاسم.
+ويؤول المصدر إلى النسخة الأساسية، ويجب أن ينتمي تجاوز `from` إلى ذلك المشروع. واختيار مصدر
+لا يغيّر جذر الإعداد.
+ويجب أن تدعم الاستراتيجية المختارة مرجع البداية المقدّم؛
+فعملية اللقطة الأصلية في Rift، مثلًا، ليس لها خيار اختيار مرجع.
+
+وينتظر الإنشاء والتحديث تفعيل ملحقات النسخة الأساسية. والاستدعاءات التي تُجرى أثناء إعداد ملحقات تلك النسخة
+ترى التسجيلات حتى الآن ولا تنتظر تفعيلها.
+
+وتحمّل الإزالة الإعداد الأساسي وتفعّل ملحقاته، ثم تستخدم استراتيجية worktree المسجّلة لا
+الافتراضي المختار حاليًا. والمالك المسجّل غير المتاح ينتج خطأ. وقد تكون وجهة worktree
+في مكان آخر:
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+إذا تعذّر العثور على الاستراتيجية المسجّلة، تفشل الإزالة بدلًا من الرجوع إلى Git. ويمكن للاستراتيجية إطلاق الخطأ `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })`، مع استيراد `Worktree` من `@opencode/plugin`، لطلب
+تأكيد الإزالة القسرية دون الاعتماد على أخطاء Core أو Git.
+
+والتحديث يحمّل الإعداد الأساسي ويطلب من كل الاستراتيجيات المتاحة إيجاد worktrees عبر جذور نسخ السحب المعروفة.
+ويجمع النتائج ويحفظ الملكية المسجّلة ويشذّب المجلدات المفقودة. ويُسجّل مصدر اكتشاف فاشل
+بينما تواصل المصادر الأخرى. وتبقى المجلدات القائمة محفوظة حتى لو لم تفد بها أي استراتيجية متاحة. وراقب
+`worktree.updated` واستدعِ `list` مجددًا لقراءة الجرد المتغيّر.
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### المرجع
+
+وتتلقى التطبيقات وجهة مقترحة بعد التسمية ومعالجة التعارض. فأعد المجلد الفعلي من
+`create`؛ فقد يختلف عندما تتطلب واجهة خلفية تخطيطها. ويحل OpenCode المسار المعاد ويستخدمه
+للجرد وأوامر بدء التشغيل ونتيجة API. ويجب أن يكون المجلد المعاد موجودًا.
+
+والاستراتيجيات التي تختار وجهة أخرى تعالج تعارضات الأسماء هناك. ولا يزال OpenCode ينشئ المجلد الأب
+المقترح قبل استدعاء الاستراتيجية. ويجب أن يفيد `list` بالمجلدات التي تملكها الاستراتيجية وحدها، مع أي جذور مستودعات.
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+ويجب أن تتعاون ردود نداء Promise مع إلغاء `signal`. أما ردود نداء Effect فتعيد Effects وتستخدم مقاطعة
+Effect بدلًا من ذلك. وتبقى التسجيلات محدودة النطاق بوقت تشغيل الملحق؛ وتستخدم عمليات المشروع سجل النسخة الأساسية.
+ومحوّلات إعداد Core تغذّي إعدادات المجلدات إلى ذلك السجل.
+
+### البحث على الويب
+
+اسرد مزوّدي البحث على الويب أو نفّذ استعلامًا عبر المزوّد المختار.
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+وسجّل مزوّدًا واختر المزوّد الافتراضي بتحويل.
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = (await response.json()) as { url: string; title: string; content: string }
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+وعطّل البحث على الويب باختيار `false`، أو أعد تحميل المزوّدين بعد تغيّر الحالة الخارجية.
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### المرجع
+
+المخطّطات: [`WebSearch.Provider`](/api#schema-WebSearch.Provider)، [`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### الأحداث
+
+اشترك في تدفق الأحداث العام للخادم المرتبط. وألغِ التدفق أثناء تنظيف الملحق. ومرّر `types`، مثلًا `ctx.event.subscribe({ types: ["config.updated"] })`، لتلقي تلك الأنواع وحدها؛ وتُحدَّد أنواع الأحداث وفقًا لذلك. فالملحقات تعمل داخل الخادم، فلا تتلقى `server.connected` أبدًا خلافًا لعملاء SDK. وتُتجاهل أسماء الأنواع غير المعروفة مع تحذير في سجل الخادم.
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### المرجع
+
+المخطّط: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventContext {
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
+}
+```
+
+## الخطافات
+
+تعترض الخطافات العمليات الجارية. فسجّل خطافًا في نطاقه وتخلص من
+التسجيل المعاد عندما لا تعود تحتاجه.
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+ويمكن لعدة ملحقات تسجيل الخطاف نفسه. ويشغّلها OpenCode بترتيب الملحقات،
+فترى الخطافات اللاحقة التغييرات التي أجرتها الخطافات السابقة.
+
+### الجلسات
+
+تعترض خطافات الجلسة قبول المطالبات واستدعاءات النموذج وHTTP الأصلية وإعادات المحاولة.
+
+#### التفرعات
+
+ويعمل خطاف `fork` بعد نسخ OpenCode للسجل وقبل إرجاع استدعاء التفرّع. ويحدّد `sessionID` الجلسة الجديدة.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
+#### قبول المطالبات
+
+اعترض مطالبات المستخدم الواردة قبل تحديد المرفقات والمهارات وإدراج المطالبة في صندوق الوارد الدائم:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+ويتلقى الخطاف مسودة مملوكة قابلة للتغيير:
+
+- و`prompt` يضم `text` و`files` وإشارات الوكلاء في `agents` والمهارات المختارة `skills`.
+- و`metadata` يضم بيانات قبول يعرّفها التطبيق.
+- و`delivery` هو `"steer"` افتراضيًا ويمكن تغييره إلى `"queue"`.
+- معرّفات الجلسة والرسالة للقراءة فقط، ولا يستطيع الخطاف توجيه المطالبة إلى جلسة أو رسالة أخرى.
+
+وتتبع الملفات والمهارات التي يضيفها خطاف مسار التحليل والتحقق
+العادي. وعند إعادة كتابة النص، حدّث إزاحات `mention` في المرفقات التي لم تعد
+مطابقة أو أزلها. وإشارات الوكلاء لا تبدّل الوكيل النشط للجلسة.
+
+وتعمل خطافات المطالبات وفق هذه الشروط:
+
+- تعمل الخطافات بترتيب التسجيل بعد جاهزية ملحقات موقع الجلسة.
+- والأوامر التي ترسل عبر `session.prompt` تشغّل الخطاف.
+- أما الرسائل التركيبية ورسائل shell وضوابط الضغط والنقل فلا.
+- ويعمل الخطاف مرة واحدة أثناء القبول، لا قبل كل استدعاء نموذج.
+- ولا يتاح التحديد حسب المزوّد لأن تحليل النموذج يحدث بعد القبول.
+
+وتصبح التعديلات إدخال المستخدم المحفوظ الأساسي. وإذا فشل التحضير أو
+قُوطع، لا يقبل OpenCode المطالبة.
+
+صمّم خطافات المطالبات بحيث يمكن إعادة المحاولة بأمان. فلا تضمن هذه الخطافات تنفيذ آثارها الجانبية مرة واحدة بالضبط:
+
+- وإعادة محاولة معرّف معلّق أو مسلّم أصلًا تعيد القبول الأصلي دون إعادة تشغيل الخطافات.
+- والتقديمات المتزامنة قد تشغّل الخطافات أكثر من مرة، لكن يفوز أول قبول ناجح وحده.
+- وخطافات المطالبات تحوّل الإدخال ولا تعرض واجهة رفض محدّدة النوع.
+
+#### طلبات النموذج
+
+عدّل تعليمات النظام المجمّعة أو الرسائل أو الأدوات أو خيارات الطلب قبل إرسال الطلب إلى النموذج مباشرةً. ولكل
+نوع طلب تصدره الجلسة خطافه الخاص، فيستطيع الملحق معاملة حلقة الوكيل والطلبات المساعدة
+بشكل مختلف:
+
+- يعمل `context` في حلقة الوكيل، بما في ذلك خطوات المتابعة الناتجة عن استدعاء الأدوات.
+- ويعمل `compaction` لملخصات نقاط التحقق. و`messages` هو سجل المحادثة الجاري تلخيصه؛ ويضيف OpenCode
+  مطالبة تلخيصه بعد عمل الخطافات. واضبط `result` لتسجيل الضغط بنفسك وتخطي استدعاء النموذج؛ ويأخذ
+  الحقول نفسها التي تأخذها رسالة ضغط مكتملة.
+- ويعمل `generate` لاستدعاءات `ctx.session.generate` العابرة.
+- ويعمل `title` لتوليد العناوين. وليس له `agent` ولا `tools`. واضبط `result` لتوفير العنوان بنفسك.
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+وتؤثر التغييرات في استدعاء النموذج الصادر وحده، لا في السجل المحفوظ ولا الإعداد. والخطاف الذي ينبغي أن ينطبق على
+كل طلب يجب أن يسجّل لكل نوع.
+
+وتحمل الرسائل في خطافات `context` و`compaction` و`generate` بيانات `metadata` لرسالتها المخزّنة، للقراءة فقط
+(مثلًا ما ضبطه خطاف `prompt`). ولا تُرسل إلى النموذج.
+
+ويسرد جزء `system` الذي يحمل تعليمات OpenCode كل مصدر أيضًا في `metadata.experimental.instructions` كـ
+`{ key, text }`، مثل `core/date` أو `core/environment`، ليستطيع الخطاف تمييز المصادر. والقائمة نسخة:
+فتعديل `text` في الجزء لا يحدّثها. وهذه ميزة تجريبية قد تتغيّر.
+
+وتتبع تجاوزات الطلب هذه القواعد:
+
+- يبدأ `options` فارغًا عند كل استدعاء للنموذج، ولا يتضمّن الإعدادات الفعلية للنموذج.
+- والمفاتيح المحدّدة النوع إعدادات توليد؛ وأي مفتاح آخر يُمرَّر إلى البروتوكول المختار كخيار مزوّد.
+- وتعمل الخطافات بترتيب التسجيل وترى التجاوزات التي أجرتها الخطافات السابقة.
+- لإعدادات الطلب أسبقية على الإعدادات الافتراضية للنموذج، وللأخيرة أسبقية على الإعدادات الافتراضية للمسار.
+- تُدمج كائنات خيارات المزوّد على جميع مستويات التداخل، بينما تحلّ المصفوفات والقيم المفردة محلّ القيم السابقة.
+- وحذف تجاوز أو ضبطه على `undefined` يعود إلى الافتراضيات المضبوطة بدل إزالتها.
+- تُطبَّق تعديلات جسم طلب HTTP الخام بعد تحويل الطلب إلى صيغة البروتوكول، ويمكنها استبدال الحقول الناتجة.
+
+#### خيارات المزوّد
+
+وتستخدم خيارات المزوّد أسماء الخيارات الدلالية للبروتوكول المختار، لا حقول جسم HTTP الخام. وحدّد الإعدادات الخاصة
+بالمزوّد للمزوّد المطابق. مثلًا، يستخدم OpenAI Responses الخيار `reasoningEffort`:
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+وتعتمد خيارات التوليد على البروتوكول والنموذج المختارين:
+
+- `maxTokens` هو حد رموز الإخراج الدلالي.
+- ويدعم Gemini الخيار `topK`؛ ولا يعرضه OpenAI Responses.
+
+#### تحديد النموذج
+
+هذا خطاف تجريبي يعمل كلّما حدّدت الجلسة النموذج الذي سيعالج الطلب، وقبل تجهيز أيّ جزء من الطلب. يبدأ `model`
+بالنموذج المختار؛ فغيّره لخدمة هذا الطلب بنموذج آخر من المزوّد نفسه، بما في ذلك نموذج مخفي
+من منتقي النماذج. وتحتفظ الجلسة بنموذجها المختار؛ ويستخدم الطلب ورسالة المساعد النموذج الجديد.
+يحدّد `kind` نوع الطلب الذي يجري اختيار نموذج له، بحيث يستطيع الموجّه تخطّي طلبات توليد العناوين أو إعادة التوجيه بعد ضغط السياق. وإذا اختار الخطاف نموذجًا من
+مزوّد آخر، يفشل الطلب لأن النموذج غير متاح.
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
+
+#### طلب النموذج
+
+عدّل إعدادات طلب النموذج وحدّد نطاق الخطاف لمزوّد واحد اختياريًا. ويحمل الحدث `kind` نفسه
+الذي تحمله خطافات HTTP أدناه.
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### HTTP الأصلية
+
+عدّل طلبات المزوّد الأصلية أو استجاباته. يُبثّ محتواها في صورة تدفّقات لا يمكن قراءتها إلا مرة واحدة، لذا أنشئ نسخة من محتوى الطلب أو الاستجابة، أو استبدله
+قبل قراءته.
+
+ويعمل الخطافان لكل طلب تصدره الجلسة. ويفيد `event.kind` بالتدفق الذي أصدره: `"primary"` لحلقة
+الوكيل، و`"compaction"` لملخصات نقاط التحقق، و`"title"` لتوليد العناوين، و`"generate"` لاستدعاءات
+`ctx.session.generate` العابرة. واستخدمه بدل معرّف الوكيل لتمييز الطلبات المساعدة.
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### WebSocket الأصلية (تجريبي)
+
+والمزوّدون الذين يبثّون عبر WebSocket يفتحون اتصالًا واحدًا لكل جلسة ويعيدون استخدامه بين الطلبات، فلا
+ترى `http.request` و`http.response` تلك الحركة أبدًا. ويعمل خطاف `experimental.ws.handshake` مرة لكل استدعاء نموذج
+قبل اختيار الاتصال. ويحمل `sessionID` و`agent` و`model` و`kind` نفسها التي تحملها خطافات
+HTTP، إضافة إلى `url` و`headers` للاتصال. ويؤدّي تغيير `url` أو `headers` إلى تغيير المقبس الذي يستخدمه الطلب، لذا يُفتح اتصال جديد
+عند تبديل رمز bearer.
+
+ولا تزال خطافات HTTP تعمل لكل طلب HTTP، بما في ذلك الطلب الذي يعود إليه مسار WebSocket.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+يتيح `experimental.ws.send` و`experimental.ws.receive` الوصول إلى الإطارات نفسها، وهو ما يقابل تعديل محتوى طلب HTTP أو استجابته
+في WebSocket. يعمل `send` بعد أن يُنشئ مشغّل المزوّد إطارًا صادرًا وقبل أن يكتبه، ويعمل
+`receive` على كل إطار وارد قبل أن يقرأه المشغّل. ويحمل كلا الخطافين الإطار كسلسلة نصية، ويمرّر
+القيمة الموجودة في `frame` عند انتهاء الخطاف.
+
+لا يتحقّق OpenCode من الإطارات المعدّلة. ويتتبّع مشغّل المزوّد الحالة استنادًا إلى ردود المزوّد، لذا يتحمّل الملحق مسؤولية أيّ تعديل يغيّر
+دلالة الإطار في البروتوكول، كما هي الحال عند تعديل محتوى طلب HTTP أو استجابته.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+وهذه الخطافات تجريبية وقد تتغير أسماؤها أو أشكالها.
+
+#### سياسة إعادة المحاولة
+
+تجاوز قرار إعادة المحاولة لفشل مزوّد أو استبدل مهلة التأخير بالمللي ثانية. ويعمل الخطاف بعد أن يصنّف OpenCode
+الفشل ويقترح سياسته، لكن قبل جدولة أي إعادة محاولة. ولا يعرض كيفية إجراء OpenCode
+للمحاولة التالية داخليًا.
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+يمكن لخطافات إعادة المحاولة تغيير `decision` الأولي في OpenCode للسماح بمحاولة جديدة بعد إخفاق يُعدّ نهائيًا،
+أو لمنع إعادة محاولة مقترحة.
+
+وتتبع قرارات إعادة المحاولة هذه القواعد:
+
+- وتعمل عدة خطافات بترتيب التسجيل، وترى الخطافات اللاحقة القرار الحالي.
+- ويبقى الحد الأقصى المدمج لعدد المحاولات حدًّا صارمًا.
+- و`attempt` المحاولة الفعلية قيد النظر. فالطلب الأولي `1`، وأول إعادة محاولة `2`.
+- والتأخيرات غير الصالحة مثل `NaN` أو اللانهاية أو القيم السالبة تعود إلى التأخير المحسوب.
+- والتعافي من فائض السياق منفصل لأنه يضغط المحادثة بدل إعادة محاولة الطلب نفسه.
+
+#### مرجع الجلسة
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  native?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### الأذونات
+
+راجع قرارات الأذونات بعد تقييم القواعد المضبوطة وقبل
+تنفيذ إجراء أو نشر مطالبة إذن.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+وتتبع خطافات الأذونات هذه القواعد:
+
+- تعمل الخطافات لقرارات `allow` و`ask`.
+- و`deny` المضبوط صراحةً نهائي ولا يستدعي الخطاف.
+- ويمكن للخطاف تغيير `effect` إلى `allow` أو `ask` أو `deny`.
+- ويظهر `message` في طلب إذن مصعّد أو يصبح سبب الرفض.
+
+#### المرجع
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### shell
+
+عدّل أوامر shell أو مجلدات العمل أو المهل أو الملفات التنفيذية أو متغيّرات البيئة قبل التنفيذ.
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### المرجع
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### الأدوات
+
+افحص إدخال الأداة أو استبدله قبل التنفيذ.
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+وافحص النتائج الناجحة أو الإخفاقات بعد التنفيذ.
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### المرجع
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## دعم V1
+
+يمكن للملحق دعم V1 وV2 من نقطة دخول الحزمة نفسها. اجعل التصدير الافتراضي كائنًا واحدًا
+يحتوي على دالة `server()` لـ V1 ودالة `setup()` لـ V2:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- يستدعي V1 الدالة `server()` ويستخدم الخطافات المعادة.
+- ويقرأ V2 `id` و`setup()` من التصدير الافتراضي (أو `effect()` لملحقات Effect)، ويتجاهل `server()`.
+- استخدم في كل تنفيذ واجهة API الخاصة بإصداره؛ فالتصدير المشترك لا يحوّل خطافات V1 إلى خطافات V2.
+- استخدم معامل النشر لإدراج ناتج `Plugin.define(...)` في الكائن المصدّر، كي يجري التحقّق من أنواع تعريف V2 بمعزل عن `server()`.
+
+وتُدعم صيغة كائن V1 في OpenCode `1.18.29`. وقد تتوقع إصدارات V1 الأقدم
+تصديرات دوال بدلًا من ذلك؛ فاختبر الحزمة المثبّتة بأقدم إصدار V1
+تنوي دعمه وبـV2.

@@ -246,6 +246,22 @@ describe("og.png response", () => {
   })
 })
 
+describe("card text", () => {
+  // Satori draws a character no font file has as the same empty box. The Greek alpha and the arrow ⥈ are in the
+  // font's "rest" file, not the Latin one, so each must draw as itself: different from that box and from the other.
+  test("draws characters the Latin file lacks from the rest file", async () => {
+    const card = modelOgCard(inkling)!
+    const [alpha, arrow, missing] = await Promise.all(
+      ["\u03b1", "\u2948", "\ue000"].map(async (character) =>
+        Buffer.from(await resource.renderOgCard({ ...card, name: `Inkling ${character}` })).toString("base64"),
+      ),
+    )
+    expect(alpha).not.toBe(missing)
+    expect(arrow).not.toBe(missing)
+    expect(alpha).not.toBe(arrow)
+  }, 30_000)
+})
+
 describe("OG Worker build", () => {
   // The deploy builds and uploads this; building it here fails the PR instead.
   test("bundles the Worker with the Wasm and font modules it imports", async () => {

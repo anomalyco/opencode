@@ -1,0 +1,161 @@
+---
+title: "Przegląd API"
+description: "Uwierzytelniaj się w API OpenCode Console osobistymi kluczami API lub kluczami kont usługowych i ograniczaj, co może robić każdy klucz."
+---
+
+API Console pozwala skryptom i integracjom wywoływać modele i eksportować użycie. Każde żądanie uwierzytelnia się
+kluczem API.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                       | Endpointy                                         |
+| ----------------------------------------- | ------------------------------------------------- |
+| [Modele](/console/api/models)             | `https://opencode.ai/console/api/v1/models`       |
+| [Inferencja](/console/api/inference)      | `https://opencode.ai/inference/...`               |
+| [Dostawcy](/console/api/providers)        | `https://opencode.ai/inference/custom/...`        |
+| [Eksport użycia](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## Klucze API
+
+Klucze API mogą mieć zarówno członkowie obszaru roboczego, jak i konta usługowe. Wysyłaj klucz jako token bearer.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                        | Osobisty klucz API                                     | Klucz konta usługowego                                                   |
+| ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Tworzony przez         | Dowolnego członka, dla siebie                          | Właścicieli i administratorów                                            |
+| Tworzony w             | **Account › Personal API keys**                        | **Settings › Service accounts**                                          |
+| Działa jako            | Członek, który go utworzył                             | Konto usługowe                                                           |
+| Użycie liczone do      | [Budżetu członka](/console/budgets#member-budgets)     | [Budżetu konta usługowego](/console/budgets#service-account-budgets)     |
+| Najlepszy do           | Własnych skryptów i [harnessów](/console/harnesses)    | CI, współdzielonych maszyn i integracji                                  |
+
+- Każdy klucz działa w jednym obszarze roboczym, wybranym przy tworzeniu. Nagłówek obszaru roboczego nie jest potrzebny.
+- Pełny klucz jest pokazywany tylko raz, zaraz po utworzeniu. Później Console pokazuje tylko jego prefiks.
+- **Expiration** jest opcjonalne: **Never**, **1 day**, **7 days**, **30 days** lub **Custom** (od 1 do 365 dni).
+  Wygasłego klucza nie można odnowić, więc utwórz nowy.
+
+## Osobiste klucze API
+
+Osobisty klucz działa w Twoim imieniu: ma uprawnienia wynikające z Twojej roli i podlega Twoim
+[budżetom](/console/budgets#member-budgets) oraz zasadom dotyczącym modeli.
+
+1. Otwórz **Account** z menu konta i znajdź **Personal API keys**.
+2. Kliknij **Add API key**.
+3. Wybierz **Workspace**, **Key name** i opcjonalne **Expiration**. Właściciele i administratorzy wybierają też
+   **Permissions**.
+4. Kliknij **Create** i skopiuj klucz.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Klucz podlega Twojemu bieżącemu dostępowi do obszaru roboczego. Jeśli Twoja rola się zmieni, zmieni się też to, co może
+robić klucz. Jeśli obszar roboczy wymusza [SSO](/console/sso#sso-enforcement), klucz działa tylko wtedy, gdy masz aktywną
+sesję SSO, chyba że jesteś właścicielem.
+
+## Konta usługowe
+
+Konto usługowe należy do obszaru roboczego tak jak członek, ale nie jest powiązane z konkretną osobą. Ma własne klucze API,
+odrębne statystyki użycia i własny [budżet](/console/budgets#service-account-budgets). Używaj go do automatyzacji, aby
+użycie nie było przypisane do konkretnej osoby. Kontami usługowymi zarządzają właściciele i administratorzy.
+
+1. Otwórz **Settings › Service accounts** i kliknij **Add Service Account**, a następnie nadaj mu nazwę, na przykład
+   `CI Pipeline`.
+2. Otwórz konto usługowe i kliknij **Add API Key**.
+3. Wybierz **Key name**, opcjonalne **Expiration** i **Permissions**, a następnie kliknij **Create**.
+4. Skopiuj klucz.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Właściciele i administratorzy mogą później zmienić nazwę klucza konta usługowego lub jego uprawnienia przez **Edit…**
+w menu akcji klucza.
+
+## Uprawnienia
+
+Każdy klucz ma poziom uprawnień wybierany w **Permissions** podczas tworzenia.
+
+| Uprawnienia    | Pozwala                                                                              |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | Wszystko, co może członek lub konto usługowe, z wyjątkiem **This account's API keys**. |
+| **Restricted** | Tylko wybrane przez Ciebie zasoby.                                                   |
+| **Read only**  | Dostęp do odczytu wszystkich zasobów. Klucz może wyświetlać modele, ale nie wywoływać ich. |
+
+Klucz nigdy nie robi więcej niż osoba lub konto, w którego imieniu działa. Osobisty klucz jest ograniczony bieżącą rolą
+członka, a klucz konta usługowego tym, co [mogą robić konta usługowe](#limitations).
+
+### Klucze ograniczone
+
+Ustaw każdy zasób na **None**, **Read** lub **Write**. **Write** obejmuje **Read**.
+
+| Zasób                       | Poziomy               |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**, **Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**, **Write**   |
+| **Members**                 | **Read**, **Write**   |
+| **Providers**               | **Read**, **Write**   |
+| **Billing**                 | **Read**, **Write**   |
+| **Workspace settings**      | **Read**, **Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
+
+**Models › Read** wyświetla modele, a **Models › Request** dodatkowo je wywołuje przez API
+[Inferencja](/console/api/inference) i [Dostawcy](/console/api/providers). Na przykład klucz, który tylko wywołuje
+modele, potrzebuje:
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+Klucze utworzone jako **Inference only** przed wprowadzeniem uprawnień zakresowych są pokazywane jako **Restricted**
+z **Models** ustawionym na **Request**.
+
+### Kto może przyznawać jakie uprawnienia
+
+- **Members** mogą tworzyć tylko osobiste klucze, które wyświetlają i wywołują modele. Console pokazuje wtedy
+  „This key can list and call models as you.” zamiast wyboru uprawnień.
+- **Owners and admins** mogą nadać swoim osobistym kluczom **All**, **Restricted** lub **Read only**, w granicach własnej
+  roli. Domyślnie jest to **Restricted** z **Models** ustawionym na **Request**. Jeśli później stracą rolę, ich klucze
+  zostaną odpowiednio ograniczone.
+- **Klucze kont usługowych** domyślnie mają **All**. Właściciele i administratorzy wybierają ich uprawnienia.
+
+### Ograniczenia
+
+Niektóre działania zawsze wymagają osoby zalogowanej do Console, a tworzenie kluczy kluczem jest mocno ograniczone.
+
+- Żaden klucz API nie może zmieniać ustawień SSO ani usuwać obszaru roboczego.
+- Klucze kont usługowych nie mogą zapraszać członków, zmieniać ról, usuwać członków, zarządzać rozliczeniami, zmieniać
+  ustawień obszaru roboczego, zarządzać modelami ani tworzyć i usuwać kont usługowych, nawet z **All**.
+- **This account's API keys** jest dostępne tylko w kluczach kont usługowych, a **All** go nie obejmuje. Klucz z tym
+  uprawnieniem może tworzyć i unieważniać klucze wyłącznie dla swojego konta usługowego. Nowe klucze muszą być
+  **Restricted**, mieścić się w uprawnieniach klucza tworzącego i nie mogą obejmować **This account's API keys**.
+- Osobiste klucze nigdy nie mogą otrzymać **This account's API keys**, a żaden klucz API nie może tworzyć ani
+  unieważniać osobistych kluczy API.
+
+Żądania poza uprawnieniami klucza zwracają HTTP `403`.
+
+## Unieważnianie
+
+| Klucz               | Kto może go unieważnić | Gdzie                                                                             |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| Osobisty klucz API  | Członek, do którego należy | **Account › Personal API keys**, następnie **Revoke**                         |
+| Osobisty klucz API  | Właściciele i administratorzy | Strona członka w **Settings › Members**, w sekcji **API Keys**              |
+| Klucz konta usługowego | Właściciele i administratorzy | Strona konta usługowego w **Settings › Service accounts**, w sekcji **API Keys** |
+
+Klucze są też unieważniane automatycznie:
+
+- Odejście z obszaru roboczego, usunięcie z niego lub odebranie dostępu przez [SCIM](/console/scim) unieważnia każdy
+  klucz utworzony w nim przez tę osobę, w tym klucze kont usługowych. Inne klucze tego samego konta usługowego nadal
+  działają.
+- Usunięcie konta usługowego unieważnia wszystkie jego klucze.
+
+Unieważnione i wygasłe klucze przestają działać natychmiast i zwracają HTTP `401`.

@@ -15,8 +15,10 @@ import { SyntheticConflictError } from "@opencode/core/session/error"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { Agent } from "@opencode/core/agent"
+import { advance } from "../lib/clock"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
+import { noToolCalls } from "../lib/tool"
 import { PluginTestLayer } from "./fixture"
 
 const withFlags = (overrides: string) => testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
@@ -297,6 +299,7 @@ const context = (sessionID: Session.ID): Tool.Context => ({
   messageID: SessionMessage.ID.create(),
   id: Tool.CallID.make("call_1"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 })
 
 describe("OpencodePlugin event watches", () => {
@@ -766,6 +769,28 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
+  it.effect("wakes a full window for a CI failure that settles with another watch's status change", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5]) yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+        yield* hold(console, host, watchEvent(session.id, "evt_ci", { kind: "workflow_run", status: "failure" }))
+        yield* TestClock.adjust("5 seconds")
+        yield* hold(
+          console,
+          host,
+          watchEvent(session.id, "evt_state", { watchID: "ew_2", kind: "state", status: "closed" }),
+        )
+        yield* TestClock.adjust(OpencodeWatches.SETTLE)
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes("evt_state")))
+        expect(wakes.at(-1)?.metadata?.events).toEqual(["evt_ci", "evt_state"])
+        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, true])
+      }),
+    ),
+  )
+
   it.effect("wakes once for status changes seconds apart, once 15 seconds pass without another or 30 at most", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
@@ -1196,13 +1221,13 @@ describe("OpencodePlugin event watches", () => {
         expect(yield* watchTools).toEqual([])
 
         console.state.watches = true
-        yield* TestClock.adjust("1 minute")
-        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.opens === 1)
         expect(yield* eventually(watchTools, (tools) => tools.length === 4)).toHaveLength(4)
 
         console.state.watches = false
-        yield* TestClock.adjust("1 minute")
-        yield* waitUntil(Effect.sync(() => console.state.sockets.size === 0))
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.sockets.size === 0)
         expect(yield* eventually(watchTools, (tools) => tools.length === 0)).toEqual([])
       }),
     ),

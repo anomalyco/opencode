@@ -1,0 +1,269 @@
+---
+title: "CLI teması"
+description: "OpenCode terminal arayüzü için yerleşik bir tema seçin, terminalinizin kendi renklerini kullanın veya kendi temanızı ekleyin."
+---
+
+OpenCode, açık ve koyu modlar için birçok yerleşik tema sunar. Ayarlardan bir tema seçebilir veya kendi renk paletinizi oluşturabilirsiniz.
+
+## Tema seçme
+
+`Ctrl+P` tuşlarına basın, **Open settings** seçeneğini ve ardından **Theme** seçeneğini açın. Varsayılan tema `opencode`dur.
+Önceki varsayılan hâlâ `opencode-classic` olarak kullanılabilir.
+
+Temayı ve modu genel [CLI ayarlarınızda](/cli/config) da ayarlayabilirsiniz:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+Ayarları açmadan tema değiştirmek için `/themes` çalıştırın.
+
+## Sistem renkleri
+
+OpenCode terminal paletinizi okuyabildiğinde tema seçici `system` temasını içerir. Renkleri terminalinizin ön planından,
+arka planından ve ANSI paletinden türetir.
+
+`system` tema adı terminalden türetilen renkleri seçer. `system` modu terminalin açık veya koyu görünümünü izler.
+
+## Mod
+
+Terminalinizin görünümünü izlemek için `system` kullanın veya temayı açık ya da koyu moda sabitleyin:
+
+| Mod | Davranış |
+| --- | --- |
+| `system` | Terminalin algılanan açık veya koyu görünümünü izler. |
+| `dark` | Her zaman temanın koyu renklerini kullanır. |
+| `light` | Her zaman temanın açık renklerini kullanır. |
+
+Bu, CLI yapılandırmanızdaki `theme` içindeki `mode` alanına karşılık gelir. Özel bir tema yalnızca bir mod sunuyorsa
+OpenCode diğer mod istendiğinde o modu kullanır.
+
+## Tema ekleme
+
+İndirdiğiniz veya birinden aldığınız bir temayı eklemek için JSON dosyasını genel temalar dizinine kopyalayın:
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+Temayı yalnızca o projede kullanılabilir kılmak için projenin `.opencode/themes` dizinine de koyabilirsiniz.
+
+Dosya adı tema adı olur. Örneğin `my-theme.json` `my-theme` olarak görünür. Dosyayı ekledikten sonra OpenCode'u yeniden
+başlatın, ardından seçmek için `/themes` çalıştırın.
+
+OpenCode yalnızca `.json` dosyalarını okur. Geçerli dizine daha yakın bir tema, aynı ada sahip genel veya üst dizin
+temasının yerini alır.
+
+## Eklentilerde tema kullanma
+
+[TUI eklentileri](/build/plugins/cli) çözümlenmiş renkleri `context.theme` üzerinden, etkin modu `context.themeMode`
+üzerinden okur. Eklentinizin seçili temayı izlemesi için anlamsal token'lar kullanın:
+
+```tsx title="Inside a TUI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+Genel TUI eklenti API'si tema kaydetmez. Özel tema tanımlarını yukarıdaki dizinlerde JSON dosyalarıyla ekleyin.
+
+## Tema oluşturma
+
+Tema oluşturmak veya düzenlemek için [tema aracımızı](https://opencode.ai/theme/) kullanın. Bu araç yapıyı anlamayı,
+değiştirmeyi ve özel renkler tanımlamayı kolaylaştırır. Aşağıdaki açıklama referans içindir.
+
+Bir tema, paylaşılan anlamsal token'ları moda özgü paletlerden ayırır:
+
+| Bölüm | Amaç |
+| --- | --- |
+| `base` | Her modun paylaştığı eksiksiz token ağacı. |
+| `light`, `dark` | O mod için eksiksiz bir ton paleti ve isteğe bağlı token geçersiz kılmaları. |
+
+Her tema eksiksiz bir `base` sağlar ve `light` veya `dark` bölümlerinden en az birini tanımlar. Modlar dosyanın
+`base` bölümünden devralır; yerleşik OpenCode temasından veya birbirlerinden devralmaz.
+
+Aşağıdaki örnekler yalnızca her kavramla ilgili bölümleri gösterir. Özelleştirmeden önce eksiksiz bir dosya oluşturmak için
+tema düzenleyicisini kullanın.
+
+### Yapı
+
+Her iki modun kullandığı renkleri `base` içine koyun, ardından gerektiğinde `light` veya `dark` içinde geçersiz kılın:
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+Eksiksiz `base` her anlamsal token'ı sağlar. Her mod gerekli her tonu sağlar ve temel token ağacının herhangi bir bölümünü
+geçersiz kılabilir.
+
+### Renkler ve referanslar
+
+Bir renk onaltılık bir değer, `"transparent"` veya başka bir tema rengine referans olabilir:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### Tonlar
+
+Tonlar dokuz adımlı renk skalalarıdır. Her mod sekiz temel tonu ve üç takma adı tanımlar:
+
+| Tür | Değerler |
+| --- | --- |
+| Temel | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Takma ad | `accent`, `interactive`, `neutral` |
+| Adım | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+Bir temel ton için dokuz adımın tamamını tanımlayın veya bir tonu başka bir tona takma adla bağlayın:
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+Ton adımları modun kontrast yönünü izler. Açık temalar `100` değerinde koyudan `900` değerinde açığa; koyu temalar
+`100` değerinde açıktan `900` değerinde koyuya gider.
+
+`base` içindeki `categorical` dizisi, agent'ları ve diğer yinelenen öğeleri ayırt etmek için kullanılan sıralı tonları
+belirler:
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### Anlamsal token'lar
+
+Anlamsal token'lar renkleri arayüz rollerine atar. Bileşenler doğrudan renk seçmek yerine bu rolleri kullanır.
+
+| Grup | Amaç |
+| --- | --- |
+| `text` | Temel, soluk, çok soluk, seçim, eylem, form alanı ve geri bildirim metni. `faint` varsayılan olarak `muted` olur. |
+| `background` | Temel, seçim, yükseltilmiş yüzeyler, eylemler, form alanları ve geri bildirim dolguları. |
+| `border`, `scrollbar` | Kenarlık ve kaydırma çubuğu renkleri. |
+| `diff` | Eklenen, kaldırılan, bağlam, vurgu ve satır numarası renkleri. |
+| `syntax` | Kaynak kodu vurgulama. |
+| `markdown` | Markdown öğeleri. |
+
+Örneğin `text.muted` ikincil metni denetler, `background.raised` ise gitgide yükselen yüzeyleri tanımlar:
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+`text.selection` ve `background.selection` fareyle veya klavyeyle seçtiğiniz metni renklendirir. Varsayılan olarak odaklanmış
+birincil eylemi kullanır: `background.action.primary.$focused` üzerinde `text.action.primary.$focused`.
+
+Sözdizimi anahtarları `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` ve
+`punctuation` şeklindedir.
+
+Markdown anahtarları `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`,
+`listItem`, `listEnumeration`, `image`, `imageText` ve `codeBlock` şeklindedir.
+
+### Eylemler ve durumlar
+
+Eylemlerin `primary`, `secondary` ve `destructive` varyantları vardır. Eylemler ve form alanları `base` ile isteğe bağlı
+etkileşim durumlarını kullanır:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+Durum anahtarları `$hovered`, `$focused`, `$pressed`, `$selected` ve `$disabled` şeklindedir. Belirtilmeyen bir durum o
+eylemin veya form alanının `base` rengini kullanır.
+
+### İletişim kutusu yüzeyi
+
+Paneller, iletişim kutuları, menüler ve bildirimler derinliklerini `background.raised` üzerinden seçer. İletişim kutuları
+ayrıca anlamsal token'ları `@dialog` ile geçersiz kılabilir:
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+TUI, `@dialog` uygulandıktan sonra renk referanslarını yeniden çözümler. Böylece `$background.base` referansını kullanan
+token'lar iletişim kutusunun arka planına uyar. Bir eylemin bağlama özgü `base` değeri, ayrı değer belirtilmeyen
+durumlarda kullanılır. Bir durum için açıkça belirtilen değer yine önceliklidir.

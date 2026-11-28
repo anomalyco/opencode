@@ -60,15 +60,22 @@ pub struct Remote {
     pub route: String,
 }
 
+/// The Effect `Schema.TaggedError` tag of `ServiceConfig.InvalidError`.
+pub const INVALID_ERROR_TAG: &str = "ServiceConfig.InvalidError";
+
 impl Info {
     /// Decodes config text; `None` when it does not match the schema.
     pub fn parse(text: &str) -> Option<Self> {
-        let map = object(text)?;
-        let remote = match map.get("remote") {
-            None => None,
-            Some(value) => Some(Remote { route: value.as_object()?.get("route")?.as_str()?.to_string() }),
+        Self::decode(text).ok()
+    }
+
+    /// Decodes config text, returning Effect Schema's `{ errors: "all" }` message on failure.
+    pub fn decode(text: &str) -> Result<Self, String> {
+        let value: Value = serde_json::from_str(text).map_err(|_| "Expected a valid JSON string".to_owned())?;
+        let Value::Object(map) = value else {
+            return Err("Expected object".to_owned());
         };
-        decode(&map, remote)
+        decode_object(&map)
     }
 
     fn to_map(&self) -> Map<String, Value> {
@@ -79,61 +86,129 @@ impl Info {
     }
 }
 
-fn object(text: &str) -> Option<Map<String, Value>> {
-    serde_json::from_str(text).ok()
-}
-
-// Every field but `remote`, whose encoding differs between the current and the legacy schema.
-fn decode(map: &Map<String, Value>, remote: Option<Remote>) -> Option<Info> {
-    let string = |key: &str| match map.get(key) {
-        None => Some(None),
-        Some(value) => Some(Some(value.as_str()?.to_string())),
+// Validates every field in `ServiceConfig.Info` schema order so the collected error matches Effect Schema's
+// `Schema.decodeUnknownResult(Schema.fromJsonString(Info))(text, { errors: "all" })`.
+fn decode_object(map: &Map<String, Value>) -> Result<Info, String> {
+    let mut issues = Vec::new();
+    let string = |key: &str, issues: &mut Vec<String>| match map.get(key) {
+        None => None,
+        Some(Value::String(value)) => Some(value.clone()),
+        Some(_) => {
+            issues.push(format!("Expected string | undefined\n  at [\"{key}\"]"));
+            None
+        }
     };
-    let strings = |value: &Value| {
-        value.as_array()?.iter().map(|item| item.as_str().map(str::to_string)).collect::<Option<Vec<_>>>()
+    let disabled = match map.get("disabled") {
+        None => None,
+        Some(Value::Bool(value)) => Some(*value),
+        Some(_) => {
+            issues.push("Expected boolean | undefined\n  at [\"disabled\"]".into());
+            None
+        }
     };
-    Some(Info {
-        disabled: match map.get("disabled") {
-            None => None,
-            Some(value) => Some(value.as_bool()?),
-        },
-        remote,
-        remote_accepted: match map.get("remoteAccepted") {
-            None => false,
-            Some(Value::Bool(true)) => true,
-            Some(_) => return None,
-        },
-        hostname: string("hostname")?,
-        port: match map.get("port") {
-            None => None,
-            Some(value) => {
-                let port = value.as_f64().filter(|port| port.fract() == 0.0 && (1.0..=65_535.0).contains(port))?;
-                Some(port as u16)
+    let remote = match map.get("remote") {
+        None => None,
+        Some(Value::Object(object)) => match object.get("route") {
+            None => {
+                issues.push("Missing key\n  at [\"remote\"][\"route\"]".into());
+                None
+            }
+            Some(Value::String(route)) => Some(Remote { route: route.clone() }),
+            Some(_) => {
+                issues.push("Expected string\n  at [\"remote\"][\"route\"]".into());
+                None
             }
         },
-        password: string("password")?,
-        cors: match map.get("cors") {
-            None => None,
-            Some(value) => Some(strings(value)?),
+        Some(_) => {
+            issues.push("Expected object | undefined\n  at [\"remote\"]".into());
+            None
+        }
+    };
+    let remote_accepted = match map.get("remoteAccepted") {
+        None => false,
+        Some(Value::Bool(true)) => true,
+        Some(_) => {
+            issues.push("Expected true | undefined\n  at [\"remoteAccepted\"]".into());
+            false
+        }
+    };
+    let hostname = string("hostname", &mut issues);
+    let port = match map.get("port") {
+        None => None,
+        Some(value) => match value.as_f64() {
+            None => {
+                issues.push("Expected number | undefined\n  at [\"port\"]".into());
+                None
+            }
+            Some(port) => {
+                let mut ok = true;
+                if port.fract() != 0.0 || !(-9_007_199_254_740_991.0..=9_007_199_254_740_991.0).contains(&port) {
+                    issues.push("Expected an integer\n  at [\"port\"]".into());
+                    ok = false;
+                }
+                if port < 1.0 {
+                    issues.push("Expected a value greater than or equal to 1\n  at [\"port\"]".into());
+                    ok = false;
+                }
+                if port > 65_535.0 {
+                    issues.push("Expected a value less than or equal to 65535\n  at [\"port\"]".into());
+                    ok = false;
+                }
+                ok.then_some(port as u16)
+            }
         },
-        env: match map.get("env") {
-            None => None,
-            Some(value) => Some(
-                value
-                    .as_object()?
-                    .iter()
-                    .map(|(key, value)| Some((key.clone(), value.as_str()?.to_string())))
-                    .collect::<Option<IndexMap<_, _>>>()?,
-            ),
-        },
-    })
+    };
+    let password = string("password", &mut issues);
+    let cors = match map.get("cors") {
+        None => None,
+        Some(Value::Array(items)) => {
+            let mut list = Vec::with_capacity(items.len());
+            for (index, item) in items.iter().enumerate() {
+                match item.as_str() {
+                    Some(value) => list.push(value.to_string()),
+                    None => issues.push(format!("Expected string\n  at [\"cors\"][{index}]")),
+                }
+            }
+            Some(list)
+        }
+        Some(_) => {
+            issues.push("Expected array | undefined\n  at [\"cors\"]".into());
+            None
+        }
+    };
+    let env = match map.get("env") {
+        None => None,
+        Some(Value::Object(entries)) => {
+            let mut vars = IndexMap::with_capacity(entries.len());
+            for (key, value) in entries {
+                match value.as_str() {
+                    Some(value) => {
+                        vars.insert(key.clone(), value.to_string());
+                    }
+                    None => {
+                        let key = serde_json::to_string(key).expect("key serializes");
+                        issues.push(format!("Expected string\n  at [\"env\"][{key}]"));
+                    }
+                }
+            }
+            Some(vars)
+        }
+        Some(_) => {
+            issues.push("Expected object | undefined\n  at [\"env\"]".into());
+            None
+        }
+    };
+    if !issues.is_empty() {
+        return Err(issues.join("\n"));
+    }
+    Ok(Info { disabled, remote, remote_accepted, hostname, port, password, cors, env })
 }
 
 // Earlier builds stored remote access as a boolean; the field is required in that schema.
 fn parse_legacy(text: &str) -> Option<(bool, Info)> {
-    let map = object(text)?;
-    let enabled = map.get("remote")?.as_bool()?;
-    Some((enabled, decode(&map, None)?))
+    let mut map: Map<String, Value> = serde_json::from_str(text).ok()?;
+    let enabled = map.shift_remove("remote")?.as_bool()?;
+    Some((enabled, decode_object(&map).ok()?))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -141,6 +216,9 @@ pub enum Error {
     /// A usage or validation message, worded as in TypeScript.
     #[error("{0}")]
     Invalid(String),
+    /// An existing `service.json` failed schema decoding (`ServiceConfig.InvalidError`).
+    #[error("Invalid service config at {}: {issue}", path.display())]
+    InvalidConfig { path: PathBuf, issue: String },
     #[error(transparent)]
     Io(#[from] io::Error),
 }
@@ -292,20 +370,27 @@ impl ServiceConfig {
         }
     }
 
-    /// Reads the config. A missing or invalid file is empty; a file with the legacy boolean
-    /// `remote` is repaired in place, so every reader sees the same route.
-    pub fn read(&self) -> io::Result<Info> {
+    /// Reads the config. A missing file is empty; a file with the legacy boolean `remote` is repaired in place,
+    /// so every reader sees the same route. Any other unreadable or invalid file fails without modifying it.
+    pub fn read(&self) -> Result<Info, Error> {
         if let Some(legacy) = &self.legacy
             && let Ok(text) = crate::read_text(legacy)
             && Info::parse(&text).is_some()
         {
             let _ = write_new_private(&self.file, &text);
         }
-        let Ok(text) = crate::read_text(&self.file) else { return Ok(Info::default()) };
-        if let Some(info) = Info::parse(&text) {
-            return Ok(info);
-        }
-        let Some((enabled, rest)) = parse_legacy(&text) else { return Ok(Info::default()) };
+        let text = match crate::read_text(&self.file) {
+            Ok(text) => text,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Info::default()),
+            Err(error) => return Err(error.into()),
+        };
+        let issue = match Info::decode(&text) {
+            Ok(info) => return Ok(info),
+            Err(issue) => issue,
+        };
+        let Some((enabled, rest)) = parse_legacy(&text) else {
+            return Err(Error::InvalidConfig { path: self.file.clone(), issue });
+        };
         let mut map = rest.to_map();
         if enabled {
             map.insert("remote".into(), serde_json::json!({ "route": route() }));
@@ -314,10 +399,11 @@ impl ServiceConfig {
         Ok(Info::parse(&Value::Object(map).to_string()).expect("repaired config is valid"))
     }
 
-    fn update(&self, edit: impl FnOnce(&mut Map<String, Value>)) -> io::Result<()> {
+    fn update(&self, edit: impl FnOnce(&mut Map<String, Value>)) -> Result<(), Error> {
         let mut map = self.read()?.to_map();
         edit(&mut map);
-        self.write(&map)
+        self.write(&map)?;
+        Ok(())
     }
 
     // A synced temporary file and a rename, mode 0600 for a new file, `JSON.stringify(value, null, 2)`.
@@ -335,7 +421,7 @@ impl ServiceConfig {
     }
 
     /// The private credential, created once and kept across restarts; `Some` replaces it.
-    pub fn password(&self, value: Option<&str>) -> io::Result<String> {
+    pub fn password(&self, value: Option<&str>) -> Result<String, Error> {
         let existing = self.read()?;
         if value.is_none()
             && let Some(password) = existing.password
@@ -353,14 +439,14 @@ impl ServiceConfig {
     }
 
     /// Records that the user accepted remote access.
-    pub fn accept_remote(&self) -> io::Result<()> {
+    pub fn accept_remote(&self) -> Result<(), Error> {
         self.update(|map| {
             map.insert("remoteAccepted".into(), true.into());
         })
     }
 
     /// Turns remote access on and returns its route, created once and kept.
-    pub fn remote(&self) -> io::Result<String> {
+    pub fn remote(&self) -> Result<String, Error> {
         let existing = self.read()?;
         if let Some(remote) = existing.remote {
             return Ok(remote.route);
@@ -374,7 +460,7 @@ impl ServiceConfig {
 
     // Forgets the route, so turning remote access on again issues a new one; having had it on
     // counts as accepting it.
-    fn disable_remote(&self) -> io::Result<()> {
+    fn disable_remote(&self) -> Result<(), Error> {
         self.update(|map| {
             if map.shift_remove("remote").is_some() {
                 map.insert("remoteAccepted".into(), true.into());
@@ -398,7 +484,7 @@ impl ServiceConfig {
             return Err(invalid(format!("Usage: opencode service get {}", key.name())));
         }
         if key == Key::Password {
-            return Ok(self.password(None)?);
+            return self.password(None);
         }
         let info = self.read()?;
         Ok(match key {
@@ -418,9 +504,9 @@ impl ServiceConfig {
         })
     }
 
-    /// Applies a validated edit to the file. The caller stops the service first when
+    /// Applies a validated edit to the file. The caller validates the config and stops the service first when
     /// [`Edit::stops_service`] says so, and ensures the tunnel when [`Edit::needs_tunnel`] does.
-    pub fn apply(&self, edit: &Edit) -> io::Result<()> {
+    pub fn apply(&self, edit: &Edit) -> Result<(), Error> {
         match edit {
             Edit::Remote(true) => self.remote().map(drop),
             Edit::Remote(false) | Edit::Unset(Key::Remote) => self.disable_remote(),
@@ -527,7 +613,7 @@ mod tests {
         fs::write(&config.file, r#"{"remote":false,"port":5}"#).unwrap();
         assert_eq!(config.read().unwrap(), Info { port: Some(5), ..Info::default() });
         fs::write(&config.file, "not json").unwrap();
-        assert_eq!(config.read().unwrap(), Info::default());
+        assert!(matches!(config.read(), Err(Error::InvalidConfig { .. })));
         // An editor's BOM and a Latin-1 byte read as TypeScript reads them.
         fs::write(&config.file, b"\xef\xbb\xbf{\"port\":5,\"hostname\":\"caf\xe9\"}").unwrap();
         assert_eq!(
@@ -540,6 +626,38 @@ mod tests {
         fs::write(&legacy, r#"{"port":7}"#).unwrap();
         assert_eq!(dev.read().unwrap().port, Some(7));
         assert_eq!(fs::read_to_string(&dev.file).unwrap(), r#"{"port":7}"#);
+    }
+
+    #[test]
+    fn corrupt_or_unreadable_config_fails_without_overwriting() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let config = config(dir.path(), "latest");
+        fs::create_dir_all(config.file.parent().unwrap()).unwrap();
+        let samples = [
+            "{\"hostname\":\"0.0.0.0\",\"port\":\"4096\",\"password\":\"keep-me\",\"env\":{\"KEEP\":\"1\"}}\n",
+            r#"{"port": 4096,"#,
+            r#"{"remote":true,"port":"4096","password":"keep-me"}"#,
+        ];
+        for raw in samples {
+            fs::write(&config.file, raw).unwrap();
+            let err = config.read().unwrap_err();
+            assert!(matches!(err, Error::InvalidConfig { .. }), "{raw}: {err}");
+            assert!(err.to_string().contains(&config.file.display().to_string()), "{err}");
+            for result in [
+                config.password(None).map(drop),
+                config.apply(&Edit::Port(4097)),
+                config.apply(&Edit::Remote(true)),
+                config.apply(&Edit::Unset(Key::Port)),
+                config.get(None, None).map(drop),
+            ] {
+                assert!(matches!(result, Err(Error::InvalidConfig { .. })), "{raw}: {result:?}");
+                assert_eq!(fs::read_to_string(&config.file).unwrap(), raw);
+            }
+        }
+        fs::remove_file(&config.file).unwrap();
+        fs::create_dir(&config.file).unwrap();
+        assert!(matches!(config.apply(&Edit::Port(4097)), Err(Error::Io(_))));
+        assert!(config.file.is_dir());
     }
 
     #[test]

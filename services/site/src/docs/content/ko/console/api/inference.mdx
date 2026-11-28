@@ -1,0 +1,173 @@
+---
+title: "추론 API"
+description: "인증 헤더 하나로 Console 추론에서 OpenAI, Anthropic, Gemini 호환 모델을 호출하세요."
+---
+
+Console 추론은 `https://opencode.ai/inference`에서 OpenAI, Anthropic, Gemini 호환 API를 제공합니다. 모델의 API
+계열에 맞는 엔드포인트로 JSON `POST` 요청을 보내세요.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 인증
+
+`<token>`을 [개인 API 키](/console/api#personal-api-keys) 또는 [서비스 계정 키](/console/api#service-accounts)로 바꾸세요. 두 키 모두 [Console](https://opencode.ai/console)에서 만듭니다. 유료 모델에는 이
+헤더가 필요합니다. 무료 등급 채팅 모델은 OpenCode 안에서만 사용할 수 있으며, 다른 클라이언트는 API 키가 있어도
+HTTP `403`을 받습니다. 다른 클라이언트에서는 유료 모델이나 [Go](/console/go) 구독을 사용하세요.
+
+```text
+Authorization: Bearer <token>
+```
+
+## 엔드포인트
+
+| API                     | 경로                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (decisions)  | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+각 모델은 하나의 API 계열로 제공됩니다. [모델 엔드포인트](/console/models#endpoints) 표를 보거나 실시간 목록을
+가져오세요.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+[모델 목록 API](/console/api/models)에서 응답의 모든 필드와, 연결한 제공자까지 포함하는 Console 모델 목록을 확인할 수 있습니다.
+
+### OpenAI Chat Completions
+
+`kimi-k3`, `glm-5.3`, `minimax-m3` 같은 오픈 모델과 무료 모델은 Chat Completions API를 사용합니다.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT 모델은 Responses API를 사용합니다.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude와 Qwen 모델은 Messages API를 사용합니다. `max_tokens`는 필수입니다.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini 모델은 경로에 모델과 메서드를 넣습니다. 응답을 스트리밍하려면 `:generateContent`를
+`:streamGenerateContent`로 바꾸세요.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+`jev-1.14`, `gemini-decision-1`, `gpt-6-luna-decision` 같은 결정 모델은 텍스트를 생성하는 대신 `state`에 대한
+유형이 지정된 질문에 답합니다. 질문 유형과 미디어 입력은 [결정 모델](/console/models#jev)을 참고하세요.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+같은 모델은 `/inference/openai/v1/decisions`에서 OpenAI의 Decisions 형식도 받습니다.
+
+### OpenAI Embeddings
+
+`text-embedding-3-small`, `qwen3-embedding-8b` 같은 임베딩 모델은 Embeddings API를 사용합니다. 모든 모델과
+옵션은 [임베딩 모델](/console/models#embedding-models)을 참고하세요.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints)는 포함된 결정 및 임베딩 모델을 `/inference/go` 아래 같은 경로로 제공합니다.
+
+## 비용
+
+모든 응답은 해당 API가 이미 반환하는 사용량과 함께 요청 비용을 알려 줍니다. OpenAI와 Anthropic은 `usage`에,
+Gemini는 `usageMetadata`에 표시합니다. 스트림은 최종 사용량을 담은 이벤트에서 이를 알려 줍니다.
+`stream_options.include_usage`를 사용한 Chat Completions의 마지막 사용량 청크, Responses의
+`response.completed`, Messages의 `message_delta`, Gemini의 마지막 청크입니다.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| 필드                      | 의미                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | 잔액에서 청구된 미국 달러. 무료 모델과 한도 내 [Go](/console/go) 사용량은 `0`입니다. 자체 제공자 키를 쓰면 제공자가 자체 청구액을 보고하지 않는 한 제공자가 청구할 금액의 추정치이며, 모델에 가격이 없으면 표시되지 않습니다. |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus`, `byok`(자체 제공자 키) 중 하나입니다.                                                 |
+| `opencode.list_cost`      | 피크 시간과 롱 컨텍스트 가격을 포함한 모델 가격 기준 미국 달러입니다.                                                     |
+| `opencode.estimated`      | `true`이면 `cost`가 OpenCode가 청구한 금액이 아니라 모델 가격 기준 추정치입니다. 자체 제공자 키를 쓸 때만 설정됩니다.    |
+| `opencode.allowance`      | Go 전용. 이 요청으로 [사용 한도](/console/go#usage-limits)에서 차감된 금액을 요금제의 월 한도 기준으로 달러로 표시합니다. |
+| `opencode.tokens`         | 청구된 토큰입니다. `input`은 캐시 읽기와 쓰기를 제외하고, `output`은 `reasoning`을 포함합니다.                             |
+
+이미지 생성은 응답과 스트림에서 완료된 각 이미지에 같은 필드를 보고하며, 지금까지의 비용을 함께 표시합니다. 비용은
+잔액이나 Go 사용량이 갱신되기 전에, 응답이 끝날 때 확정됩니다. 요청 도중 잔액이나 Go 한도가 소진되면 보고된 금액보다
+적게 청구될 수 있으며, 더 많이 청구되지는 않습니다.
