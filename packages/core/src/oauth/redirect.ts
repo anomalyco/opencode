@@ -8,14 +8,14 @@ export const submit =
   <A>(input: {
     state: string
     callback: Deferred.Deferred<A, Error>
-    received: (code: string, params: URLSearchParams) => A
+    received: (code: string, params: URLSearchParams, url: URL) => A
   }) =>
   (text: string) =>
     pasted(text, input.state).pipe(
       Effect.flatMap((result) =>
         "error" in result
           ? Deferred.fail(input.callback, new Error(result.error))
-          : Deferred.succeed(input.callback, input.received(result.code, result.params)),
+          : Deferred.succeed(input.callback, input.received(result.code, result.params, result.url)),
       ),
       Effect.asVoid,
     )
@@ -28,15 +28,15 @@ export const submit =
  */
 export const pasted = (text: string, state: string) =>
   Effect.gen(function* () {
-    const value = text.trim()
-    if (!URL.canParse(value)) return yield* Effect.fail(new Error("Paste the full URL from the browser's address bar"))
-    const params = new URL(value).searchParams
+    const url = URL.parse(text.trim())
+    if (!url) return yield* Effect.fail(new Error("Paste the full URL from the browser's address bar"))
+    const params = url.searchParams
     if (params.get("state") !== state) return yield* Effect.fail(new Error("This URL belongs to a different sign-in"))
     const error = params.get("error_description") ?? params.get("error")
     if (error) return { params, error }
     const code = params.get("code")
     if (!code) return yield* Effect.fail(new Error("The URL does not contain an authorization code"))
-    return { params, code }
+    return { url, params, code }
   })
 
 export * as OauthRedirect from "./redirect.js"

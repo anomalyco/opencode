@@ -255,32 +255,46 @@ const memoryStore = (): Store => {
   }
 }
 
-export const clientFromCredential = (credential: Credential.OAuth) =>
-  credential.metadata?.client as StoredOAuthClientInformation | undefined
+// Where the login found its authorization server and which resource it named, so a refresh need not discover them.
+const Discovery = Schema.Struct({ authorizationServer: Schema.String, resource: Schema.String })
 
-const redirectUris = (client: StoredOAuthClientInformation) =>
-  "redirect_uris" in client && Array.isArray(client.redirect_uris)
-    ? client.redirect_uris.filter((uri): uri is string => typeof uri === "string")
-    : undefined
+// The client the login registered or was given. Fields beyond these are kept for the SDK, which reads more of them.
+const Client = Schema.StructWithRest(
+  Schema.Struct({
+    client_id: Schema.String,
+    client_secret: Schema.optional(Schema.String),
+    redirect_uris: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+
+// A field that is corrupt or was stored by an older version reads as absent, and the others still apply.
+const lenient = <S extends Schema.Top>(schema: S) =>
+  Schema.optional(schema.pipe(Schema.catchDecoding(() => Effect.succeedNone)))
+
+/** What a login stores with its credential, as far as a refresh or the next login reads it. */
+const Metadata = Schema.Struct({
+  scope: lenient(Schema.String),
+  issuer: lenient(Schema.String),
+  discovery: lenient(Discovery),
+  client: lenient(Client),
+})
+const decodeMetadata = Schema.decodeUnknownOption(Metadata)
+const metadataOf = (credential: Credential.OAuth): typeof Metadata.Type =>
+  Option.getOrElse(decodeMetadata(credential.metadata ?? {}), () => ({}))
+
+export const clientFromCredential = (credential: Credential.OAuth) => metadataOf(credential).client
 
 // A client without registered redirect URIs (a client ID metadata document) is not tied to one port.
-const coversRedirects = (client: StoredOAuthClientInformation, registered: ReadonlyArray<string>) => {
-  const uris = redirectUris(client)
-  return uris === undefined || registered.every((uri) => uris.includes(uri))
-}
+const coversRedirects = (client: typeof Client.Type, registered: ReadonlyArray<string>) =>
+  client.redirect_uris === undefined || registered.every((uri) => client.redirect_uris?.includes(uri))
 
-const registeredPort = (client: StoredOAuthClientInformation | undefined, path: string) => {
-  const uri = (client ? (redirectUris(client) ?? []) : [])
-    .flatMap((value) => (URL.canParse(value) ? [new URL(value)] : []))
+const registeredPort = (client: typeof Client.Type | undefined, path: string) => {
+  const uri = (client?.redirect_uris ?? [])
+    .flatMap((value) => URL.parse(value) ?? [])
     .find((url) => url.hostname === "127.0.0.1" && url.pathname === path && url.port)
   return uri ? Number(uri.port) : undefined
 }
-
-// Where the login found its authorization server and which resource it named, so a refresh need not discover them.
-const Discovery = Schema.Struct({ authorizationServer: Schema.String, resource: Schema.String })
-const decodeDiscovery = Schema.decodeUnknownOption(Discovery)
-const discoveryFromCredential = (credential: Credential.OAuth) =>
-  Option.getOrUndefined(decodeDiscovery(credential.metadata?.discovery))
 
 const toCredential = (input: {
   readonly methodID: Integration.MethodID
@@ -290,6 +304,7 @@ const toCredential = (input: {
   readonly discovery: typeof Discovery.Type | undefined
   /** The scope requested, kept when the token response leaves `scope` out (RFC 6749 §5.1: then it was granted). */
   readonly scope?: string
+  readonly now: number
 }) =>
   Credential.OAuth.make({
     type: "oauth",
@@ -297,7 +312,7 @@ const toCredential = (input: {
     access: input.tokens.access_token,
     refresh: input.tokens.refresh_token ?? "",
     // 0 means the server gave no lifetime, so the token is only refreshed after a 401.
-    expires: input.tokens.expires_in ? Date.now() + input.tokens.expires_in * 1000 : 0,
+    expires: input.tokens.expires_in ? input.now + input.tokens.expires_in * 1000 : 0,
     metadata: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
@@ -353,7 +368,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
           // Refreshing ahead needs the discovery the login saved. If it fails, the current token goes out and a
           // 401 decides.
           const ahead =
-            current?.refresh && discoveryFromCredential(current) && due(current, yield* Clock.currentTimeMillis)
+            current?.refresh && metadataOf(current).discovery && due(current, yield* Clock.currentTimeMillis)
           const value = ahead ? yield* refresh(due).pipe(Effect.orElseSucceed(() => current)) : current
           presented = value?.access
           return presented
@@ -410,11 +425,12 @@ const exchange = (input: {
         return response
       }
       const oauth = input.target.config.oauth || undefined
+      const metadata = metadataOf(input.current)
       const client = oauth?.client_id
         ? { client_id: oauth.client_id, client_secret: oauth.client_secret }
-        : clientFromCredential(input.current)
+        : metadata.client
       if (!client) throw new RefreshRejected({ message: "no OAuth client information" })
-      const saved = discoveryFromCredential(input.current)
+      const saved = metadata.discovery
       const configured = await configuredDiscovery({ target: input.target, fetchFn })
       const server =
         configured ??
@@ -426,12 +442,12 @@ const exchange = (input: {
             }
           : await discover(input.target.url, { resourceMetadataUrl: input.resourceMetadataUrl, fetchFn }))
       const found = server.authorizationServerMetadata?.issuer ?? server.authorizationServerUrl
-      const issuer = input.current.metadata?.issuer
-      if (typeof issuer === "string" && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
+      const issuer = metadata.issuer
+      if (issuer !== undefined && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
         throw new IssuerChanged({ message: `issued by ${issuer}, but discovery names ${found}` })
       const resource = saved?.resource ?? selectResource(input.target, server.resourceMetadata?.resource).toString()
       // Some authorization servers (Microsoft Entra ID) refuse a refresh that names no scope.
-      const scope = typeof input.current.metadata?.scope === "string" ? input.current.metadata.scope : oauth?.scope
+      const scope = metadata.scope ?? oauth?.scope
       const tokens = await refreshAuthorization(server.authorizationServerUrl, {
         metadata: server.authorizationServerMetadata,
         clientInformation: client,
@@ -440,7 +456,7 @@ const exchange = (input: {
         resource,
         fetchFn,
       })
-      return toCredential({
+      return {
         methodID: input.current.methodID,
         serverUrl: input.target.config.url,
         tokens: {
@@ -448,11 +464,11 @@ const exchange = (input: {
           ...tokens,
           issuer: found,
         },
-        client: clientFromCredential(input.current),
+        client: metadata.client,
         scope,
         // A configured metadata URL is read on every refresh, so changing it applies at once.
         discovery: configured ? undefined : { authorizationServer: server.authorizationServerUrl, resource },
-      })
+      }
     },
     catch: (error) =>
       error instanceof RefreshRejected || error instanceof IssuerChanged
@@ -460,7 +476,7 @@ const exchange = (input: {
         : error instanceof OAuthError && rejections.has(error.code)
           ? new RefreshRejected({ message: error.message })
           : error,
-  })
+  }).pipe(Effect.flatMap((fields) => Effect.map(Clock.currentTimeMillis, (now) => toCredential({ ...fields, now }))))
 
 export const authorize = (input: {
   readonly name: string
@@ -632,6 +648,7 @@ export const authorize = (input: {
         serverUrl: input.target.config.url,
         tokens,
         client,
+        now: yield* Clock.currentTimeMillis,
         scope: authorizationUrl?.searchParams.get("scope") ?? undefined,
         discovery: input.target.metadata
           ? undefined
@@ -702,7 +719,8 @@ export const authorize = (input: {
         OauthRedirect.submit({
           state,
           callback: code,
-          received: (value, params) => ({ code: value, iss: params.get("iss") ?? undefined }),
+          // The host tells which registered redirect the server sent the browser to, as in the callback above.
+          received: (value, params, url) => ({ code: value, iss: params.get("iss") ?? undefined, host: url.host }),
         })(pasted).pipe(Effect.tap(() => Effect.logInfo("mcp oauth redirect pasted", fields))),
     }
   }).pipe(
