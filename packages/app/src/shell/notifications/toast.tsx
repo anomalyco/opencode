@@ -4,6 +4,7 @@ import { createEffect, type JSX } from "solid-js"
 import { Predicate } from "effect"
 import { useLanguage } from "@/runtime/i18n/language"
 import { acknowledgeLocalStorageNotice, localStorageNoticePending } from "@/runtime/persistence/storage"
+import { toastMobileBottom } from "./toast-room"
 
 type AppToastOptions = Omit<ToastOptions, "icon"> & {
   icon?: IconProps["name"]
@@ -23,7 +24,7 @@ export function ToastRegion() {
     })
   })
 
-  return <Toast.Region />
+  return <Toast.Region mobileOffset={{ bottom: toastMobileBottom() }} />
 }
 
 function showAppToast(options: AppToastOptions | string) {

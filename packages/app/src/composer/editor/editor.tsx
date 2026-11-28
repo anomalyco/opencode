@@ -16,6 +16,8 @@ import {
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { reserveToastRoom } from "@/shell/notifications/toast-room"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Key } from "@solid-primitives/keyed"
 import { FileIcon } from "@opencode/ui/file-icon"
@@ -123,6 +125,24 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
   onMount(() => setDock(document.querySelector<HTMLElement>('[data-slot="composer-touch-bar-mount"]') ?? undefined))
 
+  // Toasts in a narrow window rise above a composer docked at the window's bottom instead of covering Send.
+  const reserveRoom = () => {
+    if (!composer) return
+    const rect = composer.getBoundingClientRect()
+    const docked = rect.height > 0 && window.innerHeight - rect.bottom < 100
+
+    reserveToastRoom(composer, docked ? window.innerHeight - rect.top : undefined)
+  }
+
+  onMount(() => {
+    if (!composer) return
+    reserveRoom()
+    createResizeObserver(composer, reserveRoom)
+    makeEventListener(window, "resize", reserveRoom)
+  })
+  onCleanup(() => {
+    if (composer) reserveToastRoom(composer, undefined)
+  })
   createEffect(() => {
     const preview = historyHeight() !== undefined
 
