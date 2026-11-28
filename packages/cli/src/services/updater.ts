@@ -205,7 +205,7 @@ const make = Effect.gen(function* () {
     return values.findLast((value) => value !== undefined) ?? "notify"
   })
 
-  const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "30 seconds") {
+  const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input | null = "30 seconds") {
     // The prefix's npm and the package's postinstall run `node` from PATH, which may be missing or belong to another
     // Node install, so put the prefix's own node first.
     const options =
@@ -214,7 +214,7 @@ const make = Effect.gen(function* () {
         : undefined
     return yield* appProcess
       .run(ChildProcess.make(command[0], command.slice(1), options), {
-        timeout,
+        ...(timeout === null ? {} : { timeout }),
         maxOutputBytes: 100_000,
         maxErrorBytes: 100_000,
       })
@@ -449,6 +449,7 @@ const make = Effect.gen(function* () {
   const runUpgrade = (input: {
     readonly method: Method
     readonly command: string[]
+    readonly timeout: Duration.Input | null
     readonly displayCommand?: string[]
     readonly title?: string
     readonly retry?: string
@@ -463,7 +464,7 @@ const make = Effect.gen(function* () {
         },
         cause === undefined ? undefined : { cause },
       )
-    return exec(input.command, "5 minutes").pipe(
+    return exec(input.command, input.timeout).pipe(
       Effect.flatMap((result) =>
         result.code === 0 ? Effect.succeed(result) : Effect.fail(failure(resultDetail(result))),
       ),
@@ -516,9 +517,23 @@ const make = Effect.gen(function* () {
     }
     yield* Effect.scoped(
       Effect.gen(function* () {
-        // Other OpenCode processes may be installing at the same time. Wait longer than the
-        // slowest install (curl runs two 5-minute commands).
-        yield* flock.acquire("cli-upgrade", undefined, { timeoutMs: Duration.toMillis("15 minutes") })
+        // This bounds lock acquisition only. Installs can run longer without a deadline, and the
+        // holder keeps the lock fresh with a heartbeat. A waiting upgrade can expire without stopping it.
+        yield* flock.acquire("cli-upgrade", undefined, { timeoutMs: Duration.toMillis("15 minutes") }).pipe(
+          Effect.catchTag("LockTimeoutError", (cause) =>
+            Effect.fail(
+              new UpgradeError(
+                {
+                  title: "Another OpenCode upgrade is still running",
+                  detail: "The wait for the upgrade lock expired. The existing upgrade was not stopped.",
+                  command: `opencode upgrade ${version} --method ${method}`,
+                  retry: "Wait for the existing upgrade to finish, then run the command above.",
+                },
+                { cause },
+              ),
+            ),
+          ),
+        )
         if (method === "bun") {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
@@ -528,6 +543,7 @@ const make = Effect.gen(function* () {
             runUpgrade({
               method,
               command: ["bun", "install", "--global", "--trust", "--cache-dir", cache, target],
+              timeout: null,
               displayCommand: ["bun", "install", "--global", "--trust", target],
             }),
           )
@@ -540,6 +556,7 @@ const make = Effect.gen(function* () {
           yield* runUpgrade({
             method,
             command: ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
+            timeout: "5 minutes",
             displayCommand: ["curl", "-fsSL", "https://opencode.ai/v2/install"],
             title: "Could not download the OpenCode installer",
             retry: "Check your network, then run opencode upgrade again.",
@@ -549,17 +566,20 @@ const make = Effect.gen(function* () {
             runUpgrade({
               method,
               command: [bash, installer, "--version", version, "--no-modify-path"],
+              timeout: null,
               displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
               title: "The OpenCode installer failed",
             }),
           )
         }
-        if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
+        if (method === "brew")
+          return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName], timeout: null })
         if (method === "winget")
           return yield* retaining(
             method,
             runUpgrade({
               method,
+              timeout: null,
               command: [
                 "winget",
                 "upgrade",
@@ -571,7 +591,7 @@ const make = Effect.gen(function* () {
               ],
             }),
           )
-        return yield* retaining(method, runUpgrade({ method, command: commands[method] }))
+        return yield* retaining(method, runUpgrade({ method, command: commands[method], timeout: null }))
       }),
     ).pipe(
       Effect.mapError((cause) =>
