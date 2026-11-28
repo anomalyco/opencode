@@ -134,6 +134,123 @@ describe("stats rendering", () => {
     )
     expect(output).toContain("activity · last 16 weeks")
   })
+
+  test("aligns model detail rows by terminal display width", () => {
+    const ids = ["model", "模型", "e\u0301", "猫".repeat(30), `a${"猫".repeat(30)}`, "xxxxxxxxxx👩‍💻suffix"]
+    const output = renderStats(
+      {
+        ...stats,
+        models: ids.map((id) => ({
+          model: { providerID: "custom", id },
+          steps: 1,
+          tokens: { input: 40, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
+        })),
+      },
+      options({ models: true, limit: 10, width: 80 }),
+    )
+    const lines = output.split(/\r?\n/)
+    const header = lines.find((line) => line.startsWith("model "))
+    const rows = lines.filter((line) => line.startsWith("custom/"))
+
+    expect(header).toBeDefined()
+    expect(Bun.stringWidth(header!)).toBe(68)
+    expect(rows).toHaveLength(ids.length)
+    for (const row of rows) {
+      expect(Bun.stringWidth(row)).toBe(68)
+      expect(cellStart(row, "42")).toBe(42)
+      expect(cellStart(row, "1")).toBe(55)
+      expect(cellStart(row, "$0.00")).toBe(63)
+    }
+    expect(rows[3]).toStartWith(`custom/${"猫".repeat(13)}…`)
+    expect(rows[4]).toStartWith(`custom/a${"猫".repeat(12)}… `)
+  })
+
+  test("aligns tool reliability rows by terminal display width", () => {
+    const names = ["ascii_tool", "工具", "re\u0301sume", "猫".repeat(30), "tool_xxxxxxxx👩‍💻suffix"]
+    const output = renderStats(
+      {
+        ...stats,
+        tools: {
+          mode: "detail",
+          totals: { calls: names.length * 42, succeeded: names.length * 42, failed: 0, unfinished: 0 },
+          usage: names.map((name) => ({
+            name,
+            calls: 42,
+            succeeded: 42,
+            failed: 0,
+            unfinished: 0,
+            durationP50: 250,
+          })),
+        },
+      },
+      options({ tools: true, limit: 10, width: 80 }),
+    )
+    const lines = output.split(/\r?\n/)
+    const headerIndex = lines.findIndex((line) => line.startsWith("tool "))
+    const rows = lines.slice(headerIndex + 1, headerIndex + 1 + names.length)
+
+    expect(headerIndex).toBeGreaterThan(-1)
+    expect(Bun.stringWidth(lines[headerIndex]!)).toBe(68)
+    expect(rows).toHaveLength(names.length)
+    for (const row of rows) {
+      expect(Bun.stringWidth(row)).toBe(68)
+      expect(cellStart(row, "42")).toBe(42)
+      expect(cellStart(row, "0.00%")).toBe(51)
+      expect(cellStart(row, "250ms")).toBe(63)
+    }
+    expect(rows[3]).toStartWith(`${"猫".repeat(16)}… `)
+  })
+
+  test("truncates compact model and tool labels on grapheme boundaries", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        models: ["xxxxxxxxxx👩‍💻suffix", "xxxxxxxxxxx👩‍💻suffix", "xxxxxxxxxxxe\u0301suffix", "猫".repeat(30)].map(
+          (id) => ({
+            model: { providerID: "custom", id },
+            steps: 1,
+            tokens: { input: 40, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+            cost: 0,
+          }),
+        ),
+        tools: {
+          mode: "detail",
+          totals: { calls: 84, succeeded: 84, failed: 0, unfinished: 0 },
+          usage: ["custom/xxxxxxxxxx👩‍💻suffix", "custom/xxxxxxxxxxx👩‍💻suffix", "猫".repeat(30)].map((name) => ({
+            name,
+            calls: 42,
+            succeeded: 42,
+            failed: 0,
+            unfinished: 0,
+            durationP50: 250,
+          })),
+        },
+      },
+      options({ models: true, tools: true, limit: 10, width: 20 }),
+    )
+    const lines = output.split(/\r?\n/)
+    const modelsIndex = lines.indexOf("MODELS")
+    const toolsIndex = lines.indexOf("TOOL RELIABILITY")
+    const modelLabels = [
+      lines[modelsIndex + 1]!,
+      lines[modelsIndex + 3]!,
+      lines[modelsIndex + 5]!,
+      lines[modelsIndex + 7]!,
+    ]
+    const toolLabels = [lines[toolsIndex + 1]!, lines[toolsIndex + 3]!, lines[toolsIndex + 5]!]
+
+    expect(modelLabels).toEqual([
+      "custom/xxxxxxxxxx👩‍💻…",
+      "custom/xxxxxxxxxxx…",
+      "custom/xxxxxxxxxxxe\u0301…",
+      `custom/${"猫".repeat(6)}…`,
+    ])
+    expect(toolLabels).toEqual(["custom/xxxxxxxxxx👩‍💻…", "custom/xxxxxxxxxxx…", `${"猫".repeat(9)}…`])
+    for (const label of [...modelLabels, ...toolLabels]) {
+      expect(Bun.stringWidth(label)).toBeLessThanOrEqual(20)
+    }
+  })
 })
 
 describe("stats requests", () => {
@@ -155,6 +272,12 @@ describe("stats requests", () => {
     expect(error).toBe(cause)
   })
 })
+
+function cellStart(line: string, token: string) {
+  const index = line.lastIndexOf(token)
+  expect(index).toBeGreaterThan(-1)
+  return Bun.stringWidth(line.slice(0, index))
+}
 
 function options(input: Partial<Parameters<typeof renderStats>[1]> = {}): Parameters<typeof renderStats>[1] {
   return {
