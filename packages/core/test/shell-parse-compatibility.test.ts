@@ -102,7 +102,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       "bash",
       "FOO=bar git status",
       {},
-      { commands: [{ resource: "FOO=bar git status", save: "git status *" }], directories: [] },
+      { commands: [{ resource: "FOO=bar git status", save: "FOO=bar git status *" }], directories: [] },
     ],
     [
       "bash",

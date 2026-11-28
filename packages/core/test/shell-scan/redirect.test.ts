@@ -7,11 +7,7 @@ import { Wildcard } from "../../src/util/wildcard.js"
 async function checkResources(source: string) {
   const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
   for (const command of parsed.commands) {
-    if (
-      !/^[A-Za-z_][A-Za-z0-9_]*=/.test(command.resource) &&
-      !/^(?:\d*>>?|\d*>&|&>>?|\d*<|\d*<>|>\|)/.test(command.resource) &&
-      !command.resource.includes("\\\n")
-    ) {
+    if (!command.resource.includes("\\\n")) {
       expect(Wildcard.match(command.resource, command.save), `${source}: ${JSON.stringify(command)}`).toBe(true)
     }
   }
@@ -156,7 +152,7 @@ describe("Bash redirect resource oracle", () => {
     const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
     expect(parsed.commands).toEqual([
       { resource: "printf ok", save: "printf *" },
-      { resource: "FOO=bar >output git status 3>tail", save: "git status *" },
+      { resource: "FOO=bar >output git status 3>tail", save: "FOO=bar >output git status *" },
     ])
   })
 
