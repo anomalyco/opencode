@@ -97,6 +97,7 @@ const Body = Schema.Struct({
   response_format: Options.fields.responseFormat,
   user: Options.fields.user,
 })
+export type Body = typeof Body.Type
 
 // ---------------------------------------------------------------------------
 // Streaming schemas and state
