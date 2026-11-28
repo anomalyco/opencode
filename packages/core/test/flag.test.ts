@@ -30,11 +30,11 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
     info: new Info(experimental === undefined ? {} : { experimental: new ConfigExperimental.Info(experimental) }),
   })
 
-// todo and opencode_api are opt-in only, so the build defaults and both wildcards leave them off.
-const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
+// todo is opt-in only, so the build defaults and both wildcards leave it off.
+const every = (state: Flag.State, opencode_api: Flag.State = { enabled: false, source: "default" }): Record<Flag.Key, Flag.State> => ({
   ...Record.map(ConfigFlag.registry, () => state),
   todo: { enabled: false, source: "default" },
-  opencode_api: { enabled: false, source: "default" },
+  opencode_api,
 })
 
 describe("Flag.resolve", () => {
@@ -44,7 +44,9 @@ describe("Flag.resolve", () => {
     ["latest", false],
     ["unknown", false],
   ] as const)("applies %s build defaults", (channel, enabled) => {
-    expect(Flag.resolve({ entries: [], channel })).toEqual(every({ enabled, source: "default" }))
+    expect(Flag.resolve({ entries: [], channel })).toEqual(
+      every({ enabled, source: "default" }, { enabled, source: "default" }),
+    )
   })
 
   test.each(["todo"] as const)("%s is opt-in only: on only when named in OPENCODE_FLAGS or experimental.%s", (key) => {
@@ -62,14 +64,17 @@ describe("Flag.resolve", () => {
     })
   })
 
-  test("opencode_api turns on only by name, and only in local and dev builds", () => {
+  test("opencode_api defaults to on in local and dev builds and stays unavailable in releases", () => {
     const resolve = (channel: string, overrides?: string, experimental?: { opencode_api?: boolean }) =>
       Flag.resolve({ entries: experimental ? [document(experimental)] : [], channel, overrides }).opencode_api
-    expect(resolve("dev", "all")).toEqual({ enabled: false, source: "default" })
-    expect(resolve("local", "opencode_api")).toEqual({ enabled: true, source: "env" })
-    expect(resolve("dev", undefined, { opencode_api: true })).toEqual({ enabled: true, source: "config" })
+    expect(resolve("local")).toEqual({ enabled: true, source: "default" })
+    expect(resolve("dev")).toEqual({ enabled: true, source: "default" })
+    expect(resolve("dev", "all")).toEqual({ enabled: true, source: "env" })
+    expect(resolve("dev", "-opencode_api")).toEqual({ enabled: false, source: "env" })
+    expect(resolve("dev", undefined, { opencode_api: false })).toEqual({ enabled: false, source: "config" })
     for (const channel of ["beta", "latest", "my-branch", "unknown"])
-      expect([resolve(channel, "opencode_api"), resolve(channel, undefined, { opencode_api: true })]).toEqual([
+      expect([resolve(channel), resolve(channel, "opencode_api"), resolve(channel, undefined, { opencode_api: true })]).toEqual([
+        { enabled: false, source: "default" },
         { enabled: false, source: "default" },
         { enabled: false, source: "default" },
       ])
@@ -165,7 +170,7 @@ describe("Flag.resolve", () => {
 
   test("experimental.all_flags: false is not a kill switch, and all_flags in OPENCODE_FLAGS does nothing", () => {
     expect(Flag.resolve({ entries: [document({ all_flags: false })], channel: "dev" })).toEqual(
-      every({ enabled: true, source: "default" }),
+      every({ enabled: true, source: "default" }, { enabled: true, source: "default" }),
     )
     expect(Flag.resolve({ entries: [], channel: "latest", overrides: "all_flags" })).toEqual(
       Flag.resolve({ entries: [], channel: "latest" }),
