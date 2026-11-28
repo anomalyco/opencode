@@ -15,6 +15,15 @@ describe("scrollKey", () => {
     ).toBeUndefined()
     expect(scrollKey({ key: "PageUp", altKey: false, ctrlKey: true, metaKey: false, shiftKey: false })).toBeUndefined()
     expect(scrollKey({ key: "End", altKey: false, ctrlKey: false, metaKey: false, shiftKey: true })).toBeUndefined()
+    expect(scrollKey({ key: "Home", altKey: false, ctrlKey: true, metaKey: false, shiftKey: true })).toBeUndefined()
+    expect(scrollKey({ key: "End", altKey: true, ctrlKey: true, metaKey: false, shiftKey: false })).toBeUndefined()
+  })
+
+  test("maps Ctrl and Cmd with Home and End to the edges", () => {
+    expect(scrollKey({ key: "Home", altKey: false, ctrlKey: true, metaKey: false, shiftKey: false })).toBe("home")
+    expect(scrollKey({ key: "End", altKey: false, ctrlKey: true, metaKey: false, shiftKey: false })).toBe("end")
+    expect(scrollKey({ key: "Home", altKey: false, ctrlKey: false, metaKey: true, shiftKey: false })).toBe("home")
+    expect(scrollKey({ key: "End", altKey: false, ctrlKey: false, metaKey: true, shiftKey: false })).toBe("end")
   })
 
   test("maps space and shift-space directions", () => {
@@ -24,6 +33,7 @@ describe("scrollKey", () => {
 })
 
 describe("canScrollKey", () => {
+  // SAFETY: `canScrollKey` reads only these three properties of the element.
   const element = (scrollTop: number, clientHeight = 100, scrollHeight = 300) =>
     ({ scrollTop, clientHeight, scrollHeight }) as HTMLElement
 
