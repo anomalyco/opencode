@@ -553,10 +553,18 @@ export const layer = (options?: Options) =>
             )
             .all()
             .pipe(Effect.orDie)
+          const directSet = new Set(direct)
+          const currentlyActive = yield* execution.active
           for (const { sessionID } of pendingSubagentParents) {
-            if (active.has(sessionID) || suspended.has(sessionID)) continue
+            if (
+              active.has(sessionID) ||
+              currentlyActive.has(sessionID) ||
+              directSet.has(sessionID) ||
+              suspended.has(sessionID)
+            )
+              continue
             const session = yield* store.get(sessionID)
-            if (session?.parentID) wakes.add(sessionID)
+            if (session?.parentID && !session.revert) wakes.add(sessionID)
           }
 
           // Start children only now: their settlement reports wake parents, so the parent's
