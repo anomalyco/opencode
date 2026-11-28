@@ -5,13 +5,32 @@ import { capture, createHarness, execute, type Harness, matches, snapshot, state
 import { SimulationRenderer } from "../src/frontend/renderer"
 import { SimulationSemantics } from "../src/frontend/semantics"
 
-test("matches literal screen text", () => {
-  const harness = { screen: () => "OpenCode [ready].*" }
+test("matches literal screen text", async () => {
+  const harness = { renderOnce: async () => {}, screen: () => "OpenCode [ready].*" }
+  const check = (text: string) => Effect.runPromise(matches(harness, text))
 
-  expect(matches(harness, "OpenCode")).toBe(true)
-  expect(matches(harness, "[ready].*")).toBe(true)
-  expect(matches(harness, "OpenCode.*ready")).toBe(false)
-  expect(matches(harness, "opencode")).toBe(false)
+  expect(await check("OpenCode")).toBe(true)
+  expect(await check("[ready].*")).toBe(true)
+  expect(await check("OpenCode.*ready")).toBe(false)
+  expect(await check("opencode")).toBe(false)
+})
+
+test("matches text changed since the last render", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const renderer = yield* SimulationRenderer.create({ width: 20, height: 3 })
+        const harness = createHarness(renderer)
+        const text = new TextRenderable(renderer, { content: "thinking" })
+        renderer.root.add(text)
+        yield* Effect.promise(() => harness.renderOnce())
+
+        text.content = "The fix is in."
+
+        expect(yield* matches(harness, "The fix is in.")).toBe(true)
+      }),
+    ),
+  )
 })
 
 test("omits an absent focused renderable from state", () => {
