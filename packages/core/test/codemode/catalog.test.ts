@@ -176,7 +176,7 @@ describe("CodeModeInstructions.render", () => {
       "The tools listed below, and `search`, cannot be called directly: they only work as JavaScript inside the `execute` tool.",
     )
     expect(partial).toContain(
-      "The catalog is partial. Before calling a tool that is not listed below, find it with the global `search(...)` function. Do not guess tool names.",
+      "Before calling an unlisted tool, get its signature with the global `search(...)` function, even if you know its name. Do not guess tool names or arguments.",
     )
     expect(partial).toContain("- search(query: string | {")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
@@ -324,7 +324,9 @@ describe("CodeModeInstructions.update", () => {
     const wide = Array.from({ length: 200 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
     const text = update([echo], [echo, ...wide])
     expect(text).toStartWith("The Code Mode tool catalog has changed.\n\nNew tools are available:\n- bulk (200 tools")
-    expect(text).toContain("You can also look up tools that aren't listed with the global `search(...)` function")
+    expect(text).toContain(
+      "Before calling an unlisted tool, get its signature with the global `search(...)` function, even if you know its name. Do not guess tool names or arguments.",
+    )
     expect(text).toContain("- search(query: string | {")
     expect(update([echo, ...wide], [echo, ...wide, entry("bulk.more", "More")])).not.toContain("search(")
     expect(update([echo, ...wide], [echo])).not.toContain("search(")
