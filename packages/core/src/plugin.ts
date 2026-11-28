@@ -77,7 +77,23 @@ const layer = Layer.effect(
         })
       })
       const host = yield* PluginHost.make({ list }, plugin.id).pipe(Effect.provideContext(hostContext))
-      const exit = yield* Effect.suspend(() => plugin.effect(host)).pipe(
+      // A plugin is user code and is never type-checked, so an `async` effect (or one
+      // returning a hook map) passes the loader's "is a function" check and arrives here
+      // as a Promise instead of an Effect. Running it would hang activation forever with
+      // no error, so reject the non-Effect return and mark the plugin failed instead.
+      const exit = yield* Effect.suspend((): Effect.Effect<void, Error, Scope.Scope> => {
+        const effect = plugin.effect(host)
+        const result: unknown = effect
+        if (Effect.isEffect(result)) return effect
+        const received =
+          result instanceof Promise ? "a Promise" : result === null ? "null" : typeof result
+        return Effect.fail(
+          new Error(
+            `Plugin "${plugin.id}" effect must return an Effect, but returned ${received}. ` +
+              `Return an Effect from "effect", or use "setup" for an async function.`,
+          ),
+        )
+      }).pipe(
         grouped,
         inherit,
         Effect.updateContext((context: Context.Context<never>) =>
