@@ -1,10 +1,12 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { InMemoryTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
 import { McpClient } from "@opencode/core/mcp/client"
-import { Cause, Effect, Exit, Fiber, Stream } from "effect"
+import { Cause, Clock, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { hostEnvironmentLayer } from "./fixture/environment"
-import { testEffect } from "./lib/effect"
+import { hostEnvironmentLayer } from "../fixture/environment"
+import { testEffect } from "../lib/effect"
+import { serve } from "./fixture/http"
+import { remote, until, world } from "./harness"
 
 const it = testEffect(hostEnvironmentLayer)
 
@@ -116,7 +118,7 @@ const eventServer = Effect.fnUntraced(function* (
   }
 })
 
-const until = (check: () => boolean) =>
+const reached = (check: () => boolean) =>
   Effect.promise(async () => {
     const deadline = Date.now() + 5_000
     while (!check()) {
@@ -130,8 +132,8 @@ const required = <A>(value: A | undefined) => {
   return value
 }
 
-describe("MCP events", () => {
-  it.live("declares the extension and lists every page of event types", () =>
+describe("MCP events client", () => {
+  it.effect("declares the extension and lists every page of event types", () =>
     Effect.gen(function* () {
       const server = yield* eventServer()
       expect(server.state.capabilities).toMatchObject({ extensions: { "io.modelcontextprotocol/events": {} } })
@@ -148,12 +150,16 @@ describe("MCP events", () => {
       expect(server.state.lists.slice(0, 2)).toEqual([{}, { cursor: "page-2" }])
       // It listens for event list changes and relists once the listen opens, again on a change, and again after a
       // listen the server ended is reopened. Each relist reads both pages.
-      yield* until(() => server.state.listens.length === 1 && server.state.lists.length === 4)
+      yield* reached(() => server.state.listens.length === 1 && server.state.lists.length === 4)
       expect(server.state.listens[0].params).toEqual({ notifications: { eventsListChanged: true } })
       yield* server.notify("list_changed", server.state.listens[0].id)
-      yield* until(() => server.state.lists.length === 6)
+      yield* reached(() => server.state.lists.length === 6)
       yield* server.close(server.state.listens[0].id)
-      yield* until(() => server.state.listens.length === 2 && server.state.lists.length === 8)
+      // The listen reopens after a backoff on the test clock. Nothing else waits on the in-memory server.
+      while (!(server.state.listens.length === 2 && server.state.lists.length === 8)) {
+        yield* Effect.promise(() => Bun.sleep(1))
+        yield* TestClock.adjust("200 millis")
+      }
     }),
   )
 
@@ -163,7 +169,7 @@ describe("MCP events", () => {
       const collected = yield* Stream.runCollect(
         required(server.events).stream({ name: "job.finished", arguments: { job: "j1" }, cursor: "c0" }),
       ).pipe(Effect.forkChild({ startImmediately: true }))
-      yield* until(() => server.state.streams.length === 1)
+      yield* reached(() => server.state.streams.length === 1)
       const stream = server.state.streams[0]
       // Resuming from a cursor replays at most an hour.
       expect(stream.params).toEqual({
@@ -208,7 +214,7 @@ describe("MCP events", () => {
       const collected = yield* Stream.runCollect(required(server.events).stream({ name: "job.finished" })).pipe(
         Effect.forkChild({ startImmediately: true }),
       )
-      yield* until(() => server.state.streams.length === 1)
+      yield* reached(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
       yield* server.notify("terminated", id, {
         error: { code: -32024, message: "Forbidden", data: { reason: "revoked" } },
@@ -222,7 +228,7 @@ describe("MCP events", () => {
           data: { reason: "revoked" },
         }),
       )
-      yield* until(() => server.state.cancelled.includes(id))
+      yield* reached(() => server.state.cancelled.includes(id))
     }),
   )
 
@@ -236,7 +242,7 @@ describe("MCP events", () => {
         )
       const a = yield* first("a")
       const b = yield* first("b")
-      yield* until(() => server.state.streams.length === 2)
+      yield* reached(() => server.state.streams.length === 2)
       const [streamA, streamB] = server.state.streams
       yield* server.event(streamB.id, "for-b")
       yield* server.event(streamA.id, "for-a")
@@ -251,11 +257,11 @@ describe("MCP events", () => {
       const head = yield* Stream.runHead(required(server.events).stream({ name: "job.finished" })).pipe(
         Effect.forkChild({ startImmediately: true }),
       )
-      yield* until(() => server.state.streams.length === 1)
+      yield* reached(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
       yield* server.notify("active", id, { cursor: null, truncated: false, heartbeatMs: 30_000 })
       expect(yield* Fiber.join(head)).toMatchObject({ value: { type: "active", cursor: null } })
-      yield* until(() => server.state.cancelled.includes(id))
+      yield* reached(() => server.state.cancelled.includes(id))
     }),
   )
 
@@ -270,11 +276,11 @@ describe("MCP events", () => {
           Stream.runCollect,
           Effect.forkChild({ startImmediately: true }),
         )
-      yield* until(() => server.state.streams.length === 1)
+      yield* reached(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
       // A 10 second grant allows 30 seconds of silence from the last message.
       yield* server.notify("active", id, { cursor: null, heartbeatMs: 10_000 })
-      yield* until(() => received.includes("active"))
+      yield* reached(() => received.includes("active"))
       yield* TestClock.adjust("29 seconds")
       yield* Effect.yieldNow
       expect(collected.pollUnsafe()).toBeUndefined()
@@ -283,7 +289,7 @@ describe("MCP events", () => {
       expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(
         new Error("MCP server jobs stopped sending event stream heartbeats"),
       )
-      yield* until(() => server.state.cancelled.includes(id))
+      yield* reached(() => server.state.cancelled.includes(id))
     }),
   )
 
@@ -295,5 +301,173 @@ describe("MCP events", () => {
       expect(undeclared.events).toBeUndefined()
       expect(undeclared.state.capabilities).not.toHaveProperty("extensions")
     }),
+  )
+})
+
+describe("MCP event subscriptions", () => {
+  testEffect(Layer.empty).effect(
+    "back off failed opens, reset after a confirmed open, and mark a replay gap once",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* serve({ era: "modern", events: true })
+        // The first two opens fail, each once the test releases it.
+        const failures = yield* Queue.unbounded<void>()
+        const failing = { left: 2 }
+        server.intercept(async (_, body) => {
+          if (body?.method !== "events/stream" || failing.left === 0) return undefined
+          failing.left--
+          await Effect.runPromise(Queue.take(failures))
+          return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Temporary failure" } })
+        })
+        const place = yield* (yield* world).open({ servers: { fixture: remote(server.url) } })
+        yield* place.settled("fixture")
+        const events = yield* place.mcp.events("fixture")
+        if (!events) throw new Error("expected MCP events")
+        const clock = yield* Clock.Clock
+        const openedAt: number[] = []
+        const failed = yield* Queue.unbounded<void>()
+        const open = events.stream
+        // A failed open stays pending. Wait for the client stream to fail, not just for the server to reply.
+        using observer = spyOn(events, "stream")
+        observer.mockImplementation((input) => {
+          openedAt.push(clock.currentTimeMillisUnsafe())
+          return open(input).pipe(Stream.onError(() => Queue.offer(failed, undefined)))
+        })
+        // Each reopen waits its delay after the stream ended, jittered to between 0.8 and 1.2 times it. The test clock
+        // moves only when adjusted, so the time read once the end is seen is exact. A failed open is released only after
+        // the adjust that started it returns, so its reply can't land mid-adjust.
+        const waited = (delay: number, since: number) => {
+          const gap = openedAt[openedAt.length - 1] - since
+          expect(gap).toBeGreaterThanOrEqual(delay * 0.8)
+          expect(gap).toBeLessThanOrEqual(delay * 1.2)
+        }
+        const status = () => place.mcp.subscriptions().pipe(Effect.map((all) => all[0]))
+        const settled = <A>(effect: Effect.Effect<A>, ready: (value: A) => boolean) =>
+          Effect.gen(function* () {
+            while (true) {
+              const value = yield* effect
+              if (ready(value)) return value
+              yield* Effect.promise(() => Bun.sleep(1))
+            }
+          })
+        yield* place.mcp.subscribe("fixture", { name: "job.finished" })
+        yield* Queue.offer(failures, undefined)
+        yield* Queue.take(failed)
+        const first = clock.currentTimeMillisUnsafe()
+        yield* TestClock.adjust("1200 millis")
+        expect(openedAt).toHaveLength(2)
+        waited(1000, first)
+        yield* Queue.offer(failures, undefined)
+        yield* Queue.take(failed)
+        const second = clock.currentTimeMillisUnsafe()
+        yield* TestClock.adjust("2400 millis")
+        expect(openedAt).toHaveLength(3)
+        waited(2000, second)
+
+        const stream = yield* server.opened
+        yield* settled(status(), (sub) => sub?.status.status === "active")
+        stream.send("notifications/events/heartbeat", { cursor: "c5" })
+        const closed = clock.currentTimeMillisUnsafe()
+        stream.close()
+        expect(yield* settled(status(), (sub) => sub?.status.status === "pending")).toMatchObject({ cursor: "c5" })
+        yield* TestClock.adjust("1200 millis")
+        expect(openedAt).toHaveLength(4)
+        waited(1000, closed)
+        const reopened = yield* server.opened
+        expect(reopened.params).toMatchObject({ cursor: "c5" })
+        // The server says it skipped events it could not replay: only the next one delivered is marked.
+        reopened.send("notifications/events/active", { cursor: "c8", truncated: true, heartbeatMs: 30_000 })
+        const [gap, next] = [server.emit(), server.emit()]
+        const delivered = yield* settled(
+          Effect.sync(() => place.events.filter((event) => event.type === "experimental.mcp.event")),
+          (list) => list.length === 2,
+        )
+        expect(delivered.map((event) => event.data)).toMatchObject([
+          { eventId: gap, truncated: true },
+          { eventId: next },
+        ])
+        expect(delivered[1]?.data).not.toHaveProperty("truncated")
+      }),
+  )
+
+  testEffect(Layer.empty).live("end when the server terminates or rejects them, or offers no events", () =>
+    Effect.gen(function* () {
+      const server = yield* serve({ era: "modern", events: true })
+      const plain = yield* serve({ era: "modern" })
+      const place = yield* (yield* world).open({ servers: { fixture: remote(server.url), plain: remote(plain.url) } })
+      yield* place.settled("fixture")
+      yield* place.settled("plain")
+      const status = (id: string) =>
+        place.mcp.subscriptions().pipe(Effect.map((all) => all.find((sub) => sub.id === id)?.status))
+      const ended = (id: string) => until(`${id} to end`, status(id), (value) => value?.status === "ended")
+
+      const finished = yield* place.mcp.subscribe("fixture", { name: "job.finished" })
+      const stream = yield* server.opened
+      stream.send("notifications/events/terminated", { error: { code: -32024, message: "Revoked" } })
+      expect(yield* ended(finished.id)).toEqual({
+        status: "ended",
+        reason: "terminated",
+        error: { code: -32024, message: "Revoked" },
+      })
+      // An unlisted type is refused without asking the server.
+      const missing = yield* place.mcp.subscribe("fixture", { name: "missing" })
+      expect(yield* ended(missing.id)).toMatchObject({ status: "ended", reason: "rejected", error: { code: -32023 } })
+      expect(server.seen.methods.filter((method) => method === "events/stream")).toHaveLength(1)
+
+      expect(yield* place.mcp.events("plain")).toBeUndefined()
+      const none = yield* place.mcp.subscribe("plain", { name: "job.finished" })
+      expect(yield* ended(none.id)).toEqual({ status: "ended", reason: "unavailable" })
+    }),
+  )
+
+  testEffect(Layer.empty).live(
+    "send an event type's arguments as headers, relisting once when the server says they are stale",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* serve({ era: "modern", events: true })
+        const streams: Array<string | null> = []
+        // From the second listing on, `job` is mirrored into a header, which the server requires.
+        server.intercept((request, body) => {
+          if (body?.method === "events/list")
+            return Response.json({
+              jsonrpc: "2.0",
+              id: body.id,
+              result: {
+                resultType: "complete",
+                events: [
+                  {
+                    name: "job.finished",
+                    delivery: ["push"],
+                    inputSchema: {
+                      type: "object",
+                      properties: {
+                        job: {
+                          type: "string",
+                          ...(server.seen.methods.filter((method) => method === "events/list").length > 1
+                            ? { "x-mcp-header": "Job" }
+                            : {}),
+                        },
+                      },
+                    },
+                    payloadSchema: { type: "object" },
+                  },
+                ],
+              },
+            })
+          if (body?.method !== "events/stream") return undefined
+          streams.push(request.headers.get("mcp-param-job"))
+          if (request.headers.get("mcp-name") !== "job.finished") return new Response(null, { status: 400 })
+          if (request.headers.get("mcp-param-job") === null)
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32020, message: "Header mismatch" } },
+              { status: 400 },
+            )
+        })
+        const place = yield* (yield* world).open({ servers: { fixture: remote(server.url) } })
+        yield* place.settled("fixture")
+        yield* place.mcp.subscribe("fixture", { name: "job.finished", arguments: { job: "j1" } })
+        yield* server.opened
+        expect(streams).toEqual([null, "j1"])
+      }),
   )
 })

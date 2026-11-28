@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import path from "node:path"
 
-const root = path.resolve(import.meta.dir, "../../..")
+const root = path.resolve(import.meta.dir, "../../../..")
 const mcp = "packages/core/src/mcp/index.ts"
 // Every built-in plugin loads at Location startup, whether or not any MCP server is configured.
 const plugins = "packages/core/src/plugin/internal.ts"
