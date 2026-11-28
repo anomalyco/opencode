@@ -20,6 +20,8 @@ export type RouteTabSnapshot = {
   /** The root to open a tab for: the routed session while it is pending, or a root confirmed by the cache. */
   readonly rootID: string | undefined
   readonly serverReady: boolean
+  /** Whether a route without a tab opens one. The Inbox layout lists sessions in place of tabs, so it opens none. */
+  readonly addsTabs: boolean
 }
 
 // Where the routed session stands in the tab strip. `closed` means its tab closed while the route still showed it; it
@@ -38,6 +40,7 @@ export type RouteTabState =
       readonly target: RouteTarget
       readonly tab: RouteTabPresence
       readonly lookup: RouteLookup
+      readonly addsTabs: boolean
     }
   | { readonly status: "disposed" }
 
@@ -88,7 +91,7 @@ export function transitionRouteTab(state: RouteTabState, event: RouteTabEvent): 
   if (event.type === "resolve.failed") return changed({ ...state, lookup: "failed" })
 
   // Only a route without a tab opens its root's; a child whose lookup failed never opens one of its own.
-  if (state.tab !== "missing") return changed({ ...state, lookup: "resolved" })
+  if (state.tab !== "missing" || !state.addsTabs) return changed({ ...state, lookup: "resolved" })
 
   return changed({ ...state, tab: "adding", lookup: "resolved" }, [
     { type: "tab.add", server: state.target.server, sessionID: event.rootID },
@@ -130,8 +133,9 @@ function sync(state: Exclude<RouteTabState, { status: "disposed" }>, snapshot: R
     status: "session",
     attempt,
     target,
-    tab: tab === "missing" && snapshot.rootID ? "adding" : tab,
+    tab: tab === "missing" && snapshot.rootID && snapshot.addsTabs ? "adding" : tab,
     lookup: start ? "resolving" : lookup,
+    addsTabs: snapshot.addsTabs,
   }
 
   const effects = [
@@ -143,7 +147,13 @@ function sync(state: Exclude<RouteTabState, { status: "disposed" }>, snapshot: R
     ...(snapshot.tab ? [...routeTab(snapshot, snapshot.tab), ...remember(snapshot)] : []),
   ]
 
-  if (current && current.tab === next.tab && current.lookup === next.lookup && current.attempt === next.attempt)
+  if (
+    current &&
+    current.tab === next.tab &&
+    current.lookup === next.lookup &&
+    current.attempt === next.attempt &&
+    current.addsTabs === next.addsTabs
+  )
     return changed(current, effects)
 
   return changed(next, effects)

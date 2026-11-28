@@ -1,0 +1,843 @@
+//! Prompt editing and submission over a request-recording transport.
+
+use crate::support::{self, Harness, WAIT, deref_harness, list};
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use opencode_api::generated::SessionID;
+use opencode_api::transport::{BoxFuture, Request, Response, Transport};
+use opencode_tui::dialogs::settings;
+use opencode_tui::{Deps, Route};
+use opentui::prelude::*;
+use serde_json::{Value, json};
+
+type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
+
+/// Serves a session `ses_a` (agent `build`, model `p/m`), the location catalog, and the prompt
+/// writes; a session reads as `SessionNotFoundError` until its create lands, which takes 200 ms;
+/// anything else is a 404. The agent and model reads answer once `catalog` is set.
+struct Fixture {
+    seen: Seen,
+    created: Arc<Mutex<Vec<String>>>,
+    catalog: Arc<AtomicBool>,
+    /// A create sent while this is set answers 400 once it is cleared again.
+    reject: Arc<AtomicBool>,
+    /// GET paths it answers with a value of the test's, before any other answer.
+    reads: Vec<(String, Value)>,
+}
+
+fn missing(id: &str) -> (u16, Value) {
+    (404, json!({ "_tag": "SessionNotFoundError", "sessionID": id, "message": format!("Session not found: {id}") }))
+}
+
+impl Transport for Fixture {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
+        let path = request.url.path().to_owned();
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
+        let created = (request.method == "POST" && path == "/api/session")
+            .then(|| (self.created.clone(), body["id"].as_str().unwrap_or_default().to_owned()));
+        let read = self.reads.iter().find(|(known, _)| request.method == "GET" && *known == path);
+        let (status, body) = match (request.method, path.as_str()) {
+            _ if let Some((_, value)) = read => (200, value.clone()),
+            ("GET", "/api/session") => (200, json!({ "data": [session("ses_a")], "cursor": {} })),
+            ("GET", "/api/session/ses_a") => (200, json!({ "data": session("ses_a") })),
+            ("GET", "/api/session/ses_a/message") => (200, json!({ "data": [], "cursor": {} })),
+            ("GET", "/api/agent") => (
+                200,
+                list(
+                    "/project",
+                    json!([
+                        support::agent("build", "primary", false),
+                        support::agent("plan", "primary", false),
+                        support::agent("general", "subagent", false),
+                    ]),
+                ),
+            ),
+            ("GET", "/api/model") => {
+                let model =
+                    support::merge(support::model("p", "m", "Model M"), json!({ "variants": [{ "id": "high" }] }));
+                (200, list("/project", json!([model])))
+            }
+            ("GET", "/api/provider") => (200, list("/project", json!([]))),
+            ("GET", "/api/config") => (200, json!([])),
+            ("GET", "/api/command") => (200, list("/project", json!([{ "name": "review" }]))),
+            ("POST", "/api/session") => (200, json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) })),
+            ("POST", path) if path.ends_with("/prompt") => (
+                200,
+                json!({
+                    "data": {
+                        "id": body["id"], "sessionID": path.split('/').nth(3), "time": { "created": 1 }, "type": "user",
+                        "payload": { "text": body["text"] }, "delivery": body["delivery"].as_str().unwrap_or("steer"),
+                    }
+                }),
+            ),
+            ("POST", path) if path.ends_with("/interrupt") => (200, json!({ "interrupted": true })),
+            ("GET", path) if path.starts_with("/api/session/ses_") => {
+                let id = path.split('/').nth(3).unwrap_or_default();
+                // `ses_a` exists from the start: a not-found read of its inbox would delete it.
+                let created = id == "ses_a" || self.created.lock().unwrap().iter().any(|known| known == id);
+                match path.split('/').nth(4) {
+                    _ if !created => missing(id),
+                    None => (200, json!({ "data": session(id) })),
+                    Some("message") => (200, json!({ "data": [], "cursor": {} })),
+                    Some(_) => (200, json!({ "data": [] })),
+                }
+            }
+            ("PATCH", path) if path.contains("/inbox/") => (204, Value::Null),
+            ("POST", path)
+                if ["/model", "/agent", "/shell", "/command", "/background", "/wait"]
+                    .iter()
+                    .any(|end| path.ends_with(end)) =>
+            {
+                (204, Value::Null)
+            }
+            _ => support::not_found(),
+        };
+        let catalog = ["/api/agent", "/api/model"].contains(&path.as_str()).then(|| self.catalog.clone());
+        let reject = self.reject.load(Ordering::SeqCst).then(|| self.reject.clone());
+        Box::pin(async move {
+            while catalog.as_ref().is_some_and(|catalog| !catalog.load(Ordering::SeqCst)) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            if let Some((created, id)) = created {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                if let Some(reject) = reject {
+                    while reject.load(Ordering::SeqCst) {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    return Ok(support::respond(400, &json!({ "_tag": "BadRequest", "message": "Bad location" })));
+                }
+                created.lock().unwrap().push(id);
+            }
+            Ok(support::respond(status, &body))
+        })
+    }
+}
+
+fn session(id: &str) -> Value {
+    support::merge(support::catalog_session(), json!({ "id": id }))
+}
+
+pub(crate) struct Setup {
+    harness: Harness,
+    seen: Seen,
+    catalog: Arc<AtomicBool>,
+    reject: Arc<AtomicBool>,
+    _home: opencode_util::temp::TempDir,
+}
+
+deref_harness!(Setup);
+
+impl Setup {
+    pub(crate) fn new(route: Route) -> Self {
+        let home = opencode_util::temp::tempdir().unwrap();
+        Self::with_home(route, home)
+    }
+
+    /// The agent and model reads wait for `catalog` to be set.
+    fn held(route: Route) -> Self {
+        Self::build(route, opencode_util::temp::tempdir().unwrap(), false)
+    }
+
+    fn with_home(route: Route, home: opencode_util::temp::TempDir) -> Self {
+        Self::build(route, home, true)
+    }
+
+    pub(crate) fn serving(route: Route, reads: Vec<(&str, Value)>, width: u16) -> Self {
+        let reads = reads.into_iter().map(|(path, value)| (path.to_owned(), value)).collect();
+        Self::build_with(route, opencode_util::temp::tempdir().unwrap(), true, reads, width)
+    }
+
+    fn build(route: Route, home: opencode_util::temp::TempDir, catalog: bool) -> Self {
+        Self::build_with(route, home, catalog, Vec::new(), 90)
+    }
+
+    fn build_with(
+        route: Route,
+        home: opencode_util::temp::TempDir,
+        catalog: bool,
+        reads: Vec<(String, Value)>,
+        width: u16,
+    ) -> Self {
+        let seen = Seen::default();
+        let catalog = Arc::new(AtomicBool::new(catalog));
+        let reject = Arc::new(AtomicBool::new(false));
+        let fixture = Fixture {
+            seen: seen.clone(),
+            created: Arc::default(),
+            catalog: catalog.clone(),
+            reject: reject.clone(),
+            reads,
+        };
+        let deps = Deps {
+            roots: support::roots(support::paths(home.path()), "latest"),
+            route,
+            ..support::deps(Arc::new(fixture))
+        };
+        Self { harness: support::mount(width, 24, deps), seen, catalog, reject, _home: home }
+    }
+
+    /// Waits for the catalog, which shows the agent and model under the prompt.
+    pub(crate) fn ready(&self) {
+        self.wait_for("Model M");
+    }
+
+    pub(crate) fn requests(&self, method: &str, suffix: &str) -> Vec<Value> {
+        self.seen
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(m, path, _)| m == method && path.ends_with(suffix))
+            .map(|(_, _, body)| body.clone())
+            .collect()
+    }
+
+    pub(crate) fn wait_request(&self, method: &str, suffix: &str, count: usize) -> Vec<Value> {
+        let found = self.app.wait_until(WAIT, || self.requests(method, suffix).len() >= count);
+        assert!(found, "no {method} …{suffix}: {:?}", self.seen.lock().unwrap());
+        self.requests(method, suffix)
+    }
+
+    fn history(&self) -> String {
+        std::fs::read_to_string(self._home.path().join("state/prompt-history.jsonl")).unwrap_or_default()
+    }
+
+    fn wait_history(&self, lines: usize) -> String {
+        let found = self.app.wait_until(WAIT, || self.history().lines().count() >= lines);
+        assert!(found, "history has {:?}", self.history());
+        self.history()
+    }
+}
+
+pub(crate) fn session_route() -> Route {
+    support::session_route("ses_a")
+}
+
+#[test]
+fn typing_edits_through_the_input_layer_and_enter_submits() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    let screen = setup.wait_for("Build");
+    assert!(screen.contains("Build · Model M p"), "{screen}");
+    assert!(setup.app.app().focused().is_some_and(|widget| widget.id() == setup.textarea().id()));
+
+    setup.app.type_text("hllo worlx");
+    setup.app.press("alt+b");
+    setup.app.press("alt+b");
+    setup.app.press("right");
+    setup.app.type_text("e");
+    setup.app.press("ctrl+e");
+    setup.app.press("backspace");
+    setup.app.type_text("d");
+    assert_eq!(setup.textarea().text(), "hello world");
+    setup.app.press("shift+return");
+    setup.app.type_text("a");
+    setup.app.feed(b"\n");
+    setup.app.type_text("b");
+    assert_eq!(setup.textarea().text(), "hello world\na\nb");
+    assert!(setup.textarea().keymap().is_empty());
+
+    setup.app.press("return");
+    let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(prompts[0]["text"], "hello world\na\nb");
+    assert_eq!(prompts[0]["delivery"], "steer");
+    // The selection is committed before the prompt is sent.
+    let models = setup.requests("POST", "/api/session/ses_a/model");
+    assert_eq!(models[0]["model"], json!({ "providerID": "p", "id": "m" }));
+    assert!(setup.requests("POST", "/api/session/ses_a/agent").is_empty());
+    assert_eq!(setup.textarea().text(), "");
+    // The optimistic prompt shows in the transcript at once.
+    setup.wait_for("hello world");
+}
+
+#[test]
+fn queue_and_empty_submit_and_exit_words() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    // Enter on an empty prompt with nothing queued sends nothing.
+    setup.app.press("return");
+    setup.app.type_text("later");
+    // `prompt.queue` is `<leader>return`.
+    setup.app.press("ctrl+x");
+    setup.app.press("return");
+    let prompts = setup.wait_request("POST", "/prompt", 1);
+    assert_eq!(prompts.len(), 1, "{prompts:?}");
+    assert_eq!(prompts[0]["delivery"], "queue");
+    // Now an empty Enter steers the queued prompt (`onEmptySubmit`).
+    setup.app.press("return");
+    let id = prompts[0]["id"].as_str().unwrap();
+    let steers = setup.wait_request("PATCH", &format!("/api/session/ses_a/inbox/{id}"), 1);
+    assert_eq!(steers[0]["delivery"], "steer");
+
+    // Shell prompts cannot be queued; the text stays.
+    setup.app.type_text("!ls");
+    setup.app.press("ctrl+x");
+    setup.app.press("return");
+    setup.wait_for("This prompt cannot be queued");
+    assert_eq!(setup.textarea().text(), "ls");
+    setup.app.press("escape");
+    setup.app.press("ctrl+c");
+
+    // `exit`, `quit`, and `:q` exit instead of sending.
+    setup.app.type_text(":q");
+    setup.app.press("return");
+    assert!(setup.app.app().is_quitting());
+    assert_eq!(setup.requests("POST", "/prompt").len(), 1);
+}
+
+#[test]
+fn history_steps_through_submitted_prompts_and_is_written_as_typescript_writes_it() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    for text in ["first", "second"] {
+        setup.app.type_text(text);
+        setup.app.press("return");
+    }
+    let history = setup.wait_history(2);
+    assert_eq!(
+        history,
+        "{\"text\":\"first\",\"files\":[],\"agents\":[],\"skills\":[],\"pasted\":[],\"mode\":\"normal\"}\n\
+         {\"text\":\"second\",\"files\":[],\"agents\":[],\"skills\":[],\"pasted\":[],\"mode\":\"normal\"}\n"
+    );
+
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "second");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "first");
+    // At the start of a one-line prompt, Down moves to the end first, then steps.
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "first");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "second");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "");
+
+    // Up inside a multi-line prompt moves the cursor before it steps.
+    setup.app.type_text("one");
+    setup.app.press("shift+return");
+    setup.app.type_text("two");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "one\ntwo");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().cursor_offset(), 0);
+    // A typed prompt is kept as the draft while Up recalls the newest entry (#63262).
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "second");
+    setup.app.press("ctrl+e");
+    setup.app.type_text("!");
+    setup.app.press("ctrl+a");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "second!");
+    setup.app.press("ctrl+e");
+    setup.app.press("backspace");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "one\ntwo");
+}
+
+/// With history unbound, Down still moves through a multi-line prompt before it opens the subagent picker (#64301).
+#[test]
+fn down_moves_through_a_multiline_prompt_when_history_is_unbound() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    settings::update(&setup.tui, |draft| {
+        settings::set_path(draft, &["keybinds", "prompt.history.next"], json!("none"));
+        settings::set_path(draft, &["keybinds", "prompt.history.previous"], json!("none"));
+    });
+    setup.wait("history unbound", || setup.tui.keymap.shortcut("prompt.history.next").is_none());
+    let textarea = setup.textarea();
+    setup.app.type_text("one");
+    setup.app.press("shift+return");
+    setup.app.type_text("two");
+    setup.app.press("shift+return");
+    setup.app.type_text("three");
+    textarea.set_cursor_offset(0);
+
+    setup.app.press("down");
+    assert_eq!(textarea.cursor_offset(), "one\n".len() as u32);
+    setup.app.press("down");
+    assert_eq!(textarea.cursor_offset(), "one\ntwo\n".len() as u32);
+    assert!(setup.app.app().focused().is_some_and(|widget| widget.id() == textarea.id()));
+    setup.app.press("down");
+    setup.wait("the subagent picker", || setup.app.text().contains("No active subagents"));
+}
+
+#[test]
+fn popping_a_stashed_shell_draft_restores_shell_mode() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("!echo pen");
+    setup.wait_for("Shell");
+    setup.tui.keymap.dispatch("prompt.stash", None);
+    setup.wait_gone("echo pen");
+    setup.wait_gone("Shell");
+    assert_eq!(setup.textarea().text(), "");
+
+    setup.tui.keymap.dispatch("prompt.stash.pop", None);
+    setup.wait_for("Shell");
+    assert_eq!(setup.textarea().text(), "echo pen");
+}
+
+#[test]
+fn selecting_a_stashed_shell_draft_from_the_stash_list_restores_shell_mode() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("!echo pen");
+    setup.wait_for("Shell");
+    setup.tui.keymap.dispatch("prompt.stash", None);
+    setup.wait_gone("echo pen");
+    setup.wait_gone("Shell");
+
+    setup.tui.keymap.dispatch("prompt.stash.list", None);
+    setup.wait_for("echo pen");
+    setup.app.press("return");
+    setup.wait_for("Shell");
+    assert_eq!(setup.textarea().text(), "echo pen");
+}
+
+#[test]
+fn down_past_the_newest_entry_restores_the_draft_text_and_shell_mode() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("previous");
+    setup.app.press("return");
+    setup.wait_history(1);
+    setup.app.type_text("!echo pen");
+    setup.wait_for("Shell");
+    setup.app.press("ctrl+a");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "previous");
+    setup.wait_gone("Shell");
+    setup.app.press("ctrl+e");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "echo pen");
+    setup.wait_for("Shell");
+}
+
+// #63262: clearing a recalled entry drops the draft, so Down stays empty.
+#[test]
+fn clearing_a_recalled_entry_drops_the_draft_so_down_stays_empty() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("previous");
+    setup.app.press("return");
+    setup.wait_history(1);
+    setup.app.type_text("unsent");
+    setup.app.press("ctrl+a");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "previous");
+    setup.app.press("ctrl+c");
+    assert_eq!(setup.textarea().text(), "");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "");
+}
+
+#[test]
+fn shell_mode_runs_the_command_and_its_keys_leave_it() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("!");
+    setup.wait_for("Shell");
+    assert_eq!(setup.textarea().text(), "");
+    setup.app.press("backspace");
+    setup.wait_for("Build");
+    setup.app.type_text("a!");
+    assert_eq!(setup.textarea().text(), "a!");
+    setup.app.press("ctrl+c");
+    assert_eq!(setup.textarea().text(), "");
+
+    setup.app.type_text("!");
+    setup.wait_for("Shell");
+    setup.app.press("escape");
+    setup.wait_for("Build");
+
+    setup.app.type_text("!ls -la");
+    setup.app.press("return");
+    let shells = setup.wait_request("POST", "/api/session/ses_a/shell", 1);
+    assert_eq!(shells[0]["command"], "ls -la");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+    setup.wait_for("Build");
+    let history = setup.wait_history(1);
+    assert!(history.ends_with("\"mode\":\"shell\"}\n"), "{history}");
+    // Up restores the entry in shell mode.
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "ls -la");
+    setup.wait_for("Shell");
+}
+
+#[test]
+fn ctrl_c_clears_then_exits_and_long_prompts_go_to_history() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("short");
+    setup.app.press("ctrl+c");
+    assert_eq!(setup.textarea().text(), "");
+    assert!(!setup.app.app().is_quitting());
+    setup.app.type_text("a prompt long enough to keep");
+    setup.app.press("ctrl+c");
+    let history = setup.wait_history(1);
+    assert!(history.contains("a prompt long enough to keep"), "{history}");
+    assert!(!history.contains("short"), "{history}");
+    setup.app.press("ctrl+c");
+    assert!(setup.app.app().is_quitting());
+}
+
+#[test]
+fn drafts_survive_route_changes() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("unfinished");
+    setup.tui.navigate(Route::Home);
+    setup.wait_for("█▀▀█");
+    setup.tui.navigate(session_route());
+    setup.ready();
+    assert_eq!(setup.textarea().text(), "unfinished");
+    setup.app.press("ctrl+c");
+    setup.tui.navigate(Route::Home);
+    setup.tui.navigate(session_route());
+    setup.ready();
+    assert_eq!(setup.textarea().text(), "");
+}
+
+#[test]
+fn escape_twice_interrupts_a_running_session() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.tui.data.set_status(&SessionID("ses_a".into()), opencode_store::SessionStatus::Running);
+    setup.wait_for("esc interrupt");
+    setup.app.press("escape");
+    setup.wait_for("esc again to interrupt");
+    assert!(setup.requests("POST", "/interrupt").is_empty());
+    setup.app.press("escape");
+    setup.wait_request("POST", "/api/session/ses_a/interrupt", 1);
+    // `session.background` is Ctrl+B while it runs.
+    setup.app.press("ctrl+b");
+    setup.wait_request("POST", "/api/session/ses_a/background", 1);
+}
+
+#[test]
+fn home_prompt_creates_a_session_and_opens_it() {
+    let setup = Setup::new(Route::Home);
+    setup.ready();
+    setup.app.type_text("Reply with ok");
+    setup.app.press("return");
+    let created = setup.wait_request("POST", "/api/session", 1);
+    let created: Vec<_> = created.into_iter().filter(|body| body.get("id").is_some()).collect();
+    assert_eq!(created[0]["agent"], "build");
+    assert_eq!(created[0]["model"], json!({ "providerID": "p", "id": "m" }));
+    let id = created[0]["id"].as_str().unwrap().to_owned();
+    let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
+    assert_eq!(prompts[0]["text"], "Reply with ok");
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
+    assert!(opened, "{:?}", setup.tui.route());
+    setup.wait_for("Reply with ok");
+    // The new session reads nothing before its create lands, so no "Session not found" toast.
+    let toast = setup.app.wait_until(Duration::from_millis(500), || setup.app.text().contains("not found"));
+    assert!(!toast, "{}", setup.app.text());
+}
+
+#[test]
+fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
+    let setup = Setup::new(Route::Home);
+    setup.reject.store(true, Ordering::SeqCst);
+    setup.ready();
+    setup.app.type_text("First try");
+    setup.app.press("return");
+    let created = setup.wait_request("POST", "/api/session", 1);
+    let id = SessionID(created[0]["id"].as_str().unwrap().to_owned());
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Session { id: id.clone() });
+    assert!(opened, "{:?}", setup.tui.route());
+    setup.app.type_text("follow up");
+    // Release the failure only after the session becomes visible.
+    setup.reject.store(false, Ordering::SeqCst);
+    setup.wait_for("Creating a session failed");
+    let home = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Home);
+    assert!(home, "{:?}", setup.tui.route());
+    let text = || setup.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default();
+    assert!(setup.app.wait_until(WAIT, || text() == "follow up"), "{:?}", text());
+    let tabs = setup.tui.tabs.tabs(&setup.tui);
+    assert!(tabs.iter().all(|tab| tab.session_id != id.0), "{tabs:?}");
+}
+
+#[test]
+fn a_missing_session_closes_its_tab() {
+    let setup = Setup::new(support::session_route("ses_gone"));
+    setup.wait_for("Session not found: ses_gone");
+    let home = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Home);
+    assert!(home, "{:?}", setup.tui.route());
+    let tabs = setup.tui.tabs.tabs(&setup.tui);
+    assert!(tabs.iter().all(|tab| tab.session_id != "ses_gone"), "{tabs:?}");
+}
+
+#[test]
+fn home_prompt_shows_a_placeholder_example_and_a_shell_one_in_shell_mode() {
+    let setup = Setup::new(Route::Home);
+    setup.ready();
+    let screen = setup.wait_for("Ask anything… \"");
+    let examples = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"];
+    assert!(examples.iter().any(|example| screen.contains(&format!("Ask anything… \"{example}\""))), "{screen}");
+    setup.app.type_text("!");
+    let screen = setup.wait_for("Run a command… \"");
+    assert!(
+        ["ls -la", "git status", "pwd"].iter().any(|example| screen.contains(&format!("\"{example}\""))),
+        "{screen}"
+    );
+    let setup = Setup::new(session_route());
+    setup.ready();
+    assert!(!setup.app.text().contains("Ask anything"), "{}", setup.app.text());
+}
+
+#[test]
+fn a_theme_switch_restyles_home_in_place() {
+    support::assert_restyles_in_place(
+        || Setup::new(Route::Home),
+        |setup| {
+            setup.ready();
+            setup.app.type_text("!ls -la");
+        },
+        |screen| screen.contains("ls -la") && screen.contains("Shell"),
+    );
+}
+
+#[test]
+fn enter_before_the_catalog_loads_submits_once_it_has() {
+    let setup = Setup::held(Route::Home);
+    setup.app.type_text("Reply with ok");
+    setup.app.press("return");
+    // Nothing is sent without an agent and a model, and the text stays.
+    let sent = setup.app.wait_until(Duration::from_millis(300), || !setup.requests("POST", "/api/session").is_empty());
+    assert!(!sent, "{:?}", setup.seen.lock().unwrap());
+    assert!(!setup.app.text().contains("Model M"), "{}", setup.app.text());
+    assert_eq!(setup.textarea().text(), "Reply with ok");
+
+    setup.catalog.store(true, Ordering::SeqCst);
+    let created = setup.wait_request("POST", "/api/session", 1);
+    assert_eq!(created[0]["agent"], "build");
+    assert_eq!(created[0]["model"], json!({ "providerID": "p", "id": "m" }));
+    let id = created[0]["id"].as_str().unwrap().to_owned();
+    let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
+    assert_eq!(prompts[0]["text"], "Reply with ok");
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
+    assert!(opened, "{:?}", setup.tui.route());
+}
+
+#[test]
+fn an_early_enter_is_dropped_when_the_text_changes_before_the_catalog_loads() {
+    let setup = Setup::held(Route::Home);
+    setup.app.type_text("Reply");
+    setup.app.press("return");
+    setup.app.type_text(" with ok");
+    setup.catalog.store(true, Ordering::SeqCst);
+    setup.ready();
+    let sent = setup.app.wait_until(Duration::from_millis(300), || !setup.requests("POST", "/api/session").is_empty());
+    assert!(!sent, "{:?}", setup.seen.lock().unwrap());
+    assert_eq!(setup.textarea().text(), "Reply with ok");
+}
+
+/// Check history-file interoperability in both directions.
+#[test]
+fn history_file_is_shared_with_typescript() {
+    let Some(root) = support::ts_root() else { return };
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("first");
+    setup.app.press("return");
+    setup.app.type_text("!ls -la");
+    setup.app.press("return");
+    setup.app.type_text("second \"quoted\" ünïcode");
+    setup.app.press("return");
+    let rust = setup.wait_history(3);
+    let state = setup._home.path().join("state");
+
+    let entry =
+        json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [], "mode": "normal" });
+    let moves = support::solid_oracle(
+        "E.2-history.ts",
+        &root,
+        &[&state],
+        &json!([
+            { "move": [-1, ""] },
+            { "move": [-1, "second \"quoted\" ünïcode"] },
+            { "move": [-1, "ls -la"] },
+            { "move": [-1, "first"] },
+            { "append": entry },
+        ]),
+    );
+    assert_eq!(moves, json!(["second \"quoted\" ünïcode", "ls -la", "first", null]));
+    let typescript = std::fs::read_to_string(state.join("prompt-history.jsonl")).unwrap();
+    assert_eq!(typescript, format!("{rust}{}\n", entry));
+
+    let home = opencode_util::temp::TempDir::new().unwrap();
+    std::fs::create_dir_all(home.path().join("state")).unwrap();
+    std::fs::copy(state.join("prompt-history.jsonl"), home.path().join("state/prompt-history.jsonl")).unwrap();
+    let again = Setup::with_home(session_route(), home);
+    again.ready();
+    let loaded = again.app.wait_until(WAIT, || {
+        again.app.press("up");
+        let found = again.textarea().text() == "from typescript";
+        // Until the history loads, Up does nothing; Ctrl+C on an empty prompt would exit.
+        if !found && !again.textarea().text().is_empty() {
+            again.app.press("ctrl+c");
+        }
+        found
+    });
+    assert!(loaded, "{:?}", again.textarea().text());
+    again.app.press("up");
+    assert_eq!(again.textarea().text(), "second \"quoted\" ünïcode");
+}
+
+fn interrupt_undo_harness(
+    content: Value,
+    pending: Value,
+    interrupted: bool,
+) -> (Harness, support::Log, opencode_util::temp::TempDir) {
+    let dir = support::DIRECTORY;
+    let id = "ses_interrupt_undo";
+    let ask = json!({ "type": "user", "id": "msg_ask", "text": "Reword this prompt", "time": { "created": 1 } });
+    let reply = json!({
+        "type": "assistant", "id": "msg_reply", "agent": "build",
+        "model": { "providerID": "p", "id": "m" }, "time": { "created": 2 }, "content": content,
+    });
+    let session = support::session(id, "Interrupt undo");
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [session], "cursor": {} })),
+        ("GET", "/api/session/active") => (200, json!({ "data": { "ses_interrupt_undo": { "type": "running" } } })),
+        ("GET", p) if p == format!("/api/session/{id}") => (200, json!({ "data": session })),
+        ("GET", p) if p == format!("/api/session/{id}/inbox") => (200, json!({ "data": pending })),
+        ("GET", p) if p == format!("/api/session/{id}/permission") => (200, json!({ "data": [] })),
+        ("GET", p) if p == format!("/api/session/{id}/message") => (200, json!({ "data": [reply, ask], "cursor": {} })),
+        ("POST", p) if p == format!("/api/session/{id}/interrupt") => (200, json!({ "interrupted": interrupted })),
+        ("POST", p) if p == format!("/api/experimental/session/{id}/wait") => (204, Value::Null),
+        ("POST", p) if p == format!("/api/session/{id}/revert/stage") => {
+            (200, json!({ "data": { "messageID": seen.body["messageID"] } }))
+        }
+        ("POST", p) if p == format!("/api/session/{id}/revert/commit") => (204, Value::Null),
+        _ => support::base(seen, dir),
+    });
+    let log = fake.log();
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: support::session_route(id),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 30, deps);
+    h.tui.data.set_status(&SessionID(id.into()), opencode_store::SessionStatus::Running);
+    assert!(
+        h.app.wait_until(WAIT, || {
+            let screen = h.app.text();
+            screen.contains("Reword this prompt") && screen.contains("esc interrupt")
+        }),
+        "screen:\n{}",
+        h.app.text()
+    );
+    (h, log, home)
+}
+
+fn interrupt_calls(log: &support::Log) -> Vec<(String, Value)> {
+    log.lock()
+        .unwrap()
+        .iter()
+        .filter(|seen| {
+            seen.method == "POST"
+                && (seen.path.starts_with("/api/session/") || seen.path.starts_with("/api/experimental/session/"))
+        })
+        .map(|seen| (format!("{} {}", seen.method, seen.path), seen.body.clone()))
+        .collect()
+}
+
+#[test]
+fn interrupting_before_the_model_answers_takes_the_prompt_back() {
+    let (h, log, _home) =
+        interrupt_undo_harness(json!([{ "type": "reasoning", "text": "Thinking it over" }]), json!([]), true);
+    h.app.press("escape");
+    h.wait_for("again to interrupt");
+    h.app.press("escape");
+    assert!(
+        h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 4
+            && h.app.text().matches("Reword this prompt").count() == 2),
+        "calls={:?}\n{}",
+        interrupt_calls(&log),
+        h.app.text()
+    );
+    let id = "ses_interrupt_undo";
+    assert_eq!(
+        interrupt_calls(&log),
+        vec![
+            (format!("POST /api/session/{id}/interrupt"), Value::Null),
+            (format!("POST /api/experimental/session/{id}/wait"), Value::Null),
+            (format!("POST /api/session/{id}/revert/stage"), json!({ "messageID": "msg_ask", "files": false })),
+            (format!("POST /api/session/{id}/revert/commit"), Value::Null),
+        ]
+    );
+}
+
+#[test]
+fn interrupting_after_answer_with_draft_with_pending_or_already_stopping_only_interrupts() {
+    let id = "ses_interrupt_undo";
+    let interrupt = format!("POST /api/session/{id}/interrupt");
+    let wait = format!("POST /api/experimental/session/{id}/wait");
+
+    // After the model answered with text: interrupts and waits, does not revert or restore.
+    {
+        let (h, log, _home) =
+            interrupt_undo_harness(json!([{ "type": "text", "text": "Here you go" }]), json!([]), true);
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 2));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(
+            interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            vec![interrupt.clone(), wait.clone()]
+        );
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+
+    // With a draft in the composer: only interrupts.
+    {
+        let (h, log, _home) = interrupt_undo_harness(json!([]), json!([]), true);
+        h.app.type_text("something else");
+        h.wait_for("something else");
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 1));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(), vec![interrupt.clone()]);
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+
+    // With a pending prompt in the inbox: only interrupts.
+    {
+        let pending = json!([{
+            "id": "msg_next", "sessionID": id, "time": { "created": 3 }, "type": "user",
+            "delivery": "queue", "payload": { "text": "follow up" },
+        }]);
+        let (h, log, _home) = interrupt_undo_harness(json!([]), pending, true);
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 1));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(), vec![interrupt.clone()]);
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+
+    // Repeated press when execution is already stopping (`interrupted: false`): only interrupts.
+    {
+        let (h, log, _home) = interrupt_undo_harness(json!([]), json!([]), false);
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 1));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(), vec![interrupt]);
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+}

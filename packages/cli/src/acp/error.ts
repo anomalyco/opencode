@@ -7,7 +7,7 @@ export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundErro
 
 export class SessionDirectoryMismatchError extends Schema.TaggedError<SessionDirectoryMismatchError>()(
   "ACPSessionDirectoryMismatchError",
-  { sessionId: Schema.String, cwd: Schema.String },
+  { sessionId: Schema.String, cwd: Schema.String, directory: Schema.String },
 ) {}
 
 export class InvalidConfigOptionError extends Schema.TaggedError<InvalidConfigOptionError>()(
@@ -48,6 +48,8 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
   errorName: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.Number),
+  retryAfterMs: Schema.optional(Schema.Number),
 }) {}
 
 export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
@@ -91,7 +93,7 @@ export function toRequestError(error: Error): RequestError {
       return RequestError.invalidParams({ sessionId: error.sessionId }, `session not found: ${error.sessionId}`)
     case "ACPSessionDirectoryMismatchError":
       return RequestError.invalidParams(
-        { sessionId: error.sessionId, cwd: error.cwd },
+        { sessionId: error.sessionId, cwd: error.cwd, directory: error.directory },
         `session ${error.sessionId} does not belong to cwd: ${error.cwd}`,
       )
     case "ACPInvalidConfigOptionError":
@@ -121,6 +123,8 @@ export function toRequestError(error: Error): RequestError {
         {
           ...(error.service ? { service: error.service } : {}),
           ...(error.errorName ? { errorName: error.errorName } : {}),
+          ...(error.status !== undefined ? { status: error.status } : {}),
+          ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}),
         },
         error.safeMessage,
       )

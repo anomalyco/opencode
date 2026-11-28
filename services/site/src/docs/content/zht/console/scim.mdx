@@ -1,0 +1,92 @@
+---
+title: "目錄同步"
+description: "從 Okta、Microsoft Entra ID 或任何 SCIM 2.0 身分識別提供者自動新增與移除工作區成員。"
+---
+
+目錄同步（SCIM 2.0）會在你於身分識別提供者中指派人員時將他們加入工作區，並在取消指派時移除
+其存取權。角色仍由控制台管理。
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## 開始之前
+
+- 為工作區設定 [SSO](/console/sso)。
+- [驗證](/console/sso#verify-email-domains)成員登入時使用的每個電子郵件網域。目錄同步只會新增
+  電子郵件地址屬於已驗證網域的使用者。其他人請從[成員](/console/members)頁面邀請。
+
+## 建立權杖
+
+只有工作區擁有者可以設定目錄同步或建立與撤銷其權杖。
+
+1. 開啟 **Settings › Security**，在 **Directory sync** 下點選 **Set up**。
+2. 複製 **SCIM base URL** 與權杖。權杖只會顯示一次，因此請將其存放在密鑰管理工具中。
+
+你的身分識別提供者會在每個請求中傳送該權杖。
+
+```text
+Authorization: Bearer <token>
+```
+
+## 連接身分識別提供者
+
+### Okta
+
+1. 新增 **SCIM 2.0 Test App (Header Auth)** 應用程式。
+2. 設定基礎 URL，並在 **API Token** 中輸入 `Bearer ` 後接權杖。
+3. 啟用 **Create Users**、**Update User Attributes** 與 **Deactivate Users**。將 **Import Groups** 與密碼
+   同步保持關閉。
+
+### Microsoft Entra ID
+
+1. 在企業應用程式中開啟 **Provisioning**，並將模式設為 **Automatic**。
+2. 將基礎 URL 輸入為 **Tenant URL**，權杖輸入為 **Secret Token**。
+3. 指派使用者與群組，然後開始佈建。
+
+### 其他提供者
+
+使用支援標頭權杖驗證的 SCIM 2.0 應用程式，指向基礎 URL。控制台支援 `/Users` 與
+`/Groups` 端點。
+
+請先指派一位測試人員。第一個請求之後，**Directory sync** 會顯示 **Connected to your identity provider**。
+
+## 同步的內容
+
+| 在身分識別提供者中 | 在控制台中 |
+| --- | --- |
+| 指派人員 | 以 **Member** 身分新增。既有成員保留其角色。 |
+| 更新名稱 | 更新個人資料。 |
+| 取消指派或停用 | 暫停存取並顯示為 **Deactivated**。其建立的 API 金鑰會撤銷。 |
+| 重新指派 | 恢復存取權，但已撤銷的金鑰仍無效。 |
+| 刪除 | 從工作區移除。其帳號與其他工作區不受影響。 |
+
+- 目錄同步不會變更角色與電子郵件地址。
+- 最後一位擁有者無法被停用或刪除。
+- 具有 [Go](/console/go) 訂閱的工作區無法透過目錄同步新增成員。
+
+## 群組
+
+推送群組即可替群組成員加上標籤，例如使用 Okta 的 **Push Groups** 或 Entra 群組指派功能。
+請先指派使用者，再推送他們所屬的群組。
+
+```text
+Platform Admins  →  platform-admins
+```
+
+每個群組會以群組名稱作為標籤，為其成員加上標籤。在 **Settings › Security › Group tags** 下，你可以
+重新命名標籤、將多個群組指向同一個標籤，或停止為某個群組加上標籤。離開群組會移除其標籤。
+
+## 輪替權杖
+
+1. 點選 **New token**，並將其安裝到你的身分識別提供者。
+2. 等到新權杖顯示上次使用時間。
+3. 撤銷舊權杖。
+
+撤銷權杖會停止之後的更新，但不會變更既有成員。刪除 SSO 連線會撤銷所有
+權杖。
+
+## SSO 與目錄同步
+
+工作區發出權杖後，SSO 就不再[自動新增成員](/console/sso#automatic-membership)。
+即使之後撤銷權杖，仍由目錄決定哪些人是工作區成員。

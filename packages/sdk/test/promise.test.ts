@@ -57,9 +57,10 @@ test("closing cancels active Promise event streams", async () => {
   const opencode = await OpenCode.create({ config: { directory: config, project: false, content: "{}" } })
   const events = opencode.events.subscribe()[Symbol.asyncIterator]()
   expect(await events.next()).toMatchObject({ value: { type: "server.connected" }, done: false })
-  const pending = events.next()
+  // Closing rejects the read before close resolves, so the handler has to be attached first.
+  const pending = events.next().catch((error: unknown) => error)
 
   await opencode.close()
-  const error = await pending.catch((error: unknown) => error)
+  const error = await pending
   expect(error).toMatchObject({ name: "ClientError", reason: "Transport" })
 })

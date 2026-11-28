@@ -4,7 +4,6 @@ import { Icon } from "@opencode/ui/icon"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
-import { Loader } from "@opencode/ui/loader"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
@@ -16,7 +15,6 @@ import { debounce } from "@solid-primitives/scheduled"
 import {
   createMemo,
   createSignal,
-  createUniqueId,
   For,
   getOwner,
   Index,
@@ -40,23 +38,11 @@ import {
   type SessionScreen,
 } from "@opencode/plugin/gui"
 import { addressParts, connection, externalAction, externalPage, loopback } from "./address"
-import { hostDisplay } from "./host-display"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
-import {
-  addressRows,
-  addressView,
-  initialAddressState,
-  nextAddressEpoch,
-  transitionAddress,
-  type AddressEpoch,
-  type AddressEvent,
-  type AddressRow,
-} from "./address-machine"
+import { AddressField, BrowserNavigation, PageRow, type AddressControls } from "./address-field"
 import { commentNote, pageNote } from "./comment"
 import { Glyph } from "./choices"
-import type { HistoryPage } from "./history/ipc"
-import { markMatches, parseQuery, type Query } from "./history/match"
 import { bare } from "./history/page"
 import { SignInOffer } from "./import-prompt"
 import { SiteChooserDialog } from "./site-chooser"
@@ -72,7 +58,6 @@ import {
   type OverlayContext,
   type OverlayEvent,
 } from "./overlay-machine"
-import { PageIcon } from "./page-icon"
 import { loadFailure } from "./failure"
 import { FailureBar, FailurePage } from "./failure-view"
 import { FindBar } from "./find-bar"
@@ -212,107 +197,14 @@ export default function SessionBrowserPane(props: {
     return tab ? props.model.page(props.session, tab.id) : undefined
   }
 
-  const [addressState, setAddressState] = createSignal(initialAddressState)
   const [available, setAvailable] = createSignal({ width: 0, height: 0 })
   const [toolbar, setToolbar] = createSignal(initialViewportToolbar)
-  const [pointerFocusedToggle, setPointerFocusedToggle] = createSignal(false)
-  const viewportID = createUniqueId()
   const [overlay, setOverlay] = createSignal(initialOverlayState)
 
-  // The page's reports, counted; a submitted address in the field ends at the next one.
-  const epoch = createMemo((previous: AddressEpoch | undefined) =>
-    nextAddressEpoch(previous, {
-      tabID: state()?.id,
-      url: address(),
-      loading: !!state()?.loading,
-      generation: state()?.generation ?? 0,
-      error: props.model.error(props.session),
-    }),
-  )
+  // The address field, once it renders: a submitted address keeps the empty state hidden until the page reports.
+  const [addressField, setAddressField] = createSignal<AddressControls>()
 
-  // The list follows what the user typed; a focused address is not a query.
-  const rows = createMemo(() => addressRows(addressState(), props.model.visits()))
-  const addressBar = createMemo(() => addressView(addressState(), epoch(), rows()))
-  // The typed words, whose matches each page of the list draws.
-  const query = createMemo(() => parseQuery(addressBar().query))
-
-  // Ends the questions to main's history that are still out when the pane goes.
-  const asking = new AbortController()
-  onCleanup(() => asking.abort())
-
-  const dispatchAddress = (event: AddressEvent, domEvent?: Event) => {
-    const next = transitionAddress(untrack(addressState), event)
-    setAddressState(next.state)
-    // The field's text is the machine's. After a key the input holds only what was typed, while the machine may show
-    // a completed address after it, or a row's text; the same text as before is not written by the binding.
-    const field = untrack(addressBar).field
-
-    if (input && input.value !== field) input.value = field
-    next.effects.forEach((effect) => {
-      if (effect.type === "select-input") return input?.select()
-
-      // The caret stays after the typed text, as Chrome's does, so the next key replaces the completed part.
-      if (effect.type === "select-completion") return input?.setSelectionRange(effect.start, input.value.length, "backward")
-
-      if (effect.type === "blur-input") return input?.blur()
-
-      if (effect.type === "prevent-default") return domEvent?.preventDefault()
-
-      if (effect.type === "forget") return props.model.forgetPage(effect.url)
-
-      if (effect.type === "prepare") return props.model.prepareHistory()
-
-      if (effect.type === "ask") {
-        // The field already shows what was typed and what the window knows; main's pages join when they come. A
-        // question main cannot answer, as on the web, is answered with none.
-        const answer = (pages: readonly HistoryPage[]) => {
-          if (!asking.signal.aborted) dispatchAddress({ type: "answered", attempt: effect.attempt, pages, visits: props.model.visits() })
-        }
-
-        return void props.model.searchHistory(effect.query, asking.signal).then(answer, () => answer([]))
-      }
-
-      command({ type: "navigate", tabID: effect.tabID, url: effect.url })
-    })
-  }
-
-  // Editing shows the icon of what Enter would open: the chosen page's once the person typed, else the page's own.
-  const fieldIcon = () => {
-    const bar = addressBar()
-
-    if (!bar.editing || !bar.field) return undefined
-
-    if (!bar.typed) return page()?.icon
-
-    return bar.chosen?.type === "page" ? bar.chosen.page.icon : undefined
-  }
-
-  // After a row's title: a page's address, what a search row searches with, or the typed address itself.
-  const rowDetail = (row: AddressRow) => {
-    if (row.type === "search") return plugin.t("address.search.web")
-
-    return row.type === "page" ? bare(row.url) : row.text
-  }
-
-  // A caret or a selection that leaves the end of the text ends completing, as in Chrome: the completed address
-  // becomes part of the text, and no later answer completes text the person is working inside.
-  const caretMoved = () => {
-    const bar = untrack(addressBar)
-
-    if (!input || !bar.completing) return
-    const end = input.value.length
-
-    if (input.selectionStart === bar.field.length - bar.completion.length && input.selectionEnd === end) return
-
-    dispatchAddress({
-      type: "input.changed",
-      value: input.value,
-      completing: input.selectionStart === end && input.selectionEnd === end,
-      visits: props.model.visits(),
-    })
-  }
-
-  const empty = () => !address() && !state()?.loading && !addressBar().navigating
+  const empty = () => !address() && !state()?.loading && !addressField()?.navigating()
   // The desktop page hides blank and loading documents itself; only hide here
   // while the pane shows its own empty or failed state over the embed.
   const shown = () => visible() && !empty() && !failed() && !suspended()
@@ -324,9 +216,7 @@ export default function SessionBrowserPane(props: {
   }
 
   let root: HTMLElement | undefined
-  let toolbarToggle: HTMLButtonElement | undefined
-  let input: HTMLInputElement | undefined
-  let anchor: HTMLFormElement | undefined
+  let options: HTMLElement | undefined
   let findInput: HTMLInputElement | undefined
 
   // `tabID` is the tab whose find bar took the key or click, which answers for no other tab.
@@ -544,10 +434,6 @@ export default function SessionBrowserPane(props: {
     })
   }
 
-  // The address field always shows the whole URL; at rest it draws the host emphasized.
-  const webParts = createMemo(() => hostDisplay(addressBar().field))
-  const parts = () => webParts() ?? addressParts(addressBar().field)
-  const site = () => !!addressBar().field && !addressBar().editing && !page()?.retryOnly
   const recent = () => props.model.visits().slice(0, RECENT)
 
   const pageTarget = () => {
@@ -580,14 +466,7 @@ export default function SessionBrowserPane(props: {
   const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
   const toggleInspect = () => dispatchOverlay({ type: "picker.toggled", context: context() })
 
-  const focusAddress = () => {
-    input?.focus()
-    input?.select()
-  }
-
-  // Navigates the tab and keeps the address in the field until the page reports where it went. Ends editing here rather
-  // than on blur: a click elsewhere, such as a recent page, may have blurred the field already.
-  const go = (url: string) => dispatchAddress({ type: "navigated", url, epoch: epoch() })
+  const focusAddress = () => addressField()?.focus()
 
   // Cookies came in: the offer stays to say so, and the page loads again with them, so a signed-out site opens signed
   // in.
@@ -780,8 +659,9 @@ export default function SessionBrowserPane(props: {
       inspect: toggleInspect,
       toggleToolbar: () => {
         toggleToolbar()
-        setPointerFocusedToggle(false)
-        toolbarToggle?.focus({ preventScroll: true, focusVisible: true })
+        // The toggle is an item of the options menu, so the shortcut leaves the keyboard where choosing that item
+        // does: on the menu's button, which stays when a closing toolbar takes the focused control with it.
+        options?.focus({ preventScroll: true, focusVisible: true })
       },
       focusAddress,
       find: () => find({ type: "open" }),
@@ -937,177 +817,65 @@ export default function SessionBrowserPane(props: {
         data-component="browser-bar"
         class="h-11 shrink-0 flex items-center gap-2 px-3 border-b-[0.5px] border-v2-border-border-muted"
       >
-        <div class="flex shrink-0 items-center gap-1">
-          <For each={["back", "forward"] as const}>
-            {(direction) => (
-              <Tooltip placement="top" value={plugin.t(direction === "back" ? "common.goBack" : "common.goForward")}>
-                <IconButton
-                  variant="ghost-muted"
-                  size="large"
-                  disabled={!state()?.[direction === "back" ? "canGoBack" : "canGoForward"]}
-                  aria-label={plugin.t(direction === "back" ? "common.goBack" : "common.goForward")}
-                  onClick={() => {
-                    const tab = state()
+        <BrowserNavigation
+          back={!!state()?.canGoBack}
+          forward={!!state()?.canGoForward}
+          loading={!!state()?.loading}
+          reloadable={!!address()}
+          go={(direction) => {
+            const tab = state()
 
-                    if (tab) command({ type: direction, tabID: tab.id })
-                  }}
-                  icon={<Icon name={direction === "back" ? "arrow-left" : "arrow-right"} />}
-                />
-              </Tooltip>
-            )}
-          </For>
-          <Tooltip
-            placement="top"
-            value={
-              state()?.loading
-                ? plugin.t("action.stop")
-                : tip(plugin.t("action.reload"), keybinds.keybind("browser.reload"))
-            }
-          >
-            <IconButton
-              variant="ghost-muted"
-              size="large"
-              disabled={!state()?.loading && !address()}
-              aria-label={plugin.t(state()?.loading ? "action.stop" : "action.reload")}
-              onClick={(event) => {
-                const tab = state()
+            if (tab) command({ type: direction, tabID: tab.id })
+          }}
+          reload={(ignoreCache) => {
+            const tab = state()
 
-                if (!tab) return
-                command(tab.loading ? { type: "stop", tabID: tab.id } : { type: "reload", tabID: tab.id, ignoreCache: event.shiftKey })
-              }}
-              icon={
-                <Show when={state()?.loading} fallback={<Icon name="outline-rotate-clockwise" />}>
-                  <Loader />
-                </Show>
-              }
-            />
-          </Tooltip>
-        </div>
-        <Popover
-          open={addressBar().listed}
-          anchorRef={() => anchor}
-          placement="bottom-start"
-          gutter={4}
-          // The list overhangs the field by its 8px padding, so suggestion icons and text line up with the field's.
-          shift={-8}
-          modal={false}
-        >
-          <form
-            ref={anchor}
-            dir="ltr"
-            data-component="browser-address"
-            data-editing={addressBar().editing ? "" : undefined}
-            data-site={site() ? "" : undefined}
-            data-address={addressBar().editing && !addressBar().typed && addressBar().field ? "" : undefined}
-            onPointerDown={(event) => {
-              // The whole field focuses the input, as the site button and page actions handle their own clicks.
-              if (event.target === event.currentTarget) {
-                event.preventDefault()
-                input?.focus()
-              }
-            }}
-            onSubmit={(event) => {
-              event.preventDefault()
-              dispatchAddress({ type: "submitted", epoch: epoch(), visits: props.model.visits(), failed: failed() })
-            }}
-          >
-            {/* Editing shows the icon of what Enter would open: the page's own, or the chosen row's. */}
-            <Show
-              when={site()}
-              fallback={<RowIcon search={addressBar().chosen?.type === "search"} icon={fieldIcon()} />}
-            >
-              {/* Site information describes one page: another tab or URL closes it, and opening it reads anew. */}
-              <Show when={`${props.session.key}\n${state()?.id}\n${address()}`} keyed>
-                <SiteInformation
-                  url={address()}
-                  server={props.session.server.local ? undefined : props.session.server.name}
-                  site={() => {
-                    const tab = state()
+            if (!tab) return
+            command(tab.loading ? { type: "stop", tabID: tab.id } : { type: "reload", tabID: tab.id, ignoreCache })
+          }}
+        />
+        <AddressField
+          model={props.model}
+          page={() => ({
+            tabID: state()?.id,
+            url: address(),
+            loading: !!state()?.loading,
+            generation: state()?.generation ?? 0,
+            error: props.model.error(props.session),
+          })}
+          icon={() => page()?.icon}
+          failed={failed}
+          disabled={() => !state()}
+          navigate={(url, tabID) => {
+            if (tabID) command({ type: "navigate", tabID, url })
+          }}
+          siteless={() => !!page()?.retryOnly}
+          // Site information describes one page: another tab or URL closes it, and opening it reads anew.
+          site={() => (
+            <Show when={`${props.session.key}\n${state()?.id}\n${address()}`} keyed>
+              <SiteInformation
+                url={address()}
+                server={props.session.server.local ? undefined : props.session.server.name}
+                site={() => {
+                  const tab = state()
 
-                    return tab ? props.model.site(props.session, tab.id) : undefined
-                  }}
-                  clear={() => {
-                    const tab = state()
-
-                    return tab ? props.model.clearSite(props.session, tab.id) : undefined
-                  }}
-                  clearCache={() => {
-                    const tab = state()
-
-                    return tab ? props.model.clearCache(props.session, tab.id, address()) : undefined
-                  }}
-                />
-              </Show>
-            </Show>
-            <div data-slot="browser-address-text">
-              <input
-                ref={input}
-                data-slot="browser-address-input"
-                role="combobox"
-                aria-autocomplete="both"
-                aria-expanded={addressBar().listed}
-                aria-controls={addressBar().listed ? "browser-suggestions" : undefined}
-                aria-activedescendant={addressBar().chosen ? `browser-suggestion-${addressBar().active}` : undefined}
-                spellcheck={false}
-                autocomplete="off"
-                value={addressBar().field}
-                disabled={!state()}
-                placeholder={plugin.t("address.search")}
-                aria-label={plugin.t("address.label")}
-                onFocus={() => dispatchAddress({ type: "focused", epoch: epoch() })}
-                // Leaving the field without submitting cancels the edit; a submit already ended it. Focus that leaves
-                // for the page or another window keeps the field as the document's focus, so the window's return would
-                // focus it again and start an edit under the returning click, such as one on the site button.
-                onBlur={(event) => {
-                  dispatchAddress({ type: "blurred", epoch: epoch() })
-
-                  if (!document.hasFocus()) event.currentTarget.blur()
+                  return tab ? props.model.site(props.session, tab.id) : undefined
                 }}
-                onInput={(event) =>
-                  dispatchAddress({
-                    type: "input.changed",
-                    value: event.currentTarget.value,
-                    // Only text typed at the end completes an address: not a deletion, a paste or a drop, and not
-                    // text an IME is still composing, which a changed value would break.
-                    completing:
-                      (event.inputType === "insertText" || event.inputType === "insertCompositionText") &&
-                      !event.isComposing &&
-                      event.currentTarget.selectionStart === event.currentTarget.value.length,
-                    visits: props.model.visits(),
-                  })
-                }
-                onKeyDown={(event) => {
-                  // Keys during IME composition pick and cancel candidates, not rows. Safari can report the
-                  // composition-confirming keydown with isComposing false but keyCode 229.
-                  if (event.isComposing || event.keyCode === 229) return
-                  const modified = event.ctrlKey || event.altKey || event.metaKey
+                clear={() => {
+                  const tab = state()
 
-                  // Shift with an arrow selects text, and a modified Tab is a shortcut of the app's.
-                  if (((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.shiftKey && !modified) || event.key === "Escape")
-                    dispatchAddress({ type: "key.pressed", key: event.key, epoch: epoch(), visits: props.model.visits() }, event)
-
-                  if (event.key === "Tab" && !modified)
-                    dispatchAddress({ type: "key.pressed", key: event.shiftKey ? "Shift+Tab" : "Tab", epoch: epoch(), visits: props.model.visits() }, event)
-
-                  // Shift+Delete forgets the chosen row's page, as in other browsers; on any other row it is the field's.
-                  if (event.key === "Delete" && event.shiftKey) dispatchAddress({ type: "forget.pressed", visits: props.model.visits() }, event)
+                  return tab ? props.model.clearSite(props.session, tab.id) : undefined
                 }}
-                onKeyUp={caretMoved}
-                onPointerUp={caretMoved}
+                clearCache={() => {
+                  const tab = state()
+
+                  return tab ? props.model.clearCache(props.session, tab.id, address()) : undefined
+                }}
               />
-              {/* At rest, draw the whole URL over the input's hidden text with its host emphasized. While editing, the
-                  input shows its own text so selection and the caret need no mirror. */}
-              <Show when={!addressBar().editing && addressBar().field}>
-                <div aria-hidden="true" data-slot="browser-address-display">
-                  <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined} data-web={webParts() ? "" : undefined} dir="ltr">
-                    <span data-slot="browser-address-authority"><span data-slot="browser-address-muted">{parts().scheme}</span>
-                    <span data-slot="browser-address-host" title={parts().host}><bdi dir="ltr">{parts().host}</bdi></span></span>
-                    <span data-slot="browser-address-rest">{parts().rest}</span>
-                  </span>
-                </div>
-              </Show>
-            </div>
-            {/* Any zoom but 100% stays in sight, as the system browser shows it; a click resets it. */}
+            </Show>
+          )}
+          end={
+            // Any zoom but 100% stays in sight, as the system browser shows it; a click resets it.
             <Show when={zoomed()}>
               <Tooltip placement="top" value={plugin.t("zoom.reset")}>
                 <button
@@ -1120,33 +888,9 @@ export default function SessionBrowserPane(props: {
                 </button>
               </Tooltip>
             </Show>
-          </form>
-          <Popover.Portal>
-            <Popover.Content
-              data-component="browser-suggestions"
-              data-browser-popup
-              onOpenAutoFocus={(event) => event.preventDefault()}
-              onCloseAutoFocus={(event) => event.preventDefault()}
-            >
-              <div id="browser-suggestions" role="listbox" aria-label={plugin.t("address.suggestions")}>
-                <For each={rows()}>
-                  {(row, index) => (
-                    <PageRow
-                      search={row.type === "search"}
-                      icon={row.type === "page" ? row.page.icon : undefined}
-                      title={rowTitle(row)}
-                      detail={rowDetail(row)}
-                      // Only a page draws the typed words: the other rows are the typed text itself.
-                      query={row.type === "page" ? query() : undefined}
-                      option={{ id: `browser-suggestion-${index()}`, selected: index() === addressBar().active }}
-                      onClick={() => go(row.url)}
-                    />
-                  )}
-                </For>
-              </div>
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover>
+          }
+          controls={setAddressField}
+        />
         <div class="flex shrink-0 items-center gap-1">
           {/* Extensions load into the profile, where pages of a server on this computer browse. */}
           {/* Keyed by the tab: when an agent's show request changes the tab on screen, an open menu closes rather than
@@ -1206,47 +950,32 @@ export default function SessionBrowserPane(props: {
               </Menu.Portal>
             </Menu>
           </Show>
-          <Show when={viewportToolbarAvailable(plugin.app.channel)}>
-            <Tooltip
-              placement="top"
-              value={tip(plugin.t("command.toggleToolbar"), keybinds.keybind("browser.toggleToolbar"))}
-            >
-              <IconButton
-                ref={toolbarToggle}
-                variant="ghost-muted"
-                size="large"
-                classList={{ "!outline-none": pointerFocusedToggle() }}
-                onPointerDown={() => setPointerFocusedToggle(true)}
-                onBlur={() => setPointerFocusedToggle(false)}
-                onKeyDown={() => setPointerFocusedToggle(false)}
-                aria-label={plugin.t("command.toggleToolbar")}
-                aria-expanded={toolbarVisible()}
-                aria-controls={toolbarVisible() ? viewportID : undefined}
-                disabled={!inspectable()}
-                state={toolbarVisible() ? "pressed" : undefined}
-                onClick={toggleToolbar}
-                icon={
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path
-                      d="M1 12.5H8M13.5 4V2.5H3.49997V12M14.5 5.5H9.5C9.5 8.0362 9.5 10.9638 9.5 13.5H14.5C14.5 10.9638 14.5 8.0362 14.5 5.5Z"
-                      stroke="currentColor"
-                    />
-                  </svg>
-                }
-              />
-            </Tooltip>
-          </Show>
+          <Tooltip placement="top" value={tip(plugin.t("inspect"), keybinds.keybind("browser.inspect"))}>
+            {/* The ghost variant sets the button color, so the active accent needs precedence over it. */}
+            <IconButton
+              variant="ghost-muted"
+              size="large"
+              disabled={!inspectable()}
+              state={picking() ? "pressed" : undefined}
+              classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
+              aria-pressed={picking()}
+              aria-label={plugin.t("inspect")}
+              onClick={toggleInspect}
+              icon={<Icon name="select-element" />}
+            />
+          </Tooltip>
           {/* Keyed by the tab, as the extensions menu is: an open menu is of the tab it opened on, and closes with it. */}
           <Show when={props.tab().id} keyed>
             <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={open => setMenuPage(open ? pageTarget() : undefined)}>
               <Tooltip placement="top" value={plugin.t("options")}>
-                {/* The comment tool lives in this menu, so the button shows it while it waits for a pick. */}
                 <Menu.Trigger
                   as={IconButton}
+                  ref={(element: HTMLElement) => {
+                    options = element
+                  }}
                   variant="ghost-muted"
                   size="large"
                   disabled={!state()}
-                  classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
                   icon={<Icon name="outline-dots" />}
                   aria-label={plugin.t("options")}
                 />
@@ -1296,13 +1025,15 @@ export default function SessionBrowserPane(props: {
                     <Menu.SubTrigger>{plugin.t("menu.more")}</Menu.SubTrigger>
                     <Menu.Portal>
                       <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")} data-browser-popup>
-                        <Menu.Item
-                          disabled={!inspectable()}
-                          onSelect={toggleInspect}
-                          shortcut={<Keybind keys={[...keybinds.keybind("browser.inspect")]} variant="neutral" />}
-                        >
-                          {plugin.t("inspect")}
-                        </Menu.Item>
+                        <Show when={viewportToolbarAvailable(plugin.app.channel)}>
+                          <Menu.Item
+                            disabled={!inspectable()}
+                            onSelect={toggleToolbar}
+                            shortcut={<Keybind keys={[...keybinds.keybind("browser.toggleToolbar")]} variant="neutral" />}
+                          >
+                            {plugin.t("command.toggleToolbar")}
+                          </Menu.Item>
+                        </Show>
                         <Menu.Group>
                           <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
                             {plugin.t("menu.openPage")}
@@ -1405,7 +1136,7 @@ export default function SessionBrowserPane(props: {
         )}
       </Show>
       <Show when={toolbarVisible()}>
-        <section id={viewportID} data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>
+        <section data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>
           <Show when={state()?.id} keyed>
             {(tabID) => (
               <Show when={props.session.key} keyed>
@@ -1499,7 +1230,7 @@ export default function SessionBrowserPane(props: {
                   </div>
                   <div class="flex flex-col gap-2">
                     <For each={recent()}>
-                      {(visit) => <PageRow icon={visit.icon} title={visit.title} detail={bare(visit.url)} onClick={() => go(visit.url)} />}
+                      {(visit) => <PageRow icon={visit.icon} title={visit.title} detail={bare(visit.url)} onClick={() => addressField()?.go(visit.url)} />}
                     </For>
                   </div>
                 </div>
@@ -1694,91 +1425,6 @@ export default function SessionBrowserPane(props: {
 }
 
 /** The title of a row of the address field's list: a page's own, or the text a search row searches for. */
-function rowTitle(row: AddressRow) {
-  if (row.type === "page") return row.page.title
-
-  return row.type === "search" ? row.text : ""
-}
-
-/** The icon of a row of the address field's list, and of the field while that row is chosen: the search glyph, or a page's own. */
-function RowIcon(props: { search: boolean; icon: string | undefined }) {
-  return (
-    <Show when={props.search} fallback={<PageIcon icon={props.icon} class="text-v2-icon-icon-muted" />}>
-      <Icon name="magnifying-glass" class="pointer-events-none size-4 shrink-0 text-v2-icon-icon-muted" />
-    </Show>
-  )
-}
-
-/**
- * A row of the address field's list or of the new tab page: an icon, a title and, after it, a page's address or what
- * a search row searches with. A page draws the query's matches.
- */
-function PageRow(props: {
-  search?: boolean
-  icon: string | undefined
-  title: string
-  detail: string
-  query?: Query
-  /** Set for a row of the address field's list: an option, which keeps keyboard focus in the field. */
-  option?: { id: string; selected: boolean }
-  onClick: () => void
-}) {
-  const body = () => (
-    <>
-      <RowIcon search={!!props.search} icon={props.icon} />
-      <span data-slot="browser-page-row-text">
-        <Show when={props.title}>
-          <span data-slot="browser-page-row-title">
-            <Marked text={props.title} query={props.query} />
-          </span>
-          <span>-</span>
-        </Show>
-        <span data-slot="browser-page-row-url">
-          <Marked text={props.detail} query={props.query} />
-        </span>
-      </span>
-    </>
-  )
-
-  return (
-    <Show
-      when={props.option}
-      fallback={
-        <button type="button" data-component="browser-page-row" dir="ltr" onClick={() => props.onClick()}>
-          {body()}
-        </button>
-      }
-    >
-      {(option) => (
-        <div
-          id={option().id}
-          role="option"
-          aria-selected={option().selected}
-          data-component="browser-page-row"
-          dir="ltr"
-          // The address field keeps focus, so a click does not end editing before it opens the page.
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => props.onClick()}
-        >
-          {body()}
-        </div>
-      )}
-    </Show>
-  )
-}
-
-function Marked(props: { text: string; query: Query | undefined }) {
-  return (
-    <For each={markMatches(props.text, props.query)}>
-      {(part) => (
-        <Show when={part.match} fallback={part.text}>
-          <mark>{part.text}</mark>
-        </Show>
-      )}
-    </For>
-  )
-}
-
 const connections = {
   secure: { icon: "lock", title: "site.secure", description: "site.secure.description" },
   insecure: { icon: "outline-hexagonal-warning", title: "site.insecure", description: "site.insecure.description" },

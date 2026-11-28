@@ -1,0 +1,246 @@
+---
+title: "Skill'ler"
+description: "OpenCode agent'larına bir görev için yeniden kullanılabilir talimatlar veren, yalnızca görev gerektirdiğinde yüklenen SKILL.md dosyaları yazın."
+---
+
+Bir agent'a belirli bir görev için yeniden kullanılabilir talimatlar vermek üzere bir skill oluşturun. `.opencode/skills/<skill-id>` içine bir `SKILL.md` dosyası koyun ve ne zaman kullanılacağını `description` alanında anlatın.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode bu skill'i ilgili olduğunda duyurur. Agent ardından talimatlarını, her skill'i her prompta eklemek yerine `skill` aracıyla yükleyebilir.
+
+## Oluşturma
+
+İlgili betikleri, referansları ve şablonları `SKILL.md` dosyasının yanında tutun:
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+Skill içinde yazılan yollar `SKILL.md` dosyasını içeren dizine göredir. Dizin biçimi önerilir; çünkü destekleyici dosyalara özel bir temel dizin sağlar.
+
+## Keşif
+
+OpenCode şu konumlarda otomatik olarak arama yapar:
+
+| Kapsam                | Kaynaklar                              |
+| --------------------- | -------------------------------------- |
+| Genel                 | `~/.config/opencode/skills`            |
+| Genel uyumluluk       | `~/.claude/skills`, `~/.agents/skills` |
+| Proje                 | `.opencode/skills`                     |
+| Proje uyumluluğu      | `.claude/skills`, `.agents/skills`     |
+
+OpenCode, proje kaynaklarını geçerli dizinden dosya sistemi köküne kadar arar ve her düzeyde eşleşen dizinleri dahil eder.
+
+Her kaynak iki biçimden birini içerebilir:
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Markdown dosyaları kaynak kökünde olmalıdır, örneğin `skills/review.md`.
+- Tam olarak `SKILL.md` adını taşıyan dosyalar gruplama dizinlerinde iç içe olabilir, örneğin `skills/git-release/SKILL.md` veya `skills/teams/release/SKILL.md`.
+- `SKILL.md` içeren bir dizin tek bir skill'dir. OpenCode daha fazla skill için onun içinde arama yapmaz.
+- Gizli dosya ve dizinler ile `node_modules` atlanır.
+- Arama, kaynak kökünün altı dizin altında durur.
+
+## Kaynaklar
+
+Herhangi bir `opencode.json` veya `opencode.jsonc` dosyasındaki `skills` dizisiyle daha fazla yerel dizin veya HTTP kataloğu ekleyin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| Değer | Çözümleme |
+| ----- | ---------- |
+| Göreli yol | Yapılandırma dosyasından değil, etkin OpenCode çalışma dizininden |
+| `~/` yolu | Geçerli kullanıcının ana dizininden |
+| Mutlak yol | Olduğu gibi kullanılır |
+| `http://` veya `https://` URL'si | HTTP kataloğu olarak yüklenir |
+
+Keşfedilen her yapılandırma dosyası kendi girdilerini ekler. `skills` dizileri birbirinin yerine geçmez, birleştirilir.
+
+Bağlı bir [OpenCode Console](/console) çalışma alanı da skill paylaşabilir.
+
+## Kataloglar
+
+HTTP kataloğu, altında `index.json` dosyası bulunan bir base URL'dir:
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+Bu girdi için OpenCode her dosyayı `<base-url>/git-release/<file>` adresinden indirir.
+
+| Kural | Gereksinim |
+| ---- | ----------- |
+| Yollar | Güvenli, göreli ve aynı kaynakta olmalıdır |
+| Girdi dosyası | `SKILL.md` veya `<name>.md` içermelidir, örneğin `git-release.md` |
+| Güncellemeler | Dosyalar değiştiğinde `version` değerini artırın; böylece OpenCode önbelleğini yeniler |
+
+İndirilen her skill dizini, girdinin adını taşıyan bir kaynak kökü olur; bu nedenle hem `git-release.md` hem de `SKILL.md` aynı `git-release` kimliğine sahiptir.
+
+## Frontmatter
+
+Skill'i adlandırmak ve nerede görüneceğini denetlemek için frontmatter kullanın:
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| Alan                           | Davranış                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | Görünen ad; varsayılan olarak yoldan türetilen kimlik             |
+| `description`                  | Skill'i modele tanıtmak için kullanılan özet                      |
+| `metadata.opencode/autoinvoke` | Skill'i modelin kullanılabilir listesinden çıkarmak için `false` yapın |
+| `disable-model-invocation`     | `opencode/autoinvoke: false` ile aynı etki için `true` yapın      |
+
+Çalışma zamanında tüm frontmatter isteğe bağlıdır. Modelin skill'i keşfetmesi gerekiyorsa açık bir `description` ekleyin; açıklaması olmayan skill'ler duyurulmaz.
+
+`opencode/autoinvoke: false` yalnızca skill'i modelin kullanılabilir listesinden gizler. Skill kayıtlı kalır ve kimliğiyle açıkça yüklenebilir. Hem `disable-model-invocation` hem `opencode/autoinvoke` ayarlandığında `opencode/autoinvoke` kazanır. V2 `license` ve `compatibility` gibi taşınabilirlik alanlarını kabul eder ancak yorumlamaz.
+
+## Kimlikler
+
+Skill kimliğini dosya yolu belirler. Frontmatter'daki `name` yalnızca görünen bir etikettir.
+
+| Dosya                             | Kimlik        |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+Kimlikler tam ve büyük/küçük harfe duyarlıdır. Taşınabilir skill'ler için 1–64 karakterlik benzersiz, küçük harfli ve tireli bir kimlik kullanın ve dizin adıyla uyumlu tutun:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+V2 şu anda bu deseni, 1–64 karakter önerisini, `name` ile dizin arasında eşleşmeyi veya azami açıklama uzunluğunu zorunlu kılmaz.
+
+## Öncelik
+
+Skill'ler kimliğe göre seçilir. İki kaynak `git-release` tanımlıyorsa sonra kaydedilen kaynak OpenCode'un yüklediği skill'i sağlar:
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+Kaynaklar düşükten yükseğe öncelikle kaydedilir:
+
+1. Yerleşik skill'ler
+2. `.claude/skills`, önce genel, sonra en uzak üst dizinden geçerli dizine doğru
+3. `.agents/skills`, önce genel, sonra en uzak üst dizinden geçerli dizine doğru
+4. `~/.config/opencode/skills`
+5. Projeye ait `.opencode/skills` dizinleri, en üst dizinden geçerli dizine doğru
+6. Açık `skills` yapılandırma girdileri, yapılandırma önceliği ve dizi sırasına göre
+
+Daha önceki bir skill'i geçersiz kılmayı amaçlamıyorsanız yinelenen kimliklerden kaçının.
+
+## Yükleme
+
+OpenCode her model adımında, açıklaması olan ve `opencode/autoinvoke` değeri `false` olmayan izinli skill'leri listeler. Liste yalnızca kimliği, adı ve açıklamayı içerir; Markdown gövdesinin tamamını içermez.
+
+Model bir skill'i, tam kimliğiyle `skill` aracını çağırarak yükler:
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+OpenCode ardından:
+
+1. O kimlik için geçerli tanımı seçer.
+2. Seçilen agent'ın `skill` iznini denetler.
+3. Frontmatter olmadan Markdown gövdesini konuşmaya ekler.
+4. Skill'in temel dizinini ve en fazla on destekleyici dosya yolundan bir örnek sunar.
+
+Bir skill'i kendiniz yüklemek için promptunuzda `@skill-id` olarak belirtin.
+
+Destekleyici dosya içerikleri otomatik olarak yüklenmez. Agent bunları skill yönlendirdiğinde okur. Dosya örneği dizin tabanlı `SKILL.md` skill'leri için kullanılabilir; düz Markdown skill'leri komşu dosya listesi almaz.
+
+## İzinler
+
+`skill` eylemini ve kaynak olarak skill kimliğini kullanın. Kurallar sırayla çalışır ve son eşleşen kural kazanır:
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| Etki | Davranış |
+| ------ | -------- |
+| `allow` | Eşleşen skill'leri onay almadan duyurur ve yükler |
+| `ask` | Eşleşen skill'leri duyurur ve yüklemeden önce onay ister |
+| `deny` | Eşleşen skill'leri modelden gizler ve yüklemeyi reddeder |
+
+Aynı kuralları yalnızca tek bir agent'a uygulamak için `agents.<id>.permissions` altına koyun.
+
+## Sorun giderme
+
+Örneğin bu skill'in kimliği frontmatter adı `Git Release` değil, `release` şeklindedir:
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+Bir skill eksikse veya yanlış içerik yüklüyorsa:
+
+1. Dosyanın kök düzeyinde bir `*.md` ya da tam olarak `SKILL.md` adını taşıyan iç içe bir dosya olduğunu doğrulayın.
+2. Frontmatter `name` yerine yoldan türetilen, büyük/küçük harfe duyarlı kimliği denetleyin.
+3. Modelin skill'i keşfetmesi gerekiyorsa bir `description` ekleyin.
+4. `opencode/autoinvoke` ayarını ve seçilen agent'ın `skill` izinlerini denetleyin.
+5. Aynı kimliği tanımlayan daha sonraki bir kaynak olup olmadığına bakın.
+6. HTTP katalogları için `index.json` dosyasını, aynı kaynaktaki dosya yollarını ve değişmiş `version` değerini doğrulayın.

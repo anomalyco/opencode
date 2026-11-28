@@ -1,0 +1,11 @@
+use opencode_service::delegate;
+use opencode_util::error;
+
+use super::Context;
+use crate::args::ServeArgs;
+
+pub fn run(_context: &Context, _args: &ServeArgs) -> error::Result<()> {
+    // The TypeScript binary replaces this process, so this process's queued records go first.
+    crate::telemetry::flush();
+    Err(delegate::forward().into())
+}

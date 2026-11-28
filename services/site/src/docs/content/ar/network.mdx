@@ -1,0 +1,149 @@
+---
+title: "الشبكة"
+description: "أعدّ الوسائط وجهات إصدار الشهادات المخصّصة وشهادات العميل."
+---
+
+اضبط متغيّرات الوسيط القياسية. يستخدم OpenCode اتصالات HTTP محلية بين CLI وخدمته الخلفية، ويستثني CLI عناوين loopback تلقائيًا من المرور عبر الوسيط.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+يتعامل `HTTP_PROXY` مع وجهات HTTP ويتعامل `HTTPS_PROXY` مع وجهات HTTPS. ويمكن لعنوان الوسيط نفسه استخدام `http://`
+للمتغيّرين. عند بدء التشغيل، يضيف CLI العناوين `127.0.0.1` و`localhost` و`::1` إلى كلٍّ من `NO_PROXY` و`no_proxy`. استخدم `NO_PROXY` لسرد المضيفين الآخرين الذين يجب الاتصال بهم مباشرةً، وافصل بينهم بفواصل.
+
+## الخدمة
+
+لا تؤثر تصديرات shell في الخدمة الخلفية إلا عندما تبدأ تلك الخدمة من shell. فاحفظ المتغيّرات في إعداد
+الخدمة المُدارة حتى تستخدم عمليات بدء الخدمة اللاحقة إعدادات الشبكة نفسها.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+ويؤدي تغيير متغيّر بيئة مُدار إلى إيقاف الخدمة العاملة. ويبدأها `service start` من جديد بالبيئة الجديدة.
+يحتاج shell الذي تشغّل منه CLI إلى متغيّرات وسيط خاصة به، لأن متغيّرات الخدمة المُدارة تنطبق على عملية الخادم، لا على عملية CLI. وتُضاف استثناءات loopback تلقائيًا على الجانبين.
+
+وأزل متغيّرًا محفوظًا بـ `service unset env`:
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## المصادقة
+
+وللوسيط الذي يقبل بيانات اعتماد في عنوان URL، أدرج اسم المستخدم وكلمة المرور في كل عنوان وسيط يحتاج مصادقة.
+استخدم ترميز النسبة المئوية للأحرف مثل `@` و`:` و`/` في اسم المستخدم أو كلمة المرور.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+وللخدمة الخلفية، احفظ عنوان URL كاملًا. فالقيمة تُخزَّن في إعداد الخدمة الخاص ويُظهرها
+`opencode service get env`، فلا تشارك ذلك المخرج.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## الشهادات
+
+اضبط `NODE_EXTRA_CA_CERTS` على ملف PEM عندما يستخدم الوسيط أو الوجهة شهادة موقّعة من جهة إصدار شهادات
+خاصة. وتُضاف الجهات الإضافية إلى مخزن الثقة في وقت التشغيل عند بدء العملية.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+واحفظ مسار الملف للخدمة الخلفية، ثم أعد تشغيلها:
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## مكافح الفيروسات وفحص HTTPS
+
+تستبدل ميزة «فحص HTTPS» أو «فحص الاتصالات المشفّرة» في برامج مكافحة الفيروسات (Kaspersky وAvast وESET وغيرها)، وكذلك وسطاء
+فحص SSL في المؤسسات، شهادة الخادم بشهادة خاصة بها. يرفض OpenCode الشهادة البديلة فتفشل الطلبات بأخطاء مثل:
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+وأصلح ذلك بإحدى طريقتين:
+
+- استثنِ `opencode.ai` و`*.opencode.ai` من فحص HTTPS في إعدادات مكافح الفيروسات. وأضف مضيف API الخاص بمزوّدك
+  أيضًا، مثل `api.anthropic.com`، إذا كنت تتصل بمزوّد مباشرةً.
+- صدّر جهة إصدار شهادات الفحص كملف PEM وثق بها عبر `NODE_EXTRA_CA_CERTS`، كما هو موضّح في
+  [الشهادات](#certificates).
+
+## شهادات العميل
+
+اضبط `settings.tls` على مزوّد تتطلب بوابته TLS متبادلًا. فتقدّم طلبات نماذجه الشهادة،
+ولا تُرسَل أثناء مصافحة TLS إلا إلى الخوادم التي تطلبها.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` و`key` نصّا PEM. استخدم `{file:...}` لقراءتهما من ملفات. والملف الذي يتعذّر قراءته يترك `tls` غير مضبوط.
+- لا يُحتاج `passphrase` إلا لمفتاح مشفّر.
+- يعمل على بنيتَي Bun وNode. ولا يستطيع خادم على Cloudflare Workers تقديم شهادة عميل عبر `fetch`.
+- لا تتبع الطلبات ذات شهادة العميل عمليات إعادة التوجيه، فلا تُقدَّم الشهادة لمضيف آخر.
+
+وكل طلب نموذج لذلك المزوّد يقدّم الشهادة: نماذج المحادثة وضغط السياق والصور والقرار. والمزوّد
+الذي لديه `tls` يستخدم HTTP بدل WebSockets. ولا تقدّمها أدوات مثل webfetch وخوادم MCP البعيدة وتثبيتات الملحقات.
+
+## المقدّمة
+
+يستخدم `--standalone` و`serve` بيئة عمليتهما. ولا يضبط `opencode service set env` هاتين
+العمليتين.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+وطبّق النمط نفسه على خادم في المقدّمة:
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## التحقق
+
+تحقق من أن CLI يستطيع الوصول إلى الخدمة الخلفية بعد تطبيق الإعدادات:
+
+```bash
+opencode api get /api/info
+```
+
+يؤكّد نجاح فحص السلامة أن العميل المحلي متصل بالخدمة. أرسل طلبًا عاديًا إلى المزوّد للتحقق من
+الوسيط والشهادات المستخدمة في الاتصالات الصادرة من الخدمة.

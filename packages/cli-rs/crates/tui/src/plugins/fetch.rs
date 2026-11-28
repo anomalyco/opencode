@@ -1,0 +1,76 @@
+//! Route built-in plugin requests through the same fetch interface as external plugins.
+
+use opencode_api::client::{Body, Call};
+use opencode_plugin::abi;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+
+/// The fetch of `call`, as a generated builder made it. Its headers and a byte body do not cross; no builder a
+/// built-in uses sets them.
+pub fn fetch_of(call: Call) -> abi::Fetch {
+    debug_assert!(call.headers.is_empty(), "a plugin fetch carries no headers");
+    abi::Fetch::new(call.method, call.path).query(call.query).maybe(
+        match call.body {
+            Some(Body::Json(value)) => Some(value),
+            _ => None,
+        },
+        abi::Fetch::body,
+    )
+}
+
+pub fn data<T: DeserializeOwned>(reply: Result<Value, String>) -> Result<T, String> {
+    #[derive(serde::Deserialize)]
+    struct Data<T> {
+        data: T,
+    }
+    serde_json::from_value::<Data<T>>(reply?).map(|value| value.data).map_err(|error| error.to_string())
+}
+
+pub(crate) fn call_of(fetch: abi::Fetch) -> Result<Call, String> {
+    let method = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        .into_iter()
+        .find(|method| method.eq_ignore_ascii_case(&fetch.method))
+        .ok_or_else(|| format!("unsupported method {}", fetch.method))?;
+    if !fetch.path.starts_with('/') {
+        return Err(format!("the path {} does not start with /", fetch.path));
+    }
+    let mut call = Call::new(method, fetch.path, 200, &[]);
+    call.query = fetch.query;
+    call.body = fetch.body.map(Body::Json);
+    Ok(call)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencode_api::client::{Auth, Client};
+    use opencode_api::generated::{
+        ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionGenerateInput, SessionID,
+    };
+
+    #[test]
+    fn a_call_survives_the_fetch_round_trip() {
+        let client = Client::new("http://127.0.0.1:4096/base").unwrap();
+        let stats = || {
+            let input = ExperimentalSessionStatsInput {
+                from: Some(1.5),
+                timezone: Some("Europe/Oslo".to_owned()),
+                tools: Some(ExperimentalSessionStatsInputTools::None),
+                ..ExperimentalSessionStatsInput::default()
+            };
+            Client::experimental_session_stats_call(&input).unwrap()
+        };
+        let generate = || {
+            let input = SessionGenerateInput { session_id: SessionID("ses_1".into()), prompt: "why?".into() };
+            Client::session_generate_call(&input).unwrap()
+        };
+        for call in [stats as fn() -> Call, generate] {
+            let fetch: abi::Fetch = serde_json::from_value(serde_json::to_value(fetch_of(call())).unwrap()).unwrap();
+            let (want, got) = (client.prepare(call()).unwrap(), client.prepare(call_of(fetch).unwrap()).unwrap());
+            assert_eq!((want.method, want.url, want.headers, want.body), (got.method, got.url, got.headers, got.body));
+        }
+        assert!(call_of(abi::Fetch::new("TRACE", "/x")).is_err());
+        let elsewhere = abi::Fetch::new("GET", "/https://outside.invalid/x");
+        assert!(client.auth(Auth::password("secret")).prepare(call_of(elsewhere).unwrap()).is_err());
+    }
+}

@@ -24,6 +24,10 @@ const exit = { type: Schema.Literal("exit"), id: ProcessID, bytes: Schema.Number
 /** A file call and its reply carry the same `req`. */
 const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
+/** A peer link between two workers, named by the home. */
+export const PeerLink = Schema.String.pipe(Schema.brand("Machine.PeerLink"))
+export type PeerLink = typeof PeerLink.Type
+
 /**
  * The first message of every connection, reconnects included. It names no machine: which machine sent it is the link's
  * to prove, never the worker's to say.
@@ -31,11 +35,17 @@ const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 export const Hello = Schema.Struct({
   type: Schema.Literal("hello"),
   /** The version of the messages after the handshake: a home that does not know a worker's version ends the connection. */
-  protocol: Schema.Literal(2),
+  protocol: Schema.Literal(3),
+  /** Node's name for the worker's OS: `win32` gives the machine Windows path rules. */
   os: Schema.String,
   arch: Schema.String,
-  /** The worker's home directory, an absolute POSIX path: where `~` in a path on this machine starts. */
-  home: Schema.String.check(Schema.isPattern(/^\//)),
+  /**
+   * The worker's home directory, where `~` in a path on this machine starts: an absolute POSIX path, or on Windows a
+   * drive (`C:\Users\kit`, `C:/Users/kit`) or UNC (`\\server\share`) path.
+   */
+  home: Schema.String.check(Schema.isPattern(/^(?:\/|[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/]+[^\\/]+)/)),
+  /** The shell every command on this machine runs under, such as `pwsh`. A worker that names none runs `sh`. */
+  shell: Schema.optionalKey(Schema.String),
   /** Made once per worker process start: a new value means every process the worker held is gone. */
   instance: Instance,
   processes: Schema.Array(
@@ -48,8 +58,15 @@ export const Hello = Schema.Struct({
       signal: Schema.optionalKey(Schema.String),
     }),
   ),
+  /** The peer links that are up: they outlive the worker's connection to the home. */
+  links: Schema.optionalKey(Schema.Array(PeerLink)),
 })
 export type Hello = typeof Hello.Type
+
+/** The home's grant for one file or one forward on a peer link. */
+const Token = Schema.String
+const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 }))
+const peer = { req: Schema.Number }
 
 export const FromWorker = Schema.Union([
   Hello,
@@ -98,6 +115,11 @@ export const FromWorker = Schema.Union([
       actual: Schema.optionalKey(FileType),
     }),
   }),
+  /** The one answer to each peer request, with its `req`. */
+  Schema.Struct({ type: Schema.Literal("peer"), ...peer, ok: Schema.Literal(true) }),
+  Schema.Struct({ type: Schema.Literal("peer"), ...peer, ok: Schema.Literal(false), message: Schema.String }),
+  /** A link that was up ended, on either side. */
+  Schema.Struct({ type: Schema.Literal("peer-closed"), link: PeerLink }),
 ])
 export type FromWorker = typeof FromWorker.Type
 
@@ -114,6 +136,29 @@ export const FileCall = Schema.Union([
   Schema.Struct({ ...fs, call: Schema.Literal("move"), from: Schema.String, to: Schema.String }),
 ])
 export type FileCall = typeof FileCall.Type
+
+/**
+ * Peer requests: the home links two workers over Iroh, then grants single file transfers and port forwards on that link.
+ * `key` is the other worker's key, which is also its Iroh endpoint id. Nothing on a link runs without a grant.
+ */
+export const PeerCall = Schema.Union([
+  /** Accepts one connection from `key` naming `link`. Answered once it is up, or after 30 seconds without one. */
+  Schema.Struct({ type: Schema.Literal("peer-accept"), ...peer, link: PeerLink, key: Schema.String }),
+  /** Dials `key` and names `link`. Answered once the other worker accepted. */
+  Schema.Struct({ type: Schema.Literal("peer-connect"), ...peer, link: PeerLink, key: Schema.String }),
+  /** Takes one file presenting `token` on `link` and writes it to `path` atomically. Answered once it is written. */
+  Schema.Struct({ type: Schema.Literal("peer-receive"), ...peer, link: PeerLink, token: Token, path: Schema.String }),
+  /** Sends the file at `path` on `link` with `token`. Answered once the other worker wrote it. */
+  Schema.Struct({ type: Schema.Literal("peer-send"), ...peer, link: PeerLink, token: Token, path: Schema.String }),
+  /** Connects each stream presenting `token` on `link` to its own `127.0.0.1:port`. */
+  Schema.Struct({ type: Schema.Literal("peer-allow"), ...peer, link: PeerLink, token: Token, port: Port }),
+  /** Listens on `127.0.0.1:port` and carries each connection over `link` with `token`. */
+  Schema.Struct({ type: Schema.Literal("peer-forward"), ...peer, link: PeerLink, token: Token, port: Port }),
+  /** Ends the grant or listener of `token`: a pending receive fails. */
+  Schema.Struct({ type: Schema.Literal("peer-revoke"), ...peer, token: Token }),
+  Schema.Struct({ type: Schema.Literal("peer-close"), ...peer, link: PeerLink }),
+])
+export type PeerCall = typeof PeerCall.Type
 
 export const ToWorker = Schema.Union([
   /** Starts the process and attaches to its output from byte 0. */
@@ -134,6 +179,7 @@ export const ToWorker = Schema.Union([
   /** Sent once the home has the process's exit: the worker may forget the process and its output. */
   Schema.Struct({ type: Schema.Literal("release"), id: ProcessID }),
   FileCall,
+  PeerCall,
 ])
 export type ToWorker = typeof ToWorker.Type
 

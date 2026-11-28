@@ -1,0 +1,174 @@
+---
+title: "API الاستدلال"
+description: "استدع نماذج متوافقة مع OpenAI وAnthropic وGemini عبر استدلال Console بترويسة مصادقة واحدة."
+---
+
+يقدّم استدلال Console واجهات API متوافقة مع OpenAI وAnthropic وGemini من `https://opencode.ai/inference`. أرسل طلب
+`POST` بصيغة JSON إلى نقطة النهاية المطابقة لعائلة API الخاصة بالنموذج.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## المصادقة
+
+استبدل `<token>` بـ[مفتاح API شخصي](/console/api#personal-api-keys) أو [مفتاح حساب خدمة](/console/api#service-accounts) أنشأته في [Console](https://opencode.ai/console). وتتطلب النماذج المدفوعة
+هذه الترويسة. أما نماذج المحادثة في الخطة المجانية فلا تتاح إلا من داخل OpenCode؛ ويتلقى العملاء الآخرون HTTP `403`،
+حتى مع مفتاح API. فاستخدم النماذج المدفوعة أو اشتراك [Go](/console/go) من عملاء آخرين.
+
+```text
+Authorization: Bearer <token>
+```
+
+## نقاط النهاية
+
+| API                     | المسار                                                    |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (القرارات)   | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+يُتاح كل نموذج عبر عائلة API واحدة. راجع جدول [نقاط نهاية النماذج](/console/models#endpoints)، أو اجلب القائمة
+المحدّثة:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+وتشرح صفحة [API قائمة النماذج](/console/api/models) حقول الاستجابة وقائمة Console التي تتضمّن
+المزوّدين الذين ربطتهم.
+
+### OpenAI Chat Completions
+
+تستخدم النماذج المفتوحة مثل `kimi-k3` و`glm-5.3` و`minimax-m3` والنماذج المجانية واجهة Chat Completions.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+تستخدم نماذج GPT واجهة Responses.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+تستخدم نماذج Claude وQwen واجهة Messages. ويُشترط `max_tokens`.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+حدّد نموذج Gemini والطريقة في مسار الطلب. استبدل `:generateContent` بـ`:streamGenerateContent` لبثّ
+الاستجابة.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+تجيب نماذج القرار مثل `jev-1.14` و`gemini-decision-1` و`gpt-6-luna-decision` عن أسئلة محدّدة النوع حول
+`state` بدل توليد نص. راجع [نماذج القرار](/console/models#jev) لأنواع الأسئلة ومدخلات الوسائط.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+وتقبل النماذج نفسها أيضًا صيغة Decisions من OpenAI على `/inference/openai/v1/decisions`.
+
+### OpenAI Embeddings
+
+تستخدم نماذج التضمين مثل `text-embedding-3-small` و`qwen3-embedding-8b` واجهة Embeddings. راجع
+[نماذج التضمين](/console/models#embedding-models) لكل نموذج وخيار.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+ويقدّم [Go](/console/go#endpoints) نماذج القرار والتضمين التي يتضمنها على المسارات نفسها تحت
+`/inference/go`.
+
+## التكلفة
+
+تذكر كل استجابة تكلفة الطلب عليك، إلى جانب الاستخدام الذي تعيده واجهتها أصلًا: في `usage` لـ OpenAI
+وAnthropic، وفي `usageMetadata` لـ Gemini. وتعرضها التدفقات في الحدث الذي يحمل الاستخدام النهائي: مقطع
+الاستخدام الأخير في Chat Completions مع `stream_options.include_usage`، و`response.completed` في Responses،
+و`message_delta` في Messages، والمقطع الأخير في Gemini.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| الحقل                     | المعنى                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | دولارات أمريكية تُخصم من رصيدك. و`0` للنماذج المجانية ولاستخدام [Go](/console/go) ضمن حدوده. ومع مفتاح مزوّدك، تقدير لما يتقاضاه مزوّدك، إلا إذا أفاد بسعره؛ ويغيب عندما لا يكون للنموذج سعر. |
+| `opencode.billing_source` | `free` أو `balance` أو `go` أو `go-plus` أو `byok` (مفتاح مزوّدك).                                                       |
+| `opencode.list_cost`      | دولارات أمريكية بسعر النموذج، بما في ذلك ساعات الذروة وتسعير السياق الطويل.                                              |
+| `opencode.estimated`      | `true` عندما يكون `cost` تقديرًا بسعر النموذج لا مبلغًا خصمته OpenCode. ولا يُضبط إلا مع مفتاح مزوّدك. |
+| `opencode.allowance`      | لـ Go فقط: مقدار ما احتُسب للطلب ضمن [حدود استخدامك](/console/go#usage-limits)، بدولارات الحد الشهري للخطة. |
+| `opencode.tokens`         | الرموز التي دُفعت تكلفتها. لا يشمل `input` الرموز المقروءة من الذاكرة المؤقتة أو المكتوبة فيها، ويشمل `output` رموز `reasoning`.                      |
+
+تظهر الحقول نفسها في استجابة توليد الصور. وعند البثّ، تظهر مع كل صورة يكتمل توليدها، وتبيّن التكلفة حتى تلك اللحظة.
+وتُعرف التكلفة عند انتهاء الاستجابة، قبل تحديث رصيدك أو استخدام Go. وإذا نفد رصيدك أو حدود Go أثناء طلب، فقد تُخصم منك أقل مما ذُكر، لا أكثر.

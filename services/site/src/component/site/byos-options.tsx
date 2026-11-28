@@ -1,6 +1,7 @@
 import "./byos-options.css"
 import { For, Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import { rich } from "~/i18n/rich"
 import { byos } from "~/lib/byos"
 import { byosOptions } from "~/lib/byos-options"
@@ -24,11 +25,12 @@ const providers = marks.filter((provider) => !shown.has(provider.id))
 
 /** Each option's lead, in place of the section's own (inside its lead paragraph). */
 export function ByosOptionLeads() {
+  const language = useLanguage()
   const link = (text: string) => (
     <Rich
       value={linkPhrases(
         text,
-        byos.planLinks.map((phrase) => ({ text: phrase, href: byos.plansHref })),
+        byos.planLinks.map((phrase) => ({ text: phrase, href: language.consoleRoute(byos.plansHref) })),
       )}
     />
   )
@@ -43,6 +45,7 @@ export function ByosOptionLeads() {
 
 export function ByosOptions() {
   const i18n = useI18n()
+  const language = useLanguage()
   const providersLink = docsUrl("/providers/")
   return (
     <div data-slot="options">
@@ -100,7 +103,7 @@ export function ByosOptions() {
               <For each={byosOptions.opencode}>
                 {(item) => (
                   <li>
-                    <a href={item.href}>{item.name}</a>
+                    <a href={language.consoleRoute(item.href)}>{item.name}</a>
                   </li>
                 )}
               </For>

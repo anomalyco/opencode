@@ -1,0 +1,174 @@
+---
+title: "预热"
+description: "在你两次提示词之间暂停时，定期发送请求，避免会话的提供商提示词缓存过期。"
+---
+
+会话预热会定期发送模型请求，在你两次提示词之间停顿时保留提供商端的提示词缓存或其他短期状态。该功能默认禁用。
+
+在任意 [OpenCode 配置文件](/config)中启用预热：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+使用此配置后，OpenCode 会在最近活跃会话的提示词缓存即将过期时进行预热：时间为模型 [`cache.ttl`](/models#cache-lifetime) 的 90%，模型没有该设置时则每四分钟一次。预热会持续到距最近一次非预热请求满 30 分钟为止。
+
+## 选项
+
+使用对象形式可以修改预热提示词、空闲间隔或活跃窗口：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| 字段 | 默认值 | 用途 |
+| --- | --- | --- |
+| `prompt` | 保活指令 | 每次预热请求时作为临时用户消息追加。默认内容要求模型不做任何工作、不使用任何工具，只回复 `OK`。 |
+| `interval` | `"auto"` | 发送下一次预热请求前的空闲时间。`"auto"` 使用模型 `cache.ttl` 的 90%，没有该设置时则为四分钟。 |
+| `duration` | `"30 minutes"` | 预热窗口，从最近一次非预热模型请求开始计算。 |
+
+对象中省略的字段保持默认值。例如，以下配置只修改间隔：
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## 自动间隔
+
+默认情况下，`interval` 为 `"auto"`，会在每个模型的提示词缓存过期前进行预热。OpenCode 使用模型 [`cache.ttl`](/models#cache-lifetime) 设置的 90%，因此 `"5m"` 的缓存会每 4.5 分钟预热一次。没有 `cache.ttl` 的模型每四分钟预热一次。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+缓存持续时间超过 `duration` 时（例如 `"1h"` 搭配默认的 30 分钟），不会进行预热，因为它的寿命本来就会超过预热窗口。OpenCode 会为每个会话记录一次日志。请增大 `duration` 以便预热。
+
+## 按提供商和模型设置
+
+在提供商或模型上设置 `settings.cache.warming`，可以只预热其会话，或为它们指定单独的时间安排。它接受与顶层 `warming` 相同的值（`prompt` 除外），并会覆盖顶层设置。模型设置会覆盖提供商设置。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+在这个示例中，Anthropic 的会话每 4.5 分钟预热一次，Claude Haiku 5.5 除外，其他提供商则不预热。对象形式中省略的字段取自顶层 `warming`，然后取自默认值。无效的设置会记录一条警告，并回退到顶层 `warming`。
+
+## 时长格式
+
+`interval` 和 `duration` 接受时长字符串。两者都必须解析为大于零的有限值，并且 `interval` 必须短于 `duration`；否则 OpenCode 会跳过预热并输出一条警告日志。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## 时间安排
+
+预热会在顶层会话中的一次非预热模型请求之后开始。subagent 会话不会被预热。每个间隔都从最近一次请求或预热请求发送时开始计算，而不是从其响应完成时开始，因为提供商的缓存生命周期从请求到达时开始。预热请求不会延长活跃窗口。
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+任何新的非预热模型活动（包括压缩）都会重置这两个计时器。显式设置的间隔如果大于或等于时长，会被拒绝并给出警告；`"auto"` 间隔如果同样长，则会跳过预热，因为缓存的寿命超过了窗口。
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode 绝不会在模型请求（包括压缩）运行期间发送预热请求。如果间隔到期时请求仍在运行，预热会等待其结束，然后立即发送，前提是该请求产生的缓存尚未过期。如果已过期，预热会停止，直到下一次普通请求。
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## 请求
+
+预热请求使用会话当前的模型、agent、指令和对话上下文。OpenCode 会临时追加配置的提示词，发起一次模型调用，然后丢弃响应。
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+该请求不会接收输入、不会向历史添加消息，也不会修改持久化的会话状态。OpenCode 不会分派本地工具调用，也不会继续工具循环；默认提示词也会告诉模型不要使用工具。
+
+## 失败处理
+
+预热失败只会记录到日志，不会导致会话失败或改变会话。OpenCode 会等到下一个间隔再重试，而原有的活跃窗口会继续倒计时。
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+如果预热请求未命中缓存（读取量少于写入量），该会话的预热会停止，直到下一次非预热请求。不报告缓存用量的提供商永远不会被视为未命中。
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## 费用
+
+预热请求是真实的提供商请求。和其他模型请求一样，它们会消耗 token、产生费用、计入速率限制，也可能失败。
+
+- 间隔越短，请求量越大。
+- 时长越长，允许的预热请求越多。
+- 只有当提供商端的收益值得额外用量时，才启用预热。
+
+例如，在没有 `cache.ttl` 的模型上，默认设置允许在一个不间断的 30 分钟窗口内最多进行七次预热尝试：分别在第 4、8、12、16、20、24 和 28 分钟。
+
+## 禁用
+
+将 `warming` 设为 `false` 可以显式禁用预热。省略该字段时，预热同样处于禁用状态。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

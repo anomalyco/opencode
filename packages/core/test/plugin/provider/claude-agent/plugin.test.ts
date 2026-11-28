@@ -1,5 +1,5 @@
 import { Message, SystemPart } from "@opencode/ai/effect"
-import type { LanguageModelV3 } from "@ai-sdk/provider"
+import type { LanguageModelV3, LanguageModelV3Prompt } from "@ai-sdk/provider"
 import type { AccountInfo } from "@anthropic-ai/claude-agent-sdk"
 import { AISDK } from "@opencode/core/aisdk"
 import { Agent } from "@opencode/core/agent"
@@ -12,7 +12,7 @@ import { ClaudeIntegration } from "@opencode/core/plugin/provider/claude-agent/i
 import { ClaudeProvider } from "@opencode/core/plugin/provider/claude-agent/provider"
 import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
-import { Environment, makeFiles } from "@opencode/core/environment/index"
+import { Environment } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
@@ -123,14 +123,7 @@ describe("ClaudeAgentPlugin", () => {
     Effect.gen(function* () {
       const claude = FakeClaude.make([])
       yield* addPlugin(FakeIO.make({ claude })).pipe(
-        Effect.provideService(
-          Environment.Service,
-          Environment.Service.of({
-            id: Environment.localID,
-            files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
-            spawner: EnvironmentUnavailable.spawner,
-          }),
-        ),
+        Effect.provideService(Environment.Service, Environment.local(EnvironmentUnavailable.spawner)),
       )
       const providers = yield* Provider.Service
       const integrations = yield* Integration.Service
@@ -344,6 +337,59 @@ describe("ClaudeAgentPlugin deleted sessions", () => {
       yield* sessions.remove(session.id)
       yield* Effect.promise(() => claude.runs[0]!.closed)
       yield* eventually(store.scan({ prefix: "" }), (saved) => saved.entries.every((entry) => entry.key === "models"))
+      claude.check()
+    }),
+  )
+})
+
+describe("ClaudeAgentPlugin idle subagents", () => {
+  it.live("a subagent's process stops once it goes idle with no background work left", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make(
+        [
+          FakeClaude.expectStartup(),
+          FakeClaude.expectTurn(),
+          FakeClaude.expectTurn({ index: 1 }),
+          FakeClaude.expectInterrupt(),
+        ],
+        { probes: true },
+      )
+      yield* addPlugin(FakeIO.make({ claude }))
+      const location = yield* Location.Service
+      const sessions = yield* Session.Service
+      const hooks = yield* PluginHooks.Service
+      const parent = yield* sessions.create({ location: { directory: location.directory } })
+      const child = yield* sessions.create({ parentID: parent.id })
+      const aisdk = yield* AISDK.Service
+      const sdk = yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(ClaudeProvider.ID, haiku.id),
+          modelID: haiku.id,
+          package: Provider.aisdk(ClaudeProvider.PACKAGE),
+        }),
+        package: ClaudeProvider.PACKAGE,
+        options: {},
+      })
+      const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
+      const reply = (prompt: LanguageModelV3Prompt) =>
+        Effect.promise(() =>
+          model
+            .doStream({ prompt, headers: { [RequestKind.SESSION_HEADER]: child.id, [RequestKind.HEADER]: "primary" } })
+            .then((result) => TestSessions.collect(result.stream)),
+        )
+      yield* reply(TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."))
+
+      // Its shell will wake it again, so the next request reaches the same process.
+      yield* hooks.trigger("session", "experimental.idle", {
+        sessionID: child.id,
+        background: [{ kind: "shell", sessionID: child.id, shellID: "shell-a", command: "sleep 60" }],
+      })
+      yield* reply(TestSessions.followup())
+      expect(claude.runs).toHaveLength(1)
+
+      // The idle timeout is minutes away, so only the idle hook can have stopped it.
+      yield* hooks.trigger("session", "experimental.idle", { sessionID: child.id, background: [] })
+      yield* Effect.promise(() => claude.runs[0]!.closed)
       claude.check()
     }),
   )

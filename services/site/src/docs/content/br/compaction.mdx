@@ -1,0 +1,264 @@
+---
+title: "Compactação"
+description: "A compactação resume a conversa mais antiga, automaticamente ou sob demanda, para que uma sessão do OpenCode continue além do limite de contexto do modelo."
+---
+
+A compactação substitui os trechos mais antigos da conversa por um resumo. Isso libera espaço para a sessão longa continuar além
+do limite de contexto do modelo.
+
+## Como funciona
+
+Quando uma sessão se aproxima do limite de contexto do modelo, o OpenCode resume toda a conversa. Junto ao resumo,
+mantém o trecho mais recente — cerca de 15.000 tokens por padrão — para preservar os detalhes exatos.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+request  [ system prompt ][ older conversation ............ ][ recent 15k ][ summary instructions ]
+after    [ system prompt ][ summary of older + recent ][ recent 15k ][ pending work ]
+```
+
+Enviar a conversa completa permite que a requisição de resumo reutilize o cache de prompt
+da requisição normal quando o provedor oferece suporte. Compactações posteriores atualizam o resumo
+existente usando a conversa desde aquele checkpoint.
+
+## Início
+
+A compactação automática vem ativada por padrão:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+A compactação perde parte dos detalhes. Se precisar preservar detalhes exatos da conversa recente, aumente `keep.tokens`
+ou solicite a compactação antes que ela ocorra automaticamente.
+
+## Manual
+
+Peça a compactação a qualquer momento, mesmo para um histórico curto:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+O comando `api` descobre e se autentica com o serviço em segundo plano. A
+resposta dele confirma que a requisição foi aceita; ela não espera o resumo.
+Acompanhe os eventos `session.compaction.*` para saber quando termina. Consulte a
+[referência da API](/api) para a operação completa.
+
+| Regra | Comportamento |
+| --- | --- |
+| Momento | Roda no próximo ponto seguro, antes dos prompts que ainda estão esperando. |
+| Repetições | Requisições feitas enquanto uma está pendente se juntam a ela. |
+| Automação | Funciona quando `compaction.auto` é `false`. |
+
+Passe um `id` para que repetir a mesma requisição seja idempotente. Reutilizar esse ID em uma requisição diferente gera um conflito.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Configurações
+
+Adicione `compaction` a qualquer [arquivo de configuração do OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": "20%",
+  },
+}
+```
+
+| Campo | Padrão | Comportamento |
+| --- | ---: | --- |
+| `auto` | `true` | Compacta automaticamente perto do limite de contexto e se recupera uma vez quando um provedor rejeita uma requisição por ser longa demais. A compactação manual sempre funciona. |
+| `background` | `true` | Grava o resumo com antecedência para que a compactação automática não espere por ele. Consulte [Compactação em segundo plano](#background-compaction). |
+| `keep.tokens` | `15000` | Quantidade aproximada de tokens da conversa recente mantidos junto ao resumo. Valores maiores preservam mais detalhes, mas deixam menos espaço para trabalho novo. |
+| `buffer` | `"15%"`, pelo menos 16k | Parte da janela de contexto do modelo reservada como espaço livre. A compactação automática começa quando a conversa ocupa todo o espaço não reservado. Valores maiores antecipam a compactação. |
+
+`keep.tokens` aceita um número inteiro não negativo.
+
+### Buffer
+
+`buffer` é uma porcentagem da janela de cada modelo, então uma configuração serve para todos os modelos:
+
+| Janela do modelo | `"buffer": "20%"` compacta em |
+| ---: | ---: |
+| 128k | ~102k |
+| 1M | 800k |
+
+- É o espaço mantido livre, não o ponto em que a compactação começa: `"20%"` compacta com 80% cheio.
+- Aceita `"1%"` a `"99%"`, incluindo decimais como `"12.5%"`.
+- Uma contagem de tokens como `20000` também funciona. A mesma contagem é uma parte grande de uma janela pequena e uma parte pequena de uma grande.
+- Uma contagem de tokens pelo menos tão grande quanto a janela do modelo é ignorada e o padrão se aplica.
+
+### Janela
+
+A janela corresponde ao limite de entrada do modelo (`limit.input`), sem ultrapassar o limite de contexto (`limit.context`).
+Se o modelo tiver só um desses limites, vale o que estiver definido. Se não tiver nenhum, não há compactação automática.
+O OpenCode compacta uma vez se o provedor rejeitar uma requisição longa demais.
+
+Os limites na configuração substituem os do catálogo campo a campo. Se o catálogo definir os dois limites, aumentar só
+`limit.context` mantém a janela no limite de entrada do catálogo. Nesse caso, defina também `limit.input`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
+## Modelo
+
+Por padrão, o OpenCode escreve o resumo usando o modelo da sessão. Defina
+`agents.compaction.model` para usar outro modelo nos resumos:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "compaction": { "model": "anthropic/claude-sonnet-5-5" },
+  },
+}
+```
+
+Se esse modelo não puder ser resolvido, o OpenCode recorre ao modelo da sessão.
+
+## Compactação em segundo plano
+
+O OpenCode prepara um resumo sem interromper a sessão e o aplica na hora de compactar. Assim, a compactação automática
+não precisa pausar a sessão para escrever o resumo:
+
+```text
+60k tokens before the threshold   summary of the conversation so far starts in the background
+                                  the session keeps going; the summary is held, not applied
+threshold                         the held summary is swapped in; everything since it is kept as is
+```
+
+Em janelas de contexto pequenas, o resumo começa no máximo na metade do caminho entre a primeira resposta após a última compactação
+e o limite.
+
+| Regra | Comportamento |
+| --- | --- |
+| Custo | A requisição de resumo reutiliza o cache de prompt. Um resumo que nunca é usado, por exemplo porque a sessão termina antes do limite, ainda custa tokens. |
+| Espera | Se o resumo ainda estiver sendo escrito quando a compactação chegar, a sessão espera ele terminar. |
+| Recorre | A compactação resume como de costume se a conversa desde o resumo mantido cresceu além de cerca de 40% do limite, ou se o início da conversa mudou. |
+| Ignorado | Não é usado na compactação nativa. Logo após uma troca de modelo, ou depois de uma pausa maior que a vida útil do cache de prompt, ele começa a partir da próxima resposta. |
+| Armazenamento | Os resumos preparados ficam na memória e se perdem ao reiniciar. |
+
+Desative para escrever o resumo apenas quando a compactação chegar:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "background": false,
+  },
+}
+```
+
+## Provedores
+
+Alguns provedores podem compactar a conversa do lado deles. Ative por
+provedor ou modelo com `settings.compaction`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Uma configuração de modelo substitui a do provedor. `native` usa a compactação do provedor;
+`summary` usa a do próprio OpenCode.
+
+Com a compactação nativa, o OpenCode envia a conversa ao endpoint de
+compactação do provedor. O provedor retorna um item opaco e criptografado que substitui a conversa mais antiga. Suas mensagens e anexos recentes, até
+`keep.tokens`, são mantidos ao lado dele:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Tópico | Comportamento |
+| --- | --- |
+| Suporte | Modelos OpenAI Responses. O suporte varia por implantação e modelo. |
+| Limite | As mesmas configurações `auto` e `buffer` da compactação por resumo. Requisições manuais também funcionam. |
+| Portabilidade | Um checkpoint criptografado só funciona com o mesmo provedor e modelo. Se você trocar de modelo, a sessão continua a partir da conversa original. |
+| Longo demais | Se o provedor rejeitar uma compactação por ser longa demais, o OpenCode tenta de novo com uma requisição menor. Ele não muda para um resumo. |
+
+## Resumos
+
+O resumo é estruturado para que outro agente possa assumir o trabalho a partir dele:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Ele cobre o objetivo e os requisitos, as decisões, o trabalho concluído e o ativo,
+os bloqueios e os próximos passos, e os arquivos relevantes. Na conversa recente mantida
+ao lado, a saída longa de ferramentas é encurtada e os dados de anexos são substituídos por uma
+descrição curta.
+
+Depois da compactação, as versões atuais dos seus arquivos de instrução viram a base da
+sessão; consulte [Instruções](/instructions).
+
+## Limites
+
+| Limite | Resultado |
+| --- | --- |
+| Modelo | A compactação por resumo respeita `agents.compaction.model`; caso contrário, usa o modelo da sessão. A compactação nativa sempre usa o modelo da sessão. |
+| Histórico | A compactação precisa de conversa antiga para substituir. Ela não consegue abrir espaço quando uma requisição é quase toda instruções fixas e esquemas de ferramentas. |
+| Tamanho | Se a conversa a compactar for longa demais por si só, o OpenCode envia uma versão de texto encurtada e pode deixar de fora as trocas mais antigas. |
+| Recuperação | Uma requisição rejeitada por ser longa demais é compactada e repetida uma vez. Uma segunda rejeição é retornada como erro. |
+| Armazenamento | Mensagens anteriores continuam armazenadas mesmo quando já não são enviadas ao modelo. |
+
+Por exemplo, a compactação não ajuda aqui:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Migração
+
+A V1 usava comportamento de tail-turn e poda. A V2 usa resumos e
+`compaction.keep.tokens`:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+As configurações e o comportamento desta página valem para a V2.

@@ -1,5 +1,6 @@
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
+import { useNavigate } from "@solidjs/router"
 import { createMemo, onMount, Show } from "solid-js"
 import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
@@ -35,7 +36,12 @@ function HomeOverview() {
   const layout = useLayout()
   const settings = useSettings()
   const home = createHomeController()
-  const projects = createHomeProjectsController(home)
+  const navigate = useNavigate()
+
+  const projects = createHomeProjectsController(home, {
+    automations: { open: () => navigate("/automations") },
+  })
+
   const sessions = createHomeSessionsController(home)
   const search = createHomeSessionSearchController(home, sessions, settings.appearance.navigationPrototype)
 
@@ -69,6 +75,9 @@ export function HomeView(props: {
   providerTip?: boolean
 }) {
   const mobile = createMediaQuery("(max-width: 767px)")
+  // Between md and lg the projects column has no room beside the sessions, so the picker moves into the search field.
+  const tablet = createMediaQuery("(min-width: 768px) and (max-width: 1023px)")
+  const scoped = () => props.projectScope || tablet()
 
   const scroll = createHomeScrollController(props.search.result.groups)
 
@@ -95,22 +104,33 @@ export function HomeView(props: {
         >
           <div
             class={
-              props.projectScope
+              scoped()
                 ? "mx-auto grid min-h-full w-full max-w-[768px] grid-rows-[minmax(0,1fr)] px-3 lg:px-6"
                 : `
-            mx-auto grid min-h-full w-full max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-4 px-3
-            max-md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6
+            mx-auto grid min-h-full w-full max-w-[1056px] grid-rows-[auto_minmax(0,1fr)] gap-4 px-3
+            max-md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[256px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6
           `
             }
           >
-            <Show when={!mobile() && !props.projectScope}>
+            <Show when={!mobile() && !scoped()}>
               <HomeProjects projects={props.projects} scroll={scroll} />
             </Show>
             <HomeSessions
               sessions={props.sessions}
               search={props.search}
               scroll={scroll}
-              searchScope={props.projectScope ? <HomeProjects projects={props.projects} dropdown scope /> : undefined}
+              searchScope={
+                scoped() ? (
+                  <HomeProjects
+                    projects={props.projects}
+                    dropdown
+                    scope
+                    // A pick from the column clears the search by pressing outside it, but this picker is inside the
+                    // field. Inline search filters the list in place, so the query carries over to the new project.
+                    onPick={props.searchInline ? undefined : props.search.query.close}
+                  />
+                ) : undefined
+              }
               searchInline={props.searchInline}
             />
           </div>
@@ -124,6 +144,7 @@ export function HomeView(props: {
           class="flex"
           onOpenSettings={props.projects.utility.settings}
           onOpenHelp={props.projects.utility.help}
+          automations={props.projects.utility.automations}
           language={props.projects.copy.language}
         />
       </div>

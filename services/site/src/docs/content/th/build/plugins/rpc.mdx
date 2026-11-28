@@ -1,0 +1,261 @@
+---
+title: "Plugin RPC"
+description: "เปิดเมธอดและอีเวนต์กำหนดเองของปลั๊กอินให้ปลั๊กอินอื่นและไคลเอนต์"
+---
+
+ปลั๊กอินเปิดเมธอดและอีเวนต์กำหนดเองที่ทำงานบนเซิร์ฟเวอร์ และ
+ปลั๊กอินอื่นหรือไคลเอนต์เรียกได้
+
+## การกำหนด
+
+ใช้ `Rpc.define` เพื่อระบุเมธอด ข้อผิดพลาด และอีเวนต์ของ RPC
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### การตรวจสอบความถูกต้อง
+
+คำจำกัดความ RPC อธิบายรูปร่างของอินพุตและเอาต์พุตของเมธอด อีเวนต์
+และข้อผิดพลาด โดยรองรับ schema สองรูปแบบ
+
+- JSON Schema ใช้งานง่ายและไม่ต้องใช้แพ็กเกจอื่น
+- ตัวตรวจสอบใดๆ ที่สอดคล้องกับ Standard Schema
+  - Zod
+  - Valibot
+  - ArkType
+
+### อินพุตและเอาต์พุต
+
+แต่ละเมธอดต้องมี schema ของ `input` สำหรับอาร์กิวเมนต์ และ schema ของ `output` สำหรับค่าที่คืน
+หากเมธอดไม่รับค่าหรือไม่คืนค่า ให้ใช้ schema ของออบเจกต์ว่าง เรียกเมธอดด้วย `{}` และคืนค่า `{}`
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+หากเมธอดคืน `undefined` จะเกิดข้อผิดพลาด `rpc.invalid_output`
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+ค่า JSON Schema เป็น `unknown` ใน TypeScript จึงควรจำกัดชนิดก่อนใช้
+Standard Schema อนุมานชนิดอินพุตและเอาต์พุต
+
+### ข้อผิดพลาด
+
+เพิ่มแมป `errors` ในเมธอดสำหรับความล้มเหลวที่คาดไว้ แต่ละคีย์กลายเป็น
+`type` ของข้อผิดพลาด และ schema จะกำหนด `data` ของข้อผิดพลาด
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+ชื่อข้อผิดพลาดที่ขึ้นต้นด้วย `rpc.` สงวนไว้โดย OpenCode
+
+### อีเวนต์
+
+เพิ่มอีเวนต์ในแมป `events` ระดับบนสุด แต่ละอีเวนต์มี schema สำหรับข้อมูลที่ส่งให้ผู้สมัครรับอีเวนต์
+คุณต้องระบุแมปนี้เสมอ หาก RPC ไม่มีอีเวนต์ ให้ใช้ `events: {}`
+
+ข้อมูลอีเวนต์ต้องเป็นออบเจกต์ หากไม่มีข้อมูล ให้ใช้ schema สำหรับออบเจกต์ว่าง
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+ข้อมูลอีเวนต์ต้องไม่เป็นค่าสเกลาร์ อาร์เรย์ `null` หรือ `undefined`
+
+## การใช้งาน
+
+ลงทะเบียนการใช้งานภายใน `setup`
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+หลังลงทะเบียน RPC ปลั๊กอินเดิมเรียกผ่าน `ctx.rpc(Acme)` ได้
+
+อาร์กิวเมนต์ตัวที่สองมี `signal` สำหรับการยกเลิกและ `context.error(...)`
+สำหรับข้อผิดพลาดที่ประกาศ คุณคืนหรือ throw ข้อผิดพลาดได้
+
+ปลั๊กอินหนึ่งลงทะเบียนได้มากกว่าหนึ่ง RPC การ dispose การลงทะเบียนจะนำออก
+
+## การเรียก
+
+เมื่อลงทะเบียน RPC แล้ว เรียกผ่าน HTTP หรือจากปลั๊กอินอื่นได้
+
+### HTTP
+
+สร้างไคลเอนต์ OpenCode แล้วใช้ `client.rpc` เพื่อสร้างไคลเอนต์ย่อยสำหรับ
+RPC
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### ปลั๊กอิน
+
+ปลั๊กอินมีไคลเอนต์ OpenCode อยู่แล้ว ตัวอย่างเช่น ปลั๊กอิน TUI สร้าง
+ไคลเอนต์ย่อย RPC เดียวกันจาก `context.client` ได้
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+ปลั๊กอิน [GUI](/build/plugins/gui) อ่านไคลเอนต์ของเซิร์ฟเวอร์ของแอปเดสก์ท็อปจาก `ctx.client`
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+อ่าน `ctx.client` ตรงจุดที่เรียกใช้ เพราะไคลเอนต์จะเปลี่ยนหลังเซิร์ฟเวอร์รีสตาร์ต เมื่อเข้าถึงเซิร์ฟเวอร์ไม่ได้ Promise จากทุกการเรียกจะถูกปฏิเสธ
+
+### การสมัครรับ
+
+ใช้ `events.on` สำหรับ callback และยกเลิกการสมัครเมื่อไม่ต้องการตัวรับฟังอีก
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+สำหรับ async iterable ให้ใช้ `events.subscribe("updated")`
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+การสมัครรับอีเวนต์เป็นแบบสดเท่านั้น ผู้สมัครที่ขาดการเชื่อมต่อจึงพลาดอีเวนต์
+
+- สมัครด้วยชื่อท้องถิ่น เช่น `updated`
+- ชนิดที่ได้รับมีคำนำหน้า เช่น `rpc.acme.updated`
+- แต่ละอีเวนต์มี `data` และ `location`
+- การถอนปลั๊กอินปิดการสมัครรับของมัน
+
+ไคลเอนต์ภายนอกได้รับอีเวนต์จากทุก location จึงควรตรวจ `event.location`
+เมื่อจำเป็น ปลั๊กอินเซิร์ฟเวอร์ยังต้องกำหนดค่าและทำงานอยู่

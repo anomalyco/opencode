@@ -1,0 +1,200 @@
+---
+title: "Podgrzewanie"
+description: "Wysyłaj okresowe żądania, które nie pozwalają wygasnąć cache promptu dostawcy dla sesji podczas przerw między promptami."
+---
+
+Podgrzewanie sesji wysyła okresowe żądania modelu, aby zachować cache promptów po stronie dostawcy lub inny
+krótkotrwały stan podczas przerw między promptami. Jest domyślnie wyłączone.
+
+Włącz podgrzewanie w dowolnym [pliku konfiguracji OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Przy tej konfiguracji OpenCode podgrzewa niedawno aktywną sesję tuż przed wygaśnięciem cache promptu: przy 90% wartości
+[`cache.ttl`](/models#cache-lifetime) modelu albo co cztery minuty, gdy model jej nie ma. Trwa to do 30 minut od
+ostatniego żądania innego niż podgrzewanie.
+
+## Opcje
+
+Użyj formy obiektowej, aby zmienić prompt podgrzewania, interwał bezczynności lub aktywne okno:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Pole | Domyślnie | Przeznaczenie |
+| --- | --- | --- |
+| `prompt` | Instrukcja utrzymania połączenia | Dołączana jako tymczasowa wiadomość użytkownika do każdego żądania podgrzewania. Domyślna prosi model, aby nie wykonywał pracy, nie używał narzędzi i odpowiedział `OK`. |
+| `interval` | `"auto"` | Czas bezczynności przed następnym żądaniem podgrzewania. `"auto"` używa 90% `cache.ttl` modelu albo czterech minut, gdy go nie ma. |
+| `duration` | `"30 minutes"` | Okno podgrzewania liczone od ostatniego żądania modelu innego niż podgrzewanie. |
+
+Pominięte pola obiektu zachowują wartości domyślne. Na przykład to zmienia tylko interwał:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Automatyczny interwał
+
+Domyślnie `interval` ma wartość `"auto"`, która podgrzewa tuż przed wygaśnięciem cache promptu każdego modelu. OpenCode
+używa 90% ustawienia [`cache.ttl`](/models#cache-lifetime) modelu, więc cache `"5m"` jest podgrzewany co 4,5 minuty.
+Modele bez `cache.ttl` są podgrzewane co cztery minuty.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+Jeśli cache jest ważny dłużej niż `duration`, np. `"1h"` przy domyślnych 30 minutach, OpenCode go nie podgrzewa:
+cache i tak nie wygaśnie w tym czasie. OpenCode odnotowuje to w logu raz na sesję. Zwiększ `duration`, aby go podgrzewać.
+
+## Dla dostawcy i modelu
+
+Ustaw `settings.cache.warming` dla dostawcy lub modelu, aby podgrzewać tylko jego sesje albo nadać im własne czasy.
+Przyjmuje te same wartości co główne `warming`, z wyjątkiem `prompt`, i zastępuje je. Ustawienie modelu zastępuje
+ustawienie dostawcy.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Tutaj sesje Anthropic są podgrzewane co 4,5 minuty, z wyjątkiem Claude Haiku 5.5, a inni dostawcy nie są podgrzewani.
+Pola pominięte w formie obiektowej pochodzą z głównego `warming`, a następnie z wartości domyślnych. Nieprawidłowe
+ustawienie zapisuje ostrzeżenie i wraca do głównego `warming`.
+
+## Czasy trwania
+
+`interval` i `duration` przyjmują ciągi czasu trwania. Oba muszą dawać skończone wartości większe od zera, a `interval`
+musi być krótszy niż `duration`; w przeciwnym razie OpenCode pomija podgrzewanie i zapisuje ostrzeżenie.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Kiedy wysyłane są żądania
+
+Podgrzewanie zaczyna się po żądaniu modelu innym niż podgrzewanie w sesji najwyższego poziomu. Sesje subagentów nie są
+podgrzewane. Każdy interwał liczy się od wysłania ostatniego żądania lub żądania podgrzewania, a nie od zakończenia
+odpowiedzi, ponieważ czas życia cache dostawcy zaczyna się, gdy żądanie do niego dotrze. Żądanie podgrzewania nie
+przedłuża aktywnego okna.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Każda nowa aktywność modelu inna niż podgrzewanie, w tym kompaktowanie, resetuje oba liczniki. Jawny interwał równy lub
+dłuższy niż duration jest odrzucany z ostrzeżeniem, a tak długi interwał `"auto"` pomija podgrzewanie, ponieważ cache
+przeżywa okno.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode nigdy nie wysyła żądania podgrzewania, gdy trwa żądanie modelu, w tym kompaktowanie. Jeśli jakieś trwa, gdy
+interwał się kończy, podgrzewanie czeka na jego zakończenie i wysyła od razu, o ile cache z tego żądania nie wygasł.
+Jeśli wygasł, podgrzewanie zatrzymuje się do następnego zwykłego żądania.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## Żądania
+
+Żądanie podgrzewania używa bieżącego modelu, agenta, instrukcji i kontekstu rozmowy sesji. OpenCode tymczasowo dołącza
+skonfigurowany prompt, wykonuje jedno wywołanie modelu i odrzuca odpowiedź.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+Żądanie nie przyjmuje danych wejściowych, nie dodaje wiadomości do historii ani nie zmienia trwałego stanu sesji.
+OpenCode nie uruchamia lokalnych wywołań narzędzi ani nie kontynuuje pętli narzędzi; domyślny prompt mówi też modelowi,
+aby nie używał narzędzi.
+
+## Błędy
+
+Błędy podgrzewania trafiają do logu, ale nie przerywają ani nie zmieniają sesji. OpenCode podejmuje kolejną próbę dopiero
+po upływie następnego interwału, bez wydłużania czasu podgrzewania.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+Żądanie podgrzewania, które nie trafi w cache, czytając z niego mniej, niż zapisuje, zatrzymuje podgrzewanie tej sesji do
+następnego żądania innego niż podgrzewanie. Dostawcy, którzy nie raportują użycia cache, nigdy nie są liczeni jako
+chybienie.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Koszty
+
+Żądania podgrzewania to prawdziwe żądania dostawcy. Mogą zużywać tokeny, generować koszty, liczyć się do limitów zapytań
+i kończyć się błędami jak inne żądania modeli.
+
+- Krótsze interwały zwiększają liczbę żądań.
+- Dłuższe czasy trwania pozwalają na więcej żądań podgrzewania.
+- Włączaj podgrzewanie tylko wtedy, gdy korzyść po stronie dostawcy jest warta dodatkowego użycia.
+
+Na przykład dla modelu bez `cache.ttl` wartości domyślne pozwalają na maksymalnie siedem prób podgrzewania w jednym
+nieprzerwanym 30-minutowym oknie: w minutach 4, 8, 12, 16, 20, 24 i 28.
+
+## Wyłączanie
+
+Ustaw `warming` na `false`, aby jawnie je wyłączyć. Pominięcie pola również pozostawia podgrzewanie wyłączone.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

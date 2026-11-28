@@ -1,0 +1,95 @@
+---
+title: "Podstawy"
+description: "Twórz, przełączaj, zmieniaj nazwy i usuwaj obszary robocze OpenCode Console oraz poznaj role członków."
+---
+
+Obszar roboczy zawiera wszystko w [Console](https://opencode.ai/console): członków, środki, budżety, dostawców,
+zasady i konta usługowe. Użycie i rozliczenia są śledzone osobno dla każdego obszaru roboczego.
+
+Obszar roboczy może mieć jednego członka. Możesz samodzielnie korzystać ze środków, [własnych dostawców](/console/providers),
+budżetów i [Go](/console/go), a [zapraszać członków](/console/members) tylko wtedy, gdy ich potrzebujesz.
+
+## Pierwszy obszar roboczy
+
+Przy rejestracji Console tworzy obszar roboczy **Personal**. Jesteś jego właścicielem i jedynym członkiem. Jeśli
+rejestrujesz się z zaproszenia, zamiast tego dołączasz do obszaru, do którego Cię zaproszono. Obszar Personal nie powstaje.
+
+## Tworzenie obszaru roboczego
+
+1. Otwórz menu obszaru roboczego na górnym pasku.
+2. Kliknij **Create Workspace**.
+3. Wpisz **Workspace name** i kliknij **Create**.
+
+Stajesz się właścicielem nowego obszaru roboczego.
+
+## Przełączanie obszarów roboczych
+
+Wybierz inny obszar roboczy z menu obszaru roboczego. Console pozostawia Cię na tej samej stronie, więc przełączenie
+z `/acme/settings/members` otwiera stronę Members innego obszaru roboczego.
+
+Oczekujące zaproszenia pojawiają się na górze tego samego menu. Zobacz [Członkowie](/console/members#accept-an-invitation).
+
+## Podłączanie OpenCode
+
+Uruchom `/connect` w OpenCode i wybierz obszar roboczy w przeglądarce. OpenCode używa wtedy modeli, zasad i budżetów
+tego obszaru.
+
+```text
+/connect
+```
+
+Uruchom `/connect` ponownie, aby przełączyć OpenCode na inny obszar roboczy. [Zasady](/policies#console) obszaru
+roboczego zostają zastąpione zasadami nowego obszaru i wyczyszczone po rozłączeniu.
+
+## Role
+
+Każdy członek ma jedną rolę. Nowi członkowie zawsze dołączają jako **Member**.
+
+| Rola   | Może                                                                                                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Member | Korzystać z OpenCode, widzieć swoje użycie, logi i budżet.                                                           |
+| Admin  | Wszystko, co członek, oraz zarządzanie członkami, rozliczeniami, budżetami, dostawcami, zasadami, kontami usługowymi i ustawieniami. |
+| Owner  | Wszystko, co administrator, oraz zarządzanie SSO i synchronizacją katalogu, przyznawanie roli Owner i usuwanie obszaru roboczego. |
+
+Członkowie widzą swoje użycie i logi w **Activity**, a także ranking, gdy jest widoczny dla członków.
+Gdy obszar roboczy ma subskrypcję [Go Teams](/console/go), widzą też **Go** z własnymi limitami.
+Otwierają **Account** z menu konta.
+
+### Zasady ról
+
+- Obszar roboczy może mieć kilku właścicieli i zawsze zachowuje co najmniej jednego.
+- Nie możesz przyznać roli wyższej niż własna, więc tylko właściciele mogą mianować kogoś właścicielem.
+- Nie możesz zmienić własnej roli.
+
+### Przekazywanie roli właściciela
+
+1. Jako właściciel otwórz **Settings › Members** i ustaw nowemu właścicielowi rolę **Owner**.
+2. Poproś nowego właściciela o zmianę Twojej roli na **Admin** lub **Member**.
+
+## Usuwanie obszaru roboczego
+
+Tylko właściciele mogą usunąć obszar roboczy i tylko wtedy, gdy należą do co najmniej jednego innego obszaru.
+
+1. Otwórz **Settings › General** i kliknij **Delete workspace**.
+2. Zaznacz wszystkie potwierdzenia.
+3. Kliknij **Delete workspace**, aby potwierdzić.
+
+Usunięcie jest natychmiastowe i nie można go cofnąć:
+
+- Członkowie natychmiast tracą dostęp.
+- Wszystkie klucze API kont usługowych i oczekujące zaproszenia zostają unieważnione.
+- Automatyczne doładowanie zostaje zatrzymane.
+- Aktywna subskrypcja Go kończy się.
+- Wszelkie pozostałe środki przepadają.
+
+<Callout type="warning">Usunięcie jest zablokowane, gdy płatność jest przetwarzana. Spróbuj ponownie za kilka minut.</Callout>
+
+## Opuszczanie obszaru roboczego
+
+1. Otwórz **Account** z menu konta.
+2. W sekcji **Connected workspaces** kliknij **Leave** obok obszaru roboczego.
+3. Potwierdź przyciskiem **Leave workspace**.
+
+Ostatni właściciel nie może odejść; najpierw mianuj właścicielem innego członka. W obszarach roboczych z SSO lub
+synchronizacją katalogu członkostwem zarządza Twój dostawca tożsamości, więc nie możesz odejść z Console. Aby wrócić
+po odejściu, poproś o nowe zaproszenie.

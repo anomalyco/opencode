@@ -1,0 +1,264 @@
+---
+title: "테마"
+description: "라이트 및 다크 모드, 색상 계열, 상태 색상, 토큰을 갖춘 커스텀 OpenCode 터미널 테마를 JSON 파일로 만드세요."
+---
+
+터미널 UI에서 `Ctrl+P`를 누르고 **Open settings**를 선택한 뒤 **Theme**을 열어 테마를 고르세요. 전역 CLI
+구성에서 직접 설정할 수도 있습니다.
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+테마는 터미널 클라이언트에 속합니다. 테마 선택은 `cli.json`에 넣고 `opencode.json`에는 넣지 마세요. 구성 위치와 다른
+터미널 설정은 [CLI 설정](/cli/config)을 참고하세요.
+
+## 모드
+
+`system`을 쓰면 터미널 모양을 따르고, 테마를 한 가지 모드로 고정할 수도 있습니다.
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| 값       | 동작                                          |
+| -------- | --------------------------------------------- |
+| `system` | 터미널의 라이트 또는 다크 모드를 따릅니다.    |
+| `dark`   | 항상 다크 테마를 사용합니다.                  |
+| `light`  | 항상 라이트 테마를 사용합니다.                |
+
+커스텀 테마가 한 가지 모드만 제공하면, 다른 모드를 선택해도 OpenCode는 테마가 제공하는 모드를 사용합니다.
+
+## 내장 테마
+
+이름으로 내장 테마를 선택하세요.
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+사용 가능한 테마:
+
+- `aura`, `ayu`, `carbonfox`, `cobalt2`, `cursor`, `dracula`, `everforest`, `flexoki`
+- `catppuccin`, `catppuccin-frappe`, `catppuccin-macchiato`
+- `github`, `gruvbox`, `kanagawa`, `material`, `matrix`, `mercury`, `monokai`, `nightowl`, `nord`
+- `one-dark`, `opencode`, `opencode-classic`, `orng`, `lucent-orng`, `osaka-jade`, `palenight`, `rosepine`
+- `solarized`, `synthwave84`, `tokyonight`, `vercel`, `vesper`, `zenburn`
+
+`system` 테마는 OpenCode가 터미널 팔레트를 읽을 수 있을 때 사용할 수 있습니다.
+
+## 파일
+
+`ocean`이라는 전역 테마를 만들려면 테마 도구로 전역 테마 디렉터리에 완전한 파일을 생성하세요. 관련 구조는
+다음과 같습니다.
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+그다음 설정에서 `ocean`을 선택하거나, `theme.name`을 `ocean`으로 지정하세요. 이 값은 `cli.json`에서 설정합니다. 파일 이름에서
+`.json`을 뺀 것이 테마 이름입니다.
+
+| 범위     | 디렉터리                                |
+| -------- | --------------------------------------- |
+| 전역     | `~/.config/opencode/themes/`            |
+| 프로젝트 | 프로젝트 트리의 `.opencode/themes/`     |
+
+OpenCode는 `.json` 파일만 읽습니다. 현재 디렉터리에 가까운 테마가 같은 이름의 전역 또는 상위 테마를 대체합니다.
+
+## 형식
+
+모든 V2 테마는 완전한 `base` 토큰 트리 하나와 `light` 또는 `dark` 색상 팔레트를 하나 이상 선언합니다.
+모드는 해당 파일의 base에서만 상속하며, OpenCode 기본 제공 테마나 서로에게서 상속하지 않습니다. 커스터마이즈하기
+전에 테마 도구로 완전한 base를 생성하세요.
+
+아래 예제는 각 개념과 관련된 섹션만 보여 주며 완전한 테마 파일이 아닙니다.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## 색상
+
+16진수 색상, `transparent`, 또는 다른 테마 색상에 대한 참조를 사용하세요.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+16진수 값은 3, 4, 6, 8자리를 사용할 수 있습니다. 참조는 `$`로 시작하며, 색상 계열 참조는
+`$hue.<name>.<step>` 형식을 사용합니다.
+
+## 색상 계열
+
+색상 계열 별칭을 재정의하면 관련 색상 묶음을 한 번에 바꿀 수 있습니다.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| 종류 | 값                                                               |
+| ---- | ---------------------------------------------------------------- |
+| 기본 | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| 별칭 | `accent`, `interactive`, `neutral`                               |
+| 단계 | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`    |
+
+색상 단계는 모드의 대비 방향을 따릅니다. 라이트 테마는 `100`의 어두운 색에서 `900`의 밝은 색으로, 다크 테마는
+`100`의 밝은 색에서 `900`의 어두운 색으로 이어집니다.
+
+`categorical`은 에이전트와 반복되는 다른 항목을 구분하는 데 쓰이는 색상 계열의 순서를 정합니다. 기본 색상
+계열이나 별칭을 하나 이상 포함해야 합니다.
+
+## 상태
+
+상태 키로 상호작용 색상을 변경합니다. 지정하지 않은 상태는 가장 가까운 base 값을 사용합니다.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| 그룹     | 값                                                    |
+| -------- | ----------------------------------------------------- |
+| Actions  | `primary`, `secondary`, `destructive`                 |
+| States   | `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled` |
+
+양식 필드는 `text.formfield`나 `background.formfield` 아래에서 같은 상태 키를 사용합니다.
+
+## 토큰
+
+완전한 `base`는 모든 토큰 그룹을 포함합니다. 모드는 완전한 색상 팔레트를 제공한 뒤 그 일부를 재정의할 수
+있습니다.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| 그룹         | 용도                                                          |
+| ------------ | ------------------------------------------------------------- |
+| `text`       | 기본, 흐린, 옅은, 선택, 액션, 양식 필드, 피드백 텍스트       |
+| `background` | 기본, 선택, 표면, 액션, 양식 필드, 피드백 채우기              |
+| `border`     | 테두리                                                        |
+| `scrollbar`  | 스크롤바                                                      |
+| `diff`       | 추가, 삭제, 컨텍스트, 강조, 줄 번호 색상                      |
+| `syntax`     | 소스 코드 강조                                                |
+| `markdown`   | Markdown 요소                                                 |
+
+구문 키는 `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator`, `punctuation`입니다.
+Markdown 키는 `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`,
+`horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText`, `codeBlock`입니다.
+
+## 떠 있는 UI 요소
+
+패널, 대화 상자, 메뉴, 토스트는 `background.raised`에서 깊이를 선택합니다. 대화 상자는 상황별 `@dialog` 표면을
+추가로 지원합니다. TUI는 `@dialog`를 적용한 뒤 팔레트를 다시 해석하므로 `$background.base`를 참조하는 토큰은
+대화 상자의 배경을 따릅니다.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog`는 base 모드와 같은 토큰 그룹을 받습니다. 액션의 상황별 `base`는 지정하지 않은 상태의 대체값이 되며,
+명시적인 상태 재정의가 여전히 우선합니다.
+

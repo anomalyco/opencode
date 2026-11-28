@@ -1,0 +1,174 @@
+---
+title: "API ประมวลผลโมเดล"
+description: "เรียกใช้โมเดลที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini ผ่านบริการประมวลผลโมเดลของ Console ด้วยเฮดเดอร์ยืนยันตัวตนเดียวกัน"
+---
+
+บริการประมวลผลโมเดลของ Console มี API ที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini ที่ `https://opencode.ai/inference`
+ให้ส่งคำขอ `POST` แบบ JSON ไปยังเอนด์พอยต์ของกลุ่ม API ที่โมเดลใช้
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## การตรวจสอบสิทธิ์
+
+แทนที่ `<token>` ด้วย[คีย์ API ส่วนตัว](/console/api#personal-api-keys)หรือ[คีย์บัญชีบริการ](/console/api#service-accounts)ที่สร้างใน [Console](https://opencode.ai/console) โมเดลแบบเสียค่าใช้จ่าย
+ต้องใช้เฮดเดอร์นี้ โมเดลแชตระดับฟรีใช้ได้จากภายใน OpenCode เท่านั้น ไคลเอนต์อื่นจะได้รับ HTTP `403`
+แม้มีคีย์ API ให้ใช้โมเดลแบบเสียค่าใช้จ่ายหรือการสมัครสมาชิก [Go](/console/go) จากไคลเอนต์อื่น
+
+```text
+Authorization: Bearer <token>
+```
+
+## เอนด์พอยต์
+
+| API                     | พาธ                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (decisions)  | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+แต่ละโมเดลให้บริการผ่าน API หนึ่งกลุ่ม ดูตาราง[เอนด์พอยต์ของโมเดล](/console/models#endpoints) หรือดึงรายการล่าสุด
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+[API รายการโมเดล](/console/api/models)อธิบายทุกฟิลด์ในการตอบกลับ และรายการใน Console ที่รวม
+ผู้ให้บริการที่คุณเชื่อมต่อ
+
+### OpenAI Chat Completions
+
+โมเดลโอเพนซอร์สเช่น `kimi-k3`, `glm-5.3`, `minimax-m3` และโมเดลฟรีใช้ Chat Completions API
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+โมเดล GPT ใช้ Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+โมเดล Claude และ Qwen ใช้ Messages API `max_tokens` จำเป็น
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+โมเดล Gemini รับชื่อโมเดลและเมธอดในพาธ แทนที่ `:generateContent` ด้วย `:streamGenerateContent` เพื่อ
+สตรีมการตอบกลับ
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+โมเดลตัดสินใจ เช่น `jev-1.14`, `gemini-decision-1` และ `gpt-6-luna-decision` ตอบคำถามที่ระบุชนิดไว้เกี่ยวกับ
+`state` แทนการสร้างข้อความ ดู[โมเดลตัดสินใจ](/console/models#jev)สำหรับชนิดคำถามและอินพุตสื่อ
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+โมเดลเดียวกันยังรับรูปแบบ Decisions ของ OpenAI ที่ `/inference/openai/v1/decisions`
+
+### OpenAI Embeddings
+
+โมเดล embedding เช่น `text-embedding-3-small` และ `qwen3-embedding-8b` ใช้ Embeddings API ดู
+[โมเดล embedding](/console/models#embedding-models)สำหรับทุกโมเดลและตัวเลือก
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints) ให้บริการโมเดลตัดสินใจและ embedding ที่รวมอยู่ที่พาธเดียวกันภายใต้
+`/inference/go`
+
+## ค่าใช้จ่าย
+
+ทุกการตอบกลับรายงานค่าใช้จ่ายของคำขอ ควบคู่กับข้อมูลการใช้งานที่ API คืนอยู่แล้ว: ใน `usage` สำหรับ OpenAI และ
+Anthropic และใน `usageMetadata` สำหรับ Gemini สตรีมจะรายงานในอีเวนต์ที่นำข้อมูลการใช้งานสุดท้ายมา:
+ชังก์การใช้งานสุดท้ายสำหรับ Chat Completions ที่ใช้ `stream_options.include_usage`, `response.completed` สำหรับ Responses,
+`message_delta` สำหรับ Messages และชังก์สุดท้ายสำหรับ Gemini
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| ฟิลด์                     | ความหมาย                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | ดอลลาร์สหรัฐที่เรียกเก็บจากยอดคงเหลือของคุณ `0` สำหรับโมเดลฟรีและสำหรับการใช้งาน [Go](/console/go) ภายในขีดจำกัด เมื่อใช้คีย์ผู้ให้บริการของคุณเอง จะเป็นประมาณการค่าบริการของผู้ให้บริการ เว้นแต่ผู้ให้บริการรายงานเอง ไม่มีฟิลด์นี้เมื่อโมเดลไม่มีราคา |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus` หรือ `byok` (คีย์ผู้ให้บริการของคุณเอง)                                                       |
+| `opencode.list_cost`      | ดอลลาร์สหรัฐตามราคาของโมเดล รวมช่วงเวลาที่มีผู้ใช้หนาแน่นและราคาสำหรับบริบทขนาดยาว                                              |
+| `opencode.estimated`      | `true` เมื่อ `cost` เป็นการประมาณการตามราคาของโมเดล ไม่ใช่จำนวนที่ OpenCode เรียกเก็บ ตั้งค่าเฉพาะเมื่อใช้คีย์ผู้ให้บริการของคุณเอง |
+| `opencode.allowance`      | เฉพาะ Go: จำนวนที่คำขอนับเข้า[ขีดจำกัดการใช้งาน](/console/go#usage-limits) เป็นดอลลาร์ของขีดจำกัดรายเดือนของแพ็กเกจ |
+| `opencode.tokens`         | จำนวนโทเคนที่นำมาคิดค่าบริการ `input` ไม่รวมการอ่านและเขียนแคช ส่วน `output` รวม `reasoning` |
+
+การสร้างภาพรายงานฟิลด์เดียวกันในการตอบกลับ และในแต่ละภาพที่เสร็จของสตรีมพร้อมค่าใช้จ่ายสะสม
+ระบบทราบค่าใช้จ่ายเมื่อการตอบกลับสิ้นสุด ก่อนที่ยอดคงเหลือหรือการใช้งาน Go ของคุณจะอัปเดต หากยอดคงเหลือหรือขีดจำกัด Go
+หมดระหว่างคำขอ คุณอาจถูกเรียกเก็บน้อยกว่าที่รายงาน ไม่มีทางมากกว่า

@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Flag } from "@opencode/core/flag"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import type { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { McpEventTools } from "@opencode/core/tool/plugin/mcp-events"
@@ -16,7 +16,7 @@ import { registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/to
 
 const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 
-const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
+const setup = Effect.fnUntraced(function* () {
   const producer = yield* eventProducer([
     {
       name: "job.finished",
@@ -25,18 +25,17 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
       inputSchema: {},
       payloadSchema: { type: "object" },
     },
-    { name: "job.polled", delivery: ["poll"] },
+    { name: "job.polled", delivery: ["poll"], inputSchema: {}, payloadSchema: {} },
   ])
   const connection = yield* McpClient.connect({
     server: "jobs",
-    config: { type: "attached", transport: producer.client },
+    target: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
     directory: import.meta.dir,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))
   const asserts: Permission.AssertInput[] = []
   yield* registerToolPlugin(McpEventTools.Plugin, {}).pipe(
     Effect.provide(permissionLayer({ assert: (input) => Effect.sync(() => void asserts.push(input)) })),
-    Effect.provide(Flag.testLayer([], { overrides: input.flag ?? "mcp_events" })),
     Effect.provide(
       Layer.mock(Mcp.Service, {
         events: (server) => Effect.succeed(server === "jobs" ? connection.events : undefined),
@@ -45,7 +44,7 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
   )
   const registry = yield* Tool.Service
   const list = (input: Record<string, unknown>) =>
-    registry.snapshot([{ action: "execute", resource: "*", effect: "deny" }]).pipe(
+    registry.snapshot(PermissionPolicy.fromRules([{ action: "execute", resource: "*", effect: "deny" }])).pipe(
       Effect.flatMap((tools) =>
         tools.execute({
           sessionID: Session.ID.make("ses_mcp_events"),
@@ -71,13 +70,6 @@ const jobFinished = {
 }
 
 describe("list_mcp_events", () => {
-  it.live("is absent while the mcp_events flag is off", () =>
-    Effect.gen(function* () {
-      const { registry } = yield* setup({ flag: "-mcp_events" })
-      expect((yield* registry.list()).map((tool) => tool.id)).not.toContain("opencode_list_mcp_events")
-    }),
-  )
-
   it.live("lists one server's push events after asking permission", () =>
     Effect.gen(function* () {
       const { list, asserts, registry } = yield* setup()

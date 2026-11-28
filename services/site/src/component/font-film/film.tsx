@@ -583,7 +583,7 @@ function CompromiseScene(props: { c: Ctx }) {
   const m = word.m
   const reveal = c.at("wordmark", 2)
   const missing = word.items.filter((item) => !item.letter)
-  // The letter fills the x-height box: OpenTUI Mono's x-height is 0.52 em.
+  // The letter fills the x-height box: OpenMono's x-height is 0.52 em.
   const size = Math.round((m * 2.6) / 0.52)
 
   return (
@@ -1097,7 +1097,7 @@ function LoupeScene(props: { c: Ctx }) {
   const counted = () => order.filter((_, i) => c.t() >= 0.2 + i * 0.14).length
   const zoom = 2.6
   const chipText = `×${zoom} · 144 SQUARES PER MODULE`
-  // OpenTUI Mono advances 0.6 em; 16 px type plus 0.02 em tracking, and 8 px padding each side.
+  // OpenMono advances 0.6 em; 16 px type plus 0.02 em tracking, and 8 px padding each side.
   const chip = chipText.length * 16 * 0.62 + 16
   const R = Math.round(m * 1.25)
   const lens = () => [

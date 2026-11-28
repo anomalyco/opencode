@@ -83,6 +83,41 @@ it.effect("repairs tool input before validating its original schema", () =>
   }),
 )
 
+it.effect("runs a call to another harness's tool name as the matching Code Mode tool", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "shell-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) =>
+            draft.add({
+              name: "shell",
+              description: "Shell",
+              input: Schema.Struct({ command: Schema.String, timeout: Schema.optionalKey(Schema.Int) }),
+              execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "done" })),
+            }),
+          ),
+      },
+    ])
+    // shell is only offered inside Code Mode, so the renamed call runs as the program that calls it.
+    const snapshot = yield* registry.snapshot()
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-bash", name: "bash", input: { command: "ls", timeout: "5000" } },
+    })
+    expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
+    expect(result.content[0]).toEqual({
+      type: "text",
+      text: '<tool-repair>\nThere is no "bash" tool, so this ran inside execute as tools.shell(input). Call it there next time.\n</tool-repair>',
+    })
+  }),
+)
+
 it.effect("runs a call to another harness's tool name as the matching tool and says so", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
@@ -112,8 +147,11 @@ it.effect("runs a call to another harness's tool name as the matching tool and s
     })
     expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
     expect(result.content).toEqual([
+      {
+        type: "text",
+        text: '<tool-repair>\nThere is no "bash" tool, so this ran as "shell". Call "shell" next time.\n</tool-repair>',
+      },
       { type: "text", text: "done" },
-      { type: "text", text: 'There is no "bash" tool, so this ran as "shell". Call "shell" directly.' },
     ])
 
     const direct = yield* snapshot.execute({
@@ -121,6 +159,65 @@ it.effect("runs a call to another harness's tool name as the matching tool and s
       call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "pwd" } },
     })
     expect(direct.content).toEqual([{ type: "text", text: "done" }])
+
+    // A call rejected before it runs leaves no note behind for a later call with the same ID.
+    yield* snapshot
+      .execute({
+        ...identity,
+        call: { type: "tool-call", id: "call-reused", name: "bash", input: { command: "ls" } },
+        definitions: new Map(),
+      })
+      .pipe(Effect.flip)
+    const reused = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-reused", name: "shell", input: { command: "pwd" } },
+    })
+    expect(reused.content).toEqual([{ type: "text", text: "done" }])
+  }),
+)
+
+it.effect("runs a top-level call to a Code Mode tool and says to call it inside execute", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "acme-tools",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) => {
+            draft.add({
+              name: "echo",
+              options: { namespace: "acme" },
+              description: "Echo",
+              input: Schema.Struct({ text: Schema.String }),
+              execute: ({ text }) => Effect.succeed({ content: text }),
+            })
+            draft.add({
+              name: "fails",
+              options: { namespace: "acme" },
+              description: "Fails",
+              input: Schema.Struct({}),
+              execute: () => Effect.fail(new Tool.Error({ message: "boom" })),
+            })
+          }),
+      },
+    ])
+    const snapshot = yield* registry.snapshot()
+    const note = (path: string) =>
+      `<tool-repair>\nacme.${path} is a Code Mode tool, so this ran inside execute as tools.acme.${path}(input). Call it there next time.\n</tool-repair>`
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-echo", name: "acme.echo", input: { text: "hi" } },
+    })
+    expect(result.content[0]).toEqual({ type: "text", text: note("echo") })
+    // A failing program fails the call, with the note first.
+    const failed = yield* snapshot
+      .execute({ ...identity, call: { type: "tool-call", id: "call-fails", name: "acme.fails", input: {} } })
+      .pipe(Effect.flip)
+    expect(failed.message.startsWith(note("fails"))).toBe(true)
+    expect(failed.message).toContain("boom")
   }),
 )
 
@@ -195,5 +292,56 @@ it.effect("repairs nested Code Mode calls against the Code Mode input schema", (
       },
     })
     expect(executed).toEqual([{ count: 3, detail: true }, { count: 4 }])
+  }),
+)
+
+it.effect("keeps undeclared keys when a required key is missing so the error shows them", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "edit-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) =>
+            draft.add({
+              name: "edit",
+              options: { codemode: false },
+              description: "Edit",
+              input: Schema.Struct({ path: Schema.String, oldString: Schema.String, newString: Schema.String }),
+              execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+            }),
+          ),
+      },
+    ])
+    const snapshot = yield* registry.snapshot()
+    const failed = yield* snapshot
+      .execute({
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-wrong-keys",
+          name: "edit",
+          input: { path: "a.ts", old_string: "a", new_string: "b" },
+        },
+      })
+      .pipe(Effect.flip)
+    expect(failed.message).toContain("oldString")
+    expect(failed.message).toContain("old_string")
+    expect(failed.message).toContain("new_string")
+
+    yield* snapshot.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-extra-key",
+        name: "edit",
+        input: { path: "a.ts", oldString: "a", newString: "b", extra: true },
+      },
+    })
+    expect(executed).toEqual([{ path: "a.ts", oldString: "a", newString: "b" }])
   }),
 )

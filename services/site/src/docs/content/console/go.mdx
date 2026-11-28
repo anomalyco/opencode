@@ -49,7 +49,7 @@ for requests from China.
 In **Settings › Privacy**, an owner or admin can enable:
 
 - **DeepSeek V4.1 Flash and V4 Pro:** select **Global** under **Regions**.
-- **LongCat 2.5 Free:** select **Global** under **Regions**.
+- **LongCat 2.5:** select **Global** under **Regions**.
 - **Muse Spark 1.3 Contributor and Muse Spark 1.2 Contributor:** turn on **Allow paid endpoints that train on request data**.
 
 See [Privacy](#privacy) for each model's training and retention terms.
@@ -81,7 +81,10 @@ Your client should:
 3. Send a stable session ID in `x-opencode-session` for each conversation so we can optimize routing and
    prompt caching.
 
-See [Harnesses](/console/harnesses) to set up Go in Claude Code, Codex, Hermes, Pi, and Raycast.
+[Decision](#decision-models) and [embedding](#embedding-models) requests don't need `x-opencode-session`, so any
+client, such as a RAG library, a memory provider or a script, can call them with your Go key.
+
+See [Harnesses](/console/harnesses) to set up Go in Claude Code, Codex, Hermes, OpenClaw, Pi, and Raycast.
 
 ### Validated clients
 
@@ -96,7 +99,9 @@ with OpenCode Go, although we do not guarantee that they will continue to work i
 | **ZCode**         | Go recognizes its native session header. Our [request for `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) remains open, but it is no longer necessary to send that specific header.                                   |
 | **Pi**            | Current builds send session information for OpenCode. Update older installations.                                                                                                                                                           |
 | **jcode**         | Update to **v0.81.6 or later**, which includes the [session-header fix](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                     |
+| **OpenClaw**      | Current builds send `x-opencode-session` on Go requests. Browser sign-in needs **2026.11.7 or later**.                                                                                                                                      |
 | **Kilo Code CLI** | Builds containing [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) restore OpenCode session headers. This fix covers the CLI, not the VS Code extension. See [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+| **MiMo Code**     | Update to **v0.1.16 or later**, which sends `x-opencode-session` on Go requests ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)).                                                                                            |
 
 ### Known problematic clients
 
@@ -108,7 +113,6 @@ investigated. The linked reports track fixes and workarounds.
 | **DeepSeek Harness**    | Session information arrives on some model paths, but is missing on others. We recognize its native header; the remaining work is to send it across all adapters. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
 | **GitHub Copilot Chat** | Automatic session-header support is requested in [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186).                                                                                                                           |
 | **Kimi Code**           | The session-header request in [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) was closed as not planned.                                                                                                                            |
-| **MiMo Code**           | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) is closed, and [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) was closed without merging.                                                                            |
 
 ## Usage limits
 
@@ -127,18 +131,22 @@ with a $60 limit. Go responses report how much each request counted in [`opencod
 
 [Token prices](https://opencode.ai/console/go#pricing) are per 1M tokens and are the same for Go, Go Plus, and Go Teams.
 
+[Decision](#decision-models) and [embedding](#embedding-models) models come at list price, with no Go discount: their
+monthly limit matches what you pay, $10 on Go and $40 on Go Plus. On Go Teams it's $15, $5 higher than Go as on every
+model.
+
 **Beam Free:** Free for a limited time. Not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 
 **Gemini 4 Argon:** The 50% discount applies through November 30, 2026.
 
-**GLM-5.3:** Higher usage limits apply through November 22, 2026.
+**HungerG Free:** Free for a limited time.
 
 ### Estimated requests
 
 Console's Go page [estimates requests per 5 hours](https://opencode.ai/console/go#limits) for each model, based on
 typical Go usage patterns. Actual usage varies.
 
-You can track your current usage in the [console](https://opencode.ai/console).
+You can track your current usage in the [console](https://opencode.ai/console), or with the [usage endpoint](#usage).
 
 <Callout type="tip">If you reach the usage limit, you can continue using the free models.</Callout>
 
@@ -191,6 +199,103 @@ curl https://opencode.ai/inference/go/v1/models
 
 See the [model list API](/console/api/models) for every field in the response, including Go's monthly usage limits.
 
+### Decision models
+
+Decision models answer typed questions about a `state` instead of generating text. Send the same System One request
+as on [Console models](/console/models#jev) to `https://opencode.ai/inference/go/systemone/v1/systemone` with your Go
+key:
+
+```bash
+curl https://opencode.ai/inference/go/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My payments have failed for three days and I am losing sales.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+| Model                               | Model ID            | Input  | Output | Cached Read | Cached Write |
+| ----------------------------------- | ------------------- | ------ | ------ | ----------- | ------------ |
+| Jev 1.14                            | jev-1.14            | $0.042 | Free   | -           | -            |
+| Gemini Decision 1                   | gemini-decision-1   | $0.10  | Free   | -           | -            |
+| GPT 6 Luna Decision (≤ 272K tokens) | gpt-6-luna-decision | $0.10  | Free   | $0.01       | $0.125       |
+| GPT 6 Luna Decision (> 272K tokens) | gpt-6-luna-decision | $0.20  | Free   | $0.02       | $0.25        |
+
+- Prices are per 1M tokens.
+- Requests in OpenAI's Decisions format work at `https://opencode.ai/inference/go/openai/v1/decisions`.
+- See [Jev](/console/models#jev) for question types, and
+  [GPT 6 Luna Decision and Gemini Decision 1](/console/models#gpt-6-luna-decision-and-gemini-decision-1) for images,
+  audio, video, and PDFs in `state`.
+
+### Embedding models
+
+Embedding models turn text into vectors. Call them on OpenAI's Embeddings API at
+`https://opencode.ai/inference/go/openai/v1/embeddings` with your Go key:
+
+```bash
+curl https://opencode.ai/inference/go/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+| Model                  | Model ID               | Input |
+| ---------------------- | ---------------------- | ----- |
+| text-embedding-3-small | text-embedding-3-small | $0.02 |
+| Qwen3 Embedding 8B     | qwen3-embedding-8b     | $0.01 |
+| Gemini Embedding 2     | gemini-embedding-2     | $0.20 |
+
+- Prices are per 1M input tokens.
+- The request also takes `dimensions` and `encoding_format`. See [Embedding models](/console/models#embedding-models).
+
+### Usage
+
+Check how much of your [usage limits](#usage-limits) you've used, for example to show them in your own client:
+
+```bash
+curl https://opencode.ai/inference/go/v1/usage \
+  -H "Authorization: Bearer <token>"
+```
+
+Use the same key you use for Go. On Go and Go Plus, that is the subscriber's
+[personal API key](/console/api#personal-api-keys) or a [service account key](/console/api#service-accounts). On Go
+Teams, it is any member's personal API key.
+
+The response has one meter for each limit: `rolling` for the 5-hour limit, `weekly`, and `monthly`.
+
+```json
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 30, "resetsAt": "2026-11-21T15:00:00.000Z" },
+    "weekly": { "status": "rate-limited", "percent": 100, "resetsAt": "2026-11-23T00:00:00.000Z" },
+    "monthly": { "status": "ok", "percent": 50, "resetsAt": "2026-12-01T00:00:00.000Z" }
+  }
+}
+```
+
+| Field      | Meaning                                                                                                    |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `status`   | `ok`, or `rate-limited` once the limit is used up.                                                         |
+| `percent`  | How much of the limit is used, as a whole number from `0` to `100`.                                        |
+| `resetsAt` | When the limit resets, in ISO 8601. Before the 5-hour window starts, `rolling` resets five hours from now. |
+
+Requests without a valid key return HTTP `401`. Keys Go doesn't cover return HTTP `403` with a message that explains
+why, for example when the workspace has no active Go subscription.
+
+```json
+{ "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
+```
+
 ## Privacy
 
 See whether each model [trains on your data](https://opencode.ai/console/go#privacy).
@@ -207,7 +312,7 @@ See whether each model [trains on your data](https://opencode.ai/console/go#priv
 | Kimi K3.1 Pro              | 0 days         |
 | Kimi K3                    | 0 days         |
 | Kimi K2.7 Code             | 0 days         |
-| LongCat-2.0                | 0 days         |
+| LongCat 2.5                | 0 days         |
 | MiMo-V2.6-Pro              | 0 days         |
 | MiMo-V2.6-Flash            | 0 days         |
 | Qwen4 Max                  | 0 days         |
@@ -226,7 +331,6 @@ See whether each model [trains on your data](https://opencode.ai/console/go#priv
 | Step 5 Preview             | 0 days         |
 | Beam Free                  | 30 days        |
 | Iceman Contributor Free    | Not ZDR        |
-| LongCat 2.5 Free           | 0 days         |
 | Hy4 flash Free             | 0 days         |
 
 - **Grok 4.7:** ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API. [Learn more](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
@@ -236,8 +340,9 @@ See whether each model [trains on your data](https://opencode.ai/console/go#priv
 - **Muse Spark 1.3 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Iceman Contributor Free:** Free for a limited time in exchange for permission to use your prompts and completions to improve the model.
-- **LongCat 2.5 Free:** Hosted in China. Requires **Global** regions in your workspace privacy settings.
-- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through November 30, 2026.
+- **HungerG Free:** Free for a limited time. No data training: your prompts and completions are not used to train models.
+- **LongCat 2.5:** Hosted in China. Requires **Global** regions in your workspace privacy settings.
+- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through December 31, 2026.
 
 ## Background
 

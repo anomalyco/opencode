@@ -1,0 +1,126 @@
+---
+title: "المؤسسات"
+description: "تحكّم في النماذج والمزوّدين والتكاملات التي يمكن لمن في مؤسستك استخدامها في OpenCode."
+---
+
+استخدم [السياسات](/policies) للتحكم في ما يمكن لـ OpenCode استخدامه على أجهزة مؤسستك. وضعها في إعداد
+مُدار حتى لا يستطيع المستخدمون والمشاريع تغييرها.
+
+## النشر
+
+ضع السياسات في ملف إعدادات النظام:
+
+| المنصة | الملف                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+وعلى macOS، يمكنك أيضًا نشرها بـ MDM كتفضيلات مُدارة لنطاق `ai.opencode.managed`. راجع
+[مواقع الإعدادات](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+وللسياسات في هذه الملفات أسبقية على إعداد المستخدم والمشروع، فلا يستطيع مستخدم أو مستودع السماح بشيء ترفضه.
+راجع [الأسبقية](/policies#precedence).
+
+## حجب النماذج المجانية
+
+احجب الخطة المجانية المتاحة دون تسجيل الدخول. تبقى الخيارات الأخرى متاحة، ويمكن للمستخدمين ربط مزوّديهم وحساباتهم.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+فالخطة المجانية هي تكامل `opencode` بلا حساب. أما حسابات Console المسجّلة فهي `opencode#<account>`، لذا
+لا تؤثر فيها هذه العبارة.
+
+يمكن أن تتيح مساحة العمل في Console نماذج مجانية أيضًا. ولحجبها:
+
+- في مساحة عملك، أوقف **Free models** في تبويب Models في Console. راجع
+  [نماذج OpenCode](/console/providers#opencode-models).
+- ولإخفاء النماذج المجانية في كل حساب، اضبط `OPENCODE_DISABLE_FREE_MODELS=1` على خدمة OpenCode. راجع
+  [النماذج المجانية](/models#free-models).
+
+## اشتراط مساحة عمل Console
+
+اسمح فقط بمساحة عمل Console الخاصة بمؤسستك. فلا يمكن ربط أو استخدام أي شيء آخر.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- لا يسرد `/connect` إلا OpenCode Console، فيتمكن الناس من تسجيل الدخول.
+- لا تعمل إلا مساحة عملك. فالخطة المجانية وحسابات Console الشخصية والمؤسسات الأخرى ومفاتيح API من متغيّرات
+  البيئة ومزوّدو `opencode.json` كلها محجوبة.
+- وتعمل نماذج مساحة عملك وخوادم MCP والبحث على الويب. فغيّرها في Console دون إعادة نشر السياسة.
+
+واستبدل `org_01M3CAP8H43Z49CER6NT0Y3ZF1` بمعرّف مؤسسة مساحة عملك. ولحجب النماذج المجانية في مساحة العمل
+أيضًا، أوقف **Free models** في Console.
+
+## السماح بالمزوّدين المعتمدين فقط
+
+ارفض كل مزوّد، ثم اسمح بالذين تعتمدهم. وهذا المثال يسمح فقط ببوابة داخلية متوافقة مع OpenAI.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+ويُزال المزوّد المرفوض حتى عندما يملك أحدهم بيانات اعتماد له. راجع [المزوّدون](/policies#providers).
+
+## تقييد خوادم MCP والأدوات
+
+اسمح فقط بخوادم MCP المعتمدة، واحجب الأدوات التي لا تريد أن يشغّلها الوكلاء.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+راجع [خوادم MCP والمهارات والملحقات](/policies#mcp-servers-skills-and-plugins) و[الأدوات](/policies#tools).
+
+## التحقق من عمله
+
+- شغّل `/connect` و`/models` كمستخدم وتأكد من أن ما سمحت به وحده يظهر.
+- تحقق من سجل الخادم بحثًا عن تحذيرات. فالعبارة التي تفشل في التحقق تُسقط وتبقى البقية سارية.
+- ويفشل استدعاء الأداة المحجوب بـ`Blocked by configuration policy`.
+
+## الإصدارات
+
+| الإجراء                                                                    | يتطلب |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect` و`integration.use` و`mcp.use` و`skill.use` و`plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+يتجاهل العملاء الأقدم هذه العبارات.

@@ -17,6 +17,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { createSessionExporter } from "@/session/commands/export-session"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
@@ -309,7 +310,7 @@ export function SidebarSectionLabel(props: { id?: string; label: string; class?:
   )
 }
 
-function PinnedSessionRow(props: {
+export function PinnedSessionRow(props: {
   item: PinnedItem
   index: number
   pins: SessionPins
@@ -398,20 +399,21 @@ function PinnedSessionRow(props: {
 
   const menu = (rename: () => void) => (
     <>
+      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={() => props.pins.unpin(props.item.server, props.item.session.id)}>
         {language.t("sidebar.recent.unpin")}
       </Menu.Item>
+      <SessionReadMenuItem server={props.item.server} session={props.item.session} />
       <Menu.Item
         onSelect={() => global.sessionPreferences.update("muted", props.item.server, props.item.session.id, !muted())}
       >
         {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
       </Menu.Item>
       <Menu.Separator />
-      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
+      <SessionCopyMenu server={props.item.server} session={props.item.session} />
       <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
         {language.t("common.export")}…
       </Menu.Item>
-      <SessionReadMenuItem server={props.item.server} session={props.item.session} />
       <Show when={props.open}>
         <Menu.Separator />
         <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>

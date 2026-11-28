@@ -1,0 +1,254 @@
+---
+title: "플러그인 RPC"
+description: "플러그인의 커스텀 메서드와 이벤트를 다른 플러그인과 클라이언트에 제공합니다."
+---
+
+플러그인은 서버에서 실행되는 커스텀 메서드와 이벤트를 제공할 수 있습니다. 다른 플러그인이나 클라이언트에서 이 API를 사용할 수 있습니다.
+
+## 정의
+
+`Rpc.define`으로 RPC의 메서드, 오류, 이벤트를 나열하세요.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### 검증
+
+RPC 정의는 메서드, 이벤트, 오류의 입력과 출력 형태를 설명합니다. 두 가지 스키마 형식을 지원합니다.
+
+- JSON Schema. 간단하고 의존성이 필요 없습니다.
+- Standard Schema를 준수하는 모든 검증기
+  - Zod
+  - Valibot
+  - ArkType
+
+### 입력과 출력
+
+각 메서드에는 인수의 `input` 스키마와 반환값의 `output` 스키마가 모두 필요합니다. 인수를 받지 않거나 값을 반환하지
+않는 메서드에는 해당 스키마로 빈 객체 스키마를 사용하세요. 인수가 없으면 `{}`로 호출하고, 반환값이 없으면
+`{}`를 반환하세요.
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+메서드가 `undefined`를 반환하면 `rpc.invalid_output` 오류가 발생합니다.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+JSON Schema 값의 TypeScript 타입은 `unknown`이므로 사용하기 전에 타입을 좁히세요. Standard Schema는 입력과 출력 타입을 추론합니다.
+
+### 오류
+
+예상되는 실패에는 메서드에 `errors` 맵을 추가하세요. 각 키가 오류의 `type`이 되고 그 스키마가 오류의 `data`를 정의합니다.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+`rpc.`로 시작하는 오류 이름은 OpenCode가 예약합니다.
+
+### 이벤트
+
+최상위 `events` 맵에 이벤트를 추가하세요. 각 이벤트에는 구독자에게 보내는 데이터의 스키마가 있습니다.
+이 맵은 필수이므로 RPC에 이벤트가 없으면 `events: {}`로 지정하세요.
+
+이벤트 데이터는 객체여야 합니다. 데이터가 없으면 빈 객체 스키마를 사용하세요.
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+스칼라, 배열, `null`, `undefined`는 유효한 이벤트 데이터가 아닙니다.
+
+## 구현
+
+`setup` 안에서 구현을 등록하세요.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+RPC를 등록한 뒤 같은 플러그인은 `ctx.rpc(Acme)`로 이를 호출할 수 있습니다.
+
+두 번째 인수에는 작업을 취소하는 데 쓰는 `signal`과 선언된 오류를 만드는 `context.error(...)`가 들어 있습니다. 오류를 반환하거나 던질 수 있습니다.
+
+한 플러그인이 둘 이상의 RPC를 등록할 수 있습니다. 등록을 해제하면 해당 RPC가 제거됩니다.
+
+## 호출
+
+RPC가 등록되면 HTTP로 또는 다른 플러그인에서 호출할 수 있습니다.
+
+### HTTP
+
+OpenCode 클라이언트를 만든 다음 `client.rpc`로 RPC의 서브클라이언트를 만드세요.
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### 플러그인
+
+플러그인에는 이미 OpenCode 클라이언트가 있습니다. 예를 들어 TUI 플러그인은 `context.client`에서 같은 RPC 서브클라이언트를 만들 수 있습니다.
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+[GUI 플러그인](/build/plugins/gui)은 `ctx.client`에서 데스크톱 앱 자체 서버의 클라이언트를 읽습니다.
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+호출하는 곳에서 `ctx.client`를 읽으세요. 서버가 다시 시작되면 값이 바뀝니다. 서버에 연결할 수 없는 동안에는 모든 호출의 Promise가 거부됩니다.
+
+### 구독
+
+콜백에는 `events.on`을 사용하고 리스너가 더 이상 필요 없으면 구독을 해제하세요.
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+비동기 이터러블에는 `events.subscribe("updated")`를 사용하세요.
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+이벤트 구독은 실시간 전용이므로 연결이 끊긴 구독자는 이벤트를 놓칩니다.
+
+- `updated` 같은 로컬 이름으로 구독합니다.
+- 받는 타입에는 `rpc.acme.updated`처럼 접두사가 붙습니다.
+- 각 이벤트에는 `data`와 `location`이 있습니다.
+- 플러그인을 내리면 해당 구독이 닫힙니다.
+
+외부 클라이언트는 모든 위치의 이벤트를 받으므로 필요하면 `event.location`을 확인하세요. 서버 플러그인은 계속 구성되어 실행 중이어야 합니다.

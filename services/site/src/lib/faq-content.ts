@@ -1,7 +1,7 @@
 import { docsUrl } from "~/lib/docs"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { rich } from "~/i18n/rich"
+import { gap, joinSentences, rich, sentenceGap, stop } from "~/i18n/rich"
 import type { RichText } from "~/lib/markdown"
 
 /**
@@ -19,18 +19,31 @@ export function homeFaq(t: Translate, route: (path: string) => string) {
       },
       {
         question: t("home.faq.q2"),
-        answer: [`${t("home.faq.a2.before")} `, { text: t("home.faq.a2.link"), href: docs("/") }, "."],
+        answer: [
+          `${t("home.faq.a2.before")}${gap(t("home.faq.a2.before"))}`,
+          { text: t("home.faq.a2.link"), href: docs("/") },
+          stop(t("home.faq.a2.link")),
+        ],
       },
       {
         question: t("home.faq.q3"),
         answer: rich(
-          `${t("home.faq.a3.p1")} ${t("home.faq.a3.p4.beforeLocal")} ${t("home.faq.a3.providers")} ${t("home.faq.a3.models.after")}`,
+          joinSentences([
+            t("home.faq.a3.p1"),
+            t("home.faq.a3.p4.beforeLocal"),
+            t("home.faq.a3.providers"),
+            t("home.faq.a3.models.after"),
+          ]),
           { local: docs("/models/#local"), models: "https://opencode.ai/console/models" },
         ),
       },
       {
         question: t("home.faq.q4"),
-        answer: [`${t("home.faq.a4.p1")} `, { text: t("common.learnMore"), href: docs("/providers/") }, "."],
+        answer: [
+          `${t("home.faq.a4.p1")}${sentenceGap(t("home.faq.a4.p1"))}`,
+          { text: t("common.learnMore"), href: docs("/providers/") },
+          stop(t("common.learnMore")),
+        ],
       },
       {
         question: t("home.faq.q5"),
@@ -44,9 +57,10 @@ export function homeFaq(t: Translate, route: (path: string) => string) {
       {
         question: t("home.faq.q7"),
         answer: [
-          `${t("home.faq.a7.p1")} ${t("home.faq.a7.p2.beforeModels")} `,
+          joinSentences([t("home.faq.a7.p1"), t("home.faq.a7.p2.beforeModels")]) +
+            gap(t("home.faq.a7.p2.beforeModels")),
           { text: t("home.faq.a7.p2.modelsLink"), href: docs("/console/models/#privacy") },
-          ".",
+          stop(t("home.faq.a7.p2.modelsLink")),
         ],
       },
       {

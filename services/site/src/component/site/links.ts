@@ -4,7 +4,7 @@ import { docsUrl } from "~/lib/docs"
 import type { Translate } from "~/i18n"
 
 /** The sidebar and footer links, shared by the layout and the Markdown versions of the pages. */
-export function siteLinks(t: Translate, route: (path: string) => string) {
+export function siteLinks(t: Translate, route: (path: string) => string, consoleHref = route) {
   return {
     // Every item the primary nav can show, in the default order (settings.ts navDefaults says which
     // show by default). Design mode reorders, hides and renames them (settings navConfig); the links
@@ -22,14 +22,26 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
       {
         id: "console",
         label: t("site.nav.console"),
-        href: "/console",
+        href: consoleHref("/console"),
         demo: route("/console-demo"),
         arrow: true,
         company: true,
       },
-      { id: "models", label: t("site.nav.models"), href: "/console/models", arrow: true, company: true },
-      { id: "subscriptions", label: t("site.nav.subscriptions"), href: "/console/go", arrow: true, company: true },
-      { id: "enterprise", label: t("nav.enterprise"), href: "/console/enterprise", arrow: true, company: true },
+      { id: "models", label: t("site.nav.models"), href: consoleHref("/console/models"), arrow: true, company: true },
+      {
+        id: "subscriptions",
+        label: t("site.nav.subscriptions"),
+        href: consoleHref("/console/go"),
+        arrow: true,
+        company: true,
+      },
+      {
+        id: "enterprise",
+        label: t("nav.enterprise"),
+        href: consoleHref("/console/enterprise"),
+        arrow: true,
+        company: true,
+      },
       { id: "changelog", label: t("footer.changelog"), href: route("/changelog") },
       // Also the GitHub mark in the top-right corner (site.tsx).
       { id: "github", label: t("nav.github"), href: config.github.repoUrl, external: true, arrow: true },
@@ -86,10 +98,10 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
       {
         title: "Anomaly",
         links: [
-          { label: t("site.nav.console"), href: "/console" },
-          { label: "OpenCode Models", href: "/console/models" },
-          { label: t("site.nav.subscriptions"), href: "/console/go" },
-          { label: t("nav.enterprise"), href: "/console/enterprise" },
+          { label: t("site.nav.console"), href: consoleHref("/console") },
+          { label: "OpenCode Models", href: consoleHref("/console/models") },
+          { label: t("site.nav.subscriptions"), href: consoleHref("/console/go") },
+          { label: t("nav.enterprise"), href: consoleHref("/console/enterprise") },
           { label: t("legal.privacy"), href: route("/legal/privacy-policy") },
           { label: t("legal.terms"), href: route("/legal/terms-of-service") },
         ],

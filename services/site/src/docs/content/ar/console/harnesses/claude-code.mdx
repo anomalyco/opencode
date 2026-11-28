@@ -1,0 +1,81 @@
+---
+title: "Claude Code"
+description: "استخدم نماذج Console وGo من Claude Code."
+---
+
+يستخدم Claude Code واجهة Anthropic Messages API. اربطه بـ Console باستخدام متغيّرَي بيئة لتستخدم أي نموذج مدفوع أو نموذج Go،
+بما في ذلك GPT وGemini والنماذج المفتوحة. وتترجم Console الطلب للنماذج التي لا تقبل Anthropic
+Messages.
+
+<Callout>
+يتيح لك [Console CLI](/console/harnesses#console-cli) إعداد Claude Code بأمر واحد، بما يشمل سياسات مساحة العمل
+  وخوادم MCP والمهارات والتعليمات. شغّل `npx @opencode/console setup claude-code`. والخطوات أدناه تعدّه
+  يدويًا.
+</Callout>
+
+```bash
+export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5
+```
+
+استبدل `oc_sk_...` بـ[مفتاح API شخصي](/console/harnesses#get-an-api-key).
+
+## الإعداد
+
+اضبط المتغيّرات في `~/.claude/settings.json` لاستخدام Console في كل جلسة. واربط الأسماء المستعارة `opus` و`sonnet` و`haiku`
+بنماذج Console حتى يستخدمها `/model` والمهام الخلفية.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+يضيف Claude Code المسار `/v1/messages` إلى عنوان URL الأساسي، فلا تضفه بنفسك. شغّل `/status`
+للتأكد من أن عنوان URL الأساسي والرمز نشطان.
+
+<Callout>
+  استخدم `ANTHROPIC_AUTH_TOKEN`، لا `ANTHROPIC_API_KEY`. وإذا كنت مسجّلًا بحساب Claude، فشغّل `/logout` أولًا حتى
+لا يرسل Claude Code بيانات تسجيل دخولك إلى Console.
+</Callout>
+
+## Go
+
+استخدم عنوان URL الأساسي لـ Go ومفتاحًا من مساحة عمل لديها اشتراك [Go](/console/go).
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+## النماذج
+
+استخدم أي معرّف نموذج من جدول [Console](/console/models#endpoints) أو [Go](/console/go#endpoints). وبدّل النماذج في
+جلسة بـ `/model`، أو اختر نموذجًا لتشغيل واحد.
+
+```bash
+claude --model gpt-6.1-sol
+```
+
+## Console MCP
+
+أضف خادم [Console MCP](/console/harnesses#console-mcp) لكل مشاريعك.
+
+```bash
+claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp
+```
+
+شغّل `/mcp` في Claude Code، واختر `opencode-console`، وسجّل الدخول من المتصفح.

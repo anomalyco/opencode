@@ -1,3 +1,5 @@
+// Relative, not ~: vite.config.ts imports this module before the site's aliases exist.
+import { LOCALES, type Locale } from "../../lib/language"
 import type { DocsSet } from "../config"
 
 export interface DocsNavItem {
@@ -7,14 +9,29 @@ export interface DocsNavItem {
   href?: string
 }
 
+/**
+ * A section or group label that is UI copy rather than a page title: the sidebar reads it from the
+ * page language's dictionary, while page titles come from the pages themselves.
+ */
+export type DocsNavLabel =
+  | "nav.docs"
+  | "docs.section.build"
+  | "docs.nav.configure"
+  | "docs.nav.plugins"
+  | "docs.nav.client"
+  | "docs.nav.workspace"
+  | "docs.nav.console"
+
 export interface DocsNavGroup {
   title?: string
+  titleKey?: DocsNavLabel
   items: DocsNavItem[]
 }
 
 export interface DocsSection {
   key: "docs" | "cli" | "build" | "api" | "console"
   title: string
+  titleKey?: DocsNavLabel
   landingSlug: string
   groups: DocsNavGroup[]
 }
@@ -23,6 +40,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "docs",
     title: "Docs",
+    titleKey: "nav.docs",
     landingSlug: "index",
     groups: [
       {
@@ -30,11 +48,13 @@ export const docsSections: DocsSection[] = [
           { title: "Intro", slug: "index" },
           { title: "Config", slug: "config" },
           { title: "Migrate from V1", slug: "migrate-v1" },
+          { title: "Enterprise", slug: "enterprise" },
           { title: "Troubleshooting", slug: "troubleshooting" },
         ],
       },
       {
         title: "Configure",
+        titleKey: "docs.nav.configure",
         items: [
           { title: "Agents", slug: "agents" },
           { title: "Models", slug: "models" },
@@ -85,6 +105,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "build",
     title: "Build",
+    titleKey: "docs.section.build",
     landingSlug: "build",
     groups: [
       {
@@ -92,6 +113,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Plugins",
+        titleKey: "docs.nav.plugins",
         items: [
           { title: "Overview", slug: "build/plugins" },
           { title: "Server", slug: "build/plugins/server" },
@@ -103,6 +125,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Client",
+        titleKey: "docs.nav.client",
         items: [{ title: "JavaScript", slug: "build/client" }],
       },
       {
@@ -137,6 +160,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "console",
     title: "Console",
+    titleKey: "docs.nav.console",
     landingSlug: "console",
     groups: [
       {
@@ -150,6 +174,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Workspace",
+        titleKey: "docs.nav.workspace",
         items: [
           { title: "Basics", slug: "console/workspaces" },
           { title: "Members", slug: "console/members" },
@@ -166,6 +191,7 @@ export const docsSections: DocsSection[] = [
           { title: "Models", slug: "console/api/models" },
           { title: "Inference", slug: "console/api/inference" },
           { title: "Providers", slug: "console/api/providers" },
+          { title: "Usage export", slug: "console/api/usage-export" },
         ],
       },
       {
@@ -175,6 +201,7 @@ export const docsSections: DocsSection[] = [
           { title: "Claude Code", slug: "console/harnesses/claude-code" },
           { title: "Codex", slug: "console/harnesses/codex" },
           { title: "Hermes", slug: "console/harnesses/hermes" },
+          { title: "OpenClaw", slug: "console/harnesses/openclaw" },
           { title: "Pi", slug: "console/harnesses/pi" },
           { title: "Raycast", slug: "console/harnesses/raycast" },
         ],
@@ -199,6 +226,61 @@ export function docsMarkdownHref(slug: string, set: DocsSet) {
   return slug === "index" ? `${set.base}index.md` : `${docsHref(slug, set).replace(/\/$/, "")}.md`
 }
 
+/** A page's URL in one of the latest docs' languages: English keeps the set's base, the rest take `/<locale>`. */
+export function docsLocaleBase(locale: Locale, set: DocsSet) {
+  return locale === "en" ? set.base : `/${locale}${set.base}`
+}
+
+/** A page's URL in a language, for its language alternates and the language picker. */
+export function docsLocaleHref(slug: string, set: DocsSet, locale: Locale) {
+  return locale === "en" ? docsHref(slug, set) : `/${locale}${docsHref(slug, set)}`
+}
+
+/** A page's Markdown twin in a language. */
+export function docsLocaleMarkdownHref(slug: string, set: DocsSet, locale: Locale) {
+  return locale === "en" ? docsMarkdownHref(slug, set) : `/${locale}${docsMarkdownHref(slug, set)}`
+}
+
+/** The search index a page loads: each language has its own, beside its pages (script/build.ts). */
+export function docsPagefindHref(set: DocsSet, locale: Locale) {
+  return `${docsLocaleBase(locale, set)}pagefind/pagefind.js`
+}
+
+/**
+ * The languages a page is available in: English always, plus the languages it has a current
+ * translation in, in the site's order. A page's head and the sitemap both use this, so they list
+ * the same set (the page itself included).
+ */
+export function docsLanguageAlternates(translated: readonly Locale[]) {
+  return LOCALES.filter((locale) => locale === "en" || translated.includes(locale))
+}
+
+/** The languages a page is available in, by its translated languages. */
+export function docsAlternates(slug: string, translated: ReadonlyMap<string, readonly Locale[]>) {
+  return docsLanguageAlternates(translated.get(slug) ?? [])
+}
+
+/**
+ * A page's canonical URL: its own address when it is translated (or English), and the English page's
+ * when that language only has the fallback (translated pages reuse the English page's headings, so the
+ * fallback is the same content in another chrome). Its hreflang alternates list only the languages
+ * with a translation, so a fallback page never competes with the English one.
+ */
+export function docsCanonicalHref(slug: string, set: DocsSet, locale: Locale, translated: boolean) {
+  if (locale === "en" || translated) return docsLocaleHref(slug, set, locale)
+  return docsHref(slug, set)
+}
+
+/**
+ * Where a file under the latest docs' `content/` is: its translated language and English slug, or
+ * undefined for an English page. Translations live in `content/<locale>/<same path>.mdx`.
+ */
+export function docsTranslation(file: string) {
+  const [first, ...rest] = file.split("/")
+  if (!rest.length || !(LOCALES as readonly string[]).includes(first)) return
+  return { locale: first as Locale, slug: docsSlug(rest.join("/")) }
+}
+
 /** A content file's slug: its path under content/ without `.mdx` or a trailing `/index`. */
 export function docsSlug(file: string) {
   const slug = file.replace(/\.mdx$/, "")
@@ -210,4 +292,25 @@ export function getDocsSection(slug: string) {
     docsSections.find((section) => section.groups.some((group) => group.items.some((item) => item.slug === slug))) ??
     docsSections[0]
   )
+}
+
+/**
+ * A section in a page's language: its UI labels from the dictionary (`docs.nav.*`) and its page
+ * titles from `titles`, a translated page's own frontmatter title by slug. A page without a current
+ * translation has no entry, so the English navigation title stays (as do pages in another set).
+ */
+export function docsSectionTitles(
+  section: DocsSection,
+  titles: ReadonlyMap<string, string>,
+  label: (key: DocsNavLabel) => string,
+): DocsSection {
+  return {
+    ...section,
+    title: section.titleKey ? label(section.titleKey) : section.title,
+    groups: section.groups.map((group) => ({
+      ...group,
+      title: group.titleKey ? label(group.titleKey) : group.title,
+      items: group.items.map((item) => ({ ...item, title: titles.get(item.slug) ?? item.title })),
+    })),
+  }
 }

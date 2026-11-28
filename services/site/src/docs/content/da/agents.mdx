@@ -1,0 +1,348 @@
+---
+title: "Agenter"
+description: "Definer genanvendelige agenter i Markdown eller konfiguration, hver med sin egen systemprompt, model, tilladelser og tilstand."
+---
+
+Opret en Markdown-fil for at tilføje en genanvendelig agent. Dette eksempel tilføjer en skrivebeskyttet reviewer, som hovedagenten kan starte til kodegennemgange:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+Bed din primære agent bruge den:
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+En agent samler en systemprompt, en foretrukken model, tilladelser og visningsoplysninger i en navngivet assistentprofil.
+
+## Placeringer
+
+Gem Markdown-agenter globalt for alle projekter eller inde i et projekt:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode leder efter projektets `.opencode`-mapper fra den aktuelle mappe helt op til filsystemets rod. En indlejret sti bliver en del af agent-ID'et:
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## Formater
+
+### Markdown
+
+Frontmatter accepterer de samme felter som en `agents`-konfigurationspost. Markdown-bodyen bliver agentens `system`-prompt:
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+V1-frontmatterfelter er forældede. Se [Agentfiler](/migrate-v1#agent-files) for, hvordan filer, der stadig bruger dem, læses.
+
+### JSONC
+
+Definér agenter under `agents` i enhver [OpenCode-konfigurationsfil](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## Valg
+
+Angiv den primære agent, der bruges, når en session ikke har valgt en:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+Standarden skal findes, være synlig og understøtte primær brug. Ellers bruger OpenCode `build` og derefter den første synlige agent, der kan være primær. Ændring af denne indstilling erstatter ikke den agent, der er gemt på en eksisterende session.
+
+## Tilstande
+
+Angiv `mode` efter, hvor agenten skal køre:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| Tilstand | Adfærd |
+| --- | --- |
+| `primary` | Kører som hovedagent for en session. Dette er standard for en ny brugerdefineret agent. |
+| `subagent` | Kører kun i en undersession via `subagent`-værktøjet. |
+| `all` | Kører enten som primær agent eller subagent. |
+
+Subagenter starter med ny kontekst i hver sin undersession. De kører altid i
+baggrunden: Den overordnede session får en rapport, når en undersession bliver inaktiv, og igen
+efter hver efterfølgende arbejdsrunde. Den overordnede agents `subagent`-tilladelser afgør,
+hvilke agenter den må starte; undersessionen bruger sine egne konfigurerede tilladelser.
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## Indbyggede agenter
+
+OpenCode indeholder disse synlige agenter:
+
+| Agent | Tilstand | Formål |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | Standardagent til kodning. Værktøjer og adgang uden for arbejdsområdet er tilladt som standard; agenten beder om godkendelse, før den læser følsomme miljøfiler. |
+| **Plan** (`plan`) | `primary` | Udforsker og planlægger uden at redigere normale projektfiler. Den kan skrive OpenCode-planfiler, når den bliver bedt om det, og shell-kommandoer er fortsat tilladelsesstyrede. |
+| **General** (`general`) | `subagent` | Håndterer research og flertrinsarbejde med bred værktøjsadgang, men kan ikke starte flere subagenter. |
+| **Explore** (`explore`) | `subagent` | Søger og læser kode eller webkilder uden at redigere filer. |
+
+Tilsidesæt en indbygget agent ved at bruge samme ID:
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+Skjulte agenter som `compaction`, `title` og `summary` udfører vedligeholdelse og kan ikke vælges direkte. V2 har ingen indbygget `scout`-agent.
+
+## Fletning
+
+Agentdefinitioner flettes i konfigurationsrækkefølge. Senere skalarværdier erstatter tidligere værdier, request-maps flettes efter nøgle, og tilladelsesregler tilføjes:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+Globale `permissions` gælder før agentspecifikke regler, så senere agentregler kan forfine dem.
+
+## Indstillinger
+
+### Description
+
+`description` forklarer agentens formål. Tilføj den til subagenter, fordi OpenCode viser den til modellen, der vælger, hvilken agent der skal startes:
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### Mode
+
+`mode` accepterer `primary`, `subagent` eller `all`. Når den udelades på en ny brugerdefineret agent, er standarden `primary`:
+
+```yaml
+mode: all
+```
+
+### Model
+
+`model` bruger `provider/model` med en valgfri `#variant`:
+
+```yaml
+model: anthropic/claude-sonnet-5-5#high
+```
+
+JSON-konfiguration accepterer også den udvidede form:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- En subagent bruger sin konfigurerede model eller arver den overordnede sessions model, når ingen er konfigureret.
+- En session gemmer sin valgte model separat. Valg af en primær agent efter ID ændrer ikke den model.
+
+### System
+
+`system` angiver agentens systemprompt. En ikke-tom værdi erstatter udbyderens basisprompt for den agent:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+Projektinstruktioner, skills, referencer og andre instruktionskilder tilføjes stadig. I en Markdown-agent skal du lægge denne tekst i dokumentets body i stedet for et `system`-frontmatterfelt.
+
+### Permissions
+
+`permissions` er en ordnet liste over matchende regler:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| Felt | Betydning |
+| --- | --- |
+| `action` | Værktøjs- eller tilladelseshandling. Wildcards understøttes. |
+| `resource` | Sti, kommando, agent-ID eller en anden værdi, der matches af handlingen. Wildcards understøttes. |
+| `effect` | `allow`, `ask` eller `deny`. |
+
+Den sidste matchende regel vinder, så læg brede regler før undtagelser. Almindelige handlinger omfatter:
+
+| Handling | Dækker |
+| --- | --- |
+| `shell` | Shell-kommandoer |
+| `edit` | Værktøjerne edit, write og patch |
+| `subagent` | Underordnede agenter |
+| `read`, `glob`, `grep` | Lokale søgeværktøjer |
+| `webfetch`, `websearch` | Webværktøjer |
+| `skill` | Indlæsning af skills |
+
+For `read`-, `edit`- og `external_directory`-ressourcer udvider OpenCode `~` og `$HOME`:
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+Shell-ressourcer forbliver rå kommandotekst og udvider ikke disse værdier.
+
+### Steps
+
+`steps` angiver et positivt maksimalt antal modeltrin:
+
+```yaml
+steps: 8
+```
+
+På det sidste trin fjerner OpenCode værktøjer og beder modellen opsummere i tekst. Nyt brugerinput nulstiller kvoten.
+
+### Hidden
+
+`hidden` fjerner en agent fra normale lister, interaktiv søgning og subagentkataloget:
+
+```yaml
+hidden: true
+```
+
+Dette styrer synlighed, ikke sikkerhed. Brug tilladelser til at begrænse adfærd.
+
+### Color
+
+`color` angiver agentens UI-farve med en hexværdi på seks cifre:
+
+```yaml
+color: "#ff6b6b"
+```
+
+### Disabled
+
+`disabled` fjerner en indbygget eller brugerdefineret agent på det punkt i konfigurationsindlæsningen:
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### Request
+
+Med `request` kan du tilsidesætte headere og felter i anmodningens JSON-body for den enkelte agent:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  V2 bevarer disse værdier under kørsel af sessionen, men sender dem endnu ikke med modelanmodninger. Angiv i stedet
+  de indstillinger, der skal bruges til anmodningerne, på udbyderen, modellen eller modelvarianten.
+</Callout>
+
+Brug ikke ældre topniveaufelter som `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable` eller `maxSteps` i ny V2-agentkonfiguration.

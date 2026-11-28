@@ -127,9 +127,15 @@ const layer = Layer.effect(
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
-          // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
+          const command = !input.environment.rg
+            ? yield* failure(`Search is not available on ${input.environment.id} yet.`)
+            : input.environment.local
+              ? yield* binary.filepath
+              : yield* input.environment.rg.pipe(
+                  Effect.mapError((cause) => failure(`Unable to resolve ripgrep on ${input.environment.id}`, cause)),
+                )
           const handle = yield* input.environment.spawner.spawn(
-            ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
+            ChildProcess.make(command, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
             Effect.map((output) => output.buffer.toString("utf8")),
@@ -262,10 +268,7 @@ const layer = Layer.effect(
                     return {
                       ...match.data,
                       lines: {
-                        text:
-                          lines.length > MAX_LINE_CHARS
-                            ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..."
-                            : lines,
+                        text: lines.length > MAX_LINE_CHARS ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..." : lines,
                       },
                       path: { text: normalizePath(rawText(match.data.path)) },
                       submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({

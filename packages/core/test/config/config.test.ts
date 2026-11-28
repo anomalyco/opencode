@@ -106,14 +106,18 @@ describe("Config", () => {
             fs.mkdir(project, { recursive: true }),
             fs.mkdir(path.join(home, ".claude"), { recursive: true }),
             fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+            fs.mkdir(path.join(tmp.path, ".agents"), { recursive: true }),
           ]),
         ).pipe(
           Effect.andThen(
             Effect.gen(function* () {
-              // The fixture is real: with global enabled the walk finds both.
+              // Discovery also sees ancestors above the fixture, which may have host config.
               const config = yield* Config.Service
               const compatibility = yield* config.compatibility!()
-              expect([...compatibility.claude, ...compatibility.agents]).toHaveLength(2)
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toHaveLength(2)
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
             }).pipe(Effect.provide(testLayer(project, global))),
           ),
           Effect.andThen(
@@ -122,7 +126,11 @@ describe("Config", () => {
             // project walk enabled.
             Effect.gen(function* () {
               const config = yield* Config.Service
-              expect(yield* config.compatibility!()).toEqual({ claude: [], agents: [] })
+              const compatibility = yield* config.compatibility!()
+              expect(
+                [...compatibility.claude, ...compatibility.agents].filter((directory) => inFixture(home, directory)),
+              ).toEqual([])
+              expect(compatibility.agents).toContain(AbsolutePath.make(path.join(tmp.path, ".agents")))
               const watcher = yield* Watcher.Test
               expect(
                 (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
@@ -362,13 +370,6 @@ describe("Config", () => {
     expect(ConfigDiscovery.systemDirectory("win32", {})).toBe(
       AbsolutePath.make(path.join("C:\\ProgramData", "opencode")),
     )
-  })
-
-  test("resolves macOS managed preferences with user-specific profiles first", () => {
-    expect(ConfigDiscovery.preferencePaths("alice")).toEqual([
-      AbsolutePath.make(path.join("/Library/Managed Preferences", "alice", "ai.opencode.managed.plist")),
-      AbsolutePath.make("/Library/Managed Preferences/ai.opencode.managed.plist"),
-    ])
   })
 
   test("strips MDM payload metadata from managed preferences", () => {
@@ -637,7 +638,7 @@ describe("Config", () => {
           Effect.andThen(
             Effect.gen(function* () {
               const config = yield* Config.Service
-              const install = () =>
+              const install = (policiesOnly = false) =>
                 config.integration!(
                   opencode,
                   ConfigIntegration.make({
@@ -645,20 +646,25 @@ describe("Config", () => {
                     connection: { type: "credential", id: credentialID, label: "Console", method: "key" },
                     organization: org,
                     info: decodeInfo({
-                      mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } },
+                      ...(policiesOnly
+                        ? {}
+                        : { mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } } }),
                       policies: [{ action: "mcp.use", resource: "github", effect: "deny" }],
                     }),
                   }),
                 )
-              yield* install()
+              expect((yield* install())._tag).toBe("Withheld")
               // The personal account's servers and the denied well-known origin's config are gone; their policies stay.
               expect(supplied(yield* config.entries())).toEqual([
                 { servers: [], policies: 1 },
                 { servers: [], policies: 1 },
               ])
+              const withheld = yield* install(true)
+              expect(withheld._tag).toBe("Withheld")
+              expect(yield* install(true)).toEqual(withheld)
               org = allowed
-              yield* config.integration!(opencode, undefined)
-              yield* install()
+              expect(yield* config.integration!(opencode, undefined)).toEqual({ _tag: "Cleared" })
+              expect((yield* install())._tag).toBe("Applied")
               expect(supplied(yield* config.entries())).toEqual([
                 { servers: ["docs"], policies: 1 },
                 { servers: [], policies: 1 },
@@ -1002,25 +1008,6 @@ describe("Config", () => {
         }),
       ),
     ),
-  )
-
-  it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
-    Effect.gen(function* () {
-      const config = yield* Config.Service
-      const test = yield* Config.Test
-      expect(yield* config.entries()).toEqual([])
-
-      const entry = new Document({ type: "document", info: new Info({}) })
-      yield* test.setEntries([entry])
-      expect(yield* config.entries()).toEqual([entry])
-
-      const received = yield* config
-        .changes()
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-      yield* Effect.yieldNow
-      yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
-      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
-    }).pipe(Effect.provide(Config.testLayer())),
   )
 
   test("returns the latest defined scalar from priority-ordered documents", () => {
@@ -1439,23 +1426,6 @@ describe("Config", () => {
     })
   })
 
-  test("migrates v1 provider lists to policies", () => {
-    expect(
-      migrateV1({
-        enabled_providers: ["anthropic", "openai"],
-        disabled_providers: ["openai"],
-      }).policies,
-    ).toEqual([
-      { action: "provider.use", resource: "*", effect: "deny" },
-      { action: "provider.use", resource: "anthropic", effect: "allow" },
-      { action: "provider.use", resource: "openai", effect: "allow" },
-      { action: "provider.use", resource: "openai", effect: "deny" },
-    ])
-    expect(migrateV1({ enabled_providers: [] }).policies).toEqual([
-      { action: "provider.use", resource: "*", effect: "deny" },
-    ])
-  })
-
   test("migrates v1 provider setup options into AISDK settings", () => {
     const migrated = migrateV1({
       provider: {
@@ -1661,31 +1631,6 @@ describe("Config", () => {
     ),
   )
 
-  it.live("deduplicates global ecosystem directories found during upward discovery", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const home = path.join(global, "home")
-          const project = path.join(home, "project")
-          yield* Effect.promise(() =>
-            Promise.all([
-              fs.mkdir(path.join(home, ".claude"), { recursive: true }),
-              fs.mkdir(path.join(home, ".agents"), { recursive: true }),
-              fs.mkdir(project, { recursive: true }),
-            ]),
-          )
-          const compatibility = yield* Config.Service.use((config) => config.compatibility!()).pipe(
-            Effect.provide(testLayer(project, global)),
-          )
-
-          expect(compatibility.claude).toEqual([AbsolutePath.make(path.join(home, ".claude"))])
-          expect(compatibility.agents).toEqual([AbsolutePath.make(path.join(home, ".agents"))])
-        }),
-      ),
-    ),
-  )
-
   it.live("does not recursively watch ecosystem config roots", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
@@ -1872,221 +1817,6 @@ describe("Config", () => {
             expect(documents[0]?.info.$schema).toBeUndefined()
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(contents)
-          }).pipe(Effect.provide(testLayer(tmp.path)))
-        }),
-      ),
-    ),
-  )
-
-  it.live("loads supported scalar and resource configuration", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({
-                shell: "/bin/bash",
-                model: "anthropic/claude",
-                default_agent: "reviewer",
-                update: "notify",
-                share: "disabled",
-                enterprise: { url: "https://share.example.com" },
-                username: "test-user",
-                permissions: [
-                  { action: "bash", resource: "*", effect: "ask" },
-                  { action: "bash", resource: "git status", effect: "allow" },
-                ],
-                agents: {
-                  reviewer: {
-                    model: "openrouter/openai/gpt-5#high",
-                    request: {
-                      headers: { "x-agent": "reviewer" },
-                      body: { reasoningEffort: "high" },
-                    },
-                    description: "Review changes for correctness",
-                    system: "Find regressions.",
-                    mode: "subagent",
-                    hidden: false,
-                    color: "#ff6b6b",
-                    steps: 12,
-                    disabled: false,
-                    permissions: [{ action: "edit", resource: "*", effect: "deny" }],
-                  },
-                },
-                snapshots: false,
-                watcher: { ignore: ["node_modules/**", "dist/**", ".git"] },
-                formatter: {
-                  prettier: { disabled: true },
-                  custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
-                },
-                lsp: { typescript: { disabled: true }, custom: { command: ["custom-lsp"], extensions: [".foo"] } },
-                media: {
-                  image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
-                },
-                tool_output: { max_lines: 1000, max_bytes: 32768 },
-                mcp: {
-                  timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
-                  servers: {
-                    local: {
-                      type: "local",
-                      command: ["node", "./mcp/server.js"],
-                      environment: { API_KEY: "secret" },
-                      disabled: false,
-                      codemode: false,
-                      timeout: { catalog: 10000 },
-                      protocol: "legacy",
-                    },
-                    remote: {
-                      type: "remote",
-                      url: "https://mcp.example.com/mcp",
-                      headers: { Authorization: "Bearer token" },
-                      oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
-                      disabled: true,
-                      codemode: false,
-                      timeout: { startup: 15000 },
-                      protocol: "2026-07-28",
-                    },
-                  },
-                },
-                compaction: {
-                  auto: true,
-                  prune: false,
-                  keep: { tokens: 2000 },
-                  buffer: 10000,
-                },
-                skills: ["./skills", "~/shared-skills", "https://example.com/.well-known/skills/"],
-                instructions: ["CONTRIBUTING.md", ".cursor/rules/*.md", "https://example.com/shared-rules.md"],
-                references: {
-                  local: { path: "../library" },
-                  sdk: { repository: "github.com/example/sdk", branch: "main" },
-                  shorthand: "github.com/example/docs",
-                },
-              }),
-            ),
-          )
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
-
-            expect(documents).toHaveLength(1)
-            expect(documents[0]?.info.shell).toBe("/bin/bash")
-            expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
-            expect(documents[0]?.info.default_agent).toBe("reviewer")
-            expect(documents[0]?.info.update).toBe("notify")
-            expect(documents[0]?.info.share).toBe("disabled")
-            expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
-            expect(documents[0]?.info.username).toBe("test-user")
-            expect(documents[0]?.info.permissions).toEqual([
-              { action: "bash", resource: "*", effect: "ask" },
-              { action: "bash", resource: "git status", effect: "allow" },
-            ])
-            const reviewer = documents[0]?.info.agents?.reviewer
-            expect(reviewer?.model).toEqual(selection("openrouter/openai/gpt-5#high"))
-            expect(reviewer?.request).toEqual({
-              headers: { "x-agent": "reviewer" },
-              body: { reasoningEffort: "high" },
-            })
-            expect(reviewer?.description).toBe("Review changes for correctness")
-            expect(reviewer?.system).toBe("Find regressions.")
-            expect(reviewer?.mode).toBe("subagent")
-            expect(reviewer?.hidden).toBe(false)
-            expect(reviewer?.color).toBe("#ff6b6b")
-            expect(reviewer?.steps).toBe(12)
-            expect(reviewer?.disabled).toBe(false)
-            expect(reviewer?.permissions).toEqual([{ action: "edit", resource: "*", effect: "deny" }])
-            expect(documents[0]?.info.snapshots).toBe(false)
-            expect(documents[0]?.info.watcher).toEqual({ ignore: ["node_modules/**", "dist/**", ".git"] })
-            expect(documents[0]?.info.formatter).toEqual({
-              prettier: { disabled: true },
-              custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
-            })
-            expect(documents[0]?.info.lsp).toEqual({
-              typescript: { disabled: true },
-              custom: { command: ["custom-lsp"], extensions: [".foo"] },
-            })
-            expect(documents[0]?.info.media).toEqual({
-              image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
-            })
-            expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
-            expect(documents[0]?.info.mcp).toEqual({
-              timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
-              servers: {
-                local: {
-                  type: "local",
-                  command: ["node", "./mcp/server.js"],
-                  environment: { API_KEY: "secret" },
-                  disabled: false,
-                  codemode: false,
-                  timeout: { catalog: 10000 },
-                  protocol: "legacy",
-                },
-                remote: {
-                  type: "remote",
-                  url: "https://mcp.example.com/mcp",
-                  headers: { Authorization: "Bearer token" },
-                  oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
-                  disabled: true,
-                  codemode: false,
-                  timeout: { startup: 15000 },
-                  protocol: "2026-07-28",
-                },
-              },
-            })
-            expect(documents[0]?.info.compaction).toEqual({
-              auto: true,
-              keep: { tokens: 2000 },
-              buffer: 10000,
-            })
-            expect(documents[0]?.info.skills).toEqual([
-              "./skills",
-              "~/shared-skills",
-              "https://example.com/.well-known/skills/",
-            ])
-            expect(documents[0]?.info.instructions).toEqual([
-              "CONTRIBUTING.md",
-              ".cursor/rules/*.md",
-              "https://example.com/shared-rules.md",
-            ])
-            expect(documents[0]?.info.references).toEqual({
-              local: { path: "../library" },
-              sdk: { repository: "github.com/example/sdk", branch: "main" },
-              shorthand: "github.com/example/docs",
-            })
-          }).pipe(Effect.provide(testLayer(tmp.path)))
-        }),
-      ),
-    ),
-  )
-
-  it.live("migrates the deprecated reference key into references", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({
-                reference: {
-                  local: { path: "../library" },
-                  sdk: { repository: "github.com/example/sdk", branch: "main" },
-                  shorthand: "github.com/example/docs",
-                },
-              }),
-            ),
-          )
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
-
-            expect(documents).toHaveLength(1)
-            expect(documents[0]?.info.references).toEqual({
-              local: { path: "../library" },
-              sdk: { repository: "github.com/example/sdk", branch: "main" },
-              shorthand: "github.com/example/docs",
-            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),

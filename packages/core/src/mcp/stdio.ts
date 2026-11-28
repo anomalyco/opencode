@@ -54,6 +54,8 @@ export const resolveCwd = (directory: string, cwd: string | undefined) =>
 export const make = Effect.fnUntraced(function* (options: Options) {
   const environment = yield* Environment.Service
   const scope = yield* Effect.scope
+  // SDK transport methods run outside any fiber; keep the caller's logger, log level, and clock.
+  const runPromise = Effect.runPromiseWith(yield* Effect.context())
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
   const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
@@ -73,7 +75,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   }, Effect.ignore())
 
   const close = () =>
-    (closing ??= Effect.runPromise(
+    (closing ??= runPromise(
       Effect.gen(function* () {
         state.phase = "closed"
         pending = []
@@ -98,7 +100,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     start: () => {
       if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
       state.phase = "starting"
-      startup = Effect.runPromise(
+      startup = runPromise(
         Effect.gen(function* () {
           const handle = yield* environment.spawner.spawn(
             ChildProcess.make(options.command, [...options.args], {
@@ -125,7 +127,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     send: (message: JSONRPCMessage) =>
       state.phase !== "open"
         ? Promise.reject(new Error("Not connected"))
-        : Effect.runPromise(
+        : runPromise(
             Queue.offer(outgoing, serializeMessage(message)).pipe(
               Effect.flatMap((offered) => (offered ? Effect.void : Effect.fail(new Error("Not connected")))),
             ),

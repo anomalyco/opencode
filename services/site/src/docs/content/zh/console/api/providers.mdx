@@ -1,0 +1,104 @@
+---
+title: "提供商 API"
+description: "使用控制台密钥，通过控制台网关调用接入工作区的提供商。"
+---
+
+接入工作区的每个[提供商](/console/providers)都会通过控制台网关，以各自独立的 URL 提供服务。OpenCode 在 `/connect` 之后会自动使用它；你也可以直接调用该 URL，在自己的工具中使用相同的提供商。控制台会在转发请求前添加提供商凭据，因此提供商密钥永远不会离开工作区。
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 提供商 URL
+
+在 **Providers** 下打开提供商页面，复制其中的 **Console API URL**。
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## 认证
+
+将 `<token>` 替换为在控制台中创建的[服务账号密钥](/console/api#service-accounts)。控制台会在转发前将其替换为该连接的凭据。
+
+```text
+Authorization: Bearer <token>
+```
+
+控制台也会从 `x-api-key`、`api-key` 或 `x-goog-api-key` 中读取密钥，因此只要将提供商的 SDK 指向控制台 API URL，就可以直接使用。
+
+## 端点
+
+在控制台 API URL 后面追加提供商的 API 路径即可。控制台会将请求转发到该连接的基础 URL，并原样返回提供商的响应。
+
+| 格式                 | 路径                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+| Embeddings           | `/embeddings`                     |
+
+请按照提供商页面上显示的模型 ID 发送请求。如果模型在上游使用不同的 API ID，控制台会自动改写。对未在该连接上启用的模型发起的请求会被拒绝。
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+必须提供 `max_tokens`。
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+模型和方法是路径的一部分。将 `:generateContent` 替换为 `:streamGenerateContent` 即可流式返回响应。
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## 用量
+
+请求会按照每个模型设置的价格计入[预算](/console/budgets)。token 费用由提供商向你收取。

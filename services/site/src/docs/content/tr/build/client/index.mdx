@@ -1,0 +1,164 @@
+---
+title: "JavaScript"
+description: "Uygulamanızı OpenCode HTTP API'si için TypeScript istemcisi olan @opencode/client ile bir OpenCode sunucusuna bağlayın."
+---
+
+`@opencode/client`, OpenCode HTTP API'si için TypeScript istemcisidir. Uygulamanız bir OpenCode sunucusuna ağ üzerinden
+bağlandığında bunu kullanın. Yerel türleri ve yöntemleri [API referansıyla](/api) aynı sözleşmeden oluşturulur. Eklenti
+RPC türleri içe aktarılan RPC tanımlarından gelir.
+
+## Kurulum
+
+```sh
+bun add @opencode/client
+```
+
+## İstemci oluşturma
+
+Sunucu URL'siyle bir istemci oluşturun, ardından API kaynaklarına göre gruplanmış yöntemleri çağırın:
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## Başlıklar ve istekler
+
+Varsayılan kimlik doğrulama veya uygulama başlıklarını `OpenCode.make` çağrısına `headers` ile iletin. Özel bir `fetch` uygulaması da sağlayabilirsiniz. Her işlem, son argümanında istek seçeneklerini kabul eder. Burada bir `AbortSignal` veya yalnızca o isteğe özgü başlıklar belirtebilirsiniz. Olay abonelikleri istisnadır: yalnızca ilgili aboneyi iptal edebilirsiniz ve abonelikler temel istemcinin başlıklarını kullanır.
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## Olay akışı
+
+Akış endpoint'leri birer async iterable döndürür:
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Yerleşik olayların ve RPC olaylarının aboneleri, istemci başına tek bir bağlantıyı paylaşır. İstemci, tanıtıcı veya iterable oluşturduğunuzda bağlantı açılmaz; ancak olayları okumaya başladığınızda açılır. Döngüden çıkmak veya bir aboneyi iptal etmek yalnızca ilgili iterator'ı sonlandırır. Son abone ayrıldığında bağlantı kapanır. Paylaşılan kaynak, her olayın etkin aboneler tarafından alınmasını bekler. Uzun süren işlemlere geçmeden önce olayları arabelleğe alın.
+
+Aboneler yalnızca canlı olayları alır; geçmiş olaylar yeniden gönderilmez ve bağlantı otomatik olarak yeniden kurulmaz. Kaynakta bir hata oluşursa mevcut abonelikler kapanır. Kaynak yeniden kullanılabilir olduğunda tekrar abone olun. Sonradan katılan bir yerleşik olay abonesine geçmiş uygulama olayları değil, güncel `server.connected` işareti gönderilir.
+
+Yalnızca bazı olay türlerini almak için `types` iletin. Olaylar buna uyacak şekilde tiplenir ve `server.connected` her
+zaman gelir; böylece filtrelenmiş bir abone ne zaman yeniden eşitleyeceğini yine bilir. Filtreleme, istemcinin içinde
+paylaşılan bağlantıda yapılır.
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
+## Eklenti RPC
+
+Bir eklentinin paylaşılan sözleşmesini içe aktarın ve `client.rpc` istemcisine iletin:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+İkinci isteğe bağlı yöntem argümanı, eklentinin tanımladığı girdiden ayrı olarak `location`, `signal` ve `headers` tutar.
+Belirtilmeyen konum, yerel istek varsayılanlarını izler: temel konum başlıkları, ardından sunucunun çalışma dizini. Alt
+istemci oluşturulurken hiçbir konum seçilmez.
+
+Yöntemler argümanları ve sonuçları tanımdan çıkarır. Şema ayrıştırma sözleşme sınırına aittir; çağıranlar kabul edilen
+girdi temsilini gönderir, işleyiciler ise ayrıştırılmış değerleri alır. Promise istemcisi Standard Schema veya düz JSON
+Schema tanımlarını kabul eder ve şema ayrıştırıcılarını yerel olarak çalıştırmaz: sunucu zaten ayrıştırılmış ve
+dönüştürülmüş çıktı döndürür. Effect Schema tanımları Effect istemcisini gerektirir.
+
+Tanımlanmış bir yöntem hatası, diğer Promise istemcisi endpoint'lerinde olduğu gibi Promise'in reddedilmesine yol açar. Yakalanan hatalar tip bilgisi taşımaz. Tipli alt istemci, genel HTTP RPC hata sarmalayıcısını kaldırır. Altyapıya ayrılmış `rpc.*` hataları RPC hatası olarak kalır. RPC'ye özgü olmayan kimlik doğrulama, aktarım ve protokol hataları ise istemcideki olağan biçimlerini korur.
+
+RPC abonelikleri yerel adları kullanır ve o RPC'nin olaylarını tüm konumlarda alır. Bunları filtrelemek için gerekli
+`event.location` alanını inceleyin. `events.subscribe`, yerel eşzamansız yinelenebilir API'siyle eşleşir:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on`, aynı kaynağın üzerinde pratik bir sarmalayıcıdır. Aboneliği iptal etme işlevi döndürür; eşzamansız geri
+çağırmalar sırayla beklenir. Geri çağırma veya kaynak hataları günlüğe yazılır ve o dinleyiciyi sonlandırır. Yerel ve
+tipli abonelikler, doğrudan nesne olay verisiyle aynı normal `rpc.<rpcID>.<event>` zarfını alır. Canlı abonelikler
+kaçırılan olayları yeniden oynatmaz.
+
+Sunucu eklentisi yapılandırılmalı ve RPC'yi uygulamalıdır; bir tanımı içe aktarmak onu kaydetmez. Tanım ve kayıt API'si
+için [eklenti RPC](/build/plugins/rpc) sayfasına bakın. Herhangi bir HTTP istemcisi genel
+`POST /api/rpc/{rpcID}/{method}` rotasını `{ "input": ... }` ile çağırabilir ve `{ "output": ... }` alabilir. Belirtilmeyen
+girdi/çıktı alanları değer yok anlamına gelir.
+
+## Yerel arka plan hizmeti
+
+Ana istemci giriş noktaları tarayıcıyla uyumludur ve yerel süreç yönetimi içermez. Bir Node uygulamasında yerel Promise
+hizmet API'sini `@opencode/client/service` içinden içe aktarın.
+
+- `Service.discover()`, yeni bir süreç başlatmadan sağlıklı ve kayıtlı bir endpoint döndürür.
+- `Service.ensure()` uyumlu bir hizmet döndürür, gerektiğinde bir tane başlatır.
+- `Service.stop()` tam olarak kayıtlı hizmet örneğini durdurur.
+- `Service.headers(endpoint)` bir istemci için kimlik doğrulama başlıkları oluşturur.
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` isteğe bağlı bir kayıt dosyası, sürüm, hizmet komutu ve `onStart` geri çağırması kabul eder. `version`
+tam bir değer veya bir uyumluluk yüklemi kabul eder:
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+Standart kayıt yolunu ve `opencode serve --service` komutunu kullanmak için bu seçenekleri atlayın.

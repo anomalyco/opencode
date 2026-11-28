@@ -1,0 +1,167 @@
+---
+title: "API-Überblick"
+description: "Authentifiziere dich bei der OpenCode Console API mit persönlichen API-Schlüsseln oder Schlüsseln von Service-Konten und begrenze, was jeder Schlüssel darf."
+---
+
+Über die Console API können deine Skripte und Integrationen Modelle aufrufen und Nutzungsdaten exportieren.
+Jede Anfrage benötigt zur Authentifizierung einen API-Schlüssel.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                            | Endpunkte                                          |
+| ---------------------------------------------- | -------------------------------------------------- |
+| [Modelle](/console/api/models)                 | `https://opencode.ai/console/api/v1/models`        |
+| [Inference](/console/api/inference)            | `https://opencode.ai/inference/...`                |
+| [Anbieter](/console/api/providers)             | `https://opencode.ai/inference/custom/...`         |
+| [Nutzungsexport](/console/api/usage-export)    | `https://opencode.ai/console/api/v2/usage/export`  |
+
+## API-Schlüssel
+
+Sowohl Mitglieder eines Workspace als auch Service-Konten können API-Schlüssel haben. Sende einen Schlüssel als
+Bearer-Token.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                    | Persönlicher API-Schlüssel                              | Schlüssel eines Service-Kontos                                           |
+| ------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Erstellt von       | Jedes Mitglied, für sich selbst                          | Owner und Admins                                                        |
+| Erstellt unter     | **Account › Personal API keys**                          | **Settings › Service accounts**                                          |
+| Handelt als        | Das Mitglied, das ihn erstellt hat                       | Das Service-Konto                                                        |
+| Nutzung wird angerechnet auf | Das [Budget](/console/budgets#member-budgets) des Mitglieds | Das [Budget](/console/budgets#service-account-budgets) des Service-Kontos |
+| Am besten für      | Deine eigenen Skripte und [Harnesses](/console/harnesses) | CI, gemeinsam genutzte Maschinen und Integrationen                       |
+
+- Jeder Schlüssel gilt in einem Workspace, der beim Erstellen gewählt wird. Ein Workspace-Header ist nicht nötig.
+- Der vollständige Schlüssel wird nur einmal angezeigt, direkt nach dem Erstellen. Danach zeigt die Console nur sein
+  Präfix.
+- **Expiration** ist optional: **Never**, **1 day**, **7 days**, **30 days** oder **Custom** (1 bis 365 Tage). Ein
+  abgelaufener Schlüssel kann nicht verlängert werden, erstelle also einen neuen.
+
+## Persönliche API-Schlüssel
+
+Ein persönlicher Schlüssel stellt Anfragen in deinem Namen. Deine Rolle, deine [Budgets](/console/budgets#member-budgets) und
+Modellregeln gelten für ihn.
+
+1. Öffne **Account** über das Kontomenü und suche **Personal API keys**.
+2. Klicke auf **Add API key**.
+3. Wähle den **Workspace**, einen **Key name** und optional eine **Expiration**. Owner und Admins wählen außerdem
+   **Permissions**.
+4. Klicke auf **Create** und kopiere den Schlüssel.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Der Schlüssel übernimmt deine aktuellen Zugriffsrechte im Workspace. Ändert sich deine Rolle, ändern sich auch
+seine Berechtigungen. Wenn der Workspace [SSO erzwingt](/console/sso#sso-enforcement), ist deine SSO-Session
+Voraussetzung dafür, dass der Schlüssel funktioniert. Für Owner gilt diese Einschränkung nicht.
+
+## Service-Konten
+
+Ein Service-Konto ist ein nicht-menschliches Mitglied des Workspace mit eigenen API-Schlüsseln, eigener Nutzung und
+eigenem [Budget](/console/budgets#service-account-budgets). Nutze eines für Automatisierung, damit die Nutzung nicht an
+eine Person gebunden ist. Owner und Admins verwalten sie.
+
+1. Öffne **Settings › Service accounts**, klicke auf **Add Service Account** und benenne es, zum Beispiel
+   `CI Pipeline`.
+2. Öffne das Service-Konto und klicke auf **Add API Key**.
+3. Wähle einen **Key name**, optional eine **Expiration** und **Permissions** und klicke dann auf **Create**.
+4. Kopiere den Schlüssel.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Owner und Admins können einen Schlüssel eines Service-Kontos später über **Edit…** im Aktionsmenü des Schlüssels
+umbenennen oder seine Berechtigungen ändern.
+
+## Berechtigungen
+
+Jeder Schlüssel hat eine Berechtigungsstufe, die du beim Erstellen unter **Permissions** wählst.
+
+| Berechtigungen | Erlaubt                                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| **All**        | Alles, was das Mitglied oder Service-Konto darf, außer **This account's API keys**.       |
+| **Restricted** | Nur die Ressourcen, die du wählst.                                                        |
+| **Read only**  | Lesezugriff auf jede Ressource. Der Schlüssel kann Modelle auflisten, aber nicht aufrufen. |
+
+Ein Schlüssel hat nie mehr Rechte als das Mitglied oder Service-Konto, in dessen Namen er verwendet wird. Bei
+persönlichen Schlüsseln gelten die Grenzen der aktuellen Mitgliedsrolle, bei Schlüsseln von Service-Konten die
+[Einschränkungen für Service-Konten](#limitations).
+
+### Eingeschränkte Schlüssel
+
+Setze jede Ressource auf **None**, **Read** oder **Write**. **Write** schließt **Read** ein.
+
+| Ressource                   | Stufen                |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**, **Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**, **Write**   |
+| **Members**                 | **Read**, **Write**   |
+| **Providers**               | **Read**, **Write**   |
+| **Billing**                 | **Read**, **Write**   |
+| **Workspace settings**      | **Read**, **Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
+
+**Models › Read** listet Modelle auf, und **Models › Request** ruft sie zusätzlich über die
+[Inference](/console/api/inference)- und [Providers](/console/api/providers)-APIs auf. Ein Schlüssel, der nur Modelle
+aufruft, braucht zum Beispiel:
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+Schlüssel, die vor den abgestuften Berechtigungen als **Inference only** erstellt wurden, erscheinen als
+**Restricted** mit **Models** auf **Request**.
+
+### Wer was vergeben kann
+
+- **Mitglieder** können nur persönliche Schlüssel erstellen, die Modelle auflisten und aufrufen. Die Console zeigt
+  „This key can list and call models as you.“ statt der Berechtigungsauswahl.
+- **Owner und Admins** können ihren persönlichen Schlüsseln **All**, **Restricted** oder **Read only** geben, bis zur
+  eigenen Rolle. Der Standard ist **Restricted** mit **Models** auf **Request**. Werden sie später herabgestuft,
+  werden die Berechtigungen ihrer Schlüssel entsprechend eingeschränkt.
+- **Schlüssel von Service-Konten** erhalten standardmäßig **All**. Owner und Admins wählen ihre Berechtigungen.
+
+### Einschränkungen
+
+Manche Aktionen brauchen immer eine in der Console angemeldete Person, und das Erstellen von Schlüsseln mit einem
+Schlüssel ist stark begrenzt.
+
+- Kein API-Schlüssel kann SSO-Einstellungen ändern oder den Workspace löschen.
+- Schlüssel von Service-Konten können keine Mitglieder einladen, Rollen ändern, Mitglieder entfernen, die Abrechnung
+  verwalten, Workspace-Einstellungen ändern, Modelle verwalten oder Service-Konten erstellen oder entfernen, auch nicht
+  mit **All**.
+- **This account's API keys** ist nur bei Schlüsseln von Service-Konten verfügbar, und **All** schließt es nicht ein.
+  Ein Schlüssel damit kann Schlüssel nur für sein eigenes Service-Konto erstellen und widerrufen. Neue Schlüssel müssen
+  **Restricted** sein, innerhalb der Berechtigungen des erstellenden Schlüssels bleiben und dürfen
+  **This account's API keys** nicht enthalten.
+- Persönliche Schlüssel erhalten nie **This account's API keys**, und kein API-Schlüssel kann persönliche API-Schlüssel
+  erstellen oder widerrufen.
+
+Anfragen außerhalb der Berechtigungen eines Schlüssels geben HTTP `403` zurück.
+
+## Widerruf
+
+| Schlüssel                    | Wer ihn widerrufen kann       | Wo                                                                                    |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------- |
+| Persönlicher API-Schlüssel   | Das Mitglied, dem er gehört   | **Account › Personal API keys**, dann **Revoke**                                      |
+| Persönlicher API-Schlüssel   | Owner und Admins             | Die Mitgliederseite unter **Settings › Members**, unter **API Keys**                  |
+| Schlüssel eines Service-Kontos | Owner und Admins           | Die Seite des Service-Kontos unter **Settings › Service accounts**, unter **API Keys** |
+
+Schlüssel werden außerdem automatisch widerrufen:
+
+- Wenn jemand den Workspace verlässt, daraus entfernt wird oder den Zugriff über [SCIM](/console/scim) verliert,
+  werden alle Schlüssel widerrufen, die diese Person dort erstellt hat, auch Schlüssel von Service-Konten.
+  Andere Schlüssel desselben Service-Kontos funktionieren weiter.
+- Das Entfernen eines Service-Kontos widerruft alle seine Schlüssel.
+
+Widerrufene und abgelaufene Schlüssel funktionieren sofort nicht mehr und geben HTTP `401` zurück.

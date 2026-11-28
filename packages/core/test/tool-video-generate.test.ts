@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import type { Media } from "@opencode/ai/effect"
 import { Bus } from "@opencode/core/bus"
-import { Flag } from "@opencode/core/flag"
+import { Config } from "@opencode/core/config"
 import { Generate } from "@opencode/core/generate"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -16,7 +16,9 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { VideoGenerateTool } from "@opencode/core/tool/plugin/video-generate"
-import { Effect, Layer, Stream } from "effect"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { Effect, Layer, Schedule, Stream } from "effect"
 import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -68,7 +70,7 @@ const it = testEffect(
         },
       }),
     ),
-  ).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "video_generate"))),
+  ),
 )
 
 const videoModel = (providerID: string, id: string) =>
@@ -124,9 +126,45 @@ const setup = (providerID = "test") =>
     return { session, run, notice, directory: location.directory }
   })
 
+const configure = (video_generate: ConfigExperimental.Info["video_generate"]) =>
+  Effect.gen(function* () {
+    const config = yield* Config.Test
+    yield* config.setEntries([
+      new Document({
+        type: "document",
+        info: new Info({ experimental: new ConfigExperimental.Info({ video_generate }) }),
+      }),
+    ])
+    const bus = yield* Bus.Service
+    yield* bus.publish(Event.Updated, {})
+  })
+
+const registered = Tool.Service.use((registry) => registry.list()).pipe(
+  Effect.map((tools) => tools.some((tool) => tool.name === VideoGenerateTool.name && tool.options?.codemode === true)),
+)
+// Catalog and config changes reach the tool through events, so wait for them instead of a fixed delay.
+const until = (expected: boolean) =>
+  registered.pipe(
+    Effect.repeat({ until: (value) => value === expected, schedule: Schedule.spaced("5 millis") }),
+    Effect.timeout("10 seconds"),
+  )
+
 const kinds = (assets: ReadonlyArray<Media.Asset> | undefined) => assets?.map((asset) => asset.mediaType)
 
-describe("experimental_video_generate", () => {
+describe("generate_video", () => {
+  it.live("is on by default while a video model is available, and off with experimental.video_generate: false", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      expect(yield* registered).toBe(false)
+      yield* videoModel("test", "director")
+      expect(yield* until(true)).toBe(true)
+      yield* configure(false)
+      expect(yield* until(false)).toBe(false)
+      yield* configure({})
+      expect(yield* until(true)).toBe(true)
+    }),
+  )
+
   it.effect("starts the job, saves every video it returns and lists them all in the notice", () =>
     Effect.gen(function* () {
       yield* videoModel("test", "director")
@@ -147,9 +185,17 @@ describe("experimental_video_generate", () => {
       })
       const file = path.join(directory, "kite.mp4")
       const second = path.join(directory, "kite-1.mp4")
-      const id = result.output.id
+      const id = String(result.metadata?.jobID)
       expect(id).toStartWith("video_")
-      expect(result.output).toEqual({ id, path: file, model: "test/director" })
+      expect(result.metadata).toEqual({ jobID: id, path: file, model: "test/director" })
+      expect(result.output).toBe(
+        [
+          `Video job ${id} started in the background with test/director. It will be saved to ${file}; if the model returns more than one video, the others are saved next to it with -1, -2, … added to the name.`,
+          "You will be notified automatically when it finishes or fails. Videos usually take a few minutes.",
+          "DO NOT sleep, poll, check whether the file exists, or request the same video again while it runs.",
+          "Work on other tasks, or briefly tell the user what you started and end your response.",
+        ].join("\n"),
+      )
       expect(yield* notice(result)).toBe(
         `<background-result kind="video" id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</background-result>`,
       )
@@ -176,7 +222,7 @@ describe("experimental_video_generate", () => {
         },
       ])
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
-        ["experimental_video_generate", ["test/director"]],
+        ["generate_video", ["test/director"]],
         ["edit", ["kite.mp4"]],
         ["read", ["first.png"]],
         ["webfetch", ["https://example.test/last.png"]],

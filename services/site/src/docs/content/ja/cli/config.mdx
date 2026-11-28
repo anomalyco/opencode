@@ -1,0 +1,428 @@
+---
+title: "設定"
+description: "OpenCode の CLI と TUI の全設定項目を説明します。"
+---
+
+CLI の設定はターミナルクライアントにだけ適用されます。`opencode.json(c)` に記述するサーバー設定やプロジェクト設定とは別です。
+
+TUI から一般的な設定を変更するには、`Ctrl+P` を押して **Open settings** を選択します。
+
+<img src={`${import.meta.env.BASE_URL}assets/cli/settings.png`} alt="OpenCode TUI settings dialog" />
+
+## 設定ファイル
+
+OpenCode は CLI の設定を 1 つのグローバルファイルに保存します。
+
+```text
+~/.config/opencode/cli.json
+```
+
+`$XDG_CONFIG_HOME` が設定されている場合、OpenCode は次を使用します。
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+プロジェクトローカルの CLI 設定ファイルはありません。検証と補完のために、公開されている JSON Schema を追加します。
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode はこのファイルを作成または移行するときに `$schema` を追加します。有効な編集は TUI の実行中に再読み込みされます。
+
+不明な設定は無視されます。エディタが無効な値を指摘できるよう、`$schema` を保持してください。
+
+### 旧形式の `tui.json`
+
+V1 はターミナルクライアントの設定を `tui.json` に保存していました。V2 がこのファイルを読むのは移行時の 1 回だけです。`cli.json` の下位の設定として読み込むことはありません。
+
+- `cli.json` がない場合、CLI は同じディレクトリにあるグローバルの `tui.json` からサポート対象の設定を読み取り、状態ディレクトリの `kv.json` に保存された設定と合わせて新しいファイルを作成します。
+- `cli.json` ができると、`tui.json` は無視されます。その後に編集しても反映されません。ファイルは残しても削除してもかまいません。
+- `cli.json` を削除すると、次回の起動時に移行をやり直します。
+- 移行処理が旧形式のファイルを変更したり削除したりすることはありません。
+- 読み込むのはグローバルの `tui.json` だけです。プロジェクトローカルの `tui.json` ファイルや `tui.jsonc` は移行しません。
+
+## インライン設定
+
+`OPENCODE_CLI_CONFIG_CONTENT` を設定すると、インラインの JSON から CLI 設定を適用できます。
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode はインライン設定をグローバルの `cli.json` にマージします。ネストしたオブジェクトはマージされ、環境からの配列とスカラー値はグローバルの値を置き換えます。変数が設定されている間は、インライン設定が優先されます。
+
+## 外観
+
+テーマを選び、インターフェースの動きを制御し、ターミナルのカーソルを上書きします。
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Appearance settings" tabIndex={0}>
+
+| 設定              | 値                                      | 説明                                                                     |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `theme.name`      | 文字列                                  | 組み込み、カスタム、またはターミナルから導出したテーマを選択します。     |
+| `theme.mode`      | `system`、`dark`、`light`               | ターミナルの外観に従うか、テーマを 1 つのカラーモードに固定します。       |
+| `animations`      | ブール値                                | インターフェースのアニメーションを有効にします。                         |
+| `cursor.style`    | `block`、`underline`、`line`、`default` | カーソルの形状を設定します。`default` はターミナルのカーソル形状を維持します。 |
+| `cursor.blinking` | ブール値                                | カーソルの点滅を制御します。スタイルが `default` の場合は効果がありません。 |
+
+</div>
+
+テーマの選択と作成については[テーマ](/cli/theme)を参照してください。
+
+## 入力
+
+マウスのキャプチャ、スクロール、エディタのコンテキスト、貼り付け、プロンプトの画像プレビューを設定します。
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Input settings" tabIndex={0}>
+
+| 設定                   | 値                       | 説明                                                                     |
+| ---------------------- | ------------------------ | ------------------------------------------------------------------------ |
+| `mouse`                | ブール値                 | ターミナルのマウスキャプチャを有効にします。                             |
+| `scroll.speed`         | 数値、最小 `0.001`       | スクロール入力 1 回あたりの固定距離を設定します。                        |
+| `scroll.acceleration`  | ブール値                 | 繰り返しのスクロールを加速します。有効な場合は speed より優先されます。  |
+| `prompt.editor`        | ブール値                 | アクティブなエディタのファイルまたは選択範囲をプロンプトのコンテキストとして含めます。 |
+| `prompt.paste`         | `compact` または `full`  | 大きな貼り付けをコンパクトなプレースホルダーとして、または全文として表示します。 |
+| `prompt.image_preview` | ブール値                 | プロンプト入力の上に画像添付のプレビューを表示します。                   |
+
+</div>
+
+## セッション
+
+全画面 TUI のセッションの表示方法と、新しいセッションの開始場所を設定します。
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Session settings" tabIndex={0}>
+
+| 設定                    | 値                       | 説明                                                                         |
+| ----------------------- | ------------------------ | ---------------------------------------------------------------------------- |
+| `session.sidebar`       | `auto` または `hide`     | スペースがあればサイドバーを表示するか、常に非表示にします。                 |
+| `session.scrollbar`     | ブール値                 | トランスクリプトのスクロールバーを表示します。                               |
+| `session.submit_scroll` | `bottom` または `keep`   | プロンプトを送信したときに最新のメッセージへ移動するか、位置を保ちます。     |
+| `session.thinking`      | `show` または `hide`     | デフォルトでモデルの推論を表示するか非表示にします。                         |
+| `session.grouping`      | `auto` または `none`     | 関連するトランスクリプトの項目をグループ化するか、個別に表示します。         |
+| `session.image_preview` | ブール値                 | ユーザーの添付とツール結果の画像をトランスクリプトに表示します。             |
+| `session.tps`           | ブール値                 | アシスタントのフッターに毎秒の出力トークン数を表示します。                   |
+| `session.markdown`      | `source` または `rendered` | Markdown の構文マーカーを表示するか、レンダリングされた内容で隠します。    |
+| `session.new_location`  | `launch` または `inherit` | TUI の起動ディレクトリで開始するか、アクティブなセッションの場所を継承します。 |
+| `session.permissions`   | `prompt` または `autoaccept` | 権限のリクエストを確認するか、すべてのリクエストを自動的に承認します。    |
+
+</div>
+
+## タブ
+
+セッションのタブバーを設定します。
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+従来のブール値 `tabs.enabled` も引き続きサポートされます。`true` は `on`、`false` は `off` です。OpenCode は設定ファイルを書き換えずにこれを読み取ります。
+
+<div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
+
+| 設定              | 値                         | 説明                                                                          |
+| ----------------- | -------------------------- | ----------------------------------------------------------------------------- |
+| `tabs.mode`       | `auto`、`on`、`off`        | タブの表示を自動で切り替えるか、常に表示または非表示にします。自動設定では Herdr 内でタブを表示しません。 |
+| `tabs.scope`      | `cwd` または `global`      | 作業ディレクトリごとにタブを分けるか、グローバルに共有します。                |
+| `tabs.layout`     | `horizontal` または `vertical` | タブを横のストリップに置くか、縦のサイドバーに置きます。                  |
+| `tabs.indicators` | `status` または `numbers`  | ステータスのアイコンを表示するか、常にタブの番号を表示します。                |
+
+</div>
+
+番号のインジケーターは、ステータスの色と背景のアニメーションを保持します。Ctrl+数字のショートカットは、どちらのインジケーターモードでもタブを切り替えます。
+
+## Diff
+
+Diff の初期スコープと表示を設定します。
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
+
+| 設定           | 値                                          | 説明                                                      |
+| -------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `diffs.source` | `branch`、`committed`、`working`、`turn`    | 初期のレビューのスコープを設定します。                    |
+| `diffs.wrap`   | `word` または `none`                        | 長い行を単語単位で折り返すか、折り返しません。            |
+| `diffs.tree`   | ブール値                                    | Diff のファイルツリーを表示します。                       |
+| `diffs.single` | ブール値                                    | 選択したファイルのパッチのみを表示します。                |
+| `diffs.view`   | `auto`、`split`、`unified`                  | レイアウトを設定します。`auto` は利用可能な幅から選びます。 |
+
+</div>
+
+`branch` はブランチとローカルの変更の **All** を表示し、`committed` はブランチのコミットのみ、`working` はステージ済み、未ステージ、未追跡の変更を表示します。`turn` は **Last turn**、つまりセッションが最後のターンで変更したファイルを表示します。セッションがターンを終えると更新され、`/diff` がセッションから開かれていない場合は `branch` にフォールバックします。
+
+`/diff` では、`d` を押してスコープを変更するか、**Base** から比較するブランチを選択します。これらのビュー内の選択は TUI を終了するまで有効で、`cli.json` は変更されません。
+
+## アラート
+
+システム通知と通知音を個別に有効にできます。
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Alert settings" tabIndex={0}>
+
+| 設定                    | 値                  | 説明                                                                                                     |
+| ----------------------- | ------------------- | -------------------------------------------------------------------------------------------------------- |
+| `attention.notifications` | ブール値          | 通常はターミナルにフォーカスがないときに、システム通知を表示します。                                     |
+| `attention.sound`       | ブール値            | 通知音を再生します。                                                                                     |
+| `attention.volume`      | `0` から `1` の数値 | 音量を設定します。                                                                                       |
+| `attention.sound_pack`  | 文字列              | アクティブなサウンドパックの ID を選択します。                                                           |
+| `attention.sounds`      | オブジェクト        | `default`、`question`、`permission`、`error`、`done`、`subagent_done` のサウンドファイルを上書きします。 |
+
+</div>
+
+上書きの指定が無効か、指定したファイルを読み込めなければ、そのイベントの組み込みのサウンドが使われます。
+
+更新後、TUI はホーム画面で新しいリリースのハイライトを一度表示します。もう一度見るには `/highlights` を実行するか、ダイアログをオフにします。
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## ターミナル
+
+ターミナルの連携を設定します。
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
+
+| 設定             | 値                   | 説明                                                                                                     |
+| ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `terminal.title` | ブール値             | ターミナルのウィンドウタイトルを更新します。                                                             |
+| `terminal.copy`  | `manual` または `select` | 手動でコピーするか、選択の直後にコピーします。プラットフォームのデフォルトは、Windows では `manual`、それ以外では `select` です。 |
+
+</div>
+
+## Mini
+
+`mini` グループは、最小限の対話インターフェースである [`opencode mini`](/cli#mini) を制御します。
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini settings" tabIndex={0}>
+
+| 設定                | 値                             | 説明                                                                               |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
+| `mini.thinking`     | `show` または `hide`           | モデルの推論を表示するか非表示にします。                                           |
+| `mini.tools`        | `show` または `hide`           | ツール呼び出しと、その前にあるアシスタントのテキストを表示するか非表示にします。   |
+| `mini.shell_output` | `show` または `hide`           | シェルツールの生の出力を表示するか非表示にします。                                 |
+| `mini.turn_summary` | `show` または `hide`           | スクロールバックにエージェント、モデル、所要時間の概要を表示するか非表示にします。 |
+| `mini.footer`       | `show` または `hide`           | 常設のアクティビティ、モデル、使用量、コンテキストの詳細を表示するか非表示にします。 |
+| `mini.splash`       | `show` または `hide`           | 起動時と終了時のスプラッシュバナーを表示するか非表示にします。                     |
+| `mini.work_spinner` | スピナー ID                    | フッターの作業アニメーションを選択します。                                         |
+| `mini.mono`         | ブール値                       | モノクロの ASCII 出力を使用します。                                                |
+| `mini.replay`       | ブール値                       | 再開時とターミナルのリサイズ時にセッション履歴を復元します。                       |
+| `mini.replay_limit` | 正の整数                       | リプレイを最新のメッセージに限定します。デフォルトの上限は `200` です。            |
+
+</div>
+
+利用可能なスピナー ID は次のとおりです。
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+コマンドラインの `mini` のリプレイフラグは、その実行に限りこれらの設定を上書きします。
+
+## キーバインド
+
+コマンドのバインドとリーダーキーのタイムアウトを上書きします。
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Keybind settings" tabIndex={0}>
+
+| 設定                       | 値                                 | 説明                                                                  |
+| -------------------------- | ---------------------------------- | --------------------------------------------------------------------- |
+| `keybinds.leader`          | バインドの値                       | 他のバインドで `<leader>` が参照するキーを設定します。                |
+| `keybinds.<command>`       | バインドの値                       | 1 つのコマンド ID のバインドを上書きします。                          |
+| `keybinds.*.key`           | キー文字列または記述子             | オブジェクトのバインドのキーを選択します。                            |
+| `keybinds.*.event`         | `press` または `release`           | オブジェクトのバインドを 1 つのキーイベントに限定します。             |
+| `keybinds.*.preventDefault` | ブール値                          | ターミナルのデフォルトのキー動作を防ぐかどうかを制御します。          |
+| `keybinds.*.fallthrough`   | ブール値                           | 優先度の低いハンドラーが同じイベントを受け取れるようにします。        |
+| `leader.timeout`           | 正の整数                           | リーダーキーの後に待つミリ秒数を設定します。                          |
+
+</div>
+
+バインドの値は、文字列、代替の配列、またはオブジェクトにできます。バインドを無効にするには `"none"` または `false` を使用します。受け付けられるキーの構文、すべてのコマンド ID、すべてのデフォルトのバインドについては[キーバインド](/cli/keybinds)を参照してください。
+
+## プラグイン
+
+ターミナル専用のプラグインを順番に読み込みます。
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Plugin settings" tabIndex={0}>
+
+| 設定                 | 値       | 説明                                                                    |
+| -------------------- | -------- | ----------------------------------------------------------------------- |
+| `plugins`            | 配列     | 順序付きの有効化のディレクティブと外部プラグインを宣言します。          |
+| `plugins[].package`  | 文字列   | パッケージ名、ローカルパス、またはファイル URL を設定します。           |
+| `plugins[].options`  | オブジェクト | プラグイン固有のオプションをそのプラグインに渡します。              |
+
+</div>
+
+パッケージの形式、ローカルの検出、ワイルドカード、無効化のディレクティブについては[プラグイン](/cli/plugins)を参照してください。
+
+## デバッグと実験的な設定
+
+診断や、現在利用できる実験的な機能を有効にします。
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Debug and experimental settings" tabIndex={0}>
+
+| 設定                | 値                                  | 説明                                                                        |
+| ------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| `debug.devtools`    | ブール値                            | DevTools のデバッグバーを表示します。                                       |
+| `debug.timing`      | ブール値                            | デバッグバーに初回描画までの診断を表示します。                              |
+| `debug.turn_tokens` | ブール値または `verbose`            | ターンごとのトークン使用量を表示します。`verbose` はツール呼び出しの入力も含みます。 |
+| `experimental`      | 機能 ID からブール値へのオブジェクト | 予告なく変更または削除される可能性がある実験を有効または無効にします。      |
+
+</div>
+
+TUI の **Experiments** ダイアログに現在表示されている機能 ID だけを使用してください。不明な ID は効果がありません。

@@ -1,0 +1,399 @@
+---
+title: "ترحيل الملحقات من V1"
+description: "انقل أدوات ملحق V1 وخطافاته إلى API ملحقات V2."
+---
+
+يمكن تحويل إعدادات الملحق تلقائيًا إلى الصيغة المعتمدة، لكن عليك ترحيل الشيفرة التي تنفّذ الملحق. فدوال ملحق V1
+تعيد كائنًا واحدًا يضم الأدوات والخطافات. أما ملحق V2 فيصدّر افتراضيًا تعريفًا فيه `id` و`setup(ctx)`؛
+ويسجّل `setup` الخطافات والتحويلات والأدوات والاشتراكات عبر السياق.
+
+<Callout type="warning">
+  تطبيقات ملحقات V1 لا تعمل في V2. فنقل ملف أو إعادة تسمية إدخال إعداده لا يكفي.
+</Callout>
+
+## ترحيل إعداد الملحق
+
+أعد تسمية `plugin` إلى `plugins`. واستبدل زوج الحزمة والخيارات بكائن:
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+يكتشف V2 الملحقات المحلية من `.opencode/plugin/` و`.opencode/plugins/` معًا؛ فاستخدم `.opencode/plugins/` لملفات V2.
+يجب أن تشير المسارات المحلية في الإعدادات إلى مجلدات. في المثال السابق، ضع الشيفرة بعد ترحيلها في
+`./plugin/local/index.ts`؛ فإذا حدّدت الملف `./plugin/local.ts` في الإعدادات، يتخطّاه OpenCode ويسجّل تحذيرًا.
+وأبقِ الوحدات المساندة بجانب الملحق عند نقله. وتستخدم الملحقات المحلية وملحقات الحزم واجهة التطبيق
+نفسها.
+
+## استبدال نقطة الدخول
+
+غيّر استيراد الحزمة، واستبدل دالة الملحق المصدّرة بـ`Plugin.define`، وانقل التهيئة إلى
+`setup`.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+ويحتاج كل ملحق V2 معرّفًا ثابتًا `id`. فتخزين الملحق محدود النطاق بهذا المعرّف، ويميّز المعرّف الملحق في الحالة
+والتشخيصات أيضًا. وينبغي للملحقات المنشورة أن تعتمد على إصدار من `@opencode/plugin` متوافق مع إصدار OpenCode
+الذي تستهدفه.
+
+## ترحيل السياق
+
+يؤدّي سياق V2 دور عميل OpenCode وواجهة API للملحق معًا. وتُجمّع معظم العمليات حسب نطاقها بدلًا من
+وضعها في خاصية `client` منفصلة.
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | طرق النطاق مثل `ctx.session` و`ctx.permission` و`ctx.agent` |
+| وسيط خيارات الملحق                 | `ctx.options`                                                       |
+| خطاف `dispose()` المعاد               | دالة التنظيف التي يعيدها `setup`                                |
+| خطاف `event` المعاد                   | `ctx.event.subscribe()`                                             |
+| تغييرات الإعداد أو النموذج أو الأدوات المعادة | `transform(...)` في النطاق                                           |
+| مساعد shell `$` من Bun                    | استورد وأدر واجهة العملية التي يستخدمها ملحقك                  |
+
+ويصف `ctx.location` الموقع الذي حُمِّل فيه هذا الملحق. وهو ليس موقع كل جلسة أو حدث
+قد يلاحظه الملحق. فاقرأ بيانات الجلسة أو الحدث عندما يهمّ ذلك التمييز.
+
+يتيح السياق نطاقات أخرى غير المذكورة في الجدول، منها الأوامر والتكاملات وخوادم MCP والمراجع والمهارات والتخزين وVCS وworktrees والبحث على الويب. راجع [سياق الملحق الكامل](/build/plugins/server#api).
+
+### ترحيل نطاق الكتالوج
+
+كانت الإصدارات السابقة من الملحقات تنشر المزوّدين والنماذج عبر `ctx.catalog`. يتيح OpenCode الآن `ctx.provider` و`ctx.model` كنطاقين منفصلين، لذا يفشل تحميل أي ملحق يستدعي `ctx.catalog.transform`.
+
+| واجهة API السابقة للكتالوج                   | البديل الحالي |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ctx.catalog.transform(draft => …)`           | `ctx.provider.transform(editor => …)` و`ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)`               | `editor.update(id, fn)` في `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` في `ctx.model` |
+| `ctx.catalog.reload()`                        | `ctx.provider.reload()` و`ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+راجع [المزوّدين](/build/plugins/server#providers) و[النماذج](/build/plugins/server#models) للاطّلاع على واجهات API الكاملة للمحرّرات.
+
+## تسجيل الخطافات في `setup`
+
+يعيد V1 الخطافات بمفتاح نصي. أما V2 فيسجّل كل خطاف في النطاق الذي يملك العملية. ويتلقى رد النداء حدثًا
+واحدًا قابلًا للتغيير بدل كائني `input` و`output` المنفصلين.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+وتبقى التسجيلات نشطة طوال عمر الملحق وتُلغى عند تفريغه. ولا تحتفظ بالتسجيل المعاد
+إلا عندما يحتاج الملحق إلى إزالة ذلك الخطاف أو التحويل بعينه مبكرًا بـ`registration.dispose()`.
+
+واستخدم هذا الجدول لإيجاد أقرب واجهة V2 لكل خطاف في V1:
+
+| خطاف V1                                | واجهة V2                                                       |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | دالة التنظيف التي يعيدها `setup`                         |
+| `config`                               | تحويلات على النطاقات المتأثرة                           |
+| خريطة `tool`                             | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` وواجهات التكامل        |
+| `provider`                             | `ctx.provider.transform(...)` و`ctx.model.transform(...)` |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` أو `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | تحويلات الأوامر أو خطاف المطالبة، حسب القصد   |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` وحرّر `event.system`   |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` وحرّر `event.messages` |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+هذه بدائل للترحيل، وليست دائمًا مجرد أسماء جديدة للسلوك نفسه. فيعمل خطاف `prompt` في V2 قبل
+قبول المطالبة وتسجيلها في التخزين الدائم، بينما يعمل `context` قبل إرسال الطلب إلى نموذج الوكيل مباشرةً. سجّل `context` و`compaction`
+و`generate` و`title` كلًا على حدة إذا كان يجب أن ينطبق تحويل على كل نوع طلب نموذج.
+
+ولا يوجد خطاف V2 مباشر يقابل كل خطاف تجريبي في V1. فأعد تقييم الملحقات التي تستخدم
+`experimental.compaction.autocontinue` أو `experimental.provider.small_model` أو `experimental.text.complete` مقابل
+واجهات الجلسة والمزوّد والنموذج والأحداث في V2، بدل الحفاظ على افتراض دورة حياة داخلية.
+
+ولا يقابل `command.execute.before` خطاف عام واحد لواحد أيضًا. فسجّل أمرًا بـ`ctx.command.transform` عندما
+يملك الملحق ذلك الأمر. واستخدم خطاف المطالبة عندما يكون القصد الحقيقي تعديل المطالبات المرسلة من الأوامر وغيرها من
+مصادر المطالبات.
+
+## ترحيل خطافات الطلبات
+
+يفصل V2 قبول المطالبة والسياق المرئي للنموذج وخيارات النموذج الدلالية وHTTP الأصلية. فاختر أضيق
+طبقة يحتاجها ملحقك.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+واستخدم خيارات المزوّد الدلالية في `event.options`. واستخدم `model.request` لترويسات طلب النموذج وإعدادات الطلب الخام،
+ولا تستخدم `http.request` أو `http.response` إلا عندما يحتاج الملحق إلى تبادل HTTP الأصلي مع المزوّد. ويمكن للخطافات الخاصة
+بالمزوّد تمرير `{ providerID: "..." }` كوسيط ثالث إلى `ctx.session.hook`.
+
+## ترحيل الأدوات المخصّصة
+
+يعيد V1 خريطة `tool` مبنية بالمساعد القديم `tool()`. أما V2 فيسجّل تعريفات الأدوات عبر محرّر
+`ctx.tool.transform` متزامن. وتستخدم مخططات الأدوات JSON Schema، ويعيد التنفيذ محتوى منظّمًا.
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+التحويلات تعديلات على الحالة يمكن إعادة تطبيقها. اجعل دالة ردّ النداء متزامنة وقليلة الكلفة، ولا تضع فيها آثارًا جانبية يُفترض أن تحدث مرة واحدة. حمّل
+البيانات الخارجية قبل التسجيل لتكون متاحة لدالة ردّ النداء من نطاقها المحيط، واستدعِ طريقة `reload()` في النطاق عندما تتغيّر تلك البيانات.
+ويرى تحويل ملحق لاحق التغييرات السابقة وقد يحدّثها أو يستبدلها أو يزيلها.
+
+ويستبدل نمط التحويل نفسه خطافَي `config` و`provider` في V1، لكن V2 لا يعرض كائن إعداد عام
+واحدًا قابلًا للتغيير. فسجّل التغيير في النطاق الذي يملكه: `ctx.agent` أو `ctx.provider` أو `ctx.model` أو `ctx.command`
+أو `ctx.integration` أو `ctx.mcp` أو `ctx.reference` أو `ctx.skill` أو `ctx.tool` أو `ctx.vcs` أو `ctx.websearch` أو `ctx.worktree`.
+وطرق المصادقة تنتمي إلى التكاملات؛ وتحويلات المزوّد تسهم بتعريفات المصادر وإعدادات المزوّد،
+بينما تطبّق تحويلات النموذج قيودًا وتجاوزات على مجموعة نماذج المزوّد النشط كاملة.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## ترحيل الأحداث والتنظيف
+
+ويصبح رد نداء `event` في V1 اشتراكًا غير متزامن في تدفق أحداث الخادم العام. فألغِه من دالة التنظيف
+التي يعيدها `setup`.
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+واستخدم دالة التنظيف للمؤقتات والعمليات الفرعية والمقابس وغيرها من الموارد التي يملكها الملحق. وتسجيلات الخطافات
+والتحويلات محدودة النطاق بالملحق وتُنظَّف تلقائيًا.
+
+## ترحيل الخيارات والحالة الدائمة
+
+واقرأ الخيارات من `ctx.options`. واستخدم `ctx.storage` بدل اختراع ملف عام عندما تنتمي الحالة إلى ملحق؛ فقيمه
+JSON دائمة ومحدودة النطاق بالملحق.
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## دعم V1 وV2 من حزمة واحدة
+
+ويمكن للحزمة عرض التطبيقين مؤقتًا من تصدير افتراضي واحد. فيستدعي V1 `server()` ويستدعي V2
+`setup()`. وتبقى الواجهتان منفصلتين؛ ولا يترجم هذا الشكل الخطافات تلقائيًا.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+وتُدعم نقاط دخول كائنات V1 في OpenCode `1.18.29` وما بعده. وإذا كنت تدعم إصدارات V1 أقدم، فاستخدم إصدارات
+حزم أو نقاط دخول منفصلة واختبر أقدم إصدار تدّعي دعمه. وأزل تطبيق V1 بعد
+انتهاء فترة الدعم التي حدّدتها.
+
+## التحقق من ملحق منقول
+
+لكل ملحق:
+
+1. تأكد من ظهور معرّفه ومصدره في قائمة الملحقات النشطة.
+2. جرّب كل خطاف وتحويل وأداة وأمر واشتراك أحداث مسجّل.
+3. تحقق من التنظيف بإعادة تحميل الملحق أو إزالته.
+4. اختبر خيارات الملحق والحالة المحفوظة بمشروع نظيف.
+5. وللحزمة المنشورة، اختبر الحزمة المثبّتة لا نسخة مرتبطة بمساحة عمل فقط.
+
+راجع [الخادم](/build/plugins/server) لواجهة Promise الكاملة، و[ملحقات Effect](/build/plugins/effect) لنقطة دخول
+Effect، و[RPC الملحقات](/build/plugins/rpc) للطرق والأحداث المخصّصة، و[ملحقات TUI](/build/plugins/cli)
+لواجهة الطرفية.

@@ -1,0 +1,135 @@
+---
+title: "Instructions"
+description: "Donnez à OpenCode des consignes de projet persistantes avec des fichiers AGENTS.md, et découvrez où elles s’appliquent, dans quel ordre elles se chargent et comment fonctionne le repli vers CLAUDE.md."
+---
+
+Ajoutez un fichier `AGENTS.md` pour donner à OpenCode des consignes de projet persistantes. Utilisez-le pour les commandes de build, les notes d’architecture, les conventions de code et les exigences de vérification.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Versionnez les fichiers d’instructions de projet pour que tous ceux qui travaillent dans le dépôt reçoivent les mêmes consignes.
+
+## Portée
+
+Placez `AGENTS.md` dans le répertoire où ses consignes doivent s’appliquer. OpenCode charge le fichier global, puis chaque `AGENTS.md` depuis le répertoire de l’espace de travail jusqu’au répertoire personnel. Pour les espaces de travail hors du répertoire personnel, il s’arrête à la racine du projet.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+Dans cet exemple, les quatre fichiers sont chargés. Ils sont combinés dans cet ordre :
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Placez les consignes valables partout dans le fichier global. Mettez les consignes propres au dépôt à la racine du projet et les consignes plus spécifiques au plus près du code concerné. OpenCode combine les fichiers sans résoudre les conflits entre eux.
+
+Si l’espace de travail se trouve hors de la racine du projet, seul le fichier global est chargé. Définissez `OPENCODE_DISABLE_PROJECT_CONFIG=1` pour ignorer la découverte des `AGENTS.md` de projet sans désactiver le fichier global.
+
+### Repli vers CLAUDE.md
+
+Dans un répertoire sans `AGENTS.md`, OpenCode lit `CLAUDE.md` à la place. Si le fichier global `~/.config/opencode/AGENTS.md` est absent, il lit `~/.claude/CLAUDE.md`. Dans chaque répertoire, `AGENTS.md` prime toujours sur `CLAUDE.md` : si un lien symbolique relie les deux, OpenCode ne charge le fichier qu’une fois.
+
+Définissez `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` pour ignorer tous les `CLAUDE.md`, ou `OPENCODE_DISABLE_CLAUDE_CODE=1` pour ignorer aussi les skills `.claude`. Le serveur lit ces variables à son démarrage. Pour le service d’arrière-plan, enregistrez-les avec `opencode service set env` et lancez `opencode service restart`.
+
+## Découverte
+
+Les fichiers d’instructions situés sous l’espace de travail sont découverts au fil de l’exploration du projet par l’agent. La lecture d’un fichier ou le listage d’un répertoire charge les `AGENTS.md` situés entre cette cible et l’espace de travail.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Les fichiers imbriqués sont chargés du plus proche au plus lointain et dédupliqués tant que leur entrée d’instructions reste dans l’historique visible par le modèle. Relire la même zone ne les réinjecte normalement pas. Si un compactage ou un retour en arrière supprime cette entrée, une lecture ultérieure peut recharger le fichier.
+
+Les modifications d’un fichier imbriqué ne sont pas détectées automatiquement après son chargement. Démarrez une nouvelle session si le texte mis à jour doit s’appliquer immédiatement.
+
+## Ordre de chargement
+
+Le prompt système de l’agent ou du fournisseur sélectionné est envoyé en premier. OpenCode assemble ensuite les instructions initiales dans cet ordre :
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+Ces sources sont combinées, et non utilisées comme des remplacements. Les `AGENTS.md` imbriqués découverts plus tard sont ajoutés à l’historique de la session dans l’ordre de découverte.
+
+## Mises à jour
+
+Pour mettre à jour les consignes d’une session en cours, modifiez le fichier `AGENTS.md` global ou un fichier de ce nom trouvé en remontant l’arborescence.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Avant la requête suivante au modèle, OpenCode détecte la modification et ajoute une mise à jour d’instructions avant de transmettre l’entrée en attente :
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- La suppression de tous les `AGENTS.md` chargés automatiquement indique à la session que les consignes précédentes ne s’appliquent plus.
+- Un échec de lecture temporaire conserve les dernières instructions connues au lieu de les considérer comme supprimées.
+- Déplacer une session conserve son état d’instructions : les consignes de la destination sont donc introduites comme une mise à jour.
+- Valider un retour en arrière de session efface son état d’instructions et recharge les instructions avant le prompt suivant.
+
+Les valeurs d’instructions restent protégées. Les clients peuvent voir quelles sources ont changé, mais pas leur contenu.
+
+## Configuration
+
+Utilisez le tableau `instructions` pour ajouter des fichiers, des motifs glob ou des URL HTTP(S) en plus des fichiers `AGENTS.md` découverts :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Les instructions configurées se chargent après les fichiers `AGENTS.md`, dans l’ordre où elles sont listées. Les entrées de tous les documents de configuration sont combinées.
+
+| Entrée | Résolution |
+| --- | --- |
+| Chemin relatif ou glob | Recherché dans chaque répertoire depuis l’espace de travail jusqu’à la racine du projet |
+| Chemin `~/` | Résolu depuis votre répertoire personnel |
+| Chemin absolu | Utilisé tel quel ; le nom de fichier peut être un glob |
+| `http://` ou `https://` | Récupéré au chargement de la configuration, avec un délai de cinq secondes |
+
+- Les fichiers locaux se mettent à jour comme `AGENTS.md` lorsqu’ils changent. Les nouveaux fichiers correspondant à un glob se chargent au prochain changement de configuration.
+- Les fichiers manquants sont ignorés. Une URL impossible à récupérer est ignorée, ou conserve son dernier contenu récupéré.
+- Avec `OPENCODE_DISABLE_PROJECT_CONFIG=1`, ou lorsque l’espace de travail est hors du projet, les entrées relatives sont résolues par rapport au répertoire de configuration global.
+
+Un espace de travail [OpenCode Console](/console) connecté peut aussi partager des instructions.
+
+Consultez [Configuration](/config) pour connaître les emplacements et l’ordre de priorité de la configuration.

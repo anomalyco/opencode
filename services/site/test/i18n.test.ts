@@ -9,3 +9,11 @@ for (const locale of LOCALES.slice(1) as Exclude<(typeof LOCALES)[number], "en">
     expect((await checkLocale(locale)).errors).toEqual([])
   })
 }
+
+test("dictionary-backed page copy needs only the dictionary stamp", async () => {
+  const report = await checkLocale("ja")
+  const question = "content:download.faq.items.what-is-opencode.question"
+  expect(report.untranslated).not.toContain(question)
+  expect(report.stamps).not.toHaveProperty(question)
+  expect(report.stamps["home.faq.q1"]).toBeDefined()
+})

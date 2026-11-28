@@ -57,7 +57,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   automations: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Run prompts, shell commands or Code Mode actions on a timer, on a cron schedule, or on push events from connected MCP servers. Defaults to true; set false to disable. MCP events still require experimental.mcp_events.",
+      "Run prompts, shell commands or Code Mode actions on a timer, on a cron schedule, or on push events from connected MCP servers. Defaults to true; set false to disable.",
   }),
   permissions: Permission.Ruleset.pipe(optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",

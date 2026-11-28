@@ -1,5 +1,6 @@
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environments } from "@opencode/core/environment/environments"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { FileMutation } from "@opencode/core/file-mutation"
@@ -40,12 +41,18 @@ export const codeModeServices = (
             Flag.node.replace(
               Layer.mock(Flag.Service, {
                 enabled: () => Effect.succeed(false),
-                resolve: (entries) => Flag.resolve({ entries, channel: "release" }),
+                current: () => Flag.resolve({ entries: [], channel: "release" }),
               }),
             ),
             Machines.node.replace(
               Layer.mock(Machines.Service, {
                 get: (id) => Effect.fail(new Machines.NotFound({ machine: id })),
+              }),
+            ),
+            Environments.node.replace(
+              Layer.mock(Environments.Service, {
+                lookup: (id) => Effect.fail(new Machines.NotFound({ machine: id })),
+                ready: () => Effect.succeed(true),
               }),
             ),
             Permission.node.replace(permissionLayer(permission)),

@@ -1,12 +1,10 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, posix, relative } from "path"
+import { dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { FileAccess } from "../../file-access.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
@@ -14,7 +12,6 @@ import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
-import { SkillDiscovery } from "../../skill/discovery.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 
@@ -32,13 +29,17 @@ export const Input = LocationInput
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
 
 const description = (codemode: boolean) =>
-  [
-    "Read the contents of a file or directory. Supports text files, images, and PDFs.",
-    codemode
-      ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
-      : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
-    "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-  ].join(" ")
+  codemode
+    ? [
+        "Read a file or directory: text, images, and PDFs.",
+        "An image or PDF is attached to the execute result even if the program doesn't return it.",
+        `A call returns one page, at most ${ReadToolFileSystem.MAX_READ_LINES} lines or ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB, and \`next\` is where the following page starts.`,
+      ].join(" ")
+    : [
+        "Read the contents of a file or directory. Supports text files, images, and PDFs.",
+        "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+        "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+      ].join(" ")
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -49,9 +50,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const environment = yield* Environment.Service
-    const workingDirectory = yield* Environment.workingDirectory
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
 
@@ -59,7 +58,7 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: flags.resolve(loaded.entries).full_codemode.enabled
+          options: flags.current().full_codemode.enabled
             ? { codemode: { pinned: true, description: description(true) } }
             : { codemode: false },
           description: description(false),
@@ -67,19 +66,19 @@ export const Plugin = {
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
+              const workingDirectory = yield* currentWorkingDirectory
               if (input.limit === 0) return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
-                const parsed = parseSkillUri(input.path)
+                const parsed = Skill.parseAddress(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const id = Skill.ID.make(parsed.id)
+                const id = parsed.id
                 const skill = yield* skills.get(id)
-                if (!skill || !Skill.isUri(skill.path))
+                if (!skill || Skill.locate(skill)._tag !== "virtual")
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const extra = yield* skills.files(id)
+                const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
-                  resources: [skill.id],
-                  save: [skill.id],
+                  ...(yield* skills.approval(skill.id)),
                   ...Permission.invocation(context),
                 })
                 yield* permission.assert({
@@ -89,17 +88,33 @@ export const Plugin = {
                   ...Permission.invocation(context),
                 })
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
-                const encoder = new TextEncoder()
-                yield* virtualFs.write(AbsolutePath.make("/SKILL.md"), encoder.encode(skill.content))
+                // Only the requested file is loaded. The rest stay empty, which is enough for directory listings.
                 yield* Effect.forEach(
-                  extra ? Array.from(extra) : [],
-                  ([rel, text]) => virtualFs.write(AbsolutePath.make(`/${rel}`), encoder.encode(text)),
+                  files,
+                  (file) =>
+                    (file === parsed.file ? skills.read(id, file) : Effect.succeed(new Uint8Array())).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message:
+                              error._tag === "Skill.LoadError"
+                                ? `Unable to read ${input.path}: ${error.message}`
+                                : `File not found: ${input.path}`,
+                          }),
+                      ),
+                      Effect.flatMap((bytes) => virtualFs.write(AbsolutePath.make(`/${file}`), bytes)),
+                    ),
                   { discard: true },
                 )
-                const output = yield* ReadToolFileSystem.read(virtualFs, AbsolutePath.make(parsed.target), input.path, {
-                  offset: input.offset,
-                  limit: input.limit,
-                }).pipe(
+                const output = yield* ReadToolFileSystem.read(
+                  virtualFs,
+                  AbsolutePath.make(`/${parsed.file ?? ""}`),
+                  input.path,
+                  {
+                    offset: input.offset,
+                    limit: input.limit,
+                  },
+                ).pipe(
                   Effect.catchIf(
                     (error) => error instanceof Environment.NotFound,
                     () => Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
@@ -131,10 +146,12 @@ export const Plugin = {
                         ),
                       )
                       if (content.type === "directory") return yield* missing({ input: input.path, requested, context })
+                      // Shown as written, by the rules of the machine the file is on.
+                      const rules = requested.environment.path
                       return {
                         content,
                         target,
-                        path: join(dirname(input.path), basename(alternate)),
+                        path: rules.join(rules.dirname(input.path), rules.basename(alternate)),
                       }
                     }),
                 ),
@@ -146,6 +163,9 @@ export const Plugin = {
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
                 if (result.target.externalDirectory !== undefined) return
+                // Discovery walks this server's files, so it follows only a target on the Location's own environment.
+                // A cwd on a paired machine brings its instructions with it in a later change.
+                if (result.target.environment.id !== environment.id) return
                 const resolved = yield* fs.resolve(result.target.absolute)
                 const root = yield* fs.resolve(workingDirectory.absolute)
                 // The Location and its ancestors are already supplied by initial instructions,
@@ -169,15 +189,7 @@ export const Plugin = {
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({
-                output:
-                  result.output.type === "media"
-                    ? {
-                        type: result.output.type,
-                        uri: result.output.uri,
-                        mime: result.output.mime,
-                        name: result.output.name,
-                      }
-                    : result.output,
+                output: toOutput(result.output),
                 content: toModelContent(result.path, input.offset, result.output),
                 metadata: { truncated: result.output.type !== "media" && result.output.next !== undefined },
               })),
@@ -199,14 +211,14 @@ export const Plugin = {
       .pipe(Effect.orDie)
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (target: FileAccess.Target) {
-      const base = canonical(basename(target.absolute))
-      const matches = (yield* target.environment.files.list(AbsolutePath.make(dirname(target.absolute)))).filter(
+      // The path follows its environment's rules, whatever this server's platform joins with.
+      const rules = target.environment.path
+      const base = canonical(rules.basename(target.absolute))
+      const matches = (yield* target.environment.files.list(AbsolutePath.make(rules.dirname(target.absolute)))).filter(
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
-      // Another machine's path follows POSIX rules, whatever this server's platform joins with.
-      if (target.environment.id !== environment.id) return posix.join(posix.dirname(target.absolute), matches[0].name)
-      return join(dirname(target.absolute), matches[0].name)
+      return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 
     // Lists through the requested target's environment, which may be a remote workspace rather than this host.
@@ -220,7 +232,7 @@ export const Plugin = {
     // A path written from the wrong root, such as /Users/me/src/a.ts for a location at /Users/me/repo,
     // usually means <location>/src/a.ts, so check that one path and nothing else.
     const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
-      const root = workingDirectory.absolute
+      const root = (yield* currentWorkingDirectory).absolute
       // A machine's path is not this server's path to reroot, even when the text happens to sit under the Location.
       if (miss.requested.environment.id !== environment.id) return []
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))
@@ -247,13 +259,17 @@ export const Plugin = {
       folder: string,
       moved: string[],
     ) {
+      const rules = miss.requested.environment.path
       let child = folder
-      let parent = dirname(folder)
+      let parent = rules.dirname(folder)
       while (parent !== child) {
         const found = yield* listing(miss.requested.environment.files, parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
-          const suggestions = [...moved, ...similar(found.names, basename(child)).map((entry) => join(parent, entry))]
+          const suggestions = [
+            ...moved,
+            ...similar(found.names, rules.basename(child)).map((entry) => rules.join(parent, entry)),
+          ]
           const message = [
             `File not found: ${miss.input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
@@ -262,7 +278,7 @@ export const Plugin = {
           return yield* new ToolFailure({ message })
         }
         child = parent
-        parent = dirname(parent)
+        parent = rules.dirname(parent)
       }
       return yield* new ToolFailure({
         message: [`File not found: ${miss.input}`, ...didYouMean(moved)].join("\n\n"),
@@ -271,13 +287,17 @@ export const Plugin = {
 
     const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
       const moved = yield* reroot(miss).pipe(Effect.orElseSucceed(() => []))
-      const folder = dirname(miss.requested.absolute)
+      // The folders are the requested machine's, by its own path rules.
+      const rules = miss.requested.environment.path
+      const folder = rules.dirname(miss.requested.absolute)
       const found = yield* listing(miss.requested.environment.files, folder)
       if (found.type === "missing") return yield* missingFolder(miss, folder, moved)
       const suggestions = [
         ...moved,
         ...(found.type === "found"
-          ? similar(found.names, basename(miss.input)).map((entry) => join(dirname(miss.input), entry))
+          ? similar(found.names, rules.basename(miss.input)).map((entry) =>
+              rules.join(rules.dirname(miss.input), entry),
+            )
           : []),
       ]
       return yield* new ToolFailure({
@@ -337,21 +357,19 @@ const editDistance = (a: string, b: string) => {
   return previous[b.length]
 }
 
-function parseSkillUri(value: string) {
-  const trimmed = value.slice("skill://".length).replace(/\/+$/, "")
-  const slash = trimmed.indexOf("/")
-  const id = slash === -1 ? trimmed : trimmed.slice(0, slash)
-  const rest = slash === -1 ? "" : trimmed.slice(slash + 1)
-  if (!SkillDiscovery.isSafeSegment(id)) return undefined
-  if (rest !== "" && !rest.split("/").every(SkillDiscovery.isSafeSegment)) return undefined
-  // Permission checks use the canonical URI, so `skill://id/file/` can't slip past a rule for `skill://id/file`.
-  return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
+const toOutput = (
+  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+): ReadToolFileSystem.Output => {
+  if (output.type === "media") return { type: output.type, uri: output.uri, mime: output.mime, name: output.name }
+  if (output.type === "directory") return output
+  const { lineCount: _, ...text } = output
+  return text
 }
 
 export const toModelContent = (
   path: string,
   offset: number | undefined,
-  output: ReadToolFileSystem.TextContent | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
 ) => {
   if (output.type === "media")
     return [

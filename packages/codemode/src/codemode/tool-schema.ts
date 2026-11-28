@@ -45,27 +45,35 @@ type RenderContext = {
   readonly pretty: boolean
 }
 
-const hasUnresolvedRef = (
-  schema: JsonSchema,
-  definitions: Readonly<Record<string, JsonSchema>>,
-  seen: ReadonlySet<string> = new Set(),
-  visited: ReadonlySet<JsonSchema> = new Set(),
-): boolean => {
-  if (visited.has(schema)) return false
-  const nextVisited = new Set([...visited, schema])
-  if (schema.$ref !== undefined) {
-    const name = definitionName(schema.$ref)
-    if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
-    if (hasUnresolvedRef(definitions[name], definitions, new Set([...seen, name]), nextVisited)) return true
+const hasUnresolvedRef = (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>): boolean => {
+  // A node that resolved without reaching a node already on its path reaches no cycle, so it resolves on every path.
+  const clean = new Set<JsonSchema>()
+  let cycles = 0
+  const visit = (schema: JsonSchema, seen: ReadonlySet<string>, visited: ReadonlySet<JsonSchema>): boolean => {
+    if (visited.has(schema)) {
+      cycles++
+      return false
+    }
+    if (clean.has(schema)) return false
+    const before = cycles
+    const nextVisited = new Set([...visited, schema])
+    if (schema.$ref !== undefined) {
+      const name = definitionName(schema.$ref)
+      if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
+      if (visit(definitions[name], new Set([...seen, name]), nextVisited)) return true
+    }
+    const unresolved = [
+      ...(schema.anyOf ?? []),
+      ...(schema.oneOf ?? []),
+      ...(schema.allOf ?? []),
+      ...Object.values(schema.properties ?? {}),
+      ...(schema.items === undefined ? [] : [schema.items]),
+      ...(typeof schema.additionalProperties === "object" ? [schema.additionalProperties] : []),
+    ].some((item) => visit(item, seen, nextVisited))
+    if (!unresolved && cycles === before) clean.add(schema)
+    return unresolved
   }
-  return [
-    ...(schema.anyOf ?? []),
-    ...(schema.oneOf ?? []),
-    ...(schema.allOf ?? []),
-    ...Object.values(schema.properties ?? {}),
-    ...(schema.items === undefined ? [] : [schema.items]),
-    ...(typeof schema.additionalProperties === "object" ? [schema.additionalProperties] : []),
-  ].some((item) => hasUnresolvedRef(item, definitions, seen, nextVisited))
+  return visit(schema, new Set(), new Set())
 }
 
 const docTags = (schema: JsonSchema): Array<string> => {

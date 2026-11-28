@@ -8,6 +8,8 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { State } from "@opencode/core/state"
+import { CodeModeJob } from "@opencode/core/codemode/job"
+import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -625,20 +627,46 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("gives the program expression for a Code Mode tool's path or registry ID", () =>
+  it.effect("runs a call to a Code Mode tool's path or registry ID as a Code Mode call", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
-      yield* transform(service, { direct: make() }, { codemode: false })
+      yield* transform(service, {
+        fails: { ...make(), execute: () => Effect.fail(new Tool.Error({ message: "boom" })) },
+      })
       const snapshot = yield* service.snapshot()
-      expect(snapshot.codeModeExpression?.("acme.tools.echo")).toBe("tools.acme.tools.echo")
-      expect(snapshot.codeModeExpression?.("acme_tools_echo")).toBe("tools.acme.tools.echo")
-      expect(snapshot.codeModeExpression?.("acme.tools.kebab-echo")).toBe('tools.acme.tools["kebab-echo"]')
-      for (const name of ["direct", "execute", "missing", "tools.acme.tools.echo"])
-        expect(snapshot.codeModeExpression?.(name)).toBeUndefined()
-      // A tool this request doesn't offer has no expression.
-      const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
-      expect(denied.codeModeExpression?.("acme.tools.echo")).toBeUndefined()
+      for (const name of ["acme.tools.echo", "acme_tools_echo", "acme.tools.kebab-echo"]) {
+        const result = yield* snapshot.execute(call(name))
+        expect(result.output).toEqual({ text: name })
+      }
+      expect((yield* snapshot.execute(call("fails")).pipe(Effect.flip)).message).toContain("boom")
+      // In a session drain it can move to the background, like an execute program, without execute's options.
+      const handoffs: Array<CodeModeJob.Options | undefined> = []
+      const handed = yield* snapshot
+        .execute(call("acme.tools.echo"))
+        .pipe(
+          Effect.provideService(CodeModeJob.Current, (context, run, options) =>
+            Effect.sync(() => handoffs.push(options)).pipe(Effect.andThen(run(context))),
+          ),
+        )
+      expect(handed.output).toEqual({ text: "acme.tools.echo" })
+      expect(handoffs).toEqual([undefined])
+      // Not without execute, and not for a tool this request doesn't offer.
+      const withoutExecute = new Map(
+        snapshot.definitions.flatMap((definition) =>
+          definition.name === "execute" ? [] : [[definition.name, definition] as const],
+        ),
+      )
+      expect(
+        (yield* snapshot.execute({ ...call("acme.tools.echo"), definitions: withoutExecute }).pipe(Effect.flip))
+          .message,
+      ).toContain('No tool named "acme.tools.echo"')
+      const denied = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "acme_tools_echo", resource: "*", effect: "deny" }]),
+      )
+      expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
+        'No tool named "acme.tools.echo"',
+      )
     }),
   )
 
@@ -764,7 +792,9 @@ describe("Tool", () => {
       expect(available.definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect(available.codeModeCatalog?.tools).toEqual([])
 
-      const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }])
+      const denied = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+      )
       expect(denied.definitions).toEqual([])
       expect(denied.codeModeCatalog).toBeUndefined()
     }),
@@ -882,7 +912,7 @@ describe("Tool", () => {
             code: 'return await tools.shell({ command: "build", background: true })',
             tools: ["shell"],
             bindings: {},
-            permissions: [],
+            policy: Permission.Policy.empty,
             limits: {},
             context: { sessionID, ...identity, progress: () => Effect.void },
           }),
@@ -892,7 +922,7 @@ describe("Tool", () => {
             code: 'return await tools.glob({ pattern: "*" })',
             tools: ["glob"],
             bindings: {},
-            permissions: [],
+            policy: Permission.Policy.empty,
             limits: {},
             context: { sessionID, ...identity, progress: () => Effect.void },
           }),
@@ -919,9 +949,12 @@ describe("Tool", () => {
         ).toBe("ls:true:false")
 
         // When execute is denied, Code Mode tools fall back to their direct form while hidden tools stay hidden.
-        const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }], {
-          tools: { hidden: new Set(["glob"]) },
-        })
+        const denied = yield* service.snapshot(
+          Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+          {
+            tools: { hidden: new Set(["glob"]) },
+          },
+        )
         expect(denied.codeModeCatalog).toBeUndefined()
         expect(denied.definitions.map((tool) => tool.name)).toEqual([
           "legacy_pin",
@@ -974,7 +1007,7 @@ describe("Tool", () => {
         t5: make(),
         t6: make(),
       })
-      const deny = (action: string): Permission.Ruleset => [{ action, resource: "*", effect: "deny" }]
+      const deny = (action: string) => Permission.Policy.fromRules([{ action, resource: "*", effect: "deny" }])
 
       const s1 = yield* service.snapshot(deny("t1"))
       const s2 = yield* service.snapshot(deny("t2"))
@@ -1012,14 +1045,16 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* transform(service, { lookup: make() }, { namespace: "mcp" })
       yield* transform(service, { bash: make() }, { codemode: false })
-      const denyExecute: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+      const denyExecute = Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }])
 
       const snapshot = yield* service.snapshot(denyExecute)
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["bash", "mcp_lookup"])
       expect(snapshot.codeModeCatalog).toBeUndefined()
       expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
 
-      const hidden = yield* service.snapshot([...denyExecute, { action: "mcp_lookup", resource: "*", effect: "deny" }])
+      const hidden = yield* service.snapshot(
+        Permission.Policy.override(denyExecute, [{ action: "mcp_lookup", resource: "*", effect: "deny" }]),
+      )
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
     }),
@@ -1029,14 +1064,16 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { move: make(), rename: make() }, { namespace: "opencode.session" })
-      const deny: Permission.Ruleset = [{ action: "opencode_session_move", resource: "*", effect: "deny" }]
+      const deny = Permission.Policy.fromRules([{ action: "opencode_session_move", resource: "*", effect: "deny" }])
 
       const codeMode = yield* service.snapshot(deny)
       const paths = codeModeListings(codeMode.codeModeCatalog!).map((entry) => entry.path)
       expect(paths).toContain("opencode.session.rename")
       expect(paths).not.toContain("opencode.session.move")
 
-      const direct = yield* service.snapshot([...deny, { action: "execute", resource: "*", effect: "deny" }])
+      const direct = yield* service.snapshot(
+        Permission.Policy.override(deny, [{ action: "execute", resource: "*", effect: "deny" }]),
+      )
       expect(direct.definitions.map((tool) => tool.name)).toEqual(["opencode_session_rename"])
     }),
   )
@@ -1067,6 +1104,12 @@ describe("Tool", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+        ]),
+      ).toEqual(["bash", "edit", "write", "execute"])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
     }),
   )
@@ -1081,17 +1124,6 @@ describe("Tool", () => {
       expect(
         (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map((tool) => tool.name),
       ).toEqual(["first", "execute"])
-    }),
-  )
-
-  it.effect("removes a scoped registration", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const scope = yield* Scope.make()
-      yield* transform(service, { echo: make() }, { codemode: false }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "execute"])
-      yield* Scope.close(scope, Exit.void)
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["execute"])
     }),
   )
 
@@ -1180,13 +1212,139 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("exposes execution only through a snapshot", () =>
+  it.effect("lets a tool call another through context.tool.call, with that tool's checks and hooks", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      expect("definitions" in service).toBe(false)
-      expect("execute" in service).toBe(false)
-      expect("settle" in service).toBe(false)
-      expect(typeof service.snapshot).toBe("function")
+      const hooks = yield* PluginHooks.Service
+      const before: Array<{ tool: string; id: string }> = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => void before.push({ tool: event.tool, id: event.id })),
+      )
+      yield* transform(service, { echo: make() })
+      yield* transform(
+        service,
+        {
+          outer: {
+            name: "outer",
+            description: "Calls echo",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Unknown,
+            execute: ({ text }, context) =>
+              Effect.gen(function* () {
+                const result = yield* context.tool.call("echo", { text: `inner ${text}` })
+                const invalid = yield* context.tool
+                  .call("echo", { text: 1 })
+                  .pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: () => "succeeded" }))
+                const missing = yield* context.tool
+                  .call("nope", {})
+                  .pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: () => "succeeded" }))
+                return { output: { result: result.output, invalid, missing } }
+              }),
+          },
+        },
+        { codemode: false },
+      )
+      const result = yield* executeTool(service, call("outer", "call-outer"))
+      expect(result).toMatchObject({
+        status: "completed",
+        output: {
+          result: { text: "inner outer" },
+          invalid: expect.stringContaining("text"),
+          missing: 'No tool named "nope" is available to this call.',
+        },
+      })
+      expect(before.map((item) => item.tool)).toEqual(["outer", "echo", "echo"])
+      // Each nested call gets an ID of its own.
+      expect(new Set(before.map((item) => item.id)).size).toBe(3)
+    }),
+  )
+
+  it.effect("only reaches tools the request offers, by registry ID or Code Mode path", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { codemode: false, namespace: "demo" })
+      yield* transform(service, { secret: constant("secret") }, { codemode: false })
+      yield* transform(
+        service,
+        {
+          outer: {
+            name: "outer",
+            description: "Calls other tools",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Unknown,
+            execute: (_, context) =>
+              Effect.gen(function* () {
+                const byID = yield* context.tool.call("demo_echo", { text: "id" })
+                const byPath = yield* context.tool.call("demo.echo", { text: "path" })
+                const denied = yield* context.tool
+                  .call("secret", { text: "x" })
+                  .pipe(Effect.match({ onFailure: (error) => error.message, onSuccess: () => "succeeded" }))
+                return { output: [byID.output, byPath.output, denied] }
+              }),
+          },
+        },
+        { codemode: false },
+      )
+      const snapshot = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "secret", resource: "*", effect: "deny" }]),
+      )
+      const result = yield* snapshot.execute(call("outer", "call-outer"))
+      expect(result.output).toEqual([
+        { text: "id" },
+        { text: "path" },
+        'No tool named "secret" is available to this call.',
+      ])
+    }),
+  )
+
+  it.effect("runs nested calls under the call the transcript shows", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const parentOf = (name: string, next?: string): Info => ({
+        name,
+        description: name,
+        input: Schema.Struct({}),
+        output: Schema.Unknown,
+        execute: (_, context) =>
+          next === undefined
+            ? Effect.map(CodeModeTool.Parent, (parent) => ({ output: parent ?? null }))
+            : context.tool.call(next, {}).pipe(Effect.map((result) => ({ output: result.output }))),
+      })
+      yield* transform(
+        service,
+        { outer: parentOf("outer", "middle"), middle: parentOf("middle", "probe"), probe: parentOf("probe") },
+        { codemode: false },
+      )
+      expect(yield* executeTool(service, call("outer", "call-outer"))).toMatchObject({ output: "call-outer" })
+    }),
+  )
+
+  it.effect("lets a tool inside Code Mode call a direct tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { direct: constant("direct") }, { codemode: false })
+      yield* transform(service, {
+        caller: {
+          name: "caller",
+          description: "Calls the direct tool",
+          input: Schema.Struct({}),
+          output: Schema.Unknown,
+          execute: (_, context) =>
+            context.tool.call("direct", { text: "x" }).pipe(Effect.map((result) => ({ output: result.output }))),
+        },
+      })
+      const snapshot = yield* service.snapshot()
+      const result = yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: "return await tools.caller({})" },
+        },
+      })
+      expect(result.output).toMatchObject({ output: JSON.stringify({ text: "direct" }) })
     }),
   )
 
@@ -1214,7 +1372,13 @@ describe("Tool", () => {
         call: { type: "tool-call", id: "call-context", name: "context", input: {} },
       })
       expect(contexts).toEqual([
-        { sessionID, ...identity, id: Tool.CallID.make("call-context"), progress: expect.any(Function) },
+        {
+          sessionID,
+          ...identity,
+          id: Tool.CallID.make("call-context"),
+          progress: expect.any(Function),
+          tool: { call: expect.any(Function) },
+        },
       ])
     }),
   )
@@ -1301,7 +1465,7 @@ describe("Tool", () => {
           code: 'return await tools.echo({ text: "constant" })',
           tools,
           bindings: {},
-          permissions: [],
+          policy: Permission.Policy.empty,
           limits: {},
           context: { sessionID, ...identity, progress: () => Effect.void },
         })
@@ -1582,19 +1746,6 @@ describe("Tool", () => {
 
       expect((yield* request.execute(call("echo"))).content).toEqual([{ type: "text", text: "advertised" }])
       expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "replacement" }])
-    }),
-  )
-
-  it.effect("reveals the previous registration after an overlay closes", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      yield* transform(service, { echo: constant("base") }, { codemode: false })
-      const overlay = yield* Scope.make()
-      yield* transform(service, { echo: constant("overlay") }, { codemode: false }).pipe(Scope.provide(overlay))
-
-      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "overlay" }])
-      yield* Scope.close(overlay, Exit.void)
-      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "base" }])
     }),
   )
 

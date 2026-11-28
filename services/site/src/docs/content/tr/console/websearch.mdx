@@ -1,0 +1,48 @@
+---
+title: "Console web araması"
+description: "Console üzerinden OpenCode için barındırılan web araması."
+---
+
+Console, bağlı OpenCode kullanıcılarına barındırılan web araması sunar. Bir çalışma alanı sahibi veya yöneticisi bunu çalışma alanı için bir kez etkinleştirir; üyelere ayrı bir arama sağlayıcısı anahtarı vermek gerekmez.
+
+Her başarılı aramanın ücreti **$0,01**'dir. Bu tutar çalışma alanı bakiyesinden düşülür ve üyenin harcama limitine dahil edilir.
+
+## Etkinleştirme
+
+1. Çalışma alanı sahibi veya yöneticisi olarak [Console'da](https://opencode.ai/console) oturum açın.
+2. **Integrations** bölümünü açın ve **Hosted Web Search** üzerinde **Set up** düğmesine tıklayın.
+3. **Enable** düğmesine tıklayın.
+
+Ardından her üye OpenCode'u `/connect` ile çalışma alanına bağlar.
+
+```text
+/connect
+```
+
+Çalışma alanı yapılandırması varsayılan sağlayıcı olarak **OpenCode Web Search** seçer. Üyelerin `websearch.provider`
+ayarlaması veya bir sağlayıcı API anahtarı eklemesi gerekmez. Kendi `websearch.provider` ayarını yapan bir üye o seçimi
+korur.
+
+## Arama
+
+Promptunuzda OpenCode'dan güncel bilgi isteyin. Aramayı Console'daki etkileşimli bir sayfadan değil, OpenCode üzerinden yaparsınız.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Barındırılan sağlayıcı genel web'de arama yapar ve en fazla sekiz sonuç döndürür. OpenCode sonuçları promptu yanıtlamak ve
+kaynakları belirtmek için kullanır.
+
+İzinleri yapılandırmak veya aracı devre dışı bırakmak için [web araması rehberine](/websearch) bakın.
+
+## Faturalandırma
+
+Console, yalnızca arama geçerli bir sonuç kümesi döndürdüğünde **$0,01** tahsil eder. Başarısız olan veya hız limitine takılan aramalardan ücret alınmaz.
+
+Web araması **Activity › Usage**, **Activity › Overview**, üye etkinliği, faturalar ve CSV dışa aktarımlarında model
+kullanımından ayrı görünür. Geçerli tüm harcama bütçesi politikaları web araması ücretlerini içerir.
+
+## Gizlilik
+
+Barındırılan web aramasında veriler saklanmaz. Console ve arama hizmetinin sağlayıcısı, her sorguyu ve sonuçlarını içeriklerini saklamadan işler.

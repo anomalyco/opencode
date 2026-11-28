@@ -1,0 +1,395 @@
+//! MCP and skill dialogs.
+
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
+
+use std::sync::{Arc, Mutex};
+
+use opencode_store::{Catalog, Location};
+use opencode_tui::{Args, Deps, Route};
+use serde_json::{Value, json};
+
+const DIRECTORY: &str = "/tmp/opencode/app";
+const QUERY: &str = "location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
+
+type Logged = (String, String, Value);
+
+/// One MCP server in each status.
+pub(crate) fn servers() -> Value {
+    json!([
+        { "name": "linear", "status": { "status": "failed", "error": "MCP error -32000: Connection closed" } },
+        { "name": "github", "status": { "status": "connected" } },
+        { "name": "sentry", "status": { "status": "needs_auth", "error": "Authentication required" } },
+        { "name": "docs", "status": { "status": "disabled" } },
+        { "name": "figma", "status": { "status": "pending" } },
+    ])
+}
+
+fn skills() -> Value {
+    let skill = |id: &str, description: Option<&str>| {
+        let mut skill = json!({
+            "id": id, "name": id, "path": format!("/tmp/opencode/skills/{id}/SKILL.md"), "content": "",
+        });
+        if let Some(description) = description {
+            skill["description"] = json!(description);
+        }
+        skill
+    };
+    json!([
+        skill("review", Some("Review a change\n  for defects  and style.")),
+        skill("release-notes", Some("Write release notes from the log.")),
+        skill("bisect", None),
+    ])
+}
+
+fn fake(servers: Arc<Mutex<Value>>, skills: Option<Value>) -> Fake {
+    Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (
+            200,
+            json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+        ),
+        ("GET", "/api/mcp") => (200, list(DIRECTORY, servers.lock().unwrap().clone())),
+        ("GET", "/api/skill") => match &skills {
+            Some(skills) => (200, list(DIRECTORY, skills.clone())),
+            None => (400, json!({ "_tag": "InvalidRequestError", "message": "skills exploded" })),
+        },
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        // `docs` fails to connect, so the error toast and the cleared loading state show.
+        ("POST", "/api/experimental/mcp/docs/connect") => {
+            (400, json!({ "_tag": "BadRequest", "message": "docs is disabled" }))
+        }
+        ("POST", path) if path.starts_with("/api/experimental/mcp/") => (204, Value::Null),
+        ("POST", "/api/session") => (200, json!({ "data": session(seen.body["id"].as_str().unwrap_or("ses_new")) })),
+        ("GET", path) if path.ends_with("/message") => (200, json!({ "data": [], "cursor": {} })),
+        _ => support::base(seen, DIRECTORY),
+    })
+}
+
+fn session(id: &str) -> Value {
+    json!({
+        "id": id, "title": "New session", "projectID": "proj_app", "cost": 0,
+        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+        "time": { "created": 1, "updated": 1 },
+        "location": { "directory": DIRECTORY },
+    })
+}
+
+struct Kit {
+    harness: Harness,
+    servers: Arc<Mutex<Value>>,
+    log: Log,
+    _home: opencode_util::temp::TempDir,
+}
+
+deref_harness!(Kit);
+
+impl Kit {
+    fn new() -> Self {
+        Self::with(servers(), Some(skills()))
+    }
+
+    fn with(servers: Value, skills: Option<Value>) -> Self {
+        let home = opencode_util::temp::tempdir().unwrap();
+        let servers = Arc::new(Mutex::new(servers));
+        let fake = fake(servers.clone(), skills);
+        let log = fake.log();
+        let deps = Deps {
+            directory: DIRECTORY.into(),
+            config: support::config(support::decode(r#"{ "theme": { "name": "opencode", "mode": "dark" } }"#)),
+            roots: support::roots(support::home_paths(home.path()), "test"),
+            route: Route::Home,
+            ..support::deps(Arc::new(fake))
+        };
+        let harness = support::mount_on(support::dark_app(100, 30), deps, Args::default());
+        let kit = Self { harness, servers, log, _home: home };
+        // The home prompt's catalog, so slash commands and submit work.
+        kit.wait_for("Model M");
+        kit
+    }
+
+    fn run(&self, command: &str) {
+        self.tui.keymap.dispatch(command, None);
+    }
+
+    fn requests(&self, method: &str, prefix: &str) -> Vec<Logged> {
+        let log = self.log.lock().unwrap();
+        log.iter()
+            .filter(|seen| seen.method == method && seen.url().starts_with(prefix))
+            .map(|seen| (seen.method.clone(), seen.url(), seen.body.clone()))
+            .collect()
+    }
+
+    fn wait_requests(&self, method: &str, prefix: &str, count: usize) -> Vec<Logged> {
+        let found = self.app.wait_until(WAIT, || self.requests(method, prefix).len() >= count);
+        assert!(found, "no {method} {prefix}…: {:?}", self.log.lock().unwrap());
+        self.requests(method, prefix)
+    }
+
+    /// Mutating requests under `/api/experimental/mcp`, in order.
+    fn toggles(&self) -> Vec<String> {
+        self.requests("POST", "/api/experimental/mcp/").into_iter().map(|(_, url, _)| url).collect()
+    }
+}
+
+#[test]
+fn mcp_dialog_matches_typescript() {
+    let kit = Kit::new();
+    for (id, slash, group) in [("mcp.list", "mcps", "Agent"), ("prompt.skills", "skills", "Prompt")] {
+        let command = kit
+            .tui
+            .keymap
+            .commands()
+            .into_iter()
+            .find(|command| command.id == id)
+            .unwrap_or_else(|| panic!("{id} is not registered"));
+        assert_eq!(command.slash.as_ref().map(|slash| slash.name.as_str()), Some(slash));
+        assert_eq!(command.group.as_deref(), Some(group));
+    }
+    kit.run("mcp.list");
+    kit.wait_for("Sign in required");
+    kit.only_dialog();
+    support::wait_fixture(&kit.app, "E.17b/mcp");
+
+    for _ in 0..3 {
+        kit.app.press("down");
+    }
+    kit.wait_for("view error");
+    support::wait_fixture(&kit.app, "E.17b/mcp-failed");
+
+    kit.app.press("return");
+    kit.wait_for("MCP server: linear");
+    support::wait_fixture(&kit.app, "E.17b/mcp-error");
+}
+
+#[test]
+fn skills_dialog_matches_typescript() {
+    let kit = Kit::new();
+    kit.run("prompt.skills");
+    kit.wait_for("bisect");
+    kit.only_dialog();
+    support::wait_fixture(&kit.app, "E.17b/skills");
+
+    kit.app.type_text("rel");
+    kit.wait_gone("bisect");
+    support::wait_fixture(&kit.app, "E.17b/skills-filter");
+
+    let kit = Kit::with(servers(), Some(json!([])));
+    kit.run("prompt.skills");
+    kit.wait_for("No skills available");
+    kit.only_dialog();
+    support::wait_fixture(&kit.app, "E.17b/skills-empty");
+}
+
+#[test]
+fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
+    let mut list = servers();
+    list.as_array_mut().unwrap().push(json!({
+        "name": "notion", "status": { "status": "needs_auth", "error": "Authentication required" },
+        "integrationID": "mcp_notion",
+    }));
+    let kit = Kit::with(list, Some(skills()));
+    kit.run("mcp.list");
+    kit.wait_for("Sign in required");
+    assert_eq!(kit.requests("GET", "/api/mcp"), [("GET".into(), format!("/api/mcp?{QUERY}"), Value::Null)]);
+    let space_at = |downs: usize| {
+        kit.app.press("home");
+        for _ in 0..downs {
+            kit.app.press("down");
+        }
+        kit.app.press("space");
+    };
+
+    space_at(2);
+    kit.wait_for("disconnect space");
+    kit.wait_requests("POST", "/api/experimental/mcp/", 1);
+    // linear failed: retry connects. sentry needs sign-in without an integration: connect.
+    space_at(3);
+    kit.wait_requests("POST", "/api/experimental/mcp/", 2);
+    space_at(5);
+    kit.wait_requests("POST", "/api/experimental/mcp/", 3);
+    // figma is pending: no request.
+    space_at(1);
+    space_at(0);
+    kit.wait_requests("POST", "/api/experimental/mcp/", 4);
+    kit.wait_for("docs is disabled");
+    // Only figma, which is pending, still reads "Connecting".
+    let settled = kit.app.wait_until(WAIT, || kit.app.text().matches("Connecting …").count() == 1);
+    assert!(settled, "{}", kit.app.text());
+    assert_eq!(
+        kit.toggles(),
+        [
+            format!("/api/experimental/mcp/github/disconnect?{QUERY}"),
+            format!("/api/experimental/mcp/linear/connect?{QUERY}"),
+            format!("/api/experimental/mcp/sentry/connect?{QUERY}"),
+            format!("/api/experimental/mcp/docs/connect?{QUERY}"),
+        ]
+    );
+    assert!(kit.requests("POST", "/api/experimental/mcp/").iter().all(|(_, _, body)| body.is_null()));
+    space_at(4);
+    kit.wait_for("No integrations available");
+    assert_eq!(kit.toggles().len(), 4);
+}
+
+#[test]
+fn mcp_dialog_follows_the_store_after_a_status_change() {
+    let kit = Kit::new();
+    kit.run("mcp.list");
+    kit.wait_for("Sign in required");
+    // What `mcp.status.changed` does after its settle: invalidate the list and read it again.
+    kit.servers.lock().unwrap()[1]["status"] = json!({ "status": "disabled" });
+    let location = Location::new(DIRECTORY);
+    kit.tui.data.catalog_invalidate(Catalog::McpServer, Some(&location));
+    let read = kit.tui.data.catalog_sync(Catalog::McpServer, Some(&location));
+    kit.tui.app.runtime().spawn(read);
+    kit.wait_gone("Connected ✓");
+    let screen = kit.app.text();
+    assert_eq!(screen.matches("Disabled ○").count(), 2, "{screen}");
+}
+
+#[test]
+fn mcp_error_view_goes_back_copies_and_investigates() {
+    let kit = Kit::new();
+    kit.run("mcp.list");
+    kit.wait_for("Sign in required");
+    for _ in 0..3 {
+        kit.app.press("down");
+    }
+    kit.app.press("return");
+    kit.wait_for("MCP server: linear");
+    kit.app.press("escape");
+    kit.wait_for("view error enter");
+    assert!(kit.app.text().contains("retry space"));
+
+    kit.app.press("return");
+    kit.wait_for("investigate i");
+    // `TestApp` has no terminal, so the copy fails with a toast (the live run copies).
+    kit.app.press("c");
+    kit.wait_for("Failed to copy to clipboard");
+    kit.app.press("i");
+    // `composer.set` leaves the cursor at the end, so the composer shows the text's last lines. The offset past the
+    // end went to the start before OpenTUI #2131, which showed its first.
+    kit.wait_for("Do not expose credentials.");
+    assert!(!kit.tui.dialogs.is_open());
+    let textarea = kit.tui.textarea.borrow().clone().unwrap();
+    assert_eq!(textarea.cursor_offset(), opencode_ui::prompt_input::end(&textarea));
+    let text = textarea.text();
+    for part in [
+        "Investigate why this OpenCode component failed in the current project.",
+        "MCP server: linear\nStatus: failed\nConfiguration: mcp.servers.linear\nError: MCP error -32000: Connection closed",
+        "project and global OpenCode configuration",
+    ] {
+        assert!(text.contains(part), "{part:?} missing from {text:?}");
+    }
+    assert!(kit.toggles().is_empty());
+}
+
+#[test]
+fn picking_a_skill_mentions_it_and_the_prompt_sends_it() {
+    let kit = Kit::new();
+    kit.run("prompt.skills");
+    kit.wait_for("bisect");
+    assert_eq!(kit.requests("GET", "/api/skill"), [("GET".into(), format!("/api/skill?{QUERY}"), Value::Null)]);
+    kit.app.type_text("rel");
+    kit.wait_gone("bisect");
+    kit.app.press("return");
+    kit.wait_gone("Skills");
+    let textarea = kit.tui.textarea.borrow().clone().unwrap();
+    assert_eq!(textarea.text(), "@release-notes ");
+
+    // A second pick of the same skill inserts nothing; the list is cached, so it is not read again.
+    kit.app.type_text("go");
+    kit.slash_dialog_pick("release-notes");
+    assert_eq!(textarea.text(), "@release-notes go");
+    assert_eq!(kit.requests("GET", "/api/skill").len(), 1);
+
+    kit.app.press("return");
+    let prompts = || -> Vec<Value> {
+        kit.requests("POST", "/api/session/")
+            .into_iter()
+            .filter(|(_, url, _)| url.ends_with("/prompt"))
+            .map(|(_, _, body)| body)
+            .collect()
+    };
+    let sent = kit.app.wait_until(WAIT, || !prompts().is_empty());
+    assert!(sent, "no prompt: {:?}", kit.log.lock().unwrap());
+    let prompt = prompts().remove(0);
+    assert_eq!(prompt["text"], "@release-notes go");
+    assert_eq!(
+        prompt["skills"],
+        json!([{ "id": "release-notes", "mention": { "start": 0, "end": 14, "text": "@release-notes" } }])
+    );
+}
+
+#[test]
+fn skills_dialog_shows_a_failed_read() {
+    let kit = Kit::with(servers(), None);
+    kit.run("prompt.skills");
+    let screen = kit.wait_for("Could not load skills");
+    assert!(screen.contains("Close and reopen Skills to try again."), "{screen}");
+    // The declared error's message, as `errorMessage` shows it, without its tag.
+    assert!(screen.contains("skills exploded") && !screen.contains("InvalidRequestError"), "{screen}");
+    // Locked while failed: typing does not filter.
+    assert!(!screen.contains("Search"), "{screen}");
+}
+
+#[test]
+fn mcp_skill_load_error_shows_its_message_on_prompt_submit() {
+    let message = "Failed to load SKILL.md of MCP skill team:deploy: connection closed";
+    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (
+            200,
+            json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+        ),
+        ("GET", "/api/skill") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([{
+                    "id": "team:deploy",
+                    "name": "team:deploy",
+                    "description": "Deploy from MCP.",
+                    "path": "skill://team:deploy/SKILL.md",
+                    "content": "",
+                }]),
+            ),
+        ),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_skill") => (200, json!({ "data": session("ses_skill") })),
+        ("GET", "/api/session/ses_skill/message") => (200, json!({ "data": [], "cursor": {} })),
+        ("POST", "/api/session/ses_skill/prompt") => {
+            (502, json!({ "_tag": "SkillLoadError", "skill": "team:deploy", "message": message }))
+        }
+        _ => support::base(seen, DIRECTORY),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::decode(r#"{ "theme": { "name": "opencode", "mode": "dark" } }"#)),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: support::session_route("ses_skill"),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 30, deps);
+    h.wait_for("opencode");
+    h.tui.keymap.dispatch("prompt.skills", None);
+    h.wait_for("team:deploy");
+    h.app.press("return");
+    h.wait_gone("Skills");
+    let textarea = h.tui.textarea.borrow().clone().unwrap();
+    assert_eq!(textarea.text(), "@team:deploy ");
+
+    h.app.press("return");
+    let screen = h.wait_for("Failed to send prompt");
+    assert!(screen.contains("connection closed"), "{screen}");
+    assert!(!screen.contains("UnexpectedStatus") && !screen.contains("SkillLoadError"), "{screen}");
+    assert_eq!(textarea.text(), "@team:deploy ");
+}
+
+impl Kit {
+    fn slash_dialog_pick(&self, id: &str) {
+        self.tui.keymap.dispatch("prompt.skills", None);
+        self.wait_for("bisect");
+        self.app.type_text(id);
+        self.app.press("return");
+        self.wait_gone("Skills");
+    }
+}

@@ -321,6 +321,16 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("maps the media tools' old experimental names in native rules", () => {
+    const rule = { action: "experimental_image_generate", resource: "*", effect: "deny" }
+    const result = normalized({
+      permissions: [rule],
+      agents: { build: { permissions: [{ ...rule, action: "experimental_video_generate" }] } },
+    }).encoded
+    expect(result.permissions).toEqual([{ ...rule, action: "generate_image" }])
+    expect(result.agents).toMatchObject({ build: { permissions: [{ ...rule, action: "generate_video" }] } })
+  })
+
   test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
     const build = {
       tools: { write: false, read: true },
@@ -453,6 +463,29 @@ describe("ConfigNormalize", () => {
     const result = normalized({ mcp: { example: server } })
     expect(result.diagnostics).toEqual([])
     expect(Schema.decodeUnknownSync(Info)(result.encoded).mcp?.servers?.example?.codemode).toBeUndefined()
+  })
+
+  test("reads snake_case oauth keys on legacy remote MCP servers (#55335)", () => {
+    const oauth = (value: Record<string, unknown>) =>
+      Schema.decodeUnknownSync(Info)(
+        normalized({ mcp: { example: { type: "remote", url: "https://example.com/mcp", oauth: value } } }).encoded,
+      ).mcp?.servers?.example
+    expect(
+      oauth({
+        client_id: "client",
+        client_secret: "secret",
+        callback_port: 19876,
+        redirect_uri: "http://127.0.0.1/cb",
+      }),
+    ).toMatchObject({
+      oauth: {
+        client_id: "client",
+        client_secret: "secret",
+        callback_port: 19876,
+        redirect_uri: "http://127.0.0.1/cb",
+      },
+    })
+    expect(oauth({ clientId: "camel", client_id: "snake" })).toMatchObject({ oauth: { client_id: "camel" } })
   })
 
   test("expands numeric MCP timeouts to every phase", () => {

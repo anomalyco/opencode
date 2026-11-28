@@ -68,6 +68,8 @@ export interface Interface {
   readonly run: (request: Request) => Effect.Effect<void, Error>
   // OpenCode stopped running the session, so a turn still waiting for tool results will not get them.
   readonly idle: (sessionID: string) => Effect.Effect<void>
+  // Stops the session's process in the background. Its saved Claude session stays, so the next request resumes it.
+  readonly retire: (sessionID: string) => Effect.Effect<void>
   // OpenCode deleted the session, so nothing can resume it.
   readonly remove: (sessionID: string) => Effect.Effect<void>
 }
@@ -107,9 +109,9 @@ export function registry() {
     )
   }, Effect.uninterruptible)
 
-  const armIdle = Effect.fn("ClaudeSessions.armIdle")(function* (entry: Entry) {
+  const armIdle = Effect.fn("ClaudeSessions.armIdle")(function* (entry: Entry, delay: number = IDLE_MS) {
     if (entry.idle) yield* Fiber.interrupt(entry.idle)
-    entry.idle = yield* Effect.sleep(IDLE_MS).pipe(
+    entry.idle = yield* Effect.sleep(delay).pipe(
       Effect.andThen(entry.lock.withPermit(stop(entry))),
       Effect.catch((error) => Effect.logWarning(error)),
       Effect.forkDetach,
@@ -369,8 +371,6 @@ export function registry() {
     ) {
       const boundary = SyncDecision.boundary(request.prompt, source)
       if (!source || !boundary) return 0
-      // Validate catch-up input before creating a forked transcript on disk.
-      yield* attemptSync(() => CatchUp.content(request.prompt, boundary.start))
       const fork = yield* attempt(() =>
         input.io.fork(source.claudeSessionID, boundary.messageID, request.connection?.CLAUDE_CONFIG_DIR),
       )
@@ -494,6 +494,13 @@ export function registry() {
       yield* armIdle(entry)
     })
 
+    const retire = Effect.fn("ClaudeSessions.retire")(function* (sessionID: string) {
+      const entry = entries.get(sessionID)
+      if (!entry || entry.active) return
+      // Runs as the idle timer, so the caller does not wait for the process to exit and a new request cancels it.
+      yield* armIdle(entry, 0)
+    })
+
     const remove = Effect.fn("ClaudeSessions.remove")(function* (sessionID: string) {
       const entry = entries.get(sessionID)
       entries.delete(sessionID)
@@ -501,7 +508,7 @@ export function registry() {
       yield* records.remove(sessionID)
     })
 
-    return { run, idle, remove } satisfies Interface
+    return { run, idle, retire, remove } satisfies Interface
   })
 
   return { attach, close }

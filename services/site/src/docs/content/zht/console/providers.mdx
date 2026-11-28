@@ -1,0 +1,210 @@
+---
+title: "控制台供應商"
+description: "將你自己的模型供應商帳號連接到 OpenCode 控制台工作區，並選擇成員可以使用哪些模型。"
+---
+
+連接你已在付費的供應商帳號，例如 Anthropic、OpenAI 或 AWS Bedrock，並將其模型
+與工作區中的所有人分享。控制台會儲存憑證並透過其閘道提供每個供應商，因此成員
+使用模型時永遠不會看到供應商金鑰。同一個閘道也可供你自己的工具透過
+[供應商 API](/console/api/providers)使用。
+
+擁有者與管理員從 **Providers** 分頁管理供應商。成員在執行 `/connect` 後，會在 OpenCode 中取得已啟用的模型。
+
+## 連接供應商
+
+1. 開啟 **Providers** 並點選 **Connect Provider**。
+2. 從目錄選擇供應商並輸入其 API 金鑰。
+3. 可選擇性點選 **Test connection**，然後點選 **Save**。
+
+目錄包含 Anthropic、OpenAI、Google、xAI、DeepSeek、Mistral、Groq、OpenRouter 等許多供應商。目錄
+供應商會預先設定其模型。
+
+### 雲端供應商
+
+雲端供應商需要一些額外詳細資料。
+
+| 供應商 | 詳細資料 |
+| --- | --- |
+| Azure | 資源名稱與 API 金鑰 |
+| AWS Bedrock | 地區與 API 金鑰 |
+| Google Vertex AI | 地區與服務帳號 JSON |
+| Cloudflare AI Gateway | 帳號 ID、閘道 ID 與 API 權杖 |
+| Databricks | 工作區 URL 與權杖 |
+
+### 自訂供應商
+
+點選 **Add Custom Provider** 連接任何其他端點，然後使用 **Add Model** 新增其模型。
+
+| 欄位 | 說明 |
+| --- | --- |
+| Base URL | 控制台轉送請求的位置，例如 `https://api.deepseek.com/v1`。 |
+| Format | Chat Completions、Responses API、Anthropic Compatible 或 Google Generative AI。 |
+| Auth mode | Bearer、API key header 或 Custom header。 |
+| Credential | 控制台傳送給供應商的金鑰。 |
+
+## 選擇模型
+
+開啟供應商即可查看其模型。只有已啟用的模型可供成員使用。
+
+- 使用 **Enabled** 開關開啟或關閉模型。
+- 開啟 **New models** 以啟用供應商之後新增的模型。
+
+## 編輯模型
+
+點選模型即可編輯。關閉面板時會儲存變更。
+
+| 區段 | 可以變更的內容 |
+| --- | --- |
+| General | 顯示名稱、API ID、工具支援、輸入與輸出類型 |
+| Variants | 擁有自己標頭或主體的變體 |
+| Configuration | 預設變體、請求標頭與主體、token 限制 |
+| Cost Tiers | 每 100 萬 token 的輸入、輸出、快取讀取與快取寫入價格 |
+
+### 自訂價格
+
+目錄模型會從供應商的定價開始。若你有議定價格，例如 OpenAI 合約的折扣，
+請在 **Cost Tiers** 下覆寫價格，讓用量報告與[預算](/console/budgets)符合你
+實際支付的金額。
+
+| 欄位 | 定價 | 你的價格 |
+| --- | --- | --- |
+| 輸入價格 | $2.50 | $2.00 |
+| 輸出價格 | $15.00 | $12.00 |
+| 快取讀取價格 | $0.25 | $0.20 |
+
+你變更的價格會在供應商頁面上醒目顯示。使用欄位上的 **Restore default value**，或模型上的 **⋯ › Restore...**，
+即可回到定價。
+
+當模型在超過某個上下文大小後收取更高費用時（例如超過 200K token 的提示詞），請新增 **Context** 層級。
+
+### 自訂模型
+
+點選 **Add Model** 新增目錄未包含的模型，並提供其 **Display name** 與 **Model ID**。使用
+現有模型上的 **⋯ › Duplicate...**，從其設定開始。
+
+## OpenCode 模型
+
+**Models** 分頁管理控制台提供的[模型](/console/models)，這些模型從工作區額度付費。它的
+運作方式與供應商頁面相同：
+
+- 開啟或關閉個別模型。
+- 關閉 **Free models** 以為工作區封鎖免費模型。
+- 開啟 **New models** 以自動啟用新的控制台模型。
+
+從 **⋯ › Disable** 停用整個供應商，即可只使用你自己的供應商。
+
+## 在 OpenCode 中使用
+
+成員執行 `/connect` 並選擇工作區。每個已啟用的供應商會顯示為工作區名稱後接
+供應商名稱，`/models` 會列出其已啟用的模型。
+
+```text
+Acme Inc. / Anthropic
+```
+
+在 **Settings › General** 中開啟 **Managed providers only**，即可為所有人將 OpenCode 限制為
+工作區的供應商。
+
+## 傳送身分
+
+當供應商是你自行營運的閘道時，請在其頁面開啟 **Send identity**。控制台接著會在其傳送到該處的每個模型請求中加入 `x-opencode-actor`
+標頭。此標頭會指明請求背後的成員或服務帳號，讓
+你的閘道可以依傳送者記錄或限制請求。
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- 它預設為關閉，變更基礎 URL 也會將其關閉。
+- 仍指向廠商自有 API 的供應商（例如 `https://api.openai.com/v1`）不會顯示此設定，因為
+  廠商會忽略該標頭。
+- 控制台會移除用戶端傳送的任何 `x-opencode-*` 標頭，因此你的閘道收到的唯一 `x-opencode-actor` 就是
+  控制台簽署的那一個。
+- **Test connection** 與模型清單只會以憑證呼叫 `GET <base URL>/models`，因此請勿在該路由要求
+  此標頭。
+
+### 權杖
+
+此標頭是控制台為每個請求簽署的 JWT。
+
+| 欄位 | 值 |
+| --- | --- |
+| `alg` | `ES256` |
+| `typ` | `opencode-actor+jwt` |
+| `iss` | `https://opencode.ai/inference` |
+| `aud` | 供應商的基礎 URL，不含結尾斜線 |
+| `iat`、`exp` | `exp` 為 `iat` 之後 120 秒 |
+
+| 宣告 | 值 |
+| --- | --- |
+| `sub` | 成員為 `user_id`，否則為 `service_account_id` |
+| `workspace_id` | 請求執行所在的工作區 |
+| `user_id`、`email` | 由成員送出請求時，記錄該成員的 ID 與電子郵件地址 |
+| `service_account_id` | 由服務帳號（包括 agent）送出請求時，記錄該服務帳號的 ID |
+| `session_id` | 用戶端有傳送時的工作階段 ID |
+| `request_id` | 用戶端在 `x-opencode-log-id` 回應標頭中收到的 ID |
+
+成員送出的請求會帶有如下的權杖內容：
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### 驗證權杖
+
+控制台會在 `https://opencode.ai/inference/.well-known/jwks.json` 發布其公開金鑰，並以
+`Cache-Control: public, max-age=300` 提供。請驗證簽章、簽發者、受眾、類型和權杖簽發後經過的時間，再驗證工作區。此
+範例使用 [jose](https://github.com/panva/jose)。
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+請將 `audience` 設為控制台中儲存的供應商基礎 URL，不含結尾斜線，並將 `org_...` 替換為
+控制台 URL 中的工作區 ID。控制台會在以其簽署前先發布新的簽署金鑰，因此依 `kid` 查詢金鑰的驗證器
+（例如 `createRemoteJWKSet`）在輪替期間仍可運作。
+
+## 停用或移除
+
+開啟供應商的 **⋯** 選單：
+
+- **Disable** 會對成員隱藏供應商及其模型，但保留其設定。
+- **Remove...** 會刪除供應商及其模型。對話框會顯示最近使用它的人，並提供
+  **Disable instead**。
+
+若要輪替金鑰，請點選供應商頁面上的憑證並輸入新的憑證。
+
+## 帳單
+
+供應商會向你收取 token 費用；控制台不會為此扣抵額度。控制台仍會使用模型的定價記錄每個請求
+及其成本，因此用量報告與[預算](/console/budgets)會包含它。
+
+若要從你自己的工具而非 OpenCode 呼叫供應商，請使用[供應商 API](/console/api/providers)。

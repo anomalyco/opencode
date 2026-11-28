@@ -1,9 +1,20 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { posix, win32 } from "node:path"
 import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { Environment } from "../environment/index.js"
 import { Failed, NotFound, WrongKind, type DirEntry, type FileInfo } from "../environment/files.js"
-import { ProcessID, Signal, type FileCall, type FromWorker, type Hello, type Instance, type ToWorker } from "./wire.js"
+import {
+  ProcessID,
+  Signal,
+  type FileCall,
+  type FromWorker,
+  type Hello,
+  type Instance,
+  type PeerCall,
+  type PeerLink,
+  type ToWorker,
+} from "./wire.js"
 
 /** How long a start whose connection was lost waits for the worker to come back before it is reported unknown. */
 const START_GRACE = "15 seconds"
@@ -34,6 +45,25 @@ export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.Proc
   }
 }
 
+/** A worker refused or could not finish a peer request. */
+export class PeerFailed extends Schema.TaggedError<PeerFailed>()("Machine.PeerFailed", {
+  machine: Environment.ID,
+  reason: Schema.String,
+}) {
+  override get message() {
+    return `${this.machine}: ${this.reason}`
+  }
+}
+
+/** The path rules and shell of the machine that sent `hello`: Node names Windows `win32`. None is a POSIX `sh`. */
+export const rules = (hello: Partial<Pick<Hello, "os" | "shell">>) => ({
+  path: hello.os === "win32" ? win32 : posix,
+  shell: hello.shell ?? "sh",
+})
+
+/** A peer request as the home asks for it, before it is given a `req`. */
+export type PeerRequest<M = PeerCall> = M extends unknown ? Omit<M, "req"> : never
+
 export const ConnectionInfo = Schema.Struct({
   kind: Schema.Literals(["websocket", "iroh"]),
   path: Schema.optionalKey(Schema.Literals(["direct", "relayed"])),
@@ -52,6 +82,10 @@ export interface Connection {
 }
 
 export interface Interface {
+  /**
+   * The machine's environment, the same handle for its whole life. Its path rules and shell are those of the newest
+   * hello, kept while the machine is offline; before any hello it is a POSIX machine running `sh`.
+   */
   readonly environment: Environment.Interface
   /**
    * Serves one connection until it is lost. A newer connection replaces it: the one being served counts as lost the
@@ -66,9 +100,14 @@ export interface Interface {
   /** The hello of the connection being served, if there is one. */
   readonly hello: () => Hello | undefined
   readonly describe: () => typeof ConnectionInfo.Type | undefined
+  /** Sends one peer request on the current connection and waits for its answer. */
+  readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
+  /** The peer links that are up, as the current connection's hello and messages since report them. */
+  readonly links: () => ReadonlySet<PeerLink>
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
+type PeerReply = Extract<FromWorker, { type: "peer" }>
 
 interface Link {
   readonly describe: Connection["describe"]
@@ -78,6 +117,9 @@ interface Link {
   /** File calls sent on this connection and not yet answered. */
   readonly calls: Map<number, Deferred.Deferred<Reply, Unknown>>
   readonly inputs: Map<number, { id: ProcessID; reply: Deferred.Deferred<void, Error> }>
+  /** Peer requests sent on this connection and not yet answered. */
+  readonly peers: Map<number, Deferred.Deferred<PeerReply, Unknown>>
+  readonly links: Set<PeerLink>
 }
 
 type OutputQueue = Queue.Queue<Uint8Array, PlatformError.PlatformError | Cause.Done>
@@ -108,6 +150,8 @@ export const make = (id: Environment.ID): Interface => {
   let next = Deferred.makeUnsafe<Link>()
   /** The worker behind the newest connection. Every process in `processes` was started on it. */
   let instance: Instance | undefined
+  /** The newest hello, which says what kind of machine this is, kept while it is offline. */
+  let reported: Hello | undefined
   let req = 0
   const online = Effect.suspend(() => (link ? Effect.succeed(link) : Deferred.await(next)))
   const platform = (method: string) => (cause: Error) =>
@@ -122,6 +166,8 @@ export const make = (id: Environment.ID): Interface => {
     current.calls.forEach((call) => Deferred.doneUnsafe(call, Effect.fail(new Unknown({ machine: id }))))
     current.inputs.forEach((input) => Deferred.doneUnsafe(input.reply, Effect.fail(new Unknown({ machine: id }))))
     current.inputs.clear()
+    current.peers.forEach((reply) => Deferred.doneUnsafe(reply, Effect.fail(new Unknown({ machine: id }))))
+    current.links.clear()
   }
 
   // The process will not be heard from again: whoever waits on it gets `error`.
@@ -150,9 +196,12 @@ export const make = (id: Environment.ID): Interface => {
         lost: Deferred.makeUnsafe(),
         calls: new Map(),
         inputs: new Map(),
+        peers: new Map(),
+        links: new Set(connection.hello.links),
       }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
+      reported = connection.hello
       const listed = new Map(connection.hello.processes.map((entry) => [entry.id, entry]))
       // Nothing here will ever read a process this home does not know, so it is stopped and forgotten. The worker
       // signals at once and the release drops it, so its exit is never reported. A release is safe to repeat.
@@ -203,6 +252,15 @@ export const make = (id: Environment.ID): Interface => {
     if (message.type === "fs") {
       const call = current.calls.get(message.req)
       if (call) Deferred.doneUnsafe(call, Effect.succeed(message))
+      return
+    }
+    if (message.type === "peer") {
+      const reply = current.peers.get(message.req)
+      if (reply) Deferred.doneUnsafe(reply, Effect.succeed(message))
+      return
+    }
+    if (message.type === "peer-closed") {
+      current.links.delete(message.link)
       return
     }
     const process = processes.get(message.id)
@@ -446,25 +504,66 @@ export const make = (id: Environment.ID): Interface => {
       }),
     )
 
+  const peer = (request: PeerRequest) =>
+    Effect.suspend((): Effect.Effect<void, PeerFailed | NotSent | Unknown> => {
+      const current = link
+      if (!current) return Effect.fail(new NotSent({ machine: id }))
+      const peerID = ++req
+      const reply = Deferred.makeUnsafe<PeerReply, Unknown>()
+      current.peers.set(peerID, reply)
+      current.send({ ...request, req: peerID })
+      return Deferred.await(reply).pipe(
+        Effect.ensuring(Effect.sync(() => current.peers.delete(peerID))),
+        Effect.flatMap((answer) => {
+          if (!answer.ok) return Effect.fail(new PeerFailed({ machine: id, reason: answer.message }))
+          if (link !== current) return Effect.void
+          if (request.type === "peer-accept" || request.type === "peer-connect") current.links.add(request.link)
+          if (request.type === "peer-close") current.links.delete(request.link)
+          return Effect.void
+        }),
+      )
+    })
+
   return {
     connect,
     close,
+    peer,
+    links: () => link?.links ?? new Set(),
     hello: () => link?.hello,
     describe: () => link?.describe?.(),
-    environment: Environment.make(id, {
-      spawner,
-      overrides: {
-        stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
-        list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
-        read: (path, range) =>
-          call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
-        write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
-        append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
-        remove: (path) => call<void>(path, { call: "remove", path }),
-        mkdir: (path) => call<void>(path, { call: "mkdir", path }),
-        move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+    // Its driver runs only argv, cwd and env, under the shell the worker names: `sh -c` when it names none, which is
+    // the contract every worker can meet. The path rules and shell are read on each use, so a handle taken before the
+    // worker first connected follows the machine it turns out to be.
+    environment: {
+      ...Environment.make(
+        id,
+        {
+          spawner,
+          overrides: {
+            stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
+            list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
+            read: (path, range) =>
+              call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
+            write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
+            append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
+            remove: (path) => call<void>(path, { call: "remove", path }),
+            mkdir: (path) => call<void>(path, { call: "mkdir", path }),
+            move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+          },
+        },
+        {
+          home: Effect.suspend(() =>
+            link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
+          ),
+        },
+      ),
+      get path() {
+        return rules(reported ?? {}).path
       },
-    }),
+      get shell() {
+        return rules(reported ?? {}).shell
+      },
+    },
   }
 }
 

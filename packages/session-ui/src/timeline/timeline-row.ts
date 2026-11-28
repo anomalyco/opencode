@@ -1,4 +1,5 @@
 import { Data, Match, Predicate } from "effect"
+import { isScriptFilePartID } from "./facts"
 
 export type PartRef = {
   messageID: string
@@ -18,8 +19,8 @@ export type PartGroup =
     }
   | {
       key: string
-      /** A subagent row holds one call or report; events count background shells. */
-      type: "file" | "read" | "events" | "subagent"
+      /** A subagent row holds one call or report; events count background shells; thought holds thoughts one after another. */
+      type: "file" | "read" | "events" | "subagent" | "thought"
       refs: PartRef[]
     }
 
@@ -53,9 +54,11 @@ export namespace TimelineRow {
     spacing?: "tool" | "content"
   }> {}
 
+  /** The thought the model is writing, after the finished thoughts (`before`) it follows with nothing between. */
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
     ref: PartRef
+    before?: readonly PartRef[]
   }> {}
 
   /**
@@ -157,7 +160,11 @@ export namespace TimelineRow {
       other.previousAssistantPart === row.previousAssistantPart &&
       other.spacing === row.spacing &&
       sameGroup(other.group, row.group),
-    Thinking: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Thinking") && sameRef(other.ref, row.ref),
+    Thinking: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Thinking") &&
+      sameRef(other.ref, row.ref) &&
+      (other.before?.length ?? 0) === (row.before?.length ?? 0) &&
+      (row.before ?? []).every((ref, index) => sameRef(ref, other.before![index]!)),
     Error: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "Error") &&
       other.text === row.text &&
@@ -179,6 +186,17 @@ export namespace TimelineRow {
     Worked: () => (other: TimelineRow) => Predicate.isTagged(other, "Worked"),
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
+
+  /**
+   * A row of the changes a script made, drawn as their own cards, which belongs to the script's block above it. Changes
+   * grouped into a summary row with other edits stand apart from the script, as any other block does.
+   */
+  export function scriptChanges(row: TimelineRow) {
+    if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "file") return false
+    const refs = row.group.refs
+
+    return refs.length > 0 && refs.every((ref) => isScriptFilePartID(ref.partID))
+  }
 
   export function equals(a: TimelineRow, b: TimelineRow) {
     return a === b || (a.userMessageID === b.userMessageID && sameFields(a)(b))
@@ -217,7 +235,7 @@ export type TimelineRowMap = {
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }
-  Thinking: { userMessageID: string; ref: PartRef }
+  Thinking: { userMessageID: string; ref: PartRef; before?: readonly PartRef[] }
   Retry: { userMessageID: string; attempt: number; message: string; next: number }
   Error: {
     userMessageID: string

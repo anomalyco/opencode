@@ -5,8 +5,9 @@ import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { app } from "electron"
 import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/options"
-import { APP_ID, APP_NAME, CHANNEL } from "../constants"
+import { APP_ID, APP_NAME, APP_USER_MODEL_ID, CHANNEL } from "../constants"
 import { debuggingSwitches } from "../diagnostics/options"
+import { applySmoothScrolling } from "../native/smooth-scrolling"
 
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
 
@@ -23,13 +24,10 @@ export function configureApplication() {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   app.setName(APP_NAME)
-  app.setAppUserModelId(APP_ID)
+  app.setAppUserModelId(APP_USER_MODEL_ID)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-
-  // Chromium animates each mouse-wheel notch on Linux; native Linux apps scroll by the full delta immediately.
-  if (process.platform === "linux") app.commandLine.appendSwitch("disable-smooth-scrolling")
 
   const build = { packaged: app.isPackaged, channel: CHANNEL }
 
@@ -60,6 +58,9 @@ export function configureApplication() {
   if (customUserData) {
     app.setPath("sessionData", path.join(customUserData, "session"))
   }
+
+  // Reads the settings store, so it runs once userData is set.
+  applySmoothScrolling()
 
   if (testRoot) {
     app.setPath("sessionData", path.join(testRoot, "session"))

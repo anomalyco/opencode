@@ -1,0 +1,117 @@
+---
+title: "Harness"
+description: "從其他編碼 agent 與 AI 應用程式使用控制台與 Go 模型。"
+---
+
+控制台可與 OpenCode 以外的編碼 agent 搭配使用。使用 API 金鑰將 harness 指向控制台閘道，即可使用任何
+付費或 Go 模型，用量會像其他請求一樣計入你的工作區。
+
+| Harness | 按用量計費 | Go | MCP |
+| --- | --- | --- | --- |
+| [Claude Code](/console/harnesses/claude-code) | 是 | 是 | 是 |
+| [Codex](/console/harnesses/codex) | 是 | 是 | 是 |
+| [Hermes](/console/harnesses/hermes) | 內建 | 內建 | 是 |
+| [OpenClaw](/console/harnesses/openclaw) | 外掛 | 內建 | 是 |
+| [Pi](/console/harnesses/pi) | 內建 | 內建 | 是 |
+| [Raycast](/console/harnesses/raycast) | 擴充功能 | 擴充功能 | 是 |
+
+免費方案聊天模型只能在 OpenCode 內使用。其他 harness 對這些模型會收到 HTTP `403`，
+即使具有控制台 API 金鑰也一樣。請使用付費模型或 Go 訂閱。
+
+## 控制台 CLI
+
+[控制台 CLI](https://github.com/anomalyco/opencode-console-cli) 可用一個
+指令將 harness 連接到你的工作區。它需要 Node.js 22 或更新版本。
+
+| Harness | 指令 |
+| --- | --- |
+| Claude Code | `npx @opencode/console setup claude-code` |
+| Codex | `npx @opencode/console setup codex` |
+| Hermes | `npx @opencode/console setup hermes` |
+| OpenClaw | `npx @opencode/console setup openclaw` |
+| Pi | `npx @opencode/console setup pi` |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+你的瀏覽器會開啟控制台，你可以在其中核准登入並選擇工作區。接著 harness 會取得
+
+- 由控制台提供的工作區模型
+- 工作區原則，每次呼叫工具前都會檢查
+- 工作區的 MCP 伺服器、技能與指示
+
+CLI 會讓 harness 與工作區保持同步，並自行更新。
+
+若要保留 harness 自己的登入與模型，例如 Claude 或 ChatGPT 訂閱，請加上 `--keep-provider`。harness
+仍會取得工作區的原則、MCP 伺服器、技能與指示。它適用於 Claude Code、Codex、Hermes 與 OpenClaw。
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+若要手動設定 harness，或設定 CLI 未涵蓋的 harness，請使用 API 金鑰與下列基礎 URL。
+
+## 取得 API 金鑰
+
+Harness 會使用控制台 API 金鑰驗證。最快的方式是
+[個人 API 金鑰](/console/api#personal-api-keys)，它會以你的身分呼叫模型。
+
+1. 從[控制台](https://opencode.ai/console)的帳號選單開啟 **Account**。
+2. 在 **Personal API keys** 下點選 **Add API key**。
+3. 選擇工作區、為金鑰命名，然後點選 **Create**。
+4. 複製金鑰。它只會顯示一次。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+用量會計入你的[成員預算](/console/budgets#member-budgets)。按用量計費請使用具有額度之工作區的金鑰，
+Go 則使用訂閱 [Go](/console/go) 之工作區的金鑰。
+
+對於共用機器或 CI，擁有者與管理員可以改為建立[服務帳號](/console/api#service-accounts)金鑰，
+讓用量不綁定在單一個人身上。
+
+## 基礎 URL
+
+按用量計費與 Go 由不同的基礎 URL 提供。請使用符合你方案的 URL。
+
+| 方案 | 基礎 URL |
+| --- | --- |
+| 按用量計費 | `https://opencode.ai/inference` |
+| Go | `https://opencode.ai/inference/go` |
+
+附加你的 harness 所用 API 的路徑。每種 API 都會提供每個付費與 Go 文字模型：當模型使用該 API 時，
+控制台會將請求傳送到模型自己的端點，否則會進行轉譯。
+
+| API | 路徑 |
+| --- | --- |
+| OpenAI Responses | `/openai/v1/responses` |
+| OpenAI Chat Completions | `/openai/v1/chat/completions` |
+| Anthropic Messages | `/anthropic/v1/messages` |
+| Gemini | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## 工作階段
+
+同一段對話的每個請求都應傳送相同的工作階段 ID，讓控制台能一致地路由對話並重複使用提示詞
+快取。Go [規定每個請求都必須帶上這個 ID](/console/go#where-can-i-use-it)。
+
+```text
+x-opencode-session: ses_...
+```
+
+控制台也能辨識 Claude Code、Codex、Hermes 與 Pi 傳送的原生工作階段標頭，而 OpenClaw 會自行傳送
+`x-opencode-session`，因此它們都不需要額外設定。
+
+## 控制台 MCP
+
+支援 MCP 的 harness 可以透過控制台 MCP 伺服器管理工作區。它使用 OAuth 與動態用戶端
+註冊，因此你從瀏覽器登入，而不必貼上金鑰。
+
+```text
+https://opencode.ai/console/mcp
+```
+
+每個 harness 頁面都會說明如何新增它。當你的工作區啟用它時，OpenCode 會自動將該伺服器新增為 `opencode_console`，
+並在第一次使用時要求你從瀏覽器登入。

@@ -1,0 +1,67 @@
+---
+title: "Membri"
+description: "Invita persone in uno spazio di lavoro di OpenCode Console, gestisci i loro ruoli e rimuovile."
+---
+
+I proprietari e gli amministratori gestiscono i membri da **Settings › Members**. Apri la scheda di un membro per consultare il suo utilizzo e le policy di budget applicabili.
+
+## Invitare membri
+
+1. Apri **Settings › Members** e fai clic su **Invite Members**.
+2. Aggiungi uno o più indirizzi email. Separali con spazi, virgole o punti e virgola, oppure incolla un elenco.
+3. Fai clic su **Send invitations**.
+
+Ogni persona riceve un'email intitolata **Join Acme Inc. on OpenCode** con un pulsante **Join workspace**.
+
+Gli inviti scadono dopo 7 giorni. Tutti entrano come **Member**; [cambia il loro ruolo](#change-a-role) dopo che sono entrati.
+
+<Callout>
+  Su [OpenCode Go](/console/go) e Go Plus, le persone che inviti usano i modelli gratuiti o il saldo dello spazio di lavoro. Per dare
+  a ciascuno limiti Go individuali, passa a Go Teams ($20 al mese per membro, minimo 2 membri).
+  Dal terzo membro in poi, l'addebito di $20 al mese per ciascun membro decorre dal suo ingresso.
+</Callout>
+
+Anche i membri possono entrare automaticamente:
+
+- [SSO](/console/sso#automatic-membership) aggiunge le persone dei tuoi domini email verificati al primo accesso.
+- [Sincronizzazione della directory](/console/scim) aggiunge e rimuove le persone in base a come le assegni nel tuo provider di identità.
+
+## Accettare un invito
+
+L'invitato deve accedere con l'indirizzo email a cui è stato inviato l'invito. Ci sono due modi per accettare:
+
+- Fai clic su **Join workspace** nell'email di invito, poi accedi o crea un account.
+- Accedi alla Console, apri il menu dello spazio di lavoro e fai clic su **Join** in **Pending invitations**.
+
+Se la persona ha eseguito l'accesso con un altro account, Console le chiede di selezionare **Sign out and continue** e proseguire con l'indirizzo a cui ha ricevuto l'invito.
+
+## Gestire gli inviti in attesa
+
+Gli inviti in attesa compaiono nella tabella Membri come **Pending · Expires** seguito dalla data, oppure **Expired**.
+
+| Azione | Come                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------- |
+| Rinvia | **⋯ › Resend invitation**. Invia un nuovo link valido per 7 giorni; il vecchio link smette di funzionare. |
+| Revoca | **⋯ › Remove...**. Il link smette di funzionare subito.                                            |
+
+## Cambiare ruolo
+
+Apri il menu del ruolo nella riga di un membro e scegli **Member**, **Admin** o **Owner**.
+
+Puoi assegnare solo ruoli pari o inferiori al tuo, e lo spazio di lavoro mantiene sempre almeno un proprietario. Vedi
+[Ruoli](/console/workspaces#roles).
+
+## Rimuovere un membro
+
+1. Fai clic su **⋯ › Remove...** nella riga del membro.
+2. Conferma con **Remove member**.
+
+Il membro perde subito l'accesso, ma puoi invitarlo di nuovo in seguito. Lo storico del suo utilizzo resta nei report dello spazio di lavoro.
+
+Rimuovere un membro revoca anche le chiavi API che ha creato nello spazio di lavoro, comprese le chiavi degli account di servizio. Gli account
+di servizio stessi restano e le chiavi create da altre persone continuano a funzionare. Vedi [Revoca](/console/api#revocation).
+
+## Dettagli del membro
+
+Fai clic su un membro per vedere il suo budget mensile, i modelli e i client che usa, i grafici di utilizzo e i log delle richieste. Da qui
+puoi impostare il suo [budget](/console/budgets#member-budgets) ed esportare il suo utilizzo in CSV.

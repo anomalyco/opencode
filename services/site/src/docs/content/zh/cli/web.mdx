@@ -1,0 +1,150 @@
+---
+title: "Web"
+description: "在浏览器中运行 OpenCode。"
+---
+
+OpenCode 内置一个 Web 界面，由支撑 TUI 的同一个服务器提供。它默认可用，并受密码保护。
+
+## 访问
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+在浏览器中打开链接，即可通过会话 Cookie 登录并加载 Web 界面。用 OpenCode 应用扫描二维码，或将链接粘贴到应用的服务器地址栏中，也能以同样的方式连接应用。登录状态有效期为 30 天；修改服务器密码会让所有会话退出登录。
+
+### 通过 SSH 访问
+
+如果服务器只监听 localhost，可以在本机转发其端口，然后在本地打开输出的链接：
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+服务器默认只监听 localhost。其端口取决于平台：
+
+| 平台 | 默认端口 |
+| --------------------- | ------------ |
+| macOS、Linux 和 WSL | 49374        |
+| Windows               | 28894        |
+
+Windows 会保留 49152 及以上的端口，WSL 镜像网络又会在其下保留另一个端口段。运行 `opencode service status` 可以输出当前地址：
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+你可以通过 `opencode service` 命令修改这些配置。
+
+### 远程访问
+
+如果想从任何地方连接，可以通过 [OpenTunnel](https://github.com/anomalyco/opentunnel) 远程地址配对：
+
+```bash
+$ opencode pair --remote
+```
+
+首次开启远程访问时，命令会先征求你的确认：
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+在非交互式终端中，除非传入 `--yes` 表示同意，否则命令会失败。同意一次之后，后续运行不再询问，即使后来用 `opencode service set remote false` 关闭了远程访问。
+
+## 配置
+
+使用 `opencode service set` 设置任意选项：
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+修改设置会停止后台服务器。重新启动即可应用新配置：
+
+```bash
+$ opencode service start
+```
+
+## 独立运行
+
+`opencode serve` 会在前台运行同一个服务器，而不是通过共享的后台服务运行。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+适用于以下场景：
+
+- 在共享、常驻或远程主机上运行 OpenCode，然后通过 `opencode --server <url>` 连接客户端。
+- 为单个进程控制主机名、端口和 CORS 来源。
+- 在 systemd、Docker 等进程管理工具下运行，或在其他要求前台进程的环境中运行。
+- 使用专用服务器，而不是共享的后台服务。
+
+使用 `--server` 将客户端连接到该服务器：
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### 认证
+
+设置 `OPENCODE_PASSWORD` 可以使用固定密码而非自动生成的密码。同一个变量也会为 `opencode --server` 提供密码。
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+其他 HTTP 客户端使用 Basic 认证。用户名始终为 `opencode`，只有密码可以更改。
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+`opencode service set password` 只对托管的后台服务生效。`opencode serve` 会读取 `OPENCODE_PASSWORD`；如果未设置，每次启动都会生成新密码。
+
+### Docker
+
+每个版本都会发布一个带版本标签的镜像到 `ghcr.io/anomalyco/opencode`。镜像的入口点是 `opencode`，默认启动 TUI，因此要传入 `serve`。请绑定到 `0.0.0.0`，默认地址 `127.0.0.1` 只能从容器内部访问。
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 设置 `OPENCODE_PASSWORD`，这样重启后密码也不会变。
+- 挂载数据目录 `/root/.local/share/opencode`。会话保存在该目录的数据库中，不挂载的话，删除容器时会话也会丢失。挂载配置目录 `/root/.config/opencode` 可以保留全局配置。
+- 运行 `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`，确认服务已就绪。

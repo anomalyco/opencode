@@ -7,6 +7,8 @@
 @import "../../component/site/site.css";
 @import "../../component/site/rtl.css";
 @import "../../component/site/locale-type.css";
+@import "../../component/dropdown.css";
+@import "../../component/language-picker.css";
 @import "../../component/site/github-link.css";
 @import "../../component/site/tap-targets.css";
 @import "../../component/site/docs-lockup.css";
@@ -41,7 +43,7 @@
    The current section's pages in the footer's bracket list: "[ ]" before each, "[-]" and ink on the
    current page with the titles' faux medium, a dash on hover. 20px lines on a 30px pitch, like the
    Contents rail. The first item's text top sits on the content line, level with the page title's and
-   the search box's top (DESIGN.md): OpenTUI Mono's cap top sits 0.3253em less than half the line
+   the search box's top (DESIGN.md): OpenMono's cap top sits 0.3253em less than half the line
    below the line's top, and the first row's 5px hit area hangs above it (its margin collapses into
    this one). */
 [data-site] [data-component="docs-nav"] {
@@ -145,7 +147,9 @@
    nav drops over the page and scrolls when it's longer than the window. */
 @media (max-width: 60rem) {
   [data-site][data-layout="docs"] {
-    --contents-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--row-height));
+    --contents-top: calc(
+      var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--docs-strip-height) + var(--row-height)
+    );
 
     /* Jumps land below the bar on pages without a Contents bar (on-this-page.css adds that one). */
     &:not(:has([data-component="contents-menu"])) [data-component="docs-article"] :is(h2, h3, h4, h5, h6)[id] {
@@ -209,7 +213,7 @@
       display: none;
     }
 
-    /* The Contents bar and its list in the nav's type: OpenTUI Mono at the nav's size. */
+    /* The Contents bar and its list in the nav's type: OpenMono at the nav's size. */
     [data-component="contents-menu"] :is(summary, a) {
       font-family: var(--font-mono);
       font-size: var(--mono-size);
@@ -217,7 +221,7 @@
 
     [data-component="sidebar"][data-section-nav] {
       position: sticky;
-      top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+      top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--docs-strip-height));
       z-index: 9;
       background: var(--bg);
     }
@@ -238,22 +242,14 @@
         margin-inline: calc(-1 * var(--edge));
         padding-inline: var(--edge);
 
-        &::before,
         &::after {
           content: "";
           position: absolute;
           inset-inline: 0;
+          bottom: 0;
           height: 1px;
           background: var(--border);
           pointer-events: none;
-        }
-
-        &::before {
-          top: 0;
-        }
-
-        &::after {
-          bottom: 0;
         }
       }
 
@@ -471,8 +467,8 @@
 }
 
 /* ───────────── Article ─────────────
-   Reading text in Inter at the reading size, capped at about 90 characters, section titles in OpenTUI
-   Mono. Typography 4 (docs-variants.css) sets h3 to h6 and the heading rhythm. */
+   Reading text in Inter at the reading size, capped at about 90 characters, section titles in
+   OpenMono. Typography 4 (docs-variants.css) sets h3 to h6 and the heading rhythm. */
 [data-site] [data-component="docs-article"] {
   font: 400 var(--fs-read) / 1.6 var(--font-sans);
   color: var(--text);
@@ -748,240 +744,59 @@
   }
 }
 
-/* The V1 notice (DocsLayout.tsx), above the title, sticks to the window's top beside the sidebar.
-   Phones already pin the top bar, the section row and the Contents bar, so there it reads once. */
+/* Desktop: headings reached from Contents or anchor links land below the fixed docs header band. */
+@media (min-width: 60.0625rem) {
+  [data-site][data-layout="docs"] [data-component="docs-article"] :is(h2, h3, h4, h5, h6)[id] {
+    scroll-margin-top: calc(var(--docs-header-height) + 1.5rem);
+  }
+}
+
+/* A page without a translation in its language: the English page in that language's chrome. */
+[data-site][data-page="docs"] [data-component="docs-translation-notice"] {
+  margin: 0 0 1.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* The V1 notice (DocsLayout.tsx) sits inline above the article title so it stays clear of the
+   fixed docs section links in the header row. */
 [data-site][data-page="docs"] [data-component="docs-version-notice"][data-variant] {
-  margin-bottom: 2rem;
+  position: relative;
+  top: auto;
+  margin-bottom: 1.5rem;
+
+  &::before {
+    content: none;
+  }
 
   @media (max-width: 60rem) {
-    position: static;
     margin: 0 0 1.5rem;
     padding-inline: 0;
   }
 }
 
-/* ───────────── V1 notice in the logo row ─────────────
-   The V1 docs' notice is the solid dark bar ("inverted", docs-version-notice.css) in the logo row,
-   centred on the logo and as wide as the article column. A narrow column shortens the sentence with
-   "…" and keeps the link at its end. In the dark theme it stays dark: a raised dark bar with a
-   hairline, so it stands off the page. Behind it the logo row is the page's colour down to the bar's
-   bottom edge, so the article, the docs nav and the Contents rail pass under it and end there. Phones
-   have it on the screen's bottom edge instead (below). */
-[data-site] [data-component="docs-version-notice"][data-placement="header"] {
-  /* The link's grey: 6.6:1 on the light theme's bar, 6.1:1 on the dark theme's. */
-  --notice-muted: var(--fixed-dark-muted);
-  --notice-text: light-dark(var(--text-inverted), var(--text-strong));
-  position: fixed;
-  z-index: 7;
-  top: calc(var(--banner-offset, 0px) + var(--top) + var(--logo-height) / 2);
-  height: var(--v1-notice-height);
-  /* The article column's edges. A long translated label ("DOKUMENTACJA V1") can end past the
-     article's start; the notice then starts after its chevron. Browsers without anchor positioning
-     keep the article's start and end before the GitHub mark. */
-  inset-inline-start: calc(var(--page-offset) + var(--sidebar-width) + var(--gutter));
-  inset-inline-end: calc(
-    var(--page-offset) + var(--github-right) + (var(--github-size) + var(--github-mark, 20px)) / 2 + 24px
-  );
-  inset-inline-start: max(
-    anchor(--docs-article start, calc(var(--page-offset) + var(--sidebar-width) + var(--gutter))),
-    calc(anchor(--docs-lockup-toggle end, 0px) + 12px)
-  );
-  inset-inline-end: anchor(
-    --docs-article end,
-    calc(var(--page-offset) + var(--github-right) + (var(--github-size) + var(--github-mark, 20px)) / 2 + 24px)
-  );
-  translate: 0 -50%;
-  margin: 0;
-  white-space: nowrap;
+/* The V1 notice in dark mode stays a raised dark bar with a hairline rather than inverting to white. */
+[data-site][data-page="docs"] [data-component="docs-version-notice"][data-variant="inverted"] {
   background: light-dark(var(--bg-strong), var(--bg-weaker));
   box-shadow: inset 0 0 0 1px light-dark(transparent, var(--border-strong));
-  border-color: transparent;
-  color: var(--notice-text);
-
-  &::before,
-  &::after {
-    content: none;
-  }
-
-  p {
-    flex: 1;
-    display: flex;
-    min-width: 0;
-    gap: 0.5em;
-    white-space: nowrap;
-  }
-
-  [data-slot="sentence"] {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  a {
-    position: relative;
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--notice-muted);
-    text-decoration: none;
-    transition: color 100ms ease-out;
-
-    /* 44px tall to tap, on the bar's 32px. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset-inline: 0;
-      top: 50%;
-      height: 44px;
-      translate: 0 -50%;
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--link);
-      outline-offset: 2px;
-    }
-
-    &:is(:hover, :focus-visible) {
-      color: var(--notice-text);
-      transition-duration: 0ms;
-    }
-  }
+  color: light-dark(var(--text-inverted), var(--text-strong));
 
   [data-slot="badge"] {
-    background: none;
-    color: inherit;
     border-inline-end-color: light-dark(
       color-mix(in srgb, var(--text-inverted) 22%, transparent),
       var(--border-strong)
     );
   }
 
-  [data-slot="short"] {
-    display: none;
-  }
-}
+  a {
+    color: light-dark(var(--fixed-dark-muted), var(--text-weak));
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
 
-/* The link's chevron, after its text toward the reading direction, nudged 2px on hover. */
-[data-site] [data-slot="link-chevron"] {
-  flex: none;
-  transition: translate 150ms var(--ease-out);
-
-  :is(a:hover, a:focus-visible) > & {
-    translate: 2px 0;
-  }
-
-  [dir="rtl"] & {
-    scale: -1 1;
-  }
-
-  [dir="rtl"] :is(a:hover, a:focus-visible) > & {
-    translate: -2px 0;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
-}
-
-@media (min-width: 60.0625rem) {
-  /* A heading reached from Contents or a link lands below the logo row's band. */
-  [data-site] [data-slot="frame"]:has(> [data-placement="header"]) [data-component="docs-article"] [id] {
-    scroll-margin-top: calc(var(--v1-notice-bottom) + 1.5rem);
-  }
-
-  [data-site] [data-slot="frame"]:has(> [data-placement="header"]) > [data-component="content"]::before {
-    content: "";
-    position: fixed;
-    /* Under the sidebar (2), whose logo strip covers its own nav, and over the article. */
-    z-index: 1;
-    top: 0;
-    inset-inline: 0;
-    height: var(--v1-notice-bottom);
-    background: var(--bg);
-    pointer-events: none;
-  }
-}
-
-[data-site] [data-component="sidebar"] [data-component="docs-lockup"] :is([data-slot="toggle"], [data-slot="trigger"]) {
-  anchor-name: --docs-lockup-toggle;
-}
-
-[data-site] [data-slot="frame"] {
-  --v1-notice-height: 2rem;
-  /* The bar's bottom edge, where the logo row's band ends. */
-  --v1-notice-bottom: calc(
-    var(--banner-offset, 0px) + var(--top) + var(--logo-height) / 2 + var(--v1-notice-height) / 2
-  );
-
-  &:has(> [data-placement="header"]) [data-component="docs-article"] {
-    anchor-name: --docs-article;
-  }
-}
-
-/* Phones: one line on the screen's bottom edge, "V1 docs" and the link, in the same dark, running
-   under the home indicator to the very edge. iOS Safari tints its bottom toolbar from what touches the
-   bottom edge, and the page behind the site (html) takes the dark too, so the bottom of the screen is
-   one dark area; the top still takes the top bar's page colour. The page ends above the bar, so the
-   footer stays reachable. Open menus and sheets sit over it. */
-@media (max-width: 60rem) {
-  /* The bar's colours, written out because the tokens live inside this element. grey-ok: outside the tokens' scope */
-  html:has([data-component="docs-version-notice"][data-placement="header"]) {
-    background: light-dark(#161616, #242424);
-  }
-  /* grey-ok-end */
-
-  [data-site]:has([data-component="docs-version-notice"][data-placement="header"]) {
-    padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  [data-site][data-page="docs"] [data-component="docs-version-notice"][data-placement="header"] {
-    position: fixed;
-    inset: auto 0 0;
-    margin: 0;
-    z-index: 5;
-    height: auto;
-    translate: none;
-    align-items: center;
-    padding: 0 calc(var(--edge) + env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
-      calc(var(--edge) + env(safe-area-inset-left, 0px));
-    box-shadow: inset 0 1px 0 light-dark(transparent, var(--border-strong));
-    font-size: 14px;
-
-    [data-slot="badge"],
-    [data-slot="sentence"] {
-      display: none;
+    &:is(:hover, :focus-visible) {
+      color: light-dark(var(--text-inverted), var(--text-strong));
     }
-
-    [data-slot="short"] {
-      display: block;
-      flex: none;
-      text-transform: uppercase;
-    }
-
-    p {
-      justify-content: flex-end;
-      padding: 0;
-    }
-
-    a {
-      height: 3rem;
-      text-decoration: none;
-    }
-
-    a::after {
-      content: none;
-    }
-  }
-
-  /* While a phone menu or sheet is open, the bar goes, so nothing sits half under it. */
-  [data-site]:has(
-      [data-component="topbar"] [data-slot="menu"]:not([hidden]),
-      [data-component="section-nav"][data-open],
-      [data-component="contents-menu"][open],
-      [data-search-dialog]:not([hidden])
-    )
-    [data-component="docs-version-notice"][data-placement="header"] {
-    visibility: hidden;
   }
 }

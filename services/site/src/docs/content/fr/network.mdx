@@ -1,0 +1,136 @@
+---
+title: Réseau
+description: Configurez des proxys, des autorités de certification personnalisées et des certificats client.
+---
+
+Définissez les variables de proxy standard. OpenCode utilise des connexions HTTP locales entre le CLI et son service d’arrière-plan. Le CLI exclut automatiquement les adresses de bouclage du proxy.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+`HTTP_PROXY` s’applique aux destinations HTTP et `HTTPS_PROXY` aux destinations HTTPS. Dans les deux cas, l’URL du proxy peut utiliser `http://`. Au démarrage, le CLI ajoute `127.0.0.1`, `localhost` et `::1` à `NO_PROXY` ainsi qu’à `no_proxy`. Indiquez dans `NO_PROXY`, en les séparant par des virgules, les autres hôtes à joindre sans proxy.
+
+## Service
+
+Les exportations du shell n’affectent un service d’arrière-plan que si ce service démarre depuis le shell. Enregistrez les variables dans la configuration du service géré pour que les démarrages suivants utilisent les mêmes réglages réseau.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+Modifier une variable d’environnement gérée arrête le service en cours. `service start` le redémarre avec le nouvel environnement. Définissez les variables de proxy du CLI dans son propre shell : les variables du service géré ne s’appliquent qu’au processus serveur. Les adresses de bouclage sont automatiquement exclues des deux côtés.
+
+Supprimez une variable enregistrée avec `service unset env` :
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## Authentification
+
+Pour un proxy acceptant des identifiants dans l’URL, incluez le nom d’utilisateur et le mot de passe dans chaque URL de proxy nécessitant une authentification. Encodez en pourcentage les caractères tels que `@`, `:` et `/` dans l’un ou l’autre des identifiants.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+Pour le service d’arrière-plan, enregistrez l’URL complète. La valeur est stockée dans la configuration privée du service et affichée par `opencode service get env` : ne partagez donc pas cette sortie.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## Certificats
+
+Définissez `NODE_EXTRA_CA_CERTS` sur un fichier PEM lorsque le proxy ou la destination utilise un certificat signé par une autorité de certification privée. Les autorités supplémentaires sont ajoutées au magasin de confiance d’exécution au démarrage du processus.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+Enregistrez le chemin du fichier pour le service d’arrière-plan, puis redémarrez-le :
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## Antivirus et inspection HTTPS
+
+Les fonctions « analyse HTTPS » ou « analyse des connexions chiffrées » des antivirus (Kaspersky, Avast, ESET et autres) et les proxys d’inspection SSL d’entreprise remplacent le certificat du serveur par le leur. OpenCode le rejette et les requêtes échouent avec des erreurs telles que :
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+Deux solutions sont possibles :
+
+- Excluez `opencode.ai` et `*.opencode.ai` de l’analyse HTTPS dans les réglages de l’antivirus. Ajoutez aussi l’hôte d’API de votre fournisseur, par exemple `api.anthropic.com`, si vous vous connectez directement à un fournisseur.
+- Exportez l’autorité de certification d’inspection dans un fichier PEM et faites-lui confiance avec `NODE_EXTRA_CA_CERTS`, comme indiqué dans [Certificats](#certificates).
+
+## Certificats client
+
+Définissez `settings.tls` pour un fournisseur dont la passerelle exige une authentification TLS mutuelle. Les requêtes au modèle présentent le certificat, mais la négociation TLS ne l’envoie qu’aux serveurs qui le demandent.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` et `key` sont du texte PEM. Utilisez `{file:...}` pour les lire depuis des fichiers. Un fichier illisible laisse `tls` non défini.
+- `passphrase` n’est nécessaire que pour une clé chiffrée.
+- Fonctionne avec les builds Bun et Node. Un serveur sur Cloudflare Workers ne peut pas présenter de certificat client via `fetch`.
+- Les requêtes avec un certificat client ne suivent pas les redirections, afin que le certificat ne soit pas présenté à un autre hôte.
+
+Chaque requête de modèle de ce fournisseur présente le certificat : chat, compactage, modèles d’image et de décision. Un fournisseur doté de `tls` utilise HTTP au lieu de WebSockets. Les outils comme webfetch, les serveurs MCP distants et les installations de plugins ne le présentent pas.
+
+## Au premier plan
+
+`--standalone` et `serve` utilisent l’environnement de leur propre processus. `opencode service set env` ne configure pas ces processus.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+Appliquez le même schéma à un serveur au premier plan :
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## Vérification
+
+Vérifiez que le CLI peut joindre le service d’arrière-plan après avoir appliqué les réglages :
+
+```bash
+opencode api get /api/info
+```
+
+Si la vérification de l’état du service aboutit, la connexion locale entre le client et le service fonctionne. Envoyez une requête ordinaire à un fournisseur pour vérifier le proxy sortant et le chemin du certificat du service.

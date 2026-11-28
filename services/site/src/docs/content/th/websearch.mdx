@@ -1,0 +1,118 @@
+---
+title: "การค้นหาเว็บ"
+description: "ให้ OpenCode ค้นหาเว็บด้วย Exa, Firecrawl, Parallel, Tavily, TinyFish หรือแพ็กเกจ Claude ของคุณ และเลือกผู้ให้บริการกับสิทธิ์สำหรับการค้นหา"
+---
+
+เมื่อคุณขอข้อมูลล่าสุด OpenCode สามารถค้นหาเว็บ อ่านผลการค้นหา และแนบลิงก์แหล่งที่มาในคำตอบได้
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+การค้นหาครั้งแรกจะขอให้คุณอนุญาตการค้นหาเว็บและเลือกผู้ให้บริการ OpenCode จะจำตัวเลือกของคุณสำหรับเซสชันภายหลัง
+
+## ผู้ให้บริการ
+
+OpenCode มีผู้ให้บริการค้นหาห้าราย
+
+| ผู้ให้บริการ | ID | ตัวแปรสภาพแวดล้อม |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (ไม่บังคับ) |
+
+เชื่อมต่อบัญชีจาก TUI ด้วย `/connect` หรือตั้งตัวแปรสภาพแวดล้อมของผู้ให้บริการก่อนเริ่ม OpenCode
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+เมื่อเชื่อมต่อ [Claude Agent](/claude-agent) แล้ว คุณจะเลือกผู้ให้บริการค้นหาที่มี ID `claude-agent` ได้
+ผู้ให้บริการนี้ใช้ WebSearch ของ Claude Code การค้นหาจึงนับรวมในแพ็กเกจ Claude ของคุณโดยไม่ต้องใช้คีย์ API ของบริการค้นหา ใช้ได้กับทุกโมเดล ไม่เฉพาะ Claude
+
+Claude Agent จะไม่ถูกเลือกโดยอัตโนมัติ ให้เลือกใน `opencode.jsonc`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch คืนเนื้อหาหน้าเว็บแบบเข้ารหัส โมเดล Claude จึงต้องรันการค้นหาแต่ละครั้ง Haiku เป็นตัวรัน และ
+สรุปผลลัพธ์สั้นๆ จะมาก่อน ตามด้วยลิงก์ การค้นหาใช้การตั้งค่าการเชื่อมต่อของผู้ให้บริการ Claude Agent และบัญชี
+ที่แชตของคุณใช้ล่าสุด
+
+## การเลือก
+
+ตั้งผู้ให้บริการใน `opencode.jsonc` เพื่อข้ามพรอมต์การเลือก
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+ใช้ `"random"` เพื่อเลือกผู้ให้บริการที่พร้อมใช้งานโดยอัตโนมัติ แต่ละเซสชันจะใช้ผู้ให้บริการที่เลือกไว้จนกว่า
+ผู้ให้บริการนั้นจะถูกจำกัดอัตรา
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## ขีดจำกัด
+
+เมื่อผู้ให้บริการตอบกลับด้วย HTTP 429 โหมดสุ่มจะลองค้นหาอีกครั้งกับผู้ให้บริการรายอื่นที่พร้อมใช้งาน ระบบจะพักการใช้งานผู้ให้บริการที่ถูกจำกัดอัตราตามระยะเวลา `Retry-After` หรือ 60 วินาทีหากการตอบกลับไม่ได้ระบุระยะเวลาที่ใช้ได้
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+หากผู้ให้บริการทุกรายอยู่ในช่วงพัก การค้นหาจะล้มเหลวทันที การย้ายเซสชันหรือรีสตาร์ตเซิร์ฟเวอร์จะล้างผู้ให้บริการ
+ที่จำไว้ ช่วงพักใช้ร่วมกันระหว่างเซสชันในเวิร์กสเปซเดียวกัน
+
+## สิทธิ์
+
+กฎสิทธิ์สำหรับการค้นหาเว็บใช้ `websearch` เป็นการดำเนินการและใช้คำค้นเป็นทรัพยากร ตั้งให้ระบบขออนุมัติก่อนค้นหาเมื่อไม่มีกฎระบุว่าอนุญาต
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+ดู[สิทธิ์](/permissions)สำหรับลำดับกฎและการจับคู่
+
+## ปิดใช้งาน
+
+ตั้ง `websearch` เป็น `false` เพื่อเอาเครื่องมือค้นหาเว็บออกจากคำขอถึงโมเดล
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

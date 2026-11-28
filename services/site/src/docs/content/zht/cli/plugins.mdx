@@ -1,0 +1,62 @@
+---
+title: "CLI 外掛"
+description: "在 CLI 中從 OpenCode 設定載入 TUI 外掛，並在 cli.json 中新增僅限 CLI 的外掛及其選項。"
+---
+
+在 `opencode.json(c)` 中設定且提供 TUI 元件的外掛，會由 CLI 自動載入。若要了解如何
+建置外掛，請參閱[建置外掛](/build/plugins)。你不需要將相同的套件加入 `cli.json`。CLI
+會從連線的 OpenCode 伺服器取得已啟用的外掛清單，遠端伺服器也適用。
+
+僅限 CLI 的外掛請使用 `cli.json`。這些外掛會在終端機本機執行，並在 CLI 連接到
+遠端伺服器時保持作用中：
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+項目會依序處理。在 ID 或萬用字元前加上 `-` 可停用相符的外掛：
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+使用物件形式傳遞外掛選項：
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode 也會在全域設定目錄與專案 `.opencode` 目錄下探索外掛。每個外掛會使用
+與已發布套件相同的配置，並將伺服器與 TUI 進入點放在一起。
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+探索到的外掛可以直接匯入 `@opencode/plugin/tui`；OpenCode 會在執行階段解析該套件。範例請參閱
+[建置 TUI 外掛](/build/plugins/cli)。

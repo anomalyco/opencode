@@ -36,7 +36,7 @@ import { Agent } from "@opencode/core/agent"
 import { ID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { daemonShells } from "./fixture/shell-daemon"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Schedule, Scope, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Schedule, Scope, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -1050,7 +1050,7 @@ describe("SessionRestart background recovery", () => {
       const recovery = (path: string) => ({ kind: "image" as const, sessionID, path, model: "test/painter" })
       yield* jobs.start({
         id: "image_done",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: recovery("/tmp/done.png"),
         run: Effect.succeed("Image request finished. Saved image: /tmp/done.png (test/painter)."),
       })
@@ -1058,7 +1058,7 @@ describe("SessionRestart background recovery", () => {
       yield* jobs.wait({ id: "image_done" })
       yield* jobs.start({
         id: "image_running",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: recovery("/tmp/running.png"),
         run: Effect.never,
       })
@@ -1088,7 +1088,7 @@ describe("SessionRestart background recovery", () => {
       const videoID = VideoID.create()
       yield* jobs.start({
         id: videoID,
-        type: "experimental_video_generate",
+        type: "generate_video",
         recovery: { kind: "video", sessionID, path: "/tmp/running.mp4", videoID },
         run: Effect.never,
       })
@@ -1939,12 +1939,12 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedInbox(database, sessionID, ["steer", "queue"])
 
       const draining = yield* Deferred.make<void>()
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ at?: SessionRunner.Position; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
         Effect.suspend(() => {
-          drains.push({ force: input.force, promotable: input.promotable })
+          drains.push({ at: input.at, promotable: input.promotable })
           if (drains.length > 1) return Effect.void
           return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
         }),
@@ -1958,8 +1958,8 @@ describe("SessionExecution interrupt continuation", () => {
 
       // The successor drain is steer-scoped: queued next-turn work stays parked.
       expect(drains).toEqual([
-        { force: true, promotable: "input" },
-        { force: false, promotable: "steer" },
+        { at: { _tag: "Fresh", forced: true }, promotable: "input" },
+        { at: { _tag: "Fresh", forced: false }, promotable: "steer" },
       ])
     }),
   )
@@ -2000,18 +2000,18 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedSessions(database, [sessionID])
       yield* seedInbox(database, sessionID, ["steer"])
 
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ at?: SessionRunner.Position; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
-        Effect.sync(() => void drains.push({ force: input.force, promotable: input.promotable })),
+        Effect.sync(() => void drains.push({ at: input.at, promotable: input.promotable })),
       )
       const execution = Context.get(context, SessionExecution.Service)
 
       yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
-      expect(drains).toEqual([{ force: false, promotable: "steer" }])
+      expect(drains).toEqual([{ at: { _tag: "Fresh", forced: false }, promotable: "steer" }])
     }),
   )
 
@@ -2023,12 +2023,12 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedInbox(database, sessionID, [{ delivery: "queue", type: "compaction" }])
 
       const draining = yield* Deferred.make<void>()
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ at?: SessionRunner.Position; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
         Effect.suspend(() => {
-          drains.push({ force: input.force, promotable: input.promotable })
+          drains.push({ at: input.at, promotable: input.promotable })
           if (drains.length > 1) return Effect.void
           return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
         }),
@@ -2042,8 +2042,8 @@ describe("SessionExecution interrupt continuation", () => {
 
       // Control work is housekeeping, not next-turn input: continue runs it.
       expect(drains).toEqual([
-        { force: true, promotable: "input" },
-        { force: false, promotable: "steer" },
+        { at: { _tag: "Fresh", forced: true }, promotable: "input" },
+        { at: { _tag: "Fresh", forced: false }, promotable: "steer" },
       ])
     }),
   )
@@ -2055,11 +2055,11 @@ describe("SessionExecution interrupt continuation", () => {
       yield* seedSessions(database, [sessionID])
       yield* seedInbox(database, sessionID, ["queue", { delivery: "queue", type: "compaction" }])
 
-      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const drains: Array<{ at?: SessionRunner.Position; promotable?: SessionInbox.Promotable }> = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, (input) =>
-        Effect.sync(() => void drains.push({ force: input.force, promotable: input.promotable })),
+        Effect.sync(() => void drains.push({ at: input.at, promotable: input.promotable })),
       )
       const execution = Context.get(context, SessionExecution.Service)
 
@@ -2176,7 +2176,9 @@ function attempts(database: Database.Service["Service"], sessionID: Session.ID) 
 /** Builds the local execution layer plus the restart actions against the test harness services. */
 function buildExecution(
   scope: Scope.Closeable,
-  drain: (input: Parameters<SessionRunner.Interface["drain"]>[0]) => Effect.Effect<void, SessionRunner.RunError>,
+  drain: (
+    input: Parameters<SessionRunner.Interface["drain"]>[0],
+  ) => Effect.Effect<void, SessionRunner.RunError, SessionInbox.Service>,
   options?: SessionRestart.Options,
   overrideJobs?: Job.Interface,
   shell?: Shell.Interface,
@@ -2206,12 +2208,16 @@ function buildExecution(
     const runner = Layer.succeed(
       SessionRunner.Service,
       SessionRunner.Service.of({
-        drain: (input) => drain(input).pipe(Effect.as(SessionRunner.DrainResult.Complete())),
+        drain: (input) =>
+          drain(input).pipe(
+            Effect.provideService(SessionInbox.Service, inbox),
+            Effect.as(SessionRunner.DrainResult.Complete()),
+          ),
       }),
     )
     const locations = Layer.effect(
       LocationServiceMap.Service,
-      LayerMap.make(
+      LocationServiceMap.make(
         () =>
           // The local execution test only needs the Session runner (and the Shell, if given) from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

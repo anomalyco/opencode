@@ -40,6 +40,8 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
 
   const projectButton = projects.getByRole("button", { name: /HomeFocus/ })
 
+  const automations = projects.getByRole("button", { name: "Automations", exact: true })
+
   const settings = projects.getByRole("button", { name: "Settings", exact: true })
 
   const help = projects.getByRole("button", { name: "Help", exact: true })
@@ -58,9 +60,12 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
     )
     .toBe("solid")
 
-  // The two project row actions come before the utility buttons.
+  // The two project row actions come before the utility buttons, which start with Automations.
   await page.keyboard.press("Tab")
   await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await expect(automations).toBeFocused()
+  await expect(automations).toHaveCSS("outline-style", "solid")
   await page.keyboard.press("Tab")
   await expect(settings).toBeFocused()
   await expect(settings).toHaveCSS("outline-style", "solid")
@@ -73,10 +78,8 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
 
   const field = page.locator('[data-slot="home-session-search-field"]')
 
+  // A text field shows its caret and background, not a ring.
   await page.keyboard.press("Tab")
-  await expect(search).toBeFocused()
-  await expect(field).toHaveCSS("outline-style", "solid")
-  await search.click()
   await expect(search).toBeFocused()
   await expect(field).toHaveCSS("outline-style", "none")
 
@@ -92,11 +95,17 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
   await expect(sessionRow).toHaveCSS("outline-offset", "-2px")
 
   await page.setViewportSize({ width: 1280, height: 200 })
-  await expect(viewport).toHaveAttribute("tabindex", "0")
-  await viewport.press("Shift+Tab")
-  await page.keyboard.press("Tab")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Shift+Tab")
+  await expect(viewport).not.toBeFocused()
+
+  // A click still focuses the list so the keyboard can scroll it, without a ring around the whole area.
+  await viewport.click({ position: { x: 4, y: 4 } })
   await expect(viewport).toBeFocused()
-  await expect(viewport).toHaveCSS("outline-offset", "-2px")
+  await expect(viewport).toHaveCSS("outline-style", "none")
+  await page.keyboard.press("PageDown")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
 })
 
 test("Home keeps the session list in every interface mode", async ({ page }) => {
@@ -198,7 +207,14 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Open in background", "Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText([
+    "Open",
+    "Open in background",
+    "Rename",
+    "Copy",
+    "Export…",
+    "Delete…",
+  ])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -333,8 +349,32 @@ test("tabbing out of session search closes its results, and tabbing back reopens
 
   await page.keyboard.press(`${modifier}+f`)
   await expect(search).toBeFocused()
-  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
   await expect(panel.getByRole("option")).toContainText(earlier.title)
+})
+
+test("picking a project from the picker in session search clears the search", async ({ page }) => {
+  const earlier = { id: "ses_home_search_scope", title: "Finished earlier" }
+  const workspace = await mockWorkspace(page, { name: "HomeScope", sessions: [earlier] })
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  // Between md and lg the project picker sits inside the search field instead of a projects column.
+  await page.setViewportSize({ width: 900, height: 720 })
+  await page.goto("/")
+  const search = page.getByRole("textbox", { name: /Search sessions/ })
+  const panel = page.locator('[data-component="home-session-search-panel"]')
+  await expect(row(page, earlier.title)).toBeVisible()
+
+  await search.fill("Finished")
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+  await page.getByRole("button", { name: "Projects", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Projects", exact: true })
+    .getByRole("button", { name: /HomeScope/ })
+    .click()
+
+  // The results panel closes with the picker, so a query left in the field would no longer filter anything.
+  await expect(search).toHaveValue("")
+  await expect(search).toHaveAttribute("placeholder", "Search sessions in HomeScope")
+  await expect(row(page, earlier.title)).toBeVisible()
 })
 
 test("Escape cancels an inline rename whose save does not answer", async ({ page }) => {

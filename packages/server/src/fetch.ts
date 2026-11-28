@@ -1,6 +1,6 @@
 export * as ServerFetch from "./fetch"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, flow, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/http"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
@@ -17,6 +17,53 @@ export interface BootOptions {
    */
   readonly overrides?: LayerNode.Replacements
 }
+
+/** Internal entry for runtime profiles (such as `ServerWorkerd.create`) that also need the built service context. */
+export const makeWithContext = Effect.fn("ServerFetch.makeWithContext")(function* (
+  options: ServerOptions = {},
+  boot: BootOptions = {},
+) {
+  const context = yield* build(createRoutes(options, () => [], boot.overrides ?? []))
+  const handler = yield* serve(
+    context,
+    flow(
+      RequestSite.middleware(options),
+      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
+    ),
+  )
+  return { handler, context }
+})
+
+/**
+ * Builds a route layer (`createRoutes` or `createEmbeddedRoutes`) in the current Scope. Shared with the SDK's
+ * embedded host so both serve the same graph.
+ */
+export const build = <A, E, R>(routes: Layer.Layer<A, E, R>) =>
+  // Handlers capture the build context; without the caller's span, each request is its own trace.
+  Layer.build(routes.pipe(Layer.provide(HttpServer.layerServices))).pipe(withoutParentSpan)
+
+/**
+ * Starts serving a built route context: resumes suspended Sessions in a fiber the current Scope owns, then returns
+ * the web handler. Shared with the SDK's embedded host, which registers its plugins between `build` and `serve` so
+ * recovery never runs without them.
+ */
+export const serve = Effect.fnUntraced(function* (
+  context: Context.Context<HttpRouter.HttpRouter | SessionRestart.Service>,
+  middleware: (
+    app: ReturnType<HttpRouter.HttpRouter["asHttpEffect"]>,
+  ) => ReturnType<HttpRouter.HttpRouter["asHttpEffect"]> = (app) => app,
+) {
+  // Forked so the returned handler is never delayed; resumed drains are already logged and durably recorded by the
+  // execution layer. The sweep runs in the built context, outside the caller's trace.
+  yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions.pipe(
+    Effect.provideContext(context),
+    withoutParentSpan,
+    Effect.forkScoped,
+  )
+  return Context.get(context, HttpRouter.HttpRouter)
+    .asHttpEffect()
+    .pipe(middleware, HttpEffect.toWebHandlerWith(context))
+})
 
 /**
  * Builds a web-standard fetch handler — `(request: Request) => Promise<Response>` — serving the
@@ -41,18 +88,5 @@ export interface BootOptions {
  * next boot, and the sweep is a no-op when nothing is suspended.
  */
 export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
-  // Handlers capture the build context; without the caller's span, each request is its own trace.
-  const context = yield* Layer.build(
-    createRoutes(options, () => [], boot.overrides ?? []).pipe(Layer.provide(HttpServer.layerServices)),
-  ).pipe(withoutParentSpan)
-  // Forked so the returned handler is never delayed; resumed drains are already
-  // logged and durably recorded by the execution layer.
-  yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
-  return Context.get(context, HttpRouter.HttpRouter)
-    .asHttpEffect()
-    .pipe(
-      RequestSite.middleware(options),
-      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
-      HttpEffect.toWebHandlerWith(context),
-    )
+  return (yield* makeWithContext(options, boot)).handler
 })

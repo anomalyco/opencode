@@ -11,7 +11,7 @@ import { markdownContext, pageMarkdown } from "~/lib/page-markdown"
 /** The llms.txt index (https://llmstxt.org): what OpenCode is and the Markdown version of every page. */
 export async function llmsText(locale: Locale) {
   const context = await markdownContext(locale)
-  const content = homeContent(context.t, context.route)
+  const content = homeContent(context.t, context.route, context.consoleRoute)
   const page = (path: string) =>
     `- ${link(pageMarkdown[path].title, context.route(markdownPath(path)))}: ${pageMarkdown[path].description}`
   const docs = (title: string, path: string, description: string) => `- ${link(title, docsUrl(path))}: ${description}`
@@ -67,6 +67,7 @@ export async function llmsText(locale: Locale) {
       page("/press"),
       page("/brand"),
       page("/legal/privacy-policy"),
+      page("/legal/refund-policy"),
       page("/legal/terms-of-service"),
       `- ${link("Full site", context.route("/llms-full.txt"))}: the site's own pages in one Markdown file, without the docs or Console`,
       `- ${link("Discord", config.social.discord)}: the community`,

@@ -1,0 +1,630 @@
+---
+title: "CLI コマンド"
+description: "opencode コマンドラインのリファレンス。"
+---
+
+すべてのコマンドは `--help` でフラグの全一覧を表示できます（例：`opencode run --help`）。サーバーを使う一部のコマンドは、プライベートサーバーで実行する `--standalone` または特定のサーバーを指定する `--server <url>` を受け付けます。対応するフラグは各コマンドのヘルプで確認してください。
+
+## run
+
+対話的なインターフェースを開かずにメッセージを送信し、返信を出力します。
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+CI では、プロバイダーの API キーをシークレットとして渡し、プライベートサーバーが受け取れるようスタンドアロンモードを使用します。たとえば、次の GitHub Actions ジョブはチェックアウトしたリポジトリをレビューします。
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-5-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+モデルを選択します。
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
+```
+
+最後のセッションを続行します。
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+スクリプト向けに改行区切りの JSON を出力します。
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+メッセージにファイルを添付します。
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+特定のエージェントで実行します。
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+特定のセッションを続行します。
+
+```bash
+$ opencode run --session ses_4f2a1c "Check edge cases"
+```
+
+明示的に拒否されていない権限を自動承認します。
+
+```bash
+$ opencode run --auto "Fix the failing test"
+```
+
+セッションをアーカイブ状態で作成し、スクリプトや CI の実行がセッション一覧や受信トレイに表示されないようにします。セッションは存在し続け、`opencode session list` に含まれ、ID で開くこともできます。
+
+```bash
+$ opencode run --archived "Review this diff"
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+全画面の TUI の代わりに、最小限の対話インターフェースを起動します。
+
+```bash
+$ opencode mini
+```
+
+最後のセッションを続行します。
+
+```bash
+$ opencode mini --continue
+```
+
+モデルと最初のプロンプトを指定して開始します。
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-5-5 --prompt "Summarize this repository"
+```
+
+特定のセッションを続行します。
+
+```bash
+$ opencode mini --session ses_4f2a1c
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+セッションを管理します。
+
+```bash
+$ opencode session list
+```
+
+一覧の件数を絞り、JSON で出力します。
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+セッションとその子セッションを削除します。
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+セッションデータを JSON としてエクスポートします。
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+エクスポート時に、トランスクリプトやファイルに含まれる機密データを伏せます。
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+JSON ファイルまたは URL からセッションデータをインポートします。
+
+```bash
+$ opencode session import session.json
+```
+
+特定のディレクトリにインポートします。
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+AI プロバイダーと認証情報を管理します。
+
+```bash
+$ opencode auth list
+```
+
+JSON として一覧表示します。
+
+```bash
+$ opencode auth list --format json
+```
+
+プロバイダーにログインします。
+
+```bash
+$ opencode auth login anthropic
+```
+
+特定の認証方法でログインします。
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+保存済みのアカウントからログアウトします。
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+連携のアクティブなアカウントを切り替えます。
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+保存済みの認証情報をエクスポートし、別のマシンでインポートします。ファイルにはシークレットが含まれます。
+
+```bash
+$ opencode auth export anthropic > credentials.json
+$ opencode auth import credentials.json
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+利用可能なすべてのモデルを一覧表示します。
+
+```bash
+$ opencode models
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+MCP（Model Context Protocol）サーバーを管理します。
+
+```bash
+$ opencode mcp list
+```
+
+リモートサーバーを追加します。
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+ローカルサーバーをグローバル設定に追加します。
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+環境変数付きでローカルサーバーを追加します。
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+ヘッダー付きでリモートサーバーを追加します。
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+OAuth 対応のリモートサーバーで認証します。
+
+```bash
+$ opencode mcp auth sentry
+```
+
+サーバーの保存済み OAuth 認証情報を削除します。
+
+```bash
+$ opencode mcp logout sentry
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+プラグインを管理します。
+
+```bash
+$ opencode plugin list
+```
+
+組み込みのサーバープラグインを含めます。
+
+```bash
+$ opencode plugin list --builtin
+```
+
+プラグインをインストールし、グローバル設定に追加します。
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+パッケージプラグインの更新を確認します。
+
+```bash
+$ opencode plugin check
+```
+
+パッケージプラグインを更新します。
+
+```bash
+$ opencode plugin update
+```
+
+グローバル設定からプラグインを削除します。
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+共有できる使用量の統計を表示します。
+
+```bash
+$ opencode stats
+```
+
+過去 7 日間の使用量を表示します。
+
+```bash
+$ opencode stats --days 7
+```
+
+モデルの使用量を表示します。
+
+```bash
+$ opencode stats --models
+```
+
+コストとトークンの詳細を表示します。
+
+```bash
+$ opencode stats --cost
+```
+
+レポートの代わりに JSON を出力します。
+
+```bash
+$ opencode stats --json
+```
+
+現在のプロジェクトのみを表示します。
+
+```bash
+$ opencode stats --project .
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+API と Web サーバーを起動します。[Web](/cli/web)を参照してください。
+
+```bash
+$ opencode serve
+```
+
+固定ポートですべてのインターフェースにバインドします。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+別のオリジンのブラウザクライアントを許可します。
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+ブラウザまたはアプリをサーバーにサインインさせる 1 回限りのリンクと、最初のリンクの QR コードを出力します。リンクは 5 分後に失効し、1 回だけ機能します。
+
+```bash
+$ opencode pair
+```
+
+リンクに外部 URL を使用します。
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+OpenTunnel のリモートアドレス経由でどこからでもペアリングします。サーバーがインターネットに公開されるため、初めてリモートアクセスを有効にするときはその旨を説明し、承諾を求めます。[リモートアクセス](/cli/web#remote-access)を参照してください。
+
+```bash
+$ opencode pair --remote
+```
+
+プロンプトなしで承諾します（ターミナルのないスクリプトなど）。
+
+```bash
+$ opencode pair --remote --yes
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+バックグラウンドサーバーを管理します。[Web](/cli/web)を参照してください。
+
+```bash
+$ opencode service start
+```
+
+再起動します。
+
+```bash
+$ opencode service restart
+```
+
+ステータスを表示します。
+
+```bash
+$ opencode service status
+```
+
+停止します。
+
+```bash
+$ opencode service stop
+```
+
+設定を読み取ります。
+
+```bash
+$ opencode service get hostname
+```
+
+設定を書き込みます。
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+追加の CORS オリジンを許可します。
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+サーバーのプロセスに環境変数を渡します。
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+設定をデフォルトに戻します。
+
+```bash
+$ opencode service unset hostname
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+サーバーを再起動せずに設定を再読み込みします。実行中のセッションは、次のステップの切り替わりから、再読み込み後のサービスを使って続行します。
+
+```bash
+$ opencode reload
+```
+
+## api
+
+実行中のサーバーにリクエストを送ります。
+
+```bash
+$ opencode api GET /api/session
+```
+
+クエリパラメーター付きで操作 ID を呼び出します。
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+JSON ボディを送信します。
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+リクエストヘッダーを追加します。
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+エディタ連携向けに、stdin と stdout で Agent Client Protocol サーバーを起動します。クライアントが接続を閉じるまで実行されます。
+
+```bash
+$ opencode acp
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+デバッグとトラブルシューティングのツールを提供します。
+
+```bash
+$ opencode debug agents
+```
+
+設定のソースを一覧表示します。
+
+```bash
+$ opencode debug config
+```
+
+実行中のバックグラウンドサーバーのヒープスナップショットを書き出し、そのパスを出力します。
+
+```bash
+$ opencode debug heap-dump
+```
+
+スナップショットを任意のディレクトリに書き出します。
+
+```bash
+$ opencode debug heap-dump --directory ./snapshots
+```
+
+グローバルのパスを表示します。
+
+```bash
+$ opencode debug paths
+```
+
+1 つのパスを出力します。
+
+```bash
+$ opencode debug paths db
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+OpenCode を最新バージョンまたは特定のバージョンにアップグレードします。エイリアス：`update`。
+
+```bash
+$ opencode upgrade
+```
+
+特定のパッケージマネージャーで特定のバージョンにアップグレードします。
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+バックグラウンドサービスを停止し、グローバルキャッシュを削除して、OpenCode をアンインストールします。セッションデータ、設定、状態は削除されません。
+
+```bash
+$ opencode uninstall
+```
+
+削除される内容をプレビューします。
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode uninstall --help
+```

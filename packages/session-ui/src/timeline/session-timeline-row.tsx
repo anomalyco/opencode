@@ -50,15 +50,18 @@ import {
   fileRuns,
   runDisclosureKey,
   ScriptChanges,
+  ScriptOutputProvider,
   taskAgentName,
   ToolRegistry,
   type ContextGroupPart,
+  type ScriptOutputPlacement,
 } from "../tools/tool-renderer"
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
 import { scriptFileFact, type FileFact } from "./facts"
+import { scriptOutputLayout } from "./script-output"
 import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
@@ -805,8 +808,14 @@ export function createSessionTimelineRowRenderer(input: {
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
-        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
-        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
+        // Blocks stand a step further apart than a script stands from its own changes.
+        "pt-2":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          props.row.spacing === "tool" &&
+          TimelineRow.scriptChanges(props.row),
+        "pt-4":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          (props.row.spacing === "content" || (props.row.spacing === "tool" && !TimelineRow.scriptChanges(props.row))),
         "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >
@@ -847,6 +856,25 @@ export function createSessionTimelineRowRenderer(input: {
       const match = data.store.provider?.all?.get(value.model.providerID)
       const variantOnly = value.previous?.providerID === value.model.providerID && value.previous.id === value.model.id
       const variant = value.model.variant ?? "default"
+
+      // A model's faster and slower speeds are models of their own ("gpt-5.5-fast"), so moving between them is a
+      // change of speed.
+      const info = match?.models?.[value.model.id]
+      const before = value.previous?.providerID === value.model.providerID && match?.models?.[value.previous.id]
+
+      if (
+        info &&
+        before &&
+        !variantOnly &&
+        (before.speed?.base ?? value.previous?.id) === (info.speed?.base ?? value.model.id)
+      )
+        return {
+          providerID: value.model.providerID,
+          variant: undefined,
+          label: info.speed
+            ? i18n.t("ui.sessionTimeline.notice.speedSwitched", { speed: info.speed.id })
+            : i18n.t("ui.sessionTimeline.notice.speedStandard"),
+        }
 
       return {
         providerID: value.model.providerID,
@@ -1325,9 +1353,7 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
-              {content}
-            </div>
+            <div data-slot="session-turn-assistant-content">{content}</div>
           </div>
         </Frame>
       )
@@ -1529,11 +1555,23 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
+  // Where each script's Output row goes, from the rows: after its changes when they are drawn right after it.
+  const scriptOutput = createMemo(() =>
+    scriptOutputLayout(input.projection.rows(), input.projection.messageByID(), data.flag("full_codemode")),
+  )
+
+  const scriptPlacement: ScriptOutputPlacement = {
+    afterChanges: (partID) => scriptOutput().afterChanges.has(partID),
+    outputAfter: (fileID) => scriptOutput().outputAfter.get(fileID),
+  }
+
   function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
     return (
-      <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
-      </Show>
+      <ScriptOutputProvider value={scriptPlacement}>
+        <Show when={TimelineRow.key(props.row())} keyed>
+          {(_key) => render(props.row, props.onSizeChange)}
+        </Show>
+      </ScriptOutputProvider>
     )
   }
 

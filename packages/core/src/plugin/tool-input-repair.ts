@@ -3,6 +3,9 @@ export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
+import { toolExpression } from "@opencode/codemode"
+import { isRecord } from "@opencode/util/record"
+import { CodeModeTool } from "../codemode/tool.js"
 import { definition, normalizeContent } from "../tool/runtime.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
@@ -20,42 +23,66 @@ const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unkno
 const maxDepth = 6
 
 // Tool names models carry over from other harnesses, used only when no tool has that name.
-// The result tells the model which tool ran, so it calls that one next time.
-const aliases = new Map([["bash", "shell"]])
+const aliases = new Map([
+  ["bash", "shell"],
+  ["Bash", "shell"],
+])
 
 export const Plugin = define({
   id: "opencode.tool.input.repair",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const aliased = new Map<string, string>()
+      // Calls run under another tool or inside Code Mode, so the result can say how to call it next time. Keyed by the
+      // call's own copy of its input, which execute.after receives, so a call that never runs leaves nothing behind.
+      const notes = new WeakMap<
+        object,
+        { readonly called: string; readonly tool: string; readonly expression: string; readonly aliased: boolean }
+      >()
       yield* ctx.tool.hook("execute.before", (event) =>
         Effect.gen(function* () {
           // The outer Code Mode tool is built per snapshot rather than registered; its `{ code }`
           // input is trivial, and the tools it calls are repaired normally.
           if (event.tool === "execute") return
-          const alias = event.info ? undefined : aliases.get(event.tool)
-          const aliasedTool =
-            alias === undefined ? undefined : (yield* ctx.tool.list()).find((tool) => tool.id === alias)
-          const tool = event.info ?? aliasedTool
+          const tools = event.info ? [] : yield* ctx.tool.list()
+          const alias = aliases.get(event.tool)
+          const aliased = alias === undefined ? undefined : tools.find((tool) => tool.id === alias)
+          // A call to a Code Mode tool at the top level runs as a Code Mode call; see Tool's snapshot.execute.
+          const target =
+            aliased ?? tools.find((tool) => tool.id === event.tool || CodeModeTool.qualifiedName(tool) === event.tool)
+          const tool = event.info ?? target
           if (!tool) return
-          if (aliasedTool) {
-            aliased.set(event.id, event.tool)
-            event.tool = aliasedTool.id
-          }
+          const called = event.tool
+          if (aliased) event.tool = aliased.id
           const schema = definition(tool, event.codemode).inputSchema
-          if (schema.type !== "object") return
-          event.input = repair(event.input, schema, schema, 0)
+          if (schema.type === "object") event.input = repair(event.input, schema, schema, 0)
+          if (!target || !isRecord(event.input)) return
+          const input = { ...event.input }
+          event.input = input
+          notes.set(input, {
+            called,
+            tool: target.id,
+            expression: toolExpression(CodeModeTool.qualifiedName(target)),
+            aliased: aliased !== undefined,
+          })
         }),
       )
       yield* ctx.tool.hook("execute.after", (event) =>
         Effect.sync(() => {
-          const called = aliased.get(event.id)
-          if (called === undefined) return
-          aliased.delete(event.id)
-          const note = `There is no "${called}" tool, so this ran as "${event.tool}". Call "${event.tool}" directly.`
+          const call = isRecord(event.input) ? notes.get(event.input) : undefined
+          if (call === undefined) return
+          const inProgram = event.codemode
+          if (!inProgram && !call.aliased) return
+          const note = `<tool-repair>\n${
+            !inProgram
+              ? `There is no "${call.called}" tool, so this ran as "${call.tool}". Call "${call.tool}" next time.`
+              : call.aliased
+                ? `There is no "${call.called}" tool, so this ran inside execute as ${call.expression}(input). Call it there next time.`
+                : `${call.called} is a Code Mode tool, so this ran inside execute as ${call.expression}(input). Call it there next time.`
+          }\n</tool-repair>`
+          // First, so it survives when a long result is cut at the tool output limit.
           if (event.status === "error") {
             event.error = new ToolFailure({
-              message: `${event.error.message}\n\n${note}`,
+              message: `${note}\n\n${event.error.message}`,
               error: event.error.error,
               metadata: event.error.metadata,
             })
@@ -63,7 +90,7 @@ export const Plugin = define({
           }
           event.result = {
             ...event.result,
-            content: [...normalizeContent(event.result.content, event.result.output), { type: "text", text: note }],
+            content: [{ type: "text", text: note }, ...normalizeContent(event.result.content, event.result.output)],
           }
         }),
       )
@@ -131,6 +158,7 @@ function repairObject(
 
   const properties = Predicate.isObject(schema.properties) ? schema.properties : {}
   const required = Array.isArray(schema.required) ? schema.required : []
+  const missing = required.some((key) => !Object.hasOwn(parsed, key))
   const patterned = Predicate.isObject(schema.patternProperties)
   const composed = Array.isArray(schema.allOf) || Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf)
 
@@ -139,7 +167,7 @@ function repairObject(
     const declared = Object.hasOwn(properties, key)
     const property = declared ? properties[key] : !patterned ? schema.additionalProperties : undefined
 
-    if (!declared && schema.additionalProperties === false && !patterned && !composed) {
+    if (!declared && schema.additionalProperties === false && !patterned && !composed && !missing) {
       const next = { ...result }
       delete next[key]
       return next

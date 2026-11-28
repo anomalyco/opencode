@@ -1,0 +1,119 @@
+---
+title: "Web araması"
+description: "OpenCode'un Exa, Firecrawl, Parallel, Tavily, TinyFish veya Claude planınızla web'de arama yapmasını sağlayın; aramalar için sağlayıcıyı ve izinleri seçin."
+---
+
+OpenCode'dan güncel bilgi isteyin; web'de arama yapabilir, sonuçları okuyabilir ve yanıtına kaynak bağlantıları ekleyebilir.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+İlk aramada OpenCode web araması için izin ister ve bir sağlayıcı seçmenizi bekler. Seçiminizi sonraki oturumlar için hatırlar.
+
+## Sağlayıcılar
+
+OpenCode beş arama sağlayıcısı içerir:
+
+| Sağlayıcı | Kimlik | Ortam değişkeni |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (isteğe bağlı) |
+
+TUI'da `/connect` ile bir hesap bağlayın veya OpenCode'u başlatmadan önce sağlayıcının ortam değişkenini ayarlayın.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+[Claude Agent](/claude-agent) bağlıysa `claude-agent` kimliğiyle bir arama sağlayıcısı da sunar. Claude Code'un WebSearch özelliğini çalıştırır; bu nedenle aramalar Claude planınıza sayılır ve arama API anahtarı gerekmez. Yalnızca Claude değil, her model bunu kullanabilir.
+
+Claude Agent asla otomatik olarak seçilmez. `opencode.jsonc` içinde seçin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch sayfa içeriklerini şifreli döndürür, bu nedenle her aramayı bir Claude modelinin çalıştırması gerekir. Bunu Haiku
+çalıştırır; önce sonuçların kısa özeti, ardından bağlantılar gelir. Aramalar Claude Agent sağlayıcısının bağlantı ayarlarını
+ve sohbetlerinizin en son kullandığı hesabı kullanır.
+
+## Seçim
+
+Seçim istemini atlamak için `opencode.jsonc` içinde bir sağlayıcı ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Kullanılabilir bir sağlayıcıyı otomatik seçmek için `"random"` kullanın. Her oturum, seçilen sağlayıcı hız limitine ulaşana
+kadar aynı sağlayıcıyı kullanır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Sınırlar
+
+Bir sağlayıcı HTTP 429 döndürdüğünde rastgele seçim aramayı başka bir kullanılabilir sağlayıcıyla yeniden dener. Hız
+sınırına takılan sağlayıcı `Retry-After` süresi kadar bekler; yanıt geçerli bir süre içermiyorsa 60 saniye bekler.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Tüm sağlayıcılar bekleme süresindeyse arama hemen başarısız olur. Bir oturumu taşımak veya sunucusunu yeniden başlatmak
+hatırlanan sağlayıcıyı temizler; bekleme süreleri aynı çalışma alanındaki oturumlar tarafından paylaşılır.
+
+## İzinler
+
+Web aramaları `websearch` izin eylemini ve arama sorgusunu kaynak olarak kullanır. Açıkça izin verilmeyen aramalarda önce
+onay istenir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Kural sırası ve eşleştirme için [İzinler](/permissions) sayfasına bakın.
+
+## Devre dışı bırakma
+
+Web arama aracını model isteklerinden kaldırmak için `websearch` değerini `false` yapın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

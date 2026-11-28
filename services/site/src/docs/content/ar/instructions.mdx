@@ -1,0 +1,139 @@
+---
+title: "التعليمات"
+description: "امنح OpenCode إرشادًا دائمًا للمشروع بملفات AGENTS.md، واعرف أين تنطبق وترتيب تحميلها وكيف يعمل بديل CLAUDE.md."
+---
+
+أضف ملف `AGENTS.md` لتمنح OpenCode إرشادًا دائمًا للمشروع. واستخدمه لأوامر البناء وملاحظات البنية واصطلاحات الشفرة ومتطلبات التحقق.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+احفظ ملفات تعليمات المشروع في سجل المستودع ليحصل كل من يعمل فيه على الإرشادات نفسها.
+
+## النطاق
+
+ضع `AGENTS.md` في المجلد الذي ينبغي أن ينطبق إرشاده فيه. ويحمّل OpenCode الملف العام ثم كل `AGENTS.md` من مجلد مساحة العمل الحالي نحو المجلد الرئيسي. ولمساحات العمل خارج المجلد الرئيسي، يتوقف عند جذر المشروع.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+وفي هذا المثال تُحمَّل الملفات الأربعة كلها. وتُدمج بهذا الترتيب:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+وأبقِ الإرشاد الذي ينطبق في كل مكان في الملف العام. وضع إرشاد المستودع كاملًا في جذر المشروع، والإرشاد الأكثر تخصيصًا أقرب إلى الشفرة التي يغطيها. ويدمج OpenCode الملفات ولا يحل التعارضات بينها.
+
+وإذا كانت مساحة العمل خارج جذر المشروع، فلا يُحمَّل إلا الملف العام. واضبط `OPENCODE_DISABLE_PROJECT_CONFIG=1` لتخطي اكتشاف `AGENTS.md` في المشروع دون تعطيل الملف العام.
+
+### بديل CLAUDE.md
+
+في أي مجلد بلا `AGENTS.md`، يقرأ OpenCode `CLAUDE.md` بدلًا منه. وبدون
+الملف العام `~/.config/opencode/AGENTS.md`، يقرأ `~/.claude/CLAUDE.md`. ويأخذ ملف `AGENTS.md` في أي مجلد الأسبقية دائمًا على
+ملف `CLAUDE.md` فيه، لذا عند ربط الملفين برابط رمزي لا تُحمَّل التعليمات إلا مرة واحدة.
+
+واضبط `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` لتخطي كل `CLAUDE.md`، أو `OPENCODE_DISABLE_CLAUDE_CODE=1` لتخطي
+مهارات `.claude` أيضًا. ويقرأ الخادم كليهما عند بدئه. وللخدمة الخلفية، احفظهما بـ
+`opencode service set env` وشغّل `opencode service restart`.
+
+## الاكتشاف
+
+تُكتشف ملفات التعليمات تحت مساحة العمل بينما يستكشف الوكيل المشروع. فقراءة ملف أو سرد مجلد يحمّل أي ملفات `AGENTS.md` بين ذلك الهدف ومساحة العمل.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+وتُحمَّل الملفات المتداخلة من الأقرب أولًا وتُزال تكراراتها ما دام إدخال تعليماتها في السجل المرئي للنموذج. وإعادة قراءة المنطقة نفسها لا تعيد إدراجها عادةً. وإذا أزال ضغط السياق أو التراجع ذلك الإدخال، فقد تعيد قراءة لاحقة تحميل الملف.
+
+ولا تُكتشف تعديلات الملف المتداخل تلقائيًا بعد تحميله. فابدأ جلسة جديدة عندما يجب أن ينطبق النص المحدّث فورًا.
+
+## الترتيب
+
+تُرسل مطالبة نظام الوكيل أو المزوّد المختار أولًا. ثم يجمع OpenCode التعليمات الأولية بهذا الترتيب:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+تُدمَج هذه المصادر دون أن يحلّ أيّ منها محل الآخر. وتُضاف ملفات `AGENTS.md` المتداخلة إلى سجل الجلسة لاحقًا بترتيب اكتشافها.
+
+## التحديثات
+
+لتحديث الإرشادات أثناء تشغيل الجلسة، عدّل ملف `AGENTS.md` العام أو أحد الملفات التي عثر عليها OpenCode أثناء البحث صعودًا في شجرة المجلدات.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+وقبل طلب النموذج التالي، يكتشف OpenCode التغيير ويضيف تحديث تعليمات قبل تسليم الإدخال المعلّق:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- إزالة كل `AGENTS.md` محيط تخبر الجلسة بأن التعليمات المحيطة السابقة لم تعد تنطبق.
+- وفشل القراءة المؤقت يحفظ آخر تعليمات معروفة بدل معاملتها كمحذوفة.
+- ونقل جلسة يحفظ حالة تعليماتها، فيُقدَّم إرشاد الوجهة كتحديث.
+- وتثبيت تراجع الجلسة يمسح حالة تعليماتها ويعيد تحميل التعليمات قبل المطالبة التالية.
+
+وتبقى قيم التعليمات خاصة. فيمكن للعملاء معرفة المصادر التي تغيّرت، لا محتوياتها.
+
+## الإعداد
+
+استخدم مصفوفة `instructions` لإضافة ملفات أو أنماط glob أو عناوين HTTP(S) إلى جانب ملفات `AGENTS.md` المكتشفة:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+وتُحمَّل التعليمات المضبوطة بعد ملفات `AGENTS.md`، بالترتيب المدرج. وتُدمج الإدخالات من كل مستند إعداد.
+
+| الإدخال                   | التحليل                                                           |
+| ----------------------- | -------------------------------------------------------------------- |
+| مسار نسبي أو glob   | يُبحث في كل مجلد من مساحة العمل حتى جذر المشروع |
+| مسار `~/`               | يُحل من مجلدك الرئيسي                                    |
+| مسار مطلق           | يُستخدم كما هو مكتوب؛ وقد يكون اسم الملف نمط glob                         |
+| `http://` أو `https://` | يُجلب عند تحميل الإعداد، بمهلة خمس ثوانٍ                |
+
+- تتحدّث الملفات المحلية مثل `AGENTS.md` عند تغيّرها. وتُحمَّل الملفات الجديدة المطابقة لنمط glob عند تغيير الإعداد التالي.
+- تُتخطى الملفات المفقودة. ويُتخطى عنوان URL الذي يتعذّر جلبه، أو يحتفظ بآخر محتوى مجلوب.
+- ومع `OPENCODE_DISABLE_PROJECT_CONFIG=1`، أو عندما تكون مساحة العمل خارج المشروع، تُحل الإدخالات النسبية بالنسبة لمجلد الإعداد العام.
+
+ويمكن لمساحة عمل [OpenCode Console](/console) المرتبطة أن تشارك التعليمات أيضًا.
+
+راجع [الإعدادات](/config) لمواقع الإعدادات وأسبقيتها.

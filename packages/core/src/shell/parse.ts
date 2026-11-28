@@ -1,6 +1,6 @@
 export * as ShellParse from "./parse.js"
 
-import { Effect, Result } from "effect"
+import { Effect, Result, Schema } from "effect"
 import fs from "fs"
 import os from "os"
 import path from "path"
@@ -16,6 +16,14 @@ const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 export type Result = {
   commands: Array<{ resource: string; save: string }>
   directories: string[]
+}
+
+export class OpaqueError extends Schema.TaggedError<OpaqueError>()("ShellParse.OpaqueError", {
+  reason: Schema.String,
+}) {
+  override get message() {
+    return `Portable shell scanner cannot analyze command: ${this.reason}`
+  }
 }
 
 const ARITY: Record<string, number> = {
@@ -164,7 +172,7 @@ export function scan(
   shell: string,
   cwd: string,
   options: { readonly home?: string | null } = {},
-): Effect.Effect<Result, Error> {
+): Effect.Effect<Result, OpaqueError> {
   // A machine's home is not this server's, so `~` there is left as written for locating to resolve on that machine.
   const home = options.home === null ? undefined : (options.home ?? os.homedir())
   return Effect.suspend(() => {
@@ -173,8 +181,7 @@ export function scan(
     const scanned = powershell
       ? ShellScan.scanPowerShell(command)
       : ShellScan.scan(command, shellName === "bash" || shellName === "zsh" ? shellName : "posix")
-    if (scanned.kind === "opaque")
-      return Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${scanned.reason}`))
+    if (scanned.kind === "opaque") return Effect.fail(new OpaqueError({ reason: scanned.reason }))
 
     const output: Result = { commands: [], directories: [] }
     for (const item of scanned.commands) {
@@ -539,7 +546,16 @@ function directoryArgument(
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
 
   // PowerShell exposes environment variables through $env:NAME and provides these
-  // automatic directory variables. Expand only values we can determine without executing code.
+  // automatic directory variables. Expand only values we can determine without executing code: on a machine, whose
+  // variables this server does not know, only $PWD. What is left unexpanded keeps its `$` and stays unresolved.
+  if (home === undefined)
+    return expandKnownDirectory(
+      text.replace(/\$(?:\{PWD\}|PWD(?=$|[\\/]))/gi, () => cwd),
+      true,
+      cwd,
+      false,
+      home,
+    )
   return expandKnownDirectory(
     text
       .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")

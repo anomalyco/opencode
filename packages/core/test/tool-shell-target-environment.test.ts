@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Bus } from "@opencode/core/bus"
 import { Context, Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -6,6 +7,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
+import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
@@ -25,7 +27,7 @@ import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import { tempGlobalLayer } from "./fixture/global"
 import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
-import { elsewhere } from "./fixture/target-environment"
+import { elsewhere, machineOptions } from "./fixture/target-environment"
 import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -35,6 +37,7 @@ const shellToolNode = makeLocationNode({
   name: "test/shell-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ShellTool.Plugin)),
   deps: [
+    Agent.node,
     Config.node,
     Environment.node,
     FileAccess.node,
@@ -47,6 +50,7 @@ const shellToolNode = makeLocationNode({
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Tool.node,
   ],
 })
@@ -71,8 +75,13 @@ const run = (id: Environment.ID, workspaceID?: Workspace.ID) =>
       // The host's files, so the working directory exists there, and a spawner that starts no process: a command
       // elsewhere gets none of this machine's variables, which a real shell on Windows may not start without.
       const output = Stream.succeed(Buffer.from("elsewhere"))
+      const host = Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service)
       const other = elsewhere(tmp.path, {
-        ...Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service),
+        // With the session's id this is the host, which hosts the server only outside a workspace. With any other
+        // id it is a machine.
+        ...(id === Environment.localID
+          ? { ...host, local: workspaceID === undefined }
+          : { files: host.files, ...machineOptions }),
         id,
         spawner: ChildProcessSpawner.make((command) =>
           Effect.sync(() => {

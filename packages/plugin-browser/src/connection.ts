@@ -10,13 +10,26 @@ import type { Permission } from "@opencode/schema/permission"
 import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { EgressPolicy } from "./egress-policy.js"
 import { BrowserMachine } from "./machine.js"
 import { Browser } from "./rpc.js"
+import { StreamMux } from "./stream-mux.js"
 import { BrowserTunnel } from "./tunnel.js"
+import { BrowserTunnelHost } from "./tunnel-host.js"
 
 type Attachment = {
+  readonly sessionID: Session.ID
+  readonly connectionID: string
+  readonly attempt: number
   readonly closed: Deferred.Deferred<"closed" | "replaced", "unavailable">
+  /** Snapped once at attachment start so capabilities, tickets, grants, and egress stay coherent. */
+  readonly streamEnabled: boolean
+  /** Defined strictly when `streamEnabled` is true; enforced across both WS streams and legacy RPC. */
+  readonly policy: EgressPolicy.AttachmentPolicy | undefined
   readonly tunnels: BrowserTunnel.Tunnels
+  stream?: StreamMux.ServerMux
+  streamAttached: boolean
+  disposed: boolean
 }
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
@@ -66,6 +79,12 @@ export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleG
 export const make = Effect.fn("BrowserConnection.make")(function* (
   ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission" | "storage">,
 ) {
+  const tunnelHost = yield* BrowserTunnelHost.Reference
+  const locationRef = Location.Ref.make({
+    directory: ctx.location.directory,
+    ...(ctx.location.workspaceID === undefined ? {} : { workspaceID: ctx.location.workspaceID }),
+  })
+
   // Each agent's rules from config and its definition, which an attachment's grant must not override.
   const configured = new Map<string, readonly Permission.Rule[]>()
   // Appended after config, so every agent hides the browser tools and their skill until an attachment allows them.
@@ -134,17 +153,42 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   const perform = (effect: BrowserMachine.ConnectionEffect): Effect.Effect<void, unknown> => {
     if (effect.type === "sync-permissions") return Effect.asVoid(Effect.forkIn(syncPermissions(effect), work))
     if (effect.type === "close-attachment")
-      return Effect.suspend(() => {
+      return Effect.gen(function* () {
         const attachment = attachments.get(effect.attempt)
-        if (!attachment) return Effect.void
+        if (!attachment) return
+        attachment.disposed = true
         attachments.delete(effect.attempt)
+        if (tunnelHost && attachment.streamEnabled) {
+          yield* tunnelHost
+            .revokeAttachment(attachment.sessionID, attachment.connectionID, attachment.attempt)
+            .pipe(Effect.ignore)
+        }
+        const closeCode =
+          effect.outcome === "replaced"
+            ? BrowserTunnelHost.CLOSE_ATTACHMENT_REPLACED
+            : BrowserTunnelHost.CLOSE_ATTACHMENT_CLOSED
+        const closeReason = effect.outcome === "replaced" ? "replaced" : "closed"
+        attachment.stream?.close(closeCode, closeReason)
+        attachment.stream = undefined
         attachment.tunnels.dispose()
-        return Deferred.done(
+        yield* Deferred.done(
           attachment.closed,
           effect.outcome === "unavailable" ? Exit.fail(effect.outcome) : Exit.succeed(effect.outcome),
         ).pipe(Effect.asVoid)
       })
-    if (effect.type === "emit-control") return rpc.events.emit("control", effect.control)
+    if (effect.type === "emit-control") {
+      const control = effect.control
+      if (control.type === "attached") {
+        const live = Array.from(attachments.values()).find(
+          (candidate) => !candidate.disposed && candidate.connectionID === control.connectionID,
+        )
+        return rpc.events.emit(
+          "control",
+          live?.streamEnabled ? { ...control, capabilities: [BrowserTunnelHost.STREAM_CAPABILITY] } : control,
+        )
+      }
+      return rpc.events.emit("control", control)
+    }
     if (effect.type === "dispatch-command")
       return (
         rpc.events
@@ -200,16 +244,22 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           }),
       }),
     )
+  const liveAttachment = (input: {
+    sessionID: Session.ID
+    connectionID: string
+  }): Effect.Effect<Attachment, Error> => {
+    const attempt = BrowserMachine.selectAttachment(machine.state, input.sessionID, input.connectionID)
+    const attachment = attempt === undefined ? undefined : attachments.get(attempt)
+    return attachment && !attachment.disposed
+      ? Effect.succeed(attachment)
+      : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
+  }
   const tunnels = (input: {
     sessionID: Session.ID
     connectionID: string
-  }): Effect.Effect<BrowserTunnel.Tunnels, Error> => {
-    const attempt = BrowserMachine.selectAttachment(machine.state, input.sessionID, input.connectionID)
-    const attachment = attempt === undefined ? undefined : attachments.get(attempt)
-    return attachment
-      ? Effect.succeed(attachment.tunnels)
-      : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
-  }
+  }): Effect.Effect<BrowserTunnel.Tunnels, Error> =>
+    liveAttachment(input).pipe(Effect.map((attachment) => attachment.tunnels))
+
   yield* reconcileStaleGrants(ctx)
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
@@ -220,13 +270,32 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
           if (session.location.directory !== ctx.location.directory)
             return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
+          // Select experimental streaming + egress policy once at attachment start so disabled releases
+          // preserve pre-PR legacy tunnel behavior and active attachments stay coherent across RPCs.
+          const streamEnabled = tunnelHost
+            ? yield* tunnelHost.enabled.pipe(Effect.orElseSucceed(() => false))
+            : false
           return yield* Effect.acquireUseRelease(
             lock.withPermit(
               Effect.suspend(() => {
                 if (BrowserMachine.isConnectionDisposed(machine.state))
                   return Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
                 const attempt = BrowserMachine.selectNextAttempt(machine.state)
-                const attachment: Attachment = { closed: Deferred.makeUnsafe(), tunnels: BrowserTunnel.make() }
+                const policy =
+                  streamEnabled && tunnelHost
+                    ? EgressPolicy.makePolicy({ reservedLocalPorts: tunnelHost.reservedLocalPorts })
+                    : undefined
+                const attachment: Attachment = {
+                  sessionID: input.sessionID,
+                  connectionID: input.connectionID,
+                  attempt,
+                  closed: Deferred.makeUnsafe(),
+                  streamEnabled,
+                  policy,
+                  tunnels: BrowserTunnel.make(policy),
+                  streamAttached: false,
+                  disposed: false,
+                }
                 attachments.set(attempt, attachment)
                 return step({
                   type: "attach.started",
@@ -240,7 +309,15 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
               Deferred.await(attached.attachment.closed).pipe(
                 Effect.mapError(() => call.error("unavailable", "Browser permissions could not be granted.", {})),
               ),
-            (attached) => dispatch({ type: "attach.closed", sessionID: input.sessionID, attempt: attached.attempt }),
+            (attached) =>
+              Effect.suspend(() => {
+                // Once an upgraded binary WebSocket owns this attachment's liveness, a reverse-proxy idle
+                // timeout on the silent HTTP attach request must not tear down the live attachment.
+                if (attached.attachment.streamAttached && !attached.attachment.disposed && attached.attachment.stream) {
+                  return Effect.void
+                }
+                return dispatch({ type: "attach.closed", sessionID: input.sessionID, attempt: attached.attempt })
+              }),
           )
         }),
       state: (input, call) =>
@@ -272,6 +349,74 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ? dispatch({ type: "request.settled", ...input })
             : Effect.fail(call.error("unavailable", "Browser is unavailable.", {})),
         ),
+      "tunnel.ticket": (input, call) =>
+        Effect.gen(function* () {
+          const attachment = yield* liveAttachment(input).pipe(
+            Effect.mapError((error) => call.error("unavailable", error.message, {})),
+          )
+          const policy = attachment.policy
+          if (!tunnelHost || !attachment.streamEnabled || !policy) {
+            return yield* Effect.fail(call.error("unavailable", "Browser stream tunnel is disabled.", {}))
+          }
+          const issued = yield* tunnelHost
+            .issueTicket({
+              location: locationRef,
+              sessionID: input.sessionID,
+              connectionID: input.connectionID,
+              generation: attachment.attempt,
+              protocol: input.protocol,
+              onUpgrade: (socket) =>
+                Effect.gen(function* () {
+                  if (attachment.disposed || attachments.get(attachment.attempt) !== attachment) {
+                    socket.close(BrowserTunnelHost.CLOSE_ATTACHMENT_CLOSED, "attachment closed")
+                    return
+                  }
+                  const previous = attachment.stream
+                  const mux = StreamMux.createServerMux(socket, { policy })
+                  attachment.stream = mux
+                  attachment.streamAttached = true
+                  if (previous) previous.close(BrowserTunnelHost.CLOSE_ATTACHMENT_CLOSED, "superseded")
+                  yield* Effect.promise(() => mux.closed).pipe(
+                    Effect.ensuring(
+                      Effect.suspend(() => {
+                        if (attachment.stream === mux) attachment.stream = undefined
+                        // If no replacement stream took over and the attachment wasn't already closed/replaced,
+                        // closing the liveness-owning WebSocket detaches the attachment and revokes its sockets.
+                        if (!attachment.disposed && attachment.stream === undefined) {
+                          return dispatch({
+                            type: "attach.closed",
+                            sessionID: attachment.sessionID,
+                            attempt: attachment.attempt,
+                          })
+                        }
+                        return Effect.void
+                      }),
+                    ),
+                  )
+                }),
+            })
+            .pipe(Effect.mapError((error) => call.error("unavailable", String(error), {})))
+          return {
+            ticket: issued.ticket,
+            expiresIn: issued.expiresIn,
+            protocol: 1 as const,
+            path: BrowserTunnelHost.BROWSER_TUNNEL_PATH,
+          }
+        }),
+      "tunnel.grant": (input, call) =>
+        liveAttachment(input).pipe(
+          Effect.flatMap((attachment) => {
+            const policy = attachment.policy
+            if (!attachment.streamEnabled || !policy) {
+              return Effect.fail(new Error("Browser stream tunnel is disabled."))
+            }
+            return Effect.try({
+              try: () => policy.grant(input.target.host, input.target.port, input.ports ?? []),
+              catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            })
+          }),
+          Effect.mapError((error) => call.error("unavailable", error.message, {})),
+        ),
       "tunnel.open": (input, call) =>
         tunnels(input).pipe(
           Effect.flatMap((network) => network.open(input.target)),
@@ -302,12 +447,17 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       }).pipe(
         // A deleted session's grant went with it, and no revoke will forget its owner record.
         Effect.andThen(
-            event.type === "session.deleted"
-              ? Effect.all([
-                  ctx.storage.remove(GRANT_PREFIX + event.data.sessionID),
-                  Effect.tryPromise(() => rm(BrowserFiles.exportRoot(event.data.sessionID), { recursive: true, force: true }))
-                    .pipe(Effect.tapError((error) => Effect.logWarning("Could not remove deleted session's browser exports", error))),
-                ]).pipe(Effect.ignore)
+          event.type === "session.deleted"
+            ? Effect.all([
+                ctx.storage.remove(GRANT_PREFIX + event.data.sessionID),
+                Effect.tryPromise(() =>
+                  rm(BrowserFiles.exportRoot(event.data.sessionID), { recursive: true, force: true }),
+                ).pipe(
+                  Effect.tapError((error) =>
+                    Effect.logWarning("Could not remove deleted session's browser exports", error),
+                  ),
+                ),
+              ]).pipe(Effect.ignore)
             : Effect.void,
         ),
       ),
@@ -395,7 +545,11 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies win over the grant) and others such as `tool.use` policies.
      */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, operations?: readonly string[]) {
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (
+      tool: Tool.Context,
+      action: Browser.Action | Extract<Browser.Input, { type: "wait" }>,
+      operations?: readonly string[],
+    ) {
       const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
       if (!connection.ok) return { connected: false as const, message: connection.error.message }
       yield* ctx.permission.assert({

@@ -1,0 +1,97 @@
+---
+title: "Effect SDK"
+description: "Разместите OpenCode в программе Effect с @opencode/sdk/effect — встроенным SDK, нативным для Effect."
+---
+
+`@opencode/sdk/effect` — SDK для встраивания OpenCode в программы на Effect. Операции возвращают типизированные Effect и Stream. При закрытии Scope, в которой создан хост, освобождаются маршрутизатор, сервисы Location и файберы, а регистрация плагинов отменяется.
+
+```sh
+bun add @opencode/sdk effect@4.0.1
+```
+
+## Создание хоста
+
+Создайте хост внутри `Effect.scoped`, затем используйте его сгенерированные группы API или псевдоним `sessions`.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+Встроенный хост использует те же значения схем, объявленные ошибки, параметры запросов и Stream, что и `@opencode/client/effect`.
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## Потоковая передача событий
+
+Потоковые эндпоинты возвращают значения `Stream` из Effect. Если обработчик должен читать поток в фоне, запустите его в отдельном файбере в Scope хоста.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## Настройка
+
+Настройте экземпляр OpenCode, регистрируя Effect-плагины. Используйте встроенный хост, чтобы настроить агентов, модели, инструменты и другое поведение:
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+О хуках, преобразованиях, инструментах и полном контексте плагинов см. [полную документацию по Effect-плагинам](/build/plugins/effect).
+
+## Слой
+
+Используйте `OpenCode.layer()`, когда встроенный хост должен быть сервисом приложения.
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

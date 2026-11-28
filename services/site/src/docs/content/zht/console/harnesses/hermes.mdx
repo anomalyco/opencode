@@ -1,0 +1,63 @@
+---
+title: "Hermes"
+description: "從 Hermes Agent 使用控制台與 Go 模型。"
+---
+
+[Hermes Agent](https://hermes-agent.nousresearch.com) 內建按用量計費與 Go 的 OpenCode 供應商。它會為每個付費或 Go
+模型選擇正確的 API。免費方案聊天模型只能在 OpenCode 中使用；從 Hermes 使用會回傳 HTTP `403`。
+
+<Callout>
+  [控制台 CLI](/console/harnesses#console-cli) 可用一個指令設定 Hermes，包括工作區的原則、
+  MCP 伺服器、技能與指示。請執行 `npx @opencode/console setup hermes`。下列步驟為手動設定。
+</Callout>
+
+| 供應商 | 方案 | 金鑰變數 |
+| --- | --- | --- |
+| `opencode-zen` | 按用量計費 | `OPENCODE_ZEN_API_KEY` |
+| `opencode-go` | Go | `OPENCODE_GO_API_KEY` |
+
+## 設定
+
+執行模型設定，並選擇 **OpenCode Zen**（按用量計費）或 **OpenCode Go**（Go）。
+
+```bash
+hermes model
+```
+
+貼上[個人 API 金鑰](/console/harnesses#get-an-api-key)，然後選擇模型。Hermes 會將
+金鑰儲存至 `~/.hermes/.env`，並將選取的模型寫入 `~/.hermes/config.yaml`。
+
+```yaml title="~/.hermes/config.yaml"
+model:
+  provider: opencode-go
+  default: kimi-k3
+```
+
+<Callout>Go 規定每個請求都必須帶上工作階段 ID。Hermes 從 v0.21.6 起會自動傳送這個 ID。</Callout>
+
+## 模型
+
+使用[控制台](/console/models#endpoints)或 [Go](/console/go#endpoints) 表中的模型 ID，不需加上前綴。
+在工作階段中使用 `/model` 切換模型，或為單次執行選擇模型。
+
+```bash
+hermes chat --provider opencode-zen --model claude-sonnet-5-5
+```
+
+## 控制台 MCP
+
+以 OAuth 新增[控制台 MCP](/console/harnesses#console-mcp) 伺服器，然後從瀏覽器登入。
+
+```bash
+hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console
+```
+
+或將其加入 `~/.hermes/config.yaml`，並在工作階段中執行 `/reload-mcp`。
+
+```yaml title="~/.hermes/config.yaml"
+mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth
+```

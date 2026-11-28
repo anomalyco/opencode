@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/data-app",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -18,11 +18,12 @@
     "build": "vite build",
     "build:og": "bun ./script/build-og-worker.ts",
     "start": "vite start",
-    "test": "bun test --only-failures"
+    "test": "bun test --conditions=solid --only-failures"
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode/nav-menus": "workspace:*",
+    "@opencode/locale": "workspace:*",
     "@opencode/data-core": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@resvg/resvg-wasm": "2.6.2",

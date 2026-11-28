@@ -1,0 +1,110 @@
+---
+title: "Introduction au CLI"
+description: "Lancez l’interface terminal d’OpenCode, exécutez des prompts depuis des scripts et la CI, et gérez le service d’arrière-plan partagé."
+---
+
+Lancez le CLI dans un projet pour ouvrir l’interface du terminal en plein écran :
+
+```bash
+opencode
+```
+
+Indiquez un répertoire pour travailler dans un autre projet :
+
+```bash
+opencode ~/code/my-project
+```
+
+Terminaux recommandés :
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+La prise en charge des couleurs 24 bits (truecolor) donne aux thèmes leurs couleurs les plus fidèles ; les terminaux qui
+ne la proposent pas utilisent une approximation de la palette disponible.
+
+## Automatisation
+
+Utilisez `opencode run` pour soumettre un prompt sans ouvrir l’interface interactive. Cette commande est conçue pour les
+scripts, les tâches de CI et les autres automatisations qui ont besoin de la sortie du modèle directement dans le terminal.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+Utilisez `opencode mini` pour lancer l’interface interactive minimale d’OpenCode à la place du TUI plein écran.
+
+```bash
+opencode mini
+```
+
+Lancez `opencode mini --help` pour voir ses options de session, de modèle, d’agent, de prompt et de rejeu.
+
+## Service d’arrière-plan
+
+Par défaut, OpenCode découvre ou démarre un serveur d’arrière-plan partagé pour votre compte utilisateur. Chaque client
+OpenCode local se connecte à ce serveur, qui gère les sessions, la configuration, les intégrations, les autorisations et
+l’exécution des outils.
+
+Utilisez `--standalone` pour fonctionner avec un serveur privé, ou `--server` pour vous connecter à l’URL d’un serveur précis :
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+Pour que les commandes du CLI utilisent un serveur privé par défaut au lieu de démarrer le service partagé, désactivez
+celui-ci :
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+Cela arrête le service d’arrière-plan en cours. `--server` se connecte toujours à un serveur choisi explicitement ;
+`opencode service start` peut toujours démarrer le service partagé manuellement. Pour revenir à l’utilisation automatique
+du service, lancez `opencode service unset disabled`. L’appairage nécessite le service partagé et n’est pas disponible
+tant qu’il est désactivé.
+
+Consultez [Dépannage](/troubleshooting) pour le diagnostic du service partagé et la [référence de l’API](/api) pour les
+endpoints du serveur.
+
+## Chemins
+
+Affichez un chemin local précis pour l’utiliser avec d’autres outils :
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+Le sélecteur facultatif accepte `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log` ou `repos` et affiche
+uniquement le chemin suivi d’un saut de ligne. Le chemin de la base de données respecte le canal de version et
+`OPENCODE_DB` ; les chemins relatifs fournis pour la base de données sont interprétés par rapport au répertoire de données, et `:memory:`
+est affiché tel quel. Cette commande ne démarre pas de serveur et n’ouvre pas la base de données.
+
+Omettez le sélecteur pour afficher tous les chemins avec leurs libellés :
+
+```bash
+opencode debug paths
+```
+
+## Désinstallation
+
+Prévisualisez les fichiers et l’installation qui seront supprimés :
+
+```bash
+opencode uninstall --dry-run
+```
+
+Lancez `opencode uninstall` pour confirmer la suppression. OpenCode arrête les services d’arrière-plan et les terminaux
+persistants enregistrés avant de supprimer le répertoire de cache global, partagé par les versions et les canaux
+d’OpenCode. Les données de session, la configuration et l’état ne sont jamais supprimés.
+
+- `--force` (`-f`) ignore la confirmation ; utilisez cette option pour une suppression non interactive.
+- Les installations via un gestionnaire de paquets utilisent le gestionnaire détecté. Les installations par curl affichent
+  la commande finale permettant de supprimer l’exécutable manuellement.

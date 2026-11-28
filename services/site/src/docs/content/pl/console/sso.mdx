@@ -1,0 +1,93 @@
+---
+title: "SSO"
+description: "Loguj się do obszaru roboczego OpenCode Console przez swojego dostawcę tożsamości z OIDC lub SAML."
+---
+
+Logowanie jednokrotne (SSO) kieruje członków obszaru roboczego przez dostawcę tożsamości Twojej firmy podczas
+logowania. Właściciele konfigurują je w **Settings › Security**; jest ono wliczone w każdy obszar roboczy.
+
+| Protokół       | Dostawcy                                                                               |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity lub dowolny dostawca OIDC |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta lub dowolny dostawca SAML                   |
+
+Każdy obszar roboczy ma jedno połączenie SSO.
+
+## Konfiguracja OIDC
+
+1. Otwórz **Settings › Security**, kliknij **Configure SSO** i wybierz **OpenID Connect** oraz swojego dostawcę.
+2. Utwórz aplikację u swojego dostawcy, wykonując pokazane kroki, z zakresami `openid`, `email` i `profile`.
+3. Wpisz **Issuer URL** lub swojego tenanta albo domenę, a także **Client ID**, **Client Secret** i
+   **Display Name**, następnie kliknij **Save**.
+4. Skopiuj **Callback URL** z połączenia do dozwolonych URI przekierowania u swojego dostawcy.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Console sprawdza dostępność wystawcy przy zapisie. SSO działa od razu po zapisaniu połączenia.
+
+## Konfiguracja SAML
+
+1. Otwórz **Settings › Security**, kliknij **Configure SSO** i wybierz **SAML 2.0** oraz swojego dostawcę.
+2. Skopiuj **ACS URL** i **SP Entity ID** do konfiguracji dostawcy. W przypadku własnego dostawcy możesz zamiast tego
+   użyć **SP Metadata URL** lub pobrać plik XML.
+3. Dodaj metadane dostawcy: podaj adres URL, prześlij plik XML albo wklej jego treść. Możesz też ręcznie wpisać **IdP Entity ID**,
+   **IdP SSO URL** i **IdP Certificate**.
+4. Sprawdź szczegóły i kliknij **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Twój dostawca musi podpisać odpowiedź lub asercję i wysłać adres e-mail użytkownika jako atrybut `email` lub jako
+NameID.
+
+## Weryfikacja domen e-mail
+
+Osoby logujące się do [Console](https://opencode.ai/console) adresem e-mail w zweryfikowanej domenie są kierowane do
+Twojego dostawcy tożsamości. Gdy SSO działa, kliknij **Add domain** w sekcji **Email domains**, wpisz swoją domenę
+i opublikuj pokazany rekord TXT.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Kliknij **Verify Domain**, gdy rekord zostanie opublikowany. Zmiany DNS mogą się propagować przez jakiś czas. Każda
+domena może należeć tylko do jednego obszaru roboczego.
+
+## Wymuszanie SSO
+
+Gdy obszar roboczy ma SSO, administratorzy i członkowie muszą logować się przez nie, aby otworzyć obszar, a Console
+przekierowuje ich automatycznie. Podłączanie OpenCode poleceniem `/connect` podlega tej samej zasadzie.
+
+Właściciele mogą też zalogować się bez SSO, więc zachowują dostęp do ustawień obszaru roboczego nawet wtedy, gdy dostawca
+jest błędnie skonfigurowany.
+
+## Automatyczne członkostwo
+
+Osoby w zweryfikowanej domenie dołączają do obszaru roboczego jako **Member** przy pierwszym logowaniu przez SSO. Nie
+są dodawane automatycznie, gdy:
+
+- mają oczekujące zaproszenie. Zamiast tego używane jest zaproszenie.
+- obszar roboczy używa [synchronizacji katalogu](/console/scim), która decyduje o członkostwie.
+- obszar roboczy ma subskrypcję [Go](/console/go).
+
+Zaproszenia do obszaru roboczego z SSO kierują zaproszoną osobę do Twojego dostawcy tożsamości po otwarciu linku.
+
+## Istniejące konta
+
+Jeśli ktoś ma już konto Console z tym samym adresem e-mail, loguje się ponownie w trakcie procesu SSO i potwierdza
+przez **Link account**. Zaproszenie nie pomija tego potwierdzenia. Konta utworzone przez SCIM w zweryfikowanej domenie
+obszaru roboczego nadal mogą łączyć się automatycznie.
+
+## Edycja i usuwanie
+
+Kliknij **Edit** przy połączeniu, aby zmienić jego szczegóły. Pozostaw pole sekretu lub certyfikatu puste, aby zachować
+obecne. Aby przełączyć się między OIDC i SAML, usuń połączenie i utwórz nowe.
+
+Usuń połączenie przez **⋯ › Delete...**. Członkowie wracają do innych metod logowania, a synchronizacja katalogu
+zatrzymuje się, a jej tokeny zostają unieważnione. Domeny e-mail są zachowywane.

@@ -5,6 +5,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { Scope } from "effect"
 import type { EnvironmentDriver } from "../environment/driver.js"
+import type { Identity } from "../machine/identity.js"
 
 /**
  * Smallest provider-owned JSON value required to reconnect to the same
@@ -25,6 +26,11 @@ export class ProviderNotFound extends Schema.TaggedError<ProviderNotFound>()("Wo
 
 export interface Interface {
   /**
+   * Static environment defaults (`path`, `shell`, `rg`, `home`) known before connecting, so callers
+   * (such as shell permission scanning and path resolution) can read them without waking a cold workspace.
+   */
+  readonly options?: EnvironmentDriver.DriverOptions
+  /**
    * Get-or-create the provider resource backing this logical workspace.
    *
    * MUST be idempotent per `workspaceID`: core retries the same ID after
@@ -36,12 +42,12 @@ export interface Interface {
    */
   readonly create: (input: {
     readonly workspaceID: Workspace.ID
-  }) => Effect.Effect<{ readonly binding: Binding }, Error>
+  }) => Effect.Effect<{ readonly binding: Binding }, Error, Identity.Service>
   readonly connect: (input: {
     readonly workspaceID: Workspace.ID
     readonly binding: Binding
     readonly saveBinding: (binding: Binding) => Effect.Effect<void>
-  }) => Effect.Effect<EnvironmentDriver.Driver, Error, Scope.Scope>
+  }) => Effect.Effect<EnvironmentDriver.Driver, Error, Scope.Scope | Identity.Service>
   readonly suspendForIdle: (input: {
     readonly workspaceID: Workspace.ID
     readonly binding: Binding

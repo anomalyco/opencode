@@ -1,0 +1,189 @@
+---
+title: "JavaScript"
+description: "اربط تطبيقك بخادم OpenCode باستخدام @opencode/client، عميل TypeScript لواجهة HTTP API في OpenCode."
+---
+
+`@opencode/client` هو عميل TypeScript لواجهة HTTP API في OpenCode.
+استخدمه عندما يتصل تطبيقك بخادم OpenCode عبر
+الشبكة. وتُولَّد أنواعه الأصلية وطرقه من العقد نفسه الذي يولّد
+[مرجع API](/api). وتأتي أنواع RPC للملحقات من تعريفات RPC المستوردة.
+
+## التثبيت
+
+```sh
+bun add @opencode/client
+```
+
+## إنشاء عميل
+
+أنشئ عميلًا باستخدام عنوان URL للخادم. ستجد الطرق مجمّعة حسب موارد API:
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## الترويسات والطلبات
+
+مرّر ترويسات المصادقة أو التطبيق الافتراضية إلى `OpenCode.make` بـ
+`headers`. ويمكنك أيضًا تمرير تنفيذ مخصّص لـ `fetch`. وتقبل كل عملية
+خيارات طلب كوسيطها الأخير لـ`AbortSignal` أو ترويسات
+خاصة بالطلب. أما اشتراكات الأحداث فلا تقبل سوى إلغاء اشتراك المتلقّي نفسه،
+وتستخدم ترويسات العميل الأساسي.
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## بثّ الأحداث
+
+تعيد نقاط النهاية المتدفقة عناصر قابلة للتكرار غير متزامنة:
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+تتشارك اشتراكات الأحداث الأصلية وأحداث RPC اتصالًا واحدًا لكل عميل، لا يُفتح إلا عند الحاجة. فمجرد إنشاء العميل
+أو المقبض أو العنصر القابل للتكرار لا يفتح الاتصال؛ إنما يُفتح عند بدء قراءة الأحداث.
+ويؤدّي إيقاف التكرار أو إلغاء الاشتراك إلى إنهاء المكرّر المعنيّ وحده. ويُغلق الاتصال عند انتهاء
+آخر اشتراك. وينتظر المصدر المشترك أن يتلقّى جميع المشتركين النشطين كل حدث؛
+لذا خزّن الأحداث مؤقتًا قبل تنفيذ عمليات تستغرق وقتًا.
+
+لا تنقل الاشتراكات إلا الأحداث المباشرة، ولا تعيد إرسال الأحداث السابقة أو تعيد الاتصال تلقائيًا. وإذا تعطّل المصدر،
+تنتهي الاشتراكات الحالية؛ اشترك مجددًا بعد استعادة المصدر. ومن يشترك في الأحداث الأصلية بعد بدء الاتصال
+يتلقّى علامة `server.connected` الحالية، لا الأحداث الوظيفية السابقة.
+
+مرّر `types` لتلقي بعض أنواع الأحداث فقط. وتُحدَّد أنواع الأحداث وفقًا لذلك،
+ويمر `server.connected` دائمًا ليعرف المشترك المصفّى متى يعيد المزامنة.
+وتجري التصفية داخل العميل على الاتصال المشترك.
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
+## RPC الملحقات
+
+استورد العقد المشترك لملحق ومرّره إلى `client.rpc`:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+ويحمل وسيط الطريقة الاختياري الثاني `location` و`signal` و`headers`،
+منفصلة عن المدخل الذي يعرّفه الملحق. إذا لم تحدّد الموقع، تسري القيم
+الافتراضية للطلب الأصلي: ترويسات الموقع الأساسي أولًا، ثم مجلد عمل الخادم. ولا يُختار
+موقع عند إنشاء العميل الفرعي.
+
+وتستنتج الطرق الوسائط والنتائج من التعريف. وينتمي تحليل المخطط
+إلى حد العقد؛ فيرسل المستدعون تمثيل الإدخال المقبول، بينما
+يتلقى المعالجات قيمًا محلّلة. ويقبل عميل Promise تعريفات Standard Schema أو
+JSON Schema العادية، ولا
+يشغّل محلّلات المخططات محليًا: فالخادم يعيد مخرجات محلّلة
+ومحوّلة أصلًا. وتشترط تعريفات Effect Schema عميل Effect.
+
+وتُرفض أخطاء الطرق المعلنة كأخطاء نقاط نهاية أخرى في عميل Promise،
+وتبقى الأخطاء الملتقطة بلا نوع. ويُزيل العميل الفرعي المحدّد النوع
+أغلفة أخطاء HTTP RPC العامة. وتبقى إخفاقات إطار العمل المحجوزة `rpc.*` إخفاقات RPC عادية،
+بينما تحتفظ أخطاء المصادقة والنقل والبروتوكول غير المرتبطة بتمثيلاتها
+العادية في العميل.
+
+وتستخدم اشتراكات RPC أسماء محلية وتتلقى أحداث ذلك RPC عبر كل
+المواقع. وافحص `event.location` المطلوب لتصفيتها. ويطابق `events.subscribe`
+واجهة العناصر القابلة للتكرار غير المتزامنة الأصلية:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+و`events.on` غلاف ميسّر فوق المصدر نفسه. ويعيد دالة إلغاء الاشتراك؛
+وتُنتظر ردود النداء غير المتزامنة بالتتابع. وتُسجّل إخفاقات رد النداء أو المصدر
+وتنهي ذلك المستمع. وتتلقى الاشتراكات الأصلية والمحدّدة النوع المغلف العادي
+`rpc.<rpcID>.<event>` نفسه، وتأتي بيانات الحدث فيه مباشرةً على هيئة كائن. ولا تعيد الاشتراكات المباشرة
+إرسال الأحداث الفائتة.
+
+ويجب إعداد ملحق الخادم وتطبيقه لـRPC؛ فاستيراد
+تعريف لا يسجّله. راجع [RPC الملحقات](/build/plugins/rpc) لواجهة
+التعريف والتسجيل. ويمكن لأي عميل HTTP أيضًا استدعاء المسار العام
+`POST /api/rpc/{rpcID}/{method}` بـ`{ "input": ... }` وتلقي
+`{ "output": ... }`. وحقلا الإدخال/الإخراج المُغفلان يمثّلان عدم وجود قيمة.
+
+## الخدمة الخلفية المحلية
+
+نقاط دخول العميل الرئيسية متوافقة مع المتصفح ولا تتضمن إدارة
+العمليات المحلية. وفي تطبيق Node، استورد واجهة خدمة Promise
+الأصلية من `@opencode/client/service`.
+
+- يعيد `Service.discover()` نقطة نهاية مسجّلة سليمة دون بدء
+  عملية.
+- ويعيد `Service.ensure()` خدمة متوافقة، ويبدأ واحدة عند الحاجة.
+- ويوقف `Service.stop()` نسخة الخدمة المسجّلة تحديدًا.
+- وينشئ `Service.headers(endpoint)` ترويسات المصادقة لعميل.
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+ويقبل `Service.ensure()` ملف تسجيل اختياريًا وإصدارًا وأمر خدمة
+ورد نداء `onStart` اختياريًا. ويقبل `version` قيمة دقيقة أو
+دالةً تختبر التوافق:
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+أغفل هذه الخيارات لاستخدام مسار التسجيل القياسي وأمر
+`opencode serve --service`.

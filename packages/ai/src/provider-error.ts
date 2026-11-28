@@ -18,6 +18,8 @@ const patterns = [
   /input is too long for (?:the )?(?:requested|selected) model/i,
   // OpenCode Go
   /too large for the model'?s configured input limit/i,
+  // Tencent TokenHub code 400003, which OpenCode Go passes through for Hy models.
+  /input tokens exceeds? the model'?s? context limit/i,
   // Cloudflare Workers AI reports this as HTTP 413.
   /exceeded this model context window limit/i,
   /exceeds the context window/i,

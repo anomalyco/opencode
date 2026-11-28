@@ -90,18 +90,18 @@ export const SearchResult = Schema.Struct({
 export type SearchResult = typeof SearchResult.Type
 
 export const SearchOutput = Schema.Struct({
+  next: Schema.NullOr(Schema.Number).pipe(optional),
   results: Schema.Array(SearchResult).pipe(optional),
   sessions: Schema.Array(SessionSummary).pipe(optional),
-  next: Schema.NullOr(Schema.Number).pipe(optional),
 })
 export type SearchOutput = typeof SearchOutput.Type
 
 export const CallDetail = Schema.Struct({
   name: Schema.String,
   status: Schema.String,
+  error: Schema.String.pipe(optional),
   input: Schema.String.pipe(optional),
   output: Schema.String.pipe(optional),
-  error: Schema.String.pipe(optional),
 })
 export type CallDetail = typeof CallDetail.Type
 

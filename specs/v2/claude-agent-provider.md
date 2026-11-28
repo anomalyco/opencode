@@ -39,6 +39,14 @@ The provider is called "Claude Agent", with the ID `claude-agent`. The SDK's [br
 - When the list of tools changes, the Claude process restarts, because the SDK cannot swap tools while running.
 - Claude Code's plan mode is not used. opencode's Plan agent works as it does for other models, through its permissions and reminder messages.
 
+### Web Search
+
+- While Claude Agent is connected, the plugin adds an opencode websearch provider, `claude-agent`, that runs Claude Code's WebSearch. It is never the default. Users select it with `"websearch": { "provider": "claude-agent" }`.
+- Why: opencode's own search providers need an API key, while Claude plans include WebSearch. Results go through opencode's `websearch` tool, so they are saved as ordinary tool output and survive switching to a non-Claude model.
+- Each search is a one-off Haiku run with only WebSearch, no transcript and thinking off, stopped as soon as the results arrive. A model has to run it because Claude Code returns page contents encrypted.
+- It uses the provider's connection settings and the account folder chats used last, and times out after a minute.
+- Claude's summary rides on the first result.
+
 ## Claude Code Settings
 
 Claude Code reads none of the user's Claude settings. The plugin passes every setting directly when it starts Claude.
@@ -114,6 +122,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 
 - Each session has one long-running `claude` process. It stops after 5 minutes idle, and the next message picks up the saved Claude session.
 - Deleting a session stops its process right away and removes what opencode saved for it.
+- A subagent's process stops as soon as its session goes idle with no background work left, its own or a descendant's. A later message picks up the saved Claude session.
 - While opencode runs Claude's tool calls, the process is not idle, however long the tools take. Subagents, permission prompts and questions can easily take more than 5 minutes, and stopping the process then would record the call as cancelled by the user. If opencode stops running the session before sending the results, for example because the user interrupted a tool, the 5 minutes start then.
 - Why: the SDK starts one process per conversation and cannot share a process between sessions. Claude Code in a terminal works the same way.
 - The process restarts when the system prompt, tools, connection settings or output limit change.

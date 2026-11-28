@@ -1,0 +1,260 @@
+---
+title: "指令"
+description: "將提示詞變成可重用的斜線指令，支援 Markdown 或 JSON、引數、shell 輸出與附件。"
+---
+
+建立 `.opencode/commands/review.md`，將提示詞變成 `/review`：
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+在 TUI 執行指令時，請一併指定目標：
+
+```text
+/review src/auth.ts
+```
+
+OpenCode 會將 `Review src/auth.ts for bugs and missing tests.` 作為使用者提示詞提交。
+
+## Markdown
+
+將全域指令放在 `~/.config/opencode/commands/`，專案指令放在 `.opencode/commands/`。
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+只會探索 `.md` 檔案。巢狀路徑會成為以 `/` 分隔的指令名稱：
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+巢狀指令的執行方式為 `/team/review src/auth.ts`。舊版的單數目錄 `command/` 也會被探索，
+但新檔案請使用 `commands/`。
+
+指令需要中繼資料時，請在文件開頭加入 YAML 前置中繼資料。去除前後空白的 Markdown 本文一律作為提示詞範本。
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+在任意 OpenCode JSON 或 JSONC [設定檔](/config)的 `commands` 下定義指令。每個指令都需要
+`template`。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## 欄位
+
+Markdown 的前置中繼資料與 JSON 項目接受相同的欄位，差別在於 Markdown 會從檔案本文取得 `template`。
+
+| 欄位 | 必填 | 行為 |
+| --- | --- | --- |
+| `template` | 僅 JSON | 提示詞範本。 |
+| `description` | 否 | 顯示在指令清單與探索中的文字。 |
+| `agent` | 否 | 執行指令時選取的 agent。 |
+| `model` | 否 | 以 `provider/model` 或 `provider/model#variant` 格式覆寫模型。 |
+| `subagent` | 否 | `true` 會在背景子工作階段中執行；`false` 會強制使用目前的工作階段。 |
+| `subtask` | 否 | `subagent` 的已棄用別名。 |
+
+例如，下列 JSON 指令會設定目前所有選用欄位：
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+請勿將 `template` 寫在 Markdown 的前置中繼資料中；範本取自文件本文。
+
+## 引數
+
+使用 `$ARGUMENTS` 可原樣帶入完整的引數字串。
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+執行 `/component Account Settings` 時，預留位置會替換成 `Account Settings`。
+
+## 位置引數
+
+使用 `$1`、`$2` 與更大的數字表示解析後的位置引數。單引號或雙引號會將詞組分組，並在解析後移除。
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+對於 `/check src/auth.ts "error handling"`，`$1` 會變成 `src/auth.ts`，`$2` 會變成 `error handling`。
+
+編號最大的預留位置會帶入該引數以及後續所有內容。未提供的引數會替換成空字串。
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+對於 `/compare api stable branch`，OpenCode 會提交 `Compare api with stable branch.`。
+
+## 備援
+
+若範本沒有 `$ARGUMENTS`，也沒有位置引數的預留位置，OpenCode 會空一行再附上非空引數。
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+對於 `/explain src/cache.ts`，提示詞會變成：
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+將 shell 指令包在 `!` 後接反引號中，即可在提交提示詞前插入其輸出。
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode 會以設定的 shell 在作用中的專案位置執行每個區塊，並插入其合併輸出。
+OpenCode 會先展開引數的預留位置：
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+對於 `/history 5`，shell 會收到 `git log --oneline -5`。請勿將不受信任的引數放入 shell 區塊。
+
+<Callout type="warning">
+  shell 區塊會在 OpenCode 評估指令時執行，位於 agent 的工具權限流程之外。請只使用來自
+  你可信任來源的指令。
+</Callout>
+
+## 附件
+
+已儲存的範本不會展開 `@path`；它仍是一般提示詞文字。
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+若要附加檔案，請在叫用指令時透過輸入框加入。OpenCode 會在提交展開後的提示詞時保留這些
+輸入框附件。
+
+## 執行
+
+指令會在提交持久的使用者提示詞之前展開引數與 shell 區塊。它們預設會在目前的工作階段中
+執行。
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+執行 `/plan migration` 會在提交提示詞前將目前的工作階段切換為 `plan`。
+
+模型選擇遵循下列規則：
+
+1. 指令的 `model` 會覆寫其他所有模型。
+2. 若指令未指定模型，就使用該指令所選 agent 設定的模型，而非執行時正在使用的模型。
+3. 若 agent 也未設定模型，就繼續使用目前工作階段的模型。
+
+例如，下列指令會同時選取其 agent 與明確的模型：
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## 背景
+
+設定 `subagent: true`，即可在背景子工作階段執行指令。
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+父工作階段會保持可用，並保留其 agent 與模型。OpenCode 會在子工作階段完成時，將其結果或失敗
+傳回父工作階段。
+
+| 值 | 行為 |
+| --- | --- |
+| `true` | 一律使用子工作階段，即使所選 agent 具有 `mode: primary`。 |
+| `false` | 一律使用目前的工作階段，即使所選 agent 具有 `mode: subagent`。 |
+| 省略 | 只有在所選 agent 具有 `mode: subagent` 時才使用子工作階段。 |
+
+子工作階段優先使用指令指定的模型，其次是所選 agent 的模型，最後才是父工作階段的模型。仍支援舊版 `subtask`；若兩個欄位都存在，以 `subagent` 為準。
+
+```yaml
+subagent: false
+subtask: true
+```
+
+此範例會在目前的工作階段中執行，因為 `subagent` 優先。
+
+## 載入
+
+Markdown 與 JSON 指令共用同一個登錄。後面的來源會取代同名的先前指令。
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+專案來源優先於全域來源，較近的專案來源優先於上層來源。
+自訂定義也可以取代先前的內建指令。OpenCode 會自動重新載入指令檔案與設定
+變更。
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+儲存此檔案會更新 `/review`，不需要重新啟動 OpenCode。

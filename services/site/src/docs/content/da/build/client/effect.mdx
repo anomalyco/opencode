@@ -1,0 +1,144 @@
+---
+title: "Effect-klient"
+description: "Kald OpenCode HTTP-API'et fra Effect med @opencode/client/effect, som returnerer typede Effects og Streams."
+---
+
+`@opencode/client/effect` er klienten til OpenCode HTTP-API'et skrevet til Effect. Den returnerer typede Effects og Streams og afkoder svar til værdier, der følger OpenCodes skemaer.
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## Opret en klient
+
+Opret en klient med server-URL'en, og kald derefter metoder grupperet efter API-ressource.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## Headere og anmodninger
+
+Konfigurer standardheadere på den medfølgende `HttpClient`. Native operationer bruger
+normal Effect-afbrydelse til annullering. RPC-metoder accepterer desuden
+location-, header- og signalindstillinger pr. kald.
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## Stream hændelser
+
+Streaming-operationer som `event.subscribe()` og `experimental.session.log()` returnerer Effect Streams.
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+Streams med indbyggede hændelser og RPC-hændelser deler én forbindelse pr. klient. Forbindelsen åbnes ikke, når du opretter en Stream, men først når du læser fra den. Hvis én læser stopper, fortsætter de øvrige, og kilden lukkes, når den sidste stopper. Når kilden når EOF eller fejler, afsluttes de aktuelle abonnementer uden automatiske nye forsøg eller genafspilning. Læsere af indbyggede hændelser, der tilslutter sig senere, modtager den aktuelle forbindelsesmarkør før de løbende hændelser.
+
+## Plugin-RPC
+
+Brug samme delte kontrakt som Promise-klienter og serverplugins:
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+Metodernes argumenter og resultater udledes af kontrakten. Det andet, valgfrie argument indeholder `location`, `signal` og `headers`; uden location bruges de sædvanlige standarder for anmodninger. Kald afbrydes sammen med det Effect, der bruger dem. Metodens fejltyper udledes i Effects fejlkanal. Deklarerede fejl afkodes med deres dataskemaer. Den typede underklient fjerner den generiske indpakning af HTTP-RPC-fejl; reserverede `rpc.*`-typer angiver fejl i frameworket.
+
+RPC-hændelser er typede Streams, ikke callback-baserede `on`-lyttere. De modtager
+RPC'ens hændelser fra alle locations, hver med påkrævet `location` og en normal
+præfikset type som `rpc.acme.updated`. Det adskiller sig fra server-plugin-handles,
+som er fastlåst til deres egen location. Se [Effect plugin-RPC](/build/plugins/effect/rpc) for
+definitioner, skemaer, registrering og live-abonnementssemantik.
+
+## Lokal baggrundstjeneste
+
+Indgangspunktet `@opencode/client/effect/service` virker kun i Node og bruger Effects til at finde, starte, autentificere og stoppe den lokale baggrundstjeneste.
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+Opret en autentificeret klient til tjenesten, når du har sikret, at den kører.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+Find den registrerede tjeneste uden at starte den, eller stop netop den registrerede instans.
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

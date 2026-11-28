@@ -1,0 +1,3824 @@
+---
+title: "GUI"
+description: "使用 @opencode/plugin/gui 為 OpenCode Desktop 建置 OpenCode 外掛的 GUI 部分。"
+---
+
+GUI 外掛會透過 GUI 外掛 SDK `@opencode/plugin/gui`，為 OpenCode Desktop 新增面板、指令、設定頁面與原生整合。
+它是[外掛套件](/build/plugins)的 `./gui-experimental` 部分，可單獨存在，或與
+[伺服器部分](/build/plugins/server)及 [TUI 部分](/build/plugins/cli)並存。
+
+<Callout type="note">
+  GUI 外掛 API 仍在實驗階段，可能隨版本變更。套件匯出名稱中的 `-experimental` 就是為了標示這一點。
+</Callout>
+
+`./gui-experimental` 檔案會預設匯出 `Plugin.define`，與伺服器及 TUI 部分相同：
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () => void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})
+```
+
+GUI 外掛可以在兩個處理程序中執行：
+
+- **`setup`** 會在每個桌面應用程式視窗中執行。你可以用它新增面板、指令、設定頁面、插槽、伺服器來源、
+  連結處理常式與樣式。請參閱[視窗](#the-window)。
+- **`main`** 會在 Electron 主處理程序中執行一次。它提供具型別的 `Ipc` 契約、原生選單項目、
+  `WebContentsView` 嵌入，以及 Node 與 Electron 整合。請參閱[主處理程序](#the-main-process)。
+
+## 套件
+
+外掛套件可以從同一個 npm 套件提供伺服器、TUI 與 GUI 程式碼。在
+`./tui` 旁新增一個 `./gui-experimental` 匯出，OpenCode Desktop 就會為其自有背景伺服器上的每個外掛載入它。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
+```
+
+使用者會像安裝其他外掛一樣安裝它；沒有獨立的 GUI 安裝步驟。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+GUI 不宣告 id：它會採用外掛的 id、伺服器部分的 `id`，或對於沒有伺服器部分的套件，
+採用套件名稱（沒有 `name` 的本機目錄則使用目錄名稱）。請以 `ctx.id` 讀取。
+
+### 一個檔案，兩個處理程序
+
+每個處理程序都會評估整個 `./gui-experimental` 檔案，並讀取其預設匯出。視窗會執行 `setup`，
+桌面應用程式的主處理程序則執行 `main`。
+
+```tsx title="src/gui.tsx"
+import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // Window code: Solid components, ctx.layout, ctx.add(Command, …).
+  },
+  main(ctx) {
+    // Main code: electron, Node built-ins, ctx.windows.
+    ctx.windows.on("open", () => shell.beep())
+  },
+})
+```
+
+兩個處理程序都會執行同一個檔案。因此，每個處理程序都會以不執行實際操作的預留物件，替代僅供另一個處理程序使用的模組：
+
+- **在視窗中，** `electron` 與 Node 內建模組是無作用的替代品。
+- **在主處理程序中，** Solid 與僅限視窗的模組是無作用的替代品。
+
+替代品會接受模組範圍中的任何屬性讀取、呼叫或建構，例如 Solid 的提升範本或
+打包工具提升的 `require` 呼叫。請將每個處理程序的程式碼放在其自己的 setup 中：在錯誤處理程序中執行的程式碼
+會取得替代品，而不是可運作的值。
+
+`Plugin.define` 與契約輔助函式在兩個處理程序中來自同一個 SDK。在主處理程序中，
+`@opencode/plugin/gui` 會解析到主 SDK，它匯出相同的 `Plugin`、`Store`、`Ipc`、`Contract` 與
+`Registry`。一個定義可服務兩個處理程序。其僅限視窗的匯出（例如 `Command`、`bindPlugin` 與
+`createKeyed`）在主處理程序中是 `undefined`，因此請只在 `setup` 內使用它們。
+
+## 建置 bundle
+
+`./gui-experimental` 必須是單一預先建置的 CommonJS 檔案。請使用
+`@opencode/plugin/gui/vite` 的 Vite 預設集建置它：
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })
+```
+
+```bash
+vite build
+```
+
+此預設集會執行下列動作：
+
+- 以 `vite-plugin-solid` 編譯 Solid JSX。
+- 輸出單一 CommonJS 檔案，並行內化每個動態 `import()`，因為應用程式無法載入第二個區塊。
+- 將應用程式的[共用模組](#shared-modules)、Electron 與 Node 內建模組保持為外部，並打包其他每個
+  相依性。
+- 若用到其他 `effect/*`、`solid-js/*` 或 `@opencode/*` 模組，建置就會失敗。應用程式不提供這些模組，
+  自行打包也無法與應用程式共用同一個執行個體。
+
+```text
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+```
+
+請改從共用進入點匯入，例如 `import { Schema } from "effect"`。
+
+### 預設集選項
+
+將選項傳遞給 `gui()`，以變更進入點或輸出檔案。
+
+```ts title="vite.config.ts"
+export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
+```
+
+- `entry` 是預設匯出 `Plugin.define` 的檔案。預設為 `src/gui.tsx`。
+- `outFile` 是 `./gui-experimental` 匯出指向的 bundle。預設為 `dist/gui-experimental.cjs`。
+
+#### 參考
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
+
+### 相依性
+
+將建置工具加入 devDependencies。應用程式會在執行階段提供 `@opencode/plugin/gui`，因此 bundle 只需要從
+`@opencode/plugin` 相依性取得其型別。
+
+```bash
+bun add -d vite vite-plugin-solid solid-js
+```
+
+若要在 `main` 中使用 Electron 與 Node 型別，也請加入 `electron` 與 `@types/node`：
+
+```bash
+bun add -d electron @types/node
+```
+
+### 共用模組
+
+每個處理程序都會向 bundle 提供這些模組。要求兩個處理程序都不提供的模組，會使外掛的
+GUI 失敗。
+
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **兩個處理程序：** `effect`、`@opencode/plugin/gui`、`@opencode/plugin/gui/main`、`@opencode/plugin/rpc`、
+  `@opencode/schema/rpc`、`@opencode/client` 與 `@opencode/client/effect`。
+- **僅限視窗：** `solid-js`、`solid-js/web`、`solid-js/store`、`@opencode/client/solid` 與
+  `@opencode/plugin/gui/{file,review,browser}`。主處理程序會取得無作用的替代品。
+- **僅限主處理程序：** `electron` 與 `node:fs` 等 Node 內建模組。視窗會取得無作用的替代品。
+
+## GUI 進入點的載入位置
+
+OpenCode Desktop 會從其自有背景伺服器載入 GUI 進入點，該伺服器已從你的設定載入外掛，
+因此它們永遠不會新增程式碼來源。請在全域 `opencode.json(c)` 中設定外掛，讓其 GUI 在
+每個視窗中可用。
+
+<Callout type="note">
+  TUI 會從 `cli.json` 讀取外掛，但桌面應用程式只會讀取 `opencode.json(c)`。若套件只提供
+  TUI 部分，且使用者在 `cli.json` 中列出它，則在它新增
+  `./gui-experimental` 後，也必須列在 `opencode.json(c)` 中。
+</Callout>
+
+桌面應用程式的主處理程序會列出外掛，並以其獨有的憑證從自有伺服器讀取其 bundle，
+再將同一組傳送給視窗。視窗無法提供主處理程序程式碼。
+
+伺服器部分載入失敗的外掛沒有 GUI。
+
+## 重新載入與更新
+
+從本機目錄載入外掛，並在每次變更時重新建置：
+
+```bash
+vite build --watch
+```
+
+- `package.json` 具有 `name` 與 `exports` 的本機目錄會透過它們解析 `./gui-experimental`。沒有這些設定時，
+  它會載入根目錄的 `gui-experimental.cjs`（或 `.js`）。進入點必須是 `.cjs` 或 `.js`；其他任何檔案都會
+  被忽略。
+- 每次重新建置都會在每個視窗與主處理程序中重新載入外掛的 GUI。伺服器進入點不會重新啟動。
+- 已安裝套件的 GUI 只會隨其版本變更。
+- 在 `opencode.json(c)` 中變更外掛的 `options` 會重新載入外掛。
+- 更新完成後，`opencode plugin update` 會取代套件的 GUI。
+- [**Settings > Extensions > Plugins**](/plugins#desktop) 會列出外掛，並有一個可關閉其 GUI 的開關。若要
+  移除它，請從 `opencode.json(c)` 移除，或執行 `opencode plugin remove <package>`。
+
+<Callout type="note">
+  應用程式會保留內建外掛的 ID。若你的外掛 ID 與其中一個 ID 相同，或兩者以 `.` 形成上層或下層關係，
+  或位於 `opencode` 命名空間中，其 GUI 就不會載入，且 **Settings > Extensions > Plugins**
+  會將其列為未載入。
+</Callout>
+
+## 定義 GUI 外掛
+
+`Plugin.define` 會宣告外掛執行所在的系統、其儲存的視窗狀態、圖示與文案。主機會在
+任一 setup 執行前讀取這些宣告。
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})
+```
+
+- 主機會給外掛其 id `ctx.id`：伺服器部分的 `id`，或沒有伺服器部分之套件的套件名稱
+  （沒有 `name` 的本機目錄則為目錄名稱）。它會為外掛建立的每個 id 加上前綴：指令（`<id>.<command>`）、面板鍵（`<id>:<tab>`）、儲存
+  鍵（`plugin.<id>.<key>`），以及它提供之[契約與 Ipc](#contracts-and-tokens) 的 id。
+- `os` 會將外掛限制在某些作業系統上。省略它即可在每個 OS 上執行。`os` 未包含目前系統的
+  外掛不會執行，**Settings > Extensions > Plugins** 會保留其資料列並顯示「Not available on this system.」。
+- `stores` 會宣告視窗的[儲存狀態](#stored-state)。請以 `ctx.stores.<key>` 讀取。
+- `icons` 會宣告外掛[自己的圖示](#icons)，每個都是 SVG 檔案的文字。請以
+  `ctx.icons.<name>` 讀取圖示名稱。
+- `i18n` 會依語言保存文案。請行內寫入每個語言；英文會填補語言缺少的每個鍵。請以
+  `ctx.t(key, params)` 與 `ctx.plural(key, count)` 讀取。在視窗中，`ctx.t` 也會讀取應用程式的共用鍵，例如 `common.*`。在 `main` 中，缺少的鍵會回傳該鍵。
+- 定義 `setup`、`main` 或兩者。兩者皆無的 GUI 會載入失敗。
+- 未提供 setup 時，`Plugin.define` 會以 `Plugin.Declarations` 回傳宣告，方便其他檔案中的 setup
+  依宣告取得型別。`Plugin.Definition` 是完整定義的型別。
+- 外掛不會宣告它提供或使用的契約。它會在執行階段提供與讀取它們；請參閱
+  [契約與權杖](#contracts-and-tokens)。
+
+#### 參考
+
+```ts
+interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext<this>): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Messages = Record<string, string>
+
+type Cleanup = () => void | Promise<void>
+```
+
+### 拆分成多個檔案
+
+小型 GUI 外掛可以放在 `src/gui.tsx`。較大型的外掛請在 `definition.ts` 中宣告外掛、將共用權杖放在
+`contract.ts`、把每個 setup 寫在各自的檔案中，並在 `src/gui.tsx` 中組合它們。
+
+```text
+src/
+├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── rpc.ts              RPC contract between the server part and its clients
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
+    ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
+    ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
+    ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
+    ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
+    └── i18n/en.ts      English copy
+```
+
+整個 `./gui-experimental` 檔案會在視窗啟動時評估，因此請讓模組範圍與 `setup` 保持輕量。在該處註冊
+要新增的功能，並將耗費資源的工作留在元件、`createKeyed` 或 `createLatest` 中執行。
+
+較大型的外掛請先寫好宣告，依宣告為各 setup 指定型別，再將它們組合成完整的外掛定義。
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})
+```
+
+```tsx title="src/gui/window.tsx"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.provide(Notes, { count: () => ctx.stores.notes.value.count })
+}
+```
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  ctx.log.write("info", "acme started")
+}
+```
+
+```tsx title="src/gui.tsx"
+import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })
+```
+
+- `Plugin.Setup<typeof definition>` 是視窗 setup 的型別。`ctx.stores` 與 `ctx.icons` 的型別分別由宣告的 store
+  和圖示推斷。
+- `Plugin.MainSetup` 是主 setup 的型別，`Plugin.Cleanup` 則是任一 setup 可傳回之清理函式的
+  型別。
+- 從 `@opencode/plugin/gui` 匯入登錄、權杖與輔助函式，例如 `Command`、`SettingsPage`、`Panel`、`Slot`、`Contract`、`Ipc`、
+  `Registry`、`Store`、`createKeyed`、`usePlugin` 與 `bindPlugin`。
+- 從 `@opencode/plugin/gui/main` 匯入僅限主處理程序的登錄，例如 `MenubarItem`。
+
+## 共用上下文
+
+兩個 setup 都會收到外掛的選項、OpenCode 伺服器的用戶端與應用程式中繼資料，與伺服器及 TUI
+部分相同。
+
+### 選項
+
+`ctx.options` 保有外掛 `opencode.json(c)` 項目中的 `options`：與伺服器部分取得的
+值相同。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}
+```
+
+```ts
+setup(ctx) {
+  const team = ctx.options.team
+}
+```
+
+- 變更選項會重新載入外掛。
+
+### 伺服器用戶端
+
+`ctx.client` 是執行外掛之伺服器的 OpenCode 用戶端：桌面應用程式自己的伺服器。用它透過
+[外掛 RPC](/build/plugins/rpc)呼叫你的伺服器部分。
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () => ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () => {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))
+```
+
+- 每次呼叫時都請重新讀取 `ctx.client`。伺服器重新啟動後，用戶端會換掉。
+- 伺服器無法連線時，每次呼叫都會使 Promise 進入拒絕狀態。
+
+### 應用程式中繼資料
+
+`ctx.app` 描述執行中的應用程式。
+
+```ts
+if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
+```
+
+- `name` 是 `"opencode"`，與伺服器外掛的 `ctx.app.name` 相同。
+- `platform` 在 Electron 應用程式與 `main` 中是 `"desktop"`，在瀏覽器分頁中則是 `"web"`。
+- 桌面應用程式以封裝形式執行時，`packaged` 為 `true`。在 Web 上一律為 `false`。
+- 伺服器外掛會取得 `name`、`version` 與 `channel`；TUI 外掛會取得 `version` 與 `channel`。
+
+#### 參考
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
+
+## 契約與權杖
+
+權杖讓 GUI 外掛能跨處理程序或與其他外掛通訊，不必匯入彼此的執行階段程式碼。請將每個
+權杖放在 `contract.ts`。權杖只包含種類與 ID，若為 `Ipc` 則另含 schema，因此其他外掛可以匯入權杖，
+而不必載入你的執行階段程式碼。
+
+- `ctx.provide(token, impl)` 提供你自己的權杖之一：來自視窗 setup 的 `Contract`，或來自
+  `main` 的 `Ipc`。
+- `ctx.use(token)` 跟隨另一個外掛提供的契約或 `Ipc`。它會回傳
+  [`Live`](#live-dependencies-and-failure-handling) 存取子。
+- `ctx.main(ipc)` 會為你自己的 `main` 提供的 `Ipc` 回傳用戶端。
+
+外掛只能提供 id 為其自身 id 或以它開頭的權杖，形式為 `<id>.<name>`。`ctx.provide` 對任何
+其他 id 會擲出，`ctx.main` 對你 id 之外的 `Ipc` 也會擲出。本頁範例使用外掛 id `acme`，因此
+其權杖 id 都以 `acme.` 開頭。
+
+```ts
+Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
+Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acme.
+```
+
+### 契約
+
+當一個外掛的視窗 setup 向其他外掛的視窗 setup 公開 API 或 Solid 元件時，請使用
+`Contract.define`。
+
+```ts title="src/gui/contract.ts"
+import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define<AcmeBadge, "acme.badge">("acme.badge")
+```
+
+在視窗 setup 中以 `ctx.provide` 提供它。當契約持有元件時，請在 setup 期間以 `bindPlugin`
+包裝它。如此一來，其中的 `usePlugin()` 會讀取提供者的上下文，而不是取用者的。
+
+```tsx title="src/gui.tsx"
+import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) => (
+        <span>
+          {ctx.t("title")}: {props.label}
+        </span>
+      )),
+      count: () => 42,
+    })
+  },
+})
+```
+
+- 請為以 `bindPlugin` 包裝的元件標註 props，例如 `bindPlugin((props: FileTreeProps) => ...)`。
+  TypeScript 無法在 `ctx.provide` 內推斷它們。
+- 資料方法（例如 `count`）請保持不包裝。
+- `ctx.provide` 會回傳一個可提早撤回契約的函式。主機也會在目前擁有者結束時撤回它，
+  否則會在外掛停止時撤回。
+
+### 使用另一個外掛的契約
+
+從你的套件匯出 `contract.ts`，例如作為 `./contract`，讓其他外掛可以匯入其權杖。另一個
+外掛會以 `ctx.use(token)` 跟隨該契約。存取子的值會隨著提供者啟動、停止與
+重新啟動而變更，因此請在使用它的位置讀取。
+
+```tsx title="src/gui.tsx"
+import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () => {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () => <span>{count()}</span> })
+  },
+})
+```
+
+- 對同一個權杖的每次呼叫，`ctx.use` 都會回傳相同的存取子。
+- 提供者關閉時，取用者仍會繼續運作。請參閱
+  [Live 相依性與失敗處理](#live-dependencies-and-failure-handling)。
+
+### 主處理程序與視窗之間的 IPC
+
+使用 `Ipc.define` 搭配 Effect `Schema` 編解碼器，定義 `main` 與 `setup` 之間的具型別橋接。`main` 會以 `ctx.provide` 實作它，
+視窗則透過 `ctx.main` 呼叫它。
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})
+```
+
+```ts
+const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)
+```
+
+- 其他外掛會像契約一樣，以 `ctx.use(KeepAwake)` 跟隨你的 `Ipc`。
+- 狀態、事件與提供者請參閱[定義並提供 Ipc](#define-and-provide-an-ipc)。
+
+### 你的外掛擁有的登錄
+
+使用 `Registry.define` 定義由你的外掛管理的清單。其他外掛可以透過 `ctx.add` 新增項目，你的外掛則透過
+`ctx.list` 讀取清單。
+
+```ts title="src/gui/contract.ts"
+import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define<Exporter>("acme.exporter")
+```
+
+```tsx
+// Another plugin contributes an item.
+ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
+
+// The owner lists every contribution. Reactive: read it in render or in a memo.
+const exporters = () => ctx.list(Exporter)
+```
+
+## 視窗
+
+外掛的 `setup` 會在每個桌面應用程式視窗中執行。請在外掛的 [`./gui-experimental` 檔案](#define-the-gui-plugin)中，
+將它傳給 `@opencode/plugin/gui` 提供的 `Plugin.define`。`setup` 是同步的，可以回傳
+清理函式；請參閱[生命週期與清理](#lifetimes-and-cleanup)。
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () => ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})
+```
+
+## 元件
+
+在 Solid 元件內呼叫 `usePlugin<typeof definition>()`，即可取得與 `setup` 相同的上下文物件。請用獨立檔案中的宣告
+指定它的型別（見[拆分成多個檔案](#split-across-files)），避免元件與定義彼此匯入。
+
+```tsx title="src/gui/window.tsx"
+import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin<typeof definition>()
+
+  return <span>{ctx.t("title")}</span>
+}
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Slot, { at: "window.bottom", render: () => <StatusLabel /> })
+}
+```
+
+在外掛提供的內容之外呼叫 `usePlugin` 會擲出錯誤。在另一個外掛算繪的元件中，它會回傳算繪該元件之外掛的
+上下文，因此請以 `bindPlugin` 包裝你在契約上提供的元件；請參閱[契約](#contracts)。
+
+## 圖示
+
+SDK 的每個 `icon` 欄位與 `ctx.ui.Icon` 都接受 `IconName`：應用程式自有圖示之一的名稱，或
+你的外掛宣告的圖示名稱。其他任何字串都無法編譯。
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### 宣告自己的圖示
+
+對於應用程式沒有的圖稿（例如你的產品標誌），請將 SVG 檔案保留在套件中，並在
+`icons` 中宣告它。使用 `?raw` 匯入檔案，`gui()` 預設集會將其打包為文字。
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+接著在需要 `IconName` 的地方傳入 `ctx.icons` 的圖示名稱。
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons` 為你宣告的每個圖示提供一個名稱。未宣告的名稱無法編譯。
+- 主機會在 `setup` 執行前註冊你的圖示，並在外掛結束時撤回它們。
+- 不是 SVG 文件的值會在外掛啟動時使其失敗。
+- 若要讓 `?raw` 匯入通過型別檢查，請在 `tsconfig.json` 的 `types` 中加入 `"vite/client"`。
+
+### 繪製圖示
+
+主機會像繪製自己的圖示一樣繪製你的圖示：使用顯示位置的大小與顏色。
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- `viewBox` 會框住圖案；沒有時則使用 `width` 與 `height`。主機會將其縮放為 14、16 或
+  20 像素，因此請在 16 像素網格上繪製。
+- 請以 `currentColor` 繪製。圖示接著會採用其位置的顏色，例如膠囊的 `tone` 或選單列的柔和
+  圖示顏色。
+- 圖案中的 `id` 屬於整個視窗。請保持 id 唯一，或省略它們。
+
+### 為圖示加上動畫
+
+圖示可以移動，例如顯示工作正在進行。請在檔案內使用 SVG 動畫元素，例如 `animate` 與
+`animateTransform`。
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- 每個顯示該圖示的位置都會同步移動。
+- 主機重新算繪該處時，動畫不會中斷，例如膠囊的 `show` 再次執行時。
+- 在使用者減少動態效果的設定下，主機會將每個圖示停留在其第一格畫面。請讓第一格成為
+  靜止的圖案。
+- 沒有位置顯示的圖示不會有任何成本。
+
+### 儲存的圖示名稱
+
+圖示名稱是字串 `<plugin id>:<name>`，因此主機會像儲存自己圖示的名稱一樣儲存它。
+[composer 的註記或引用](#attach-to-the-composer)會將它與草稿及已送出的訊息一起保留，
+[關閉的分頁](#reopen-closed-tabs)則會將它與工作階段的版面一起保留。
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- 你的外掛未作用時，圖示不會繪製任何內容，但會保留其大小。
+- 請在使用它的位置從 `ctx.icons` 讀取名稱。手寫的名稱無法編譯。
+
+#### 參考
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
+
+## 登錄
+
+將登錄權杖和項目傳給 `ctx.add`，即可在視窗介面新增內容。項目若取決於反應式狀態（例如語言），
+請以函式傳遞，`() => item | undefined`。當它讀取的內容變更時，主機會再次執行該函式。
+傳回 `undefined` 可撤回項目，直到函式再次傳回項目。
+
+```ts
+ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
+```
+
+- 請在函式內以 `ctx.t` 讀取標籤。在固定項目中只讀取一次的標籤，會保留讀取時的語言。
+- 當項目具有常值型別的欄位（例如 `hidden: true`、`section`、`icon` 或選單名稱）時，請標註
+  函式的傳回型別：`(): Command => ({ ... })`。否則 TypeScript 會將欄位擴寬為 `string` 或
+  `boolean`，且沒有多載相符。
+- 永遠不變的項目請傳遞固定項目，例如[樣式](#styles)。
+- 主機會讓某些物件保持穩定：面板從 `list` 傳回的分頁，以及具有 `render` 的項目（例如面板
+  與設定頁面）。請從 getter 讀取其標籤，例如 `get title() { return ctx.t("title") }`。
+- `ctx.add` 會回傳一個可提早撤回項目的函式。
+
+### 指令
+
+`Command` 會將動作加入指令面板和 **Settings > Shortcuts**，也可以加入輸入框的 `/` 選單。
+主機會將指令發布為 `<plugin id>.<command id>`。
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command => ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () => {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)
+```
+
+- `title` 是面板標籤，`description` 是其第二行，`group` 是其類別，皆為翻譯後的文字。
+- `keywords` 包含面板會比對的額外詞彙，以空格分隔。
+- `section` 是 **Settings > Shortcuts** 區段。預設為 `general`。
+- `bind` 是預設快捷鍵，例如 `mod+shift+t`。使用者可以變更。
+- `slash` 也會在 `/` 選單中提供該指令。使用 `arguments: true` 時，名稱後的文字會傳給
+  `run(input)`。
+- `hidden` 會讓指令不出現在面板中，但快捷鍵仍可使用。
+- `suggested` 會在指令啟用時也列在 **Suggested** 下。`featured` 則會在開啟面板且沒有查詢時
+  列出它。
+- `enabled: false` 會將指令從面板移除並停用其快捷鍵。此設定是反應式的。
+- `scope` 是 CSS 選擇器，鍵盤焦點必須在其中，繫結才會生效。使用 `editable` 時，繫結
+  也會在文字欄位取得焦點時觸發。
+- 若要從自己的程式碼執行指令，請使用 `ctx.commands.run`；請參閱[執行指令](#run-commands)。
+
+由快捷鍵觸發時，`run` 可以傳回 `false` 表示不處理這次按鍵。事件會照常傳給原本的目標，就像這個指令
+未設定快捷鍵一樣。下列指令只會在使用者於空白輸入框按 Enter 時繼續工作階段，其他情況的
+Enter 仍交由輸入框處理：
+
+```ts
+ctx.add(Command, () => ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () => {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))
+```
+
+- 請同步傳回 `false`；Promise 會處理該按鍵。
+- 從面板或斜線指令傳回 `false` 不會有其他作用。
+
+#### 參考
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise<void>
+}
+```
+
+### 面板
+
+`Panel` 會在工作階段的側邊區域（`region: "side"`）新增分頁。使用者可以將分頁拖曳到時間軸下方的
+底部窗格。
+
+```tsx
+import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) => (input.open.includes("main") ? [mainTab] : []),
+  render: (props) => <NotesView session={props.session} screen={props.screen} tab={props.tab} />,
+})
+```
+
+所有面板回呼（`list`、`render`、`focus`、`enter`、`close`、`closed`、`restore`、`normalize`）都會收到單一
+輸入物件：
+
+- 請在使用它們的位置將 `props.session` 與 `props.tab` 作為反應式 getter 讀取。切勿在
+  `render` 頂端解構它們：當使用者從工作階段 A 切換到 B 時，面板會保持掛載，且 `props.session` 會在原處
+  更新。
+- `props.screen` 是包含這個面板且不會變動的 `SessionScreen`（`file`、`comment`、`composer`）。其動作一律以
+  目前路由指向的工作階段為目標。
+- 分頁未變更時，請從 `list` 傳回相同的 `PanelTab` 物件，讓主機不會重新掛載其觸發項目。
+  請從 getter 讀取其標籤，讓它們跟隨語言變更而不需新的物件。
+
+面板的回呼：
+
+- `list` 會傳回要顯示的分頁。`input.open` 保有工作階段中儲存的此外掛分頁 ID。它是反應式的。
+- `render` 會算繪一次分頁內容。
+- `focus` 會在選取分頁時執行。若是區域掛載時就已選取的分頁，`restored` 為 `true`。
+- `enter` 會在使用者以切換按鈕在該分頁開啟側邊區域時、分頁出現在畫面上後執行。請將鍵盤
+  焦點移到分頁自己的目標，例如文字欄位。焦點仍位於區域外時，主機會將焦點移到
+  區域。
+- `close` 會在主機移除分頁後執行。
+- `closed` 與 `restore` 讓使用者重新開啟已關閉的分頁；請參閱[重新開啟已關閉的分頁](#reopen-closed-tabs)。
+- `normalize` 會傳回可能以多種方式儲存之已儲存分頁 ID 的標準形式。
+
+面板的選項：
+
+- `mobile` 會新增面板的窄螢幕檢視。使用 `cached: true` 時，使用者顯示另一個檢視期間，該檢視會保持掛載。
+  預設情況下，檢視每次顯示時都會掛載。
+- `wide` 會在側邊區域開啟時要求較寬的工作階段最小寬度。
+- `width` 會給面板自己的側邊區域寬度；請參閱[面板寬度](#panel-width)。
+- `transient` 面板的分頁不會還原。
+
+#### 面板寬度
+
+側邊區域中的每個分頁預設會共用對話的寬度。當面板需要的空間比審查或瀏覽器少或多時，
+請設定 `width`。請傳入 CSS 像素，或 `"narrow"` 表示該區域最窄的寬度。
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- 此寬度適用於側邊窗格顯示該面板其中一個分頁時。其他分頁會保留對話的寬度。
+- 當使用者在該面板其中一個分頁上拖曳分隔線時，主機會在整個應用程式中為該面板保留該寬度，取代
+  `width`。
+- 主機會讓對話保持在其最小寬度，並讓區域至少為 `"narrow"`。
+- `ctx.layout.side.width(panel)` 會讀取儲存的寬度，`ctx.layout.side.resize(panel, width)` 則會像拖曳一樣儲存它。
+  即使面板沒有 `width`，儲存的寬度仍會套用。
+
+分頁的選項：
+
+- `id` 是分頁 ID，主機用 `<plugin id>:<id>` 當作鍵。`title` 是無障礙名稱，`label` 可自訂分頁按鈕上顯示的內容。
+- `pinned` 分頁會在不開啟的情況下列出、排在前面，且永遠不會被關閉或拖曳。
+- `draggable` 讓使用者重新排序分頁。預設為 `true`。
+- `closable` 設定關閉按鈕的外觀：`"compact"`、`"hover"` 或 `false` 表示不顯示。
+- `transient` 標記啟動器分頁，例如 **Open file**，會由下一個預覽取代。
+- `fallback` 表示在儲存的選取缺少時加入備援選取。
+- 同一 `group` 中的分頁會共用同一份算繪結果，且保持掛載。
+- `missing` 會將分頁加上刪除線，例如檔案已不存在時。
+- `hidden` 會讓已還原的分頁保持列出且可選取，但不繪製，直到其內容已知。
+- `file` 是分頁顯示的工作區路徑，會列為工作階段的開啟檔案之一。
+- `tabbable` 會將分頁面板放入 Tab 順序，供沒有可聚焦元素的內容使用。
+
+#### 參考
+
+```ts
+interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}
+```
+
+### 重新開啟已關閉的分頁
+
+主機會為使用者關閉的每個側邊分頁保留一個項目。焦點位於側邊區域時，⌘⇧T 會重新開啟最新的
+一個。側邊區域的 **New tab** 檢視會在 **Recently closed** 下列出顯示 `file` 的已關閉分頁。請加入 `closed` 與
+`restore` 來控制分頁在該處的顯示方式及其回復方式。
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed` 會在使用者關閉分頁時執行。請立即捕捉重新開啟所需的內容：傳回該列的顯示方式，以及
+  `restore` 需要的 `data`；若分頁無法回復則傳回 `false`。
+- `title` 預設為分頁的標題，`icon` 預設為面板的行動圖示。具有 `file` 的分頁會顯示其檔案圖示，
+  並將其資料夾作為 `detail`。
+- 主機會儲存項目，因此請讓 `data` 保持精簡，例如 URL。
+- `restore` 會收到已關閉分頁的 `id` 與 `closed` 傳回的 `data`。沒有 `restore` 時，主機會以相同鍵
+  再次開啟。
+- 沒有 `closed` 時，非 `transient` 的分頁會以其標題列出，並以相同鍵重新開啟。
+
+#### 參考
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}
+```
+
+### 設定頁面
+
+`SettingsPage` 可在 **Settings** 新增頁面、在主機頁面新增區段（`page: "general"` 或 `page: "servers"`），或在
+主機的 General 區段新增設定項目（`page: "general", section: "general"`）。
+
+```tsx
+import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) => <AcmeSettings highlight={input.target} />,
+})
+```
+
+- `id` 是頁面的設定分頁值（`/settings?tab=<id>`），也是 `ctx.layout.settings` 的引數。
+- `page` 會在主機頁面上新增區段，而不是新增頁面。使用 `section: "general"` 時，它會將資料列加入該頁面的 General
+  區段。
+- `title` 與 `icon` 是頁面的導覽標籤與圖示。
+- `entries` 是搜尋中繼資料，會在不掛載頁面的情況下建立索引。搜尋找到項目時，`render` 會收到其
+  id 作為 `target`。
+- 設定頁面具有 `render`，因此主機會讓它保持穩定。請從 getter 讀取其標籤與項目。
+
+使用應用程式的設定元件呈現頁面，可讓外觀與內建頁面一致，也讓搜尋功能找得到各個設定項目：
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- 自訂頁面請用 `SettingsLayout`，主機頁面上的區段（`page`）請用 `SettingsSection`，主機區段中的各個設定項目
+  （`section`）則使用 `SettingsRow`。
+- 資料列的 `id` 是顯示它的 `SettingEntry.id`：搜尋會捲動到該列並醒目提示。
+- 其 props 請參閱[設定元件](#settings-components)。
+
+#### 參考
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
+
+### 插槽
+
+`Slot` 可在四個視窗插槽中的任一個呈現 UI。
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) => <UsageRing session={input.session} active={input.active} />,
+})
+```
+
+- `window.bottom` 是視窗底部的全寬長條，位於提示上方。
+- `session.header` 是工作階段時間軸的標題列。快取的時間軸會在隱藏時保持掛載，並將 `active`
+  設為 `false`。
+- `session.location.menu` 會將項目加入專案選單，位於其位置詳細資料之後。
+- `session.panel.end` 會在側邊區域分頁列的尾端放置動作。
+- `order` 會排序同一個插槽中的項目。
+
+`session.location.menu` 會收到 `shown`，專案選單開啟時為 `true`。請只在它為 `true` 時訂閱位置資料：
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+專案選單由主機提供：請用 `ctx.ui.MenuItem`、`MenuSub`、`MenuGroup` 與 `MenuSeparator` 呈現選單項目，
+讓它們能像主機資料列一樣以鍵盤導覽並關閉選單。請參閱[選單列](#menu-rows)。
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
+})
+```
+
+#### 參考
+
+```ts
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record<string, never>
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}
+```
+
+### 選單項目
+
+`MenuItem` 會將項目加入側邊面板的 **+** 選單（`"session.panel"`）、**Add server** 選單（`"server.add"`），
+或設定中每個伺服器的資料列選單（`"server.row"`）。
+
+```ts
+import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () => {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})
+```
+
+- `order` 會依遞增順序排序項目。預設為 `0`。
+- `server.row` 項目的 `run` 會收到該資料列的伺服器鍵。`when` 只會在某些資料列列出該項目，`enabled`
+  則會在其他資料列顯示為停用。
+
+`session.panel` 項目也是啟動器。當使用者在沒有分頁的情況下開啟側邊區域，或在沒有項目為 `primary` 時
+點選 **+**，主機會顯示列出啟動器的 **New tab** 檢視。
+
+- `icon` 是項目的圖示，`keybind` 則是已發布指令的 ID，項目會顯示該指令的快捷鍵。
+- `description` 是啟動器資料列中標題後的簡短柔和細節，例如計數。
+- `opened: true` 表示項目開啟的分頁已經開啟。啟動器清單會省略該項目，**+** 選單
+  仍會列出它。
+- `primary: true` 會讓 **+** 直接執行項目，而不顯示啟動器。`order` 中的第一個主要項目
+  生效。在沒有分頁的情況下開啟側邊區域仍會顯示 **New tab** 檢視，列出不是主要且
+  未開啟的項目。
+- `ctx.layout.side.menu()` 會列出每個外掛的 `session.panel` 項目，供你自己的啟動器使用；請參閱
+  [版面](#layout)。
+
+#### 參考
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
+
+### 標題列項目
+
+`TitlebarItem` 會在視窗標題列或分頁頁尾顯示膠囊按鈕。滑鼠指標停在按鈕上方時，就會顯示標籤。
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
+)
+```
+
+- `title` 是與 `label` 不同時的無障礙名稱。
+- `busy` 會顯示載入動畫並停用膠囊。`pressed` 會將其顯示為按下狀態。
+- `run` 會在點選時執行。僅顯示的項目請省略它。
+
+#### 參考
+
+```ts
+interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
+
+### 輸入框膠囊
+
+`ComposerPill` 會將膠囊加入工作階段輸入框上方的一列，位於應用程式的背景工作與待辦膠囊旁。
+適用於屬於使用者目前工作階段之狀態，例如其分支的 pull request。膠囊
+會浮在時間軸上方，因此膠囊出現或消失永遠不會改變輸入框大小。該列會跟隨使用者的背景
+活動對齊方式，且不會顯示在 subagent 的工作階段中。
+
+`show` 會為單一工作階段傳回膠囊，或傳回 `undefined` 表示該處不顯示。主機會為每個已掛載的
+輸入框執行它，並在其讀取的內容變更時再次執行。此外掛會透過其伺服器部分的 [RPC](/build/plugins/rpc)
+列出每個工作階段目錄的開啟 pull request，並以單一膠囊顯示它們：
+
+```tsx
+import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
+
+createKeyed(
+  () => ctx.sessions.current()?.directory,
+  (directory) =>
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) => setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) => {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) => pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) => ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () => ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})
+```
+
+- `label` 是膠囊的文字，過長時會截斷。`icon` 是選用的。
+- `tone` 會為圖示上色：`"success"`、`"warning"` 或 `"danger"`。
+- 對於應用程式沒有的圖形（例如會移動的狀態標記），請[宣告自己的圖示](#icons)並傳入
+  `ctx.icons.<name>`。它會像任何圖示一樣採用 `tone`，且 `show` 再次執行時動畫會繼續。
+- `rows` 會讓膠囊在 `title` 標題下開啟選單；沒有標題時則以 `label` 為標題。每個資料列有自己的 `icon`、
+  `tone` 與柔和 `detail`，選取時會執行 `run`；沒有 `run` 的資料列只會顯示。
+- 沒有 `rows` 時，膠囊會在點選時執行 `run`。
+- `title` 也是與 `label` 不同時的膠囊無障礙名稱。
+- `order` 會在其他外掛的膠囊之間排序你的膠囊，數字較小者在前。應用程式自己的膠囊會排在前面。
+- `show` 擲出錯誤時，只會影響你外掛新增的這個膠囊。
+
+#### 參考
+
+```ts
+interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### 程式碼區塊
+
+`CodeBlock` 可用自訂 UI 呈現指定語言的 fenced 程式碼區塊，取代原先醒目標示的程式碼。
+如果視覺化呈現比原始碼更容易閱讀，例如 ` ```csv ` 表格或 ` ```latex `
+公式：
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages` 會與圍欄 info 字串的第一個字（小寫）比對：` ```CSV title="Q3" `
+  會比對 `csv`。主機不會解析別名，因此請列出你接受的每個名稱。
+- `render` 會收到區塊的 `code`、其 `language` 與顯示它的 `session`。傳回 `undefined` 或 `null`
+  可保留醒目提示的程式碼，例如來源無法解析時。
+- 算繪函式若擲出錯誤，系統會在你的外掛名下記錄錯誤，區塊則顯示原始程式碼。外掛提供的其他功能不受影響。
+- 多個外掛列出同一語言時，由第一個註冊的算繪器處理。如果你列出 `mermaid`，你的算繪器也會取代應用程式內建的
+  Mermaid 圖表。
+
+#### 串流
+
+主機收到區塊結尾的 fence 後，才會用你的 UI 原地取代程式碼。串流尚在進行，或訊息在區塊中途停止時，
+使用者只會看到醒目標示的程式碼；你的算繪函式不會收到不完整的區塊。
+
+#### 適用位置
+
+| 介面 | 程式碼區塊內容 |
+| --- | --- |
+| 時間軸：助理文字與工具輸出 | 是 |
+| 工作階段畫面上的側邊面板，例如 Markdown 預覽 | 是 |
+| 工作階段畫面上的 `ctx.ui.Markdown` | 是 |
+| `ctx.ui.Code`，以及你的 `CodeBlock` 算繪函式中的 Markdown | 否 |
+| 設定頁面、對話框與畫面外的其他介面 | 否 |
+
+#### 版面與效能
+
+- 未被任何外掛列出的語言不會增加額外負擔。只有你列出的語言會算繪自訂 UI，而且僅限
+  其時間軸資料列位於畫面上時。
+- 區塊會隨你的 UI 增長與縮小。請為非同步內容提供最小高度，讓時間軸在內容到達時位移較少。
+- 區塊會在頂端靠結尾的一角保留 Copy 按鈕（用來複製原始碼）和你的 `CodeBlockAction` 按鈕。
+
+### 程式碼區塊動作
+
+`CodeBlockAction` 會在指定語言的程式碼區塊中，於 Copy 按鈕旁新增按鈕。`run` 會收到與
+`CodeBlock` 算繪函式相同的區塊：
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- 按鈕會在區塊的結尾圍欄到達後顯示，因此永遠不會對半個指令採取動作。
+- 滑鼠指標停在上方或取得鍵盤焦點時，這些按鈕會與 Copy 一起顯示，並依 `order` 由小到大排在 Copy 前方。
+- 請從 getter 讀取 `title`，讓它跟隨語言。
+- 擲出或拒絕的 `run` 會記錄在你的外掛下，且不會變更其他內容。
+
+#### 參考
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
+### 連結處理常式
+
+`LinkHandler` 會開啟使用者在訊息或輸入框標籤中點選的本機檔案或自訂連結。`match` 傳回 true 且
+`priority` 最高的處理常式會開啟該連結。
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+- `href` 是目標：路徑、URL 或 `file://` 連結。
+- `origin` 是產生連結項目的外掛。
+- `exact` 表示路徑是已知的工作區檔案，而不是從文字猜測。
+- `background` 連結不得切換窄螢幕檢視。
+- `base` 是撰寫連結時所在的工作區相對目錄。
+- 沒有 `exists` 時，`ctx.links.exists` 會回答 `false`，因此文字永遠不會看起來像處理常式無法開啟的連結。
+
+#### 參考
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
+
+### 伺服器
+
+`Server` 可提供一份伺服器連線清單，例如你的外掛在其他機器上啟動的伺服器。
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server => ({
+    ready: loaded(),
+    entries: machines().map((machine) => ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)
+```
+
+- 啟動會等待每個來源都 `ready`。就緒來源的項目就是其完整清單。
+- `order` 會依遞增順序排序來源。
+- 每個項目的鍵是 `<plugin id>:<id>`。`label` 是其 `name` 旁的簡短徽章。
+- `auth` 表示伺服器等待使用者登入，`incompatible` 表示它執行的版本不受此應用程式
+  支援。
+- `listed: false` 會讓項目不出現在應用程式的伺服器清單中。設定仍會顯示它。
+- 伺服器 `ready` 後，`http` 是端點。
+- `reconnect` 會再次解析中斷的端點，`connect` 會準備尚未就緒的伺服器，`remove` 則會在
+  移除項目之前執行。
+- `row` 會呈現伺服器的設定項目，`cover` 則在伺服器尚未就緒時覆蓋目前路由指向的工作階段。
+- `row` 會收到主機的狀態 `Indicator`、最新的 `health()` 檢查，以及該資料列的 `server.row` 選單 `Items`。
+  其 `remove()` 會執行項目的 `remove`，然後關閉伺服器的分頁。
+
+#### 參考
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
+
+### 樣式
+
+外掛提供的這項樣式生效時，`Style` 會將 CSS 字串注入文件。
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
+```
+
+### 主題
+
+`Theme` 會將色彩主題加入 Settings › Appearance › Theme。它採用與應用程式自有主題檔案相同的格式，因此
+主題檔案可以原樣匯入。
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+主題檔案會自行命名，並提供淺色與深色變體。每個變體會從 `palette` 或 `seeds` 開始，
+絕不會兩者同時使用，並可用 `overrides` 固定單一 token。
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- 選取器會依 `name` 字母順序，將外掛主題列在應用程式的主題之間。
+- 主機會以 `<plugin id>:<theme id>` 作為每個主題的鍵，因此永遠不會取代應用程式主題或其他外掛的主題。
+- 撤回主題或停用外掛會將其從選取器移除。已選取它的使用者會保留選擇：
+  在主題回來之前，視窗會顯示預設主題。
+- 啟動時，視窗會顯示上次執行時快取的顏色，直到外掛再次提供該主題。
+
+## 主機 API
+
+主機 API 是 `ctx` 的屬性。在應用程式介面掛載前，它們都不會擲出：讀取會傳回其文件所述的
+預設值，而早期的寫入（例如 `ctx.layout.open`、`ctx.dialogs.open` 與 store 更新）會等待，並在
+第一個路由的畫面算繪後依呼叫順序套用。
+
+```ts
+ctx.add(Command, () => ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))
+```
+
+下列各節涵蓋每個 API。`ctx.options`、`ctx.client` 與 `ctx.app` 是
+[共用上下文](#shared-context)，`ctx.provide`、`ctx.use` 與 `ctx.main` 用於
+[契約與權杖](#contracts-and-tokens)，`ctx.stores` 保有外掛[宣告](#define-the-gui-plugin)的 store，
+`ctx.icons` 則保有其宣告之[圖示](#icons)的名稱。
+
+#### 參考
+
+```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  use<T>(token: Contract<T>): () => Live<T>
+  use<S extends IpcSpec>(token: Ipc<S>): () => Live<IpcClient<S>>
+  main<S extends IpcSpec>(token: Ipc<S>): IpcClient<S>
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
+
+### 版面
+
+`ctx.layout.open(key, session, options?)` 會依面板分頁的鍵 `<plugin id>:<tab id>` 開啟它。它也適用於
+尚未掛載的工作階段。
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+- `tab: "open"`（預設）會在預覽槽中選取分頁。`"preview"` 會讓它成為新的預覽，`"append"` 會加入
+  但不選取它，`"select"` 則會加入並選取它，同時保留預覽。
+- `background: true` 會在窄螢幕上保持目前檢視並開啟側邊區域，適用於使用者不是從面板
+  啟動的動作。
+- `close(key, session)` 會移除分頁並呼叫其面板的 `close`。`toggle(key, session)` 會關閉可見的分頁，否則
+  開啟它。
+- `hide(key, session)` 會隱藏顯示可見分頁的窗格，而不關閉分頁：側邊區域，或使用者移到
+  底部窗格的分頁所在的底部窗格。再次開啟分頁會顯示其窗格。
+- 當分頁不在分頁列中時，`state(key, session)` 為 `"closed"`；當它在分頁列中但其窗格顯示另一個
+  分頁時為 `"open"`；當其窗格顯示它但窗格被隱藏時（側邊區域已關閉，或底部窗格被
+  隱藏）為 `"active"`；當它在畫面上時為 `"visible"`。
+- `stored(session)` 是此外掛儲存在工作階段側邊分頁列中的分頁 ID。
+- `ready()` 會在已儲存的版面載入後為 `true`，`narrow()` 則在可視區域寬度小於 768px 時為 true。
+- `side.opened(session)` 會在側邊區域開啟時為 `true`，`side.toggle(session)` 會開啟或關閉它。
+- `side.menu()` 會依 `order` 列出每個外掛的 `session.panel` [選單項目](#menu-items)，供你自己的啟動器使用。
+- `side.width(panel)` 與 `side.resize(panel, width)` 會讀取並儲存你其中一個面板的側邊區域寬度；請參閱
+  [面板寬度](#panel-width)。
+- `sidebar.opened()` 是每個側邊面板共用的內部側邊欄偏好設定。
+- `scroll` 會依工作階段與鍵儲存捲動位移。
+- `settings(page?)` 會開啟設定。`project(server, title)` 會開啟專案的目錄選取器與新的草稿。
+- `draft({ server, directory, prompt })` 會在自己的分頁中開啟新的草稿工作階段，並填入提示詞，
+  供使用者檢視與送出。
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
+
+#### 參考
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
+
+### 工作階段與工作階段畫面
+
+`ctx.sessions.current()` 是被路由的工作階段，`ctx.screen.current()` 是其畫面。兩者在 Home
+與草稿上都是 `undefined`。請在執行動作的位置讀取它們，切勿在 `setup` 中只讀取一次。
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+- `key` 是 `<server id>\n<session id>`，在各伺服器之間唯一。請以它作為每個工作階段狀態的鍵。
+- `tab` 是擁有該工作階段的外殼分頁鍵。伺服器仍在建立它時，`pending` 為 `true`。
+- `directory` 是工作階段的工作區目錄，當它是專案根目錄時，`local` 為 `true`。
+- `listedProject` 是工作階段所屬的側邊欄專案。
+- `visit` 是工作階段每次被路由時的新物件。
+- `background` 列出工作階段執行中的 subagent 與 shell 指令。
+- `ctx.sessions.list()` 會回傳開啟之外殼分頁的工作階段。
+- 畫面的 `file` 會讀取工作區的檔案，`comment` 則保有下一個提示詞的行註解。
+  `composer` 是下一個提示詞：其文字、附加部分與模型；請參閱
+  [附加到 composer](#attach-to-the-composer)。
+- `file.sync(path)` 會載入檔案並要求伺服器監看其變更。當檔案的
+  分頁關閉時，請呼叫 `file.unwatch(path)`。
+
+#### 參考
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
+
+### 附加到 composer
+
+在事件處理常式或指令中使用 `ctx.screen.current()?.composer`，將檔案、註記或引用附加到使用者的
+下一個提示詞。
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element <button id="submit">Save</button>',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})
+```
+
+- `attach` 會讓鍵盤焦點留在原處。請呼叫 `focus()` 將其移到提示詞。
+- `update(commentID, { comment?, preview? })` 會變更已附加的部分；註記或引用只接受新的 `comment`。
+- `detach(commentID)` 會移除已附加的部分。
+- 註記留在這個應用程式處理程序期間，`live` 會取代它的 `subject` 與 `href`，適用於只有這個
+  處理程序能解析的引用，例如頁面元素。儲存草稿時會捨棄這個欄位；透過復原或建立工作階段分支而還原已送出的訊息時，
+  也不會保留這個欄位。
+
+使用者可以引用你外掛所顯示的文字（例如日誌輸出），也可以加上註解。引用和工作階段時間軸中的引用一樣，
+會顯示在來源的圖示和標籤下方。請先檢查 `quotable()`：subagent 的工作階段沒有輸入框，因此會回傳
+`false`；輸入框正在執行 shell 指令時也一樣。
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject` 會為模型命名來源，例如 `the terminal`。它不會被在地化。
+- 省略 `comment`，讓使用者透過引用標籤自行新增註解。
+- `focus(commentID)` 會開啟已附加引用的註解編輯器。輸入框未顯示時（例如顯示面板的窄
+  螢幕），編輯器會在輸入框顯示後開啟。
+- 模型會讀取 `The user quoted the following from <subject>:`，接著是每行加上 `> ` 前綴的文字，
+  然後是註解（若有）。
+
+#### 參考
+
+```ts
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}
+```
+
+### 讀取與寫入提示詞
+
+使用 `text()` 讀取使用者輸入的內容，並以 `focused()` 讀取他們是否正在輸入：
+
+```ts
+const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()
+```
+
+- `text()` 是純文字形式的提示詞：提及會以其 `@` 文字讀取，附件與附加部分則會
+  省略。在 shell 模式中，它是 shell 指令。在工作階段的草稿載入前，以及沒有輸入框的 subagent 工作階段中，
+  它是 `""`。它是反應式的。
+- 鍵盤焦點位於提示詞中時，`focused()` 為 `true`。它不是反應式的，因此請在執行動作的位置讀取它，例如
+  指令的 `run` 中。
+
+`insert(text)` 會在輸入框中插入文字，供使用者檢視並送出。composer API 不會代為送出提示詞。
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()
+```
+
+- `insert` 會在使用者上次留在提示詞中的游標處加入文字，否則加在結尾，並將游標移到
+  其後。它不會取代選取的文字。
+- 文字不會被解析：`@path` 仍是文字，不是提及。
+- `setText(text)` 會取代提示詞的文字，包括提及。附件與附加部分會保留。`setText("")`
+  會清除文字。
+- 兩者都會讓鍵盤焦點留在原處。請呼叫 `focus()` 將其移到提示詞。
+- 在工作階段儲存的草稿載入前進行的寫入（`insert`、`setText`、`attach`、`update` 或 `detach`）會等待
+  它。接著它會依呼叫順序套用至你呼叫時被路由的工作階段。它永遠不會取代已儲存的
+  草稿。
+- 在沒有輸入框的 subagent 工作階段中，寫入不會有任何作用。
+
+### 選擇模型
+
+`model()` 是下一個提示詞送出時使用的模型，`setModel` 則會像模型選取器一樣選取模型：
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer && !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}
+```
+
+- `model()` 是被路由工作階段的使用者選擇，否則為 agent 的預設值，再否則為應用程式的預設值。在模型目錄載入時、
+  沒有已連接供應商提供該模型時，以及在 subagent 的工作階段中，它是
+  `undefined`。它是反應式的。
+- `setModel` 會讓該模型成為工作階段的選擇及其第一個最近模型。沒有 `variant` 時，模型會保留
+  選取器會為它顯示的變體。
+- `setVariant(variant)` 會選取目前模型的變體。`undefined` 會選取模型的預設變體。
+- 在目錄載入時、沒有已連接供應商提供該模型時，或模型沒有該變體時，`setModel` 會傳回 `false`
+  且不變更任何內容。
+- 沒有目前模型或模型沒有該變體時，`setVariant` 會傳回 `false` 且不變更任何內容。
+- 在 subagent 的工作階段中，兩者都會傳回 `false`。
+
+#### 參考
+
+```ts
+interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+```
+
+### 伺服器與伺服器事件
+
+`ctx.servers.get(id)` 會回傳即時的 `ServerRef`。執行你外掛的桌面應用程式自有伺服器，其 id 為
+`"sidecar"`。使用 `data.on` 對其事件做出反應：
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+- `id` 是主機使用的鍵：`"sidecar"`、http URL，或[外掛提供的伺服器](#servers)所使用的 `<plugin id>:<id>`。
+- `data` 是伺服器同步的資料（例如工作階段與專案），以及其事件的 `on(type, handler)`。它是
+  反應式的。
+- 應用程式自有伺服器的 `builtin` 為 `true`。
+- 伺服器版本與此應用程式相容時，`compatible` 為 `true`；其事件連線正常時，`connected` 為 true。
+- `password` 是使用者設定的 HTTP 基本驗證密碼（若有）。
+- 請每次都從即時的 `ServerRef` 讀取 `client`、`data` 與 `url`：重新啟動的伺服器會以相同 id 取得新的用戶端。
+- `ctx.servers.list()` 會回傳應用程式所列伺服器的 id。
+
+#### 參考
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
+
+### 對話框
+
+`ctx.dialogs.open(render, { replace? })` 會在已開啟的對話框上方開啟對話框，並回傳一個控制代碼，其 `close()` 會關閉
+它。擁有它的 scope 結束時，對話框也會關閉。
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+- `replace: true` 會先關閉每個開啟的對話框，包括主機與其他外掛的對話框。
+- 任何對話框開啟時，`ctx.dialogs.active()` 為 `true`。
+- 若要使用應用程式的對話框框架，請在 `ctx.ui.Dialog` 中呈現內容。請參閱[應用程式元件](#app-components)。
+
+### 詢問使用者
+
+`confirm`、`alert`、`prompt` 與 `select` 會以應用程式自己的對話框詢問，因此你的外掛不需要自己的對話框 UI。
+每個都會回傳答案的 Promise。
+
+```ts
+const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })
+```
+
+- 使用者確認時，`confirm` 的 Promise 才會以 `true` 完成。`danger` 會將確認按鈕設為表示破壞性操作的樣式，並讓焦點
+  一開始停在 Cancel 按鈕。
+- 每個對話框的開啟方式與 `open` 相同，並隨提出要求的擁有者關閉，否則隨你的外掛關閉。
+- 取消、按 Escape、點選對話框外部、被其他對話框取代，或所屬作用域結束時，`confirm` 的 Promise 會以 `false` 完成，
+  `prompt` 與 `select` 則會以 `undefined` 完成。
+
+`alert` 會顯示一則需要使用者確認的訊息，對話框只有一個按鈕。無論以何種方式關閉對話框，Promise 都會完成：
+
+```ts
+await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
+```
+
+`prompt` 會請使用者輸入一行文字。初始 `value` 會預先選取，輸入新文字便會取代它。Promise 不會以空
+字串完成：欄位為空時，按下送出不會有任何作用。`secret: true` 會隱藏使用者輸入的內容，用於密碼或
+權杖：
+
+```ts
+const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })
+```
+
+`select` 會像指令面板一樣列出可搜尋的選項，回傳的 Promise 會以所選項目的 `value` 完成：
+
+```ts
+const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) => ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)
+```
+
+- 搜尋會比對每個選項的 `title` 與 `description`。
+- 具有相同 `group` 的選項會一起列在該標題下。
+- `current` 是要先醒目提示之選項的值。
+
+#### 參考
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise<boolean>
+  alert(options: AlertOptions): Promise<void>
+  prompt(options: PromptOptions): Promise<string | undefined>
+  select<T>(options: SelectOptions<T>): Promise<T | undefined>
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions<T> {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}
+```
+
+### 應用程式元件
+
+外掛 bundle 無法匯入 `@opencode/ui`，因此 `ctx.ui` 會提供應用程式自己的元件。它們會以
+使用者選擇的主題、字型與語言呈現，讓外掛 UI 的外觀與操作方式都和應用程式一致。
+
+```tsx
+import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () => [summaryTab],
+  render: () => (
+    <div>
+      <ui.Tooltip value={ctx.t("copy")}>
+        <ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() => void ctx.system.copy(summary.latest ?? "")} />
+      </ui.Tooltip>
+      <Show when={summary.latest} fallback={<ui.Loader size="large" />}>
+        {(text) => <ui.Markdown text={text()} />}
+      </Show>
+    </div>
+  ),
+})
+```
+
+- `Icon`、`Button` 與 `IconButton` 接受任何 `IconName`，如同 SDK 的每個 `icon` 欄位：應用程式的
+  圖示之一，或 `ctx.icons` 中[你自己的圖示](#icons)。`IconButton` 的 `label` 是其無障礙名稱；請將它包在
+  `Tooltip` 中，讓滑鼠指標停在按鈕上方時顯示標籤。
+- 按鈕上的 `busy` 會將其圖示取代為載入指示，並停用它直到再次為 `false`。
+- 對於不是 AI 正在工作的每個載入狀態（例如窗格、搜尋或正在載入的連線），請使用 `Loader`。
+- `Menu` 會開啟 `items` 清單：動作、`{ type: "separator" }` 與 `{ type: "group", label, items }`。
+- `Switch` 與 `TextInput` 不保留狀態：請將 `onChange` 或 `onInput` 的值傳回 `checked` 或 `value`。
+- `Keybind` 會將按鍵顯示為按鍵標籤，例如 `ctx.keybinds.keybind(command)`。
+- `Markdown` 採用時間軸訊息的呈現方式，`Code` 則顯示有語法醒目標示的唯讀程式碼區塊。兩者都會在掛載後
+  不久顯示內容。
+
+`Dialog` 提供應用程式的對話框框架，包括標題、內容與按鈕。請透過 `ctx.dialogs.open` 呈現；
+在其他地方使用，不會顯示有用的內容。
+
+```tsx
+const ui = ctx.ui
+
+ctx.dialogs.open((dialog) => (
+  <ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      <ui.Button variant="contrast" onClick={dialog.close}>
+        {ctx.t("done")}
+      </ui.Button>
+    }
+  >
+    <ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus />
+  </ui.Dialog>
+))
+```
+
+- `size` 預設為 `"fit"`：寬 480px，高度隨內容。`"normal"`、`"large"` 與 `"x-large"` 是固定
+  大小。
+- Escape 與點選外部會關閉對話框。`closable: false` 會隱藏標頭的關閉按鈕。
+
+#### 選單列
+
+`MenuItem`、`MenuSub`、`MenuGroup` 與 `MenuSeparator` 用來建立主機選單的項目，例如
+`session.location.menu` 插槽。這些項目支援鍵盤導覽，顯示主機樣式的淡色圖示與快捷鍵標籤，並在選取時關閉
+選單。
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem` 接受與 `Menu` 的 `items` 項目相同的欄位。
+- `MenuSub` 會在資料列旁的子選單中開啟其子項。`onOpenChange` 會告知你何時開啟，讓你只在它開啟時
+  載入其資料列。
+- `MenuGroup` 會將資料列放在標題下，`MenuSeparator` 則在資料列之間畫線。
+- 在選單外使用 `MenuItem`、`MenuSub` 或 `MenuGroup` 會擲出錯誤。主機會記錄錯誤，該外掛新增的這部分內容不會顯示。
+
+#### 選取器
+
+`Select` 會從選項清單中選取一個，像應用程式的設定資料列選取語言一樣。其值是字串；
+`options` 的型別會縮窄它。
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` 是選取器的無障礙名稱；它顯示的是所選選項的 `label`。
+- 沒有選項具有的 `value` 會顯示 `placeholder`。再次選取已選的選項不會呼叫 `onChange`。
+
+#### 設定元件
+
+`SettingsLayout`、`SettingsSection` 與 `SettingsRow` 可讓[設定頁面](#settings-pages)採用應用程式的內建版面：
+頁面有頁首，區段標題下方有帶邊框的清單；清單中的各個設定項目有標題、說明與末端的控制項。
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- 你自己的頁面請使用 `SettingsLayout`，主機頁面上的區段請使用 `SettingsSection`，主機區段中的資料列則單獨
+  使用 `SettingsRow`。無論哪種情況，資料列都會與主機的資料列對齊。
+- 資料列上的 `id` 是顯示它的 `SettingEntry.id`。找到頁面自身 id 的搜尋會醒目提示標頭。
+- `actions` 位於標題列的結尾。區段的 `footer` 位於其清單下方、邊框外。
+- 這些元件沿用 Settings 畫面的樣式，因此請透過 `SettingsPage` 呈現。
+
+#### 參考
+
+```ts
+interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) => void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) => void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}
+```
+
+### 提示
+
+`ctx.toast.show` 會在視窗角落顯示簡短訊息，並回傳一個控制代碼，其 `dismiss()` 會關閉它。
+
+```ts
+ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
+```
+
+- `variant` 是 `"default"`、`"success"`、`"error"` 或 `"loading"`。`success` 提示會顯示勾選圖示，除非你設定
+  `icon`。
+- `duration` 是提示顯示的時間（毫秒）。預設為 5 秒。
+- `persistent: true` 會讓提示保持顯示，直到使用者或 `dismiss()` 關閉它，並忽略 `duration`。
+- 與仍在顯示的提示相同的提示會取代它，而不會堆疊複本。
+- 你的外掛停止時，其提示會關閉，因此沒有按鈕會比執行它的程式碼存留更久。提示不會隨顯示它的
+  元件或 `createKeyed` 執行結束而關閉。
+
+工作執行期間顯示 `loading` 提示，並在工作結束時關閉它：
+
+```ts
+const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()
+```
+
+`actions` 會新增按鈕。點選會執行動作並關閉提示：
+
+```ts
+ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () => void sync() }],
+})
+```
+
+#### 參考
+
+```ts
+interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}
+```
+
+### 通知
+
+`ctx.attention.notify` 會在使用者看向別處時引起其注意：系統通知與音效，
+規則與應用程式自己的通知相同。
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}
+```
+
+- 系統通知只會在沒有應用程式視窗取得焦點時顯示。音效則兩者皆會播放。
+- 兩者都遵循 **Settings > Notifications**。`variant: "default"` 遵循 **Agent** 資料列，`variant: "error"` 則遵循
+  **Errors** 資料列。兩者的桌面通知預設為關閉；音效則為開啟。
+- `sound: false` 永遠不會播放音效。
+- 點選通知會將應用程式帶到前景，並在你提供 `session` 時開啟它。
+- 每個應用程式視窗都會執行你的外掛複本。請傳入事件的 `id`，例如某次執行的 id，讓只有第一個
+  傳送它的視窗發出通知並播放音效。沒有 `id` 時，每次呼叫都會通知。
+- 在應用程式介面掛載前，`notify` 會等待它。
+
+`notify` 的 Promise 不會進入拒絕狀態，而是回傳實際執行的結果：應用程式要求系統顯示通知時，`notification` 為 `true`；
+音效開始播放時，`sound` 為 `true`。
+
+```ts
+const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })
+```
+
+- 當使用者關閉它、應用程式視窗取得焦點，或另一個視窗已傳送 `id` 時，`notification` 為 `false`。
+  系統仍可能隱藏應用程式要求顯示的通知，例如使用者拒絕瀏覽器
+  權限時。
+
+#### 參考
+
+```ts
+interface Attention {
+  notify(options: NotifyOptions): Promise<NotifyResult>
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}
+```
+
+### 用量資料
+
+工作階段的 token、成本與方案數字位於其伺服器的資料中，也就是應用程式為標頭的
+「28k · $0.28」讀取的相同反應式 store。請從該處讀取，而不是從 opencode 的資料庫。
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()` 是目前其 token 計入上下文視窗的助理步驟，也是應用程式上下文圓環所使用的步驟。
+  請將其 `tokens` 與 `data.location.model.list` 中模型的 `limit.context` 比較。
+- `data.location.usage.sync(location)` 載入後，`limits()` 會保有 OpenCode 控制台預算與 Go 方案額度。
+  伺服器未回報時，它是 `null`。
+
+### 分頁
+
+`ctx.tabs` 會讀取與變更外殼的分頁列：以分頁開啟的工作階段與草稿。下列範例會在工作階段執行完成時
+將其分頁移到最前面：
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) =>
+    onCleanup(
+      data.on("session.execution.succeeded", (event) => {
+        const tab = ctx.tabs.list().find((item) => item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)
+```
+
+- `list()` 會依分頁列順序回傳開啟的分頁。它是反應式的。草稿分頁的 `session` 為 `undefined`，
+  畫面上的分頁其 `active` 為 `true`。
+- `open({ server, id }, { focus? })` 會將工作階段作為分頁開啟在分頁列結尾，除非 `focus`
+  為 `true`，否則在背景開啟。已開啟的工作階段會保留其分頁，其父分頁顯示的 subagent 也是如此。
+- `focus(key)` 會顯示分頁，`move(key, index)` 會移動它，`close(key)` 則會像使用者一樣關閉它。
+- 沒有開啟分頁具有的鍵不會有任何作用。在應用程式介面掛載前進行的寫入會等待它。
+
+#### 參考
+
+```ts
+interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}
+```
+
+### 快捷鍵
+
+`ctx.keybinds` 會依已發布的指令 ID，讀取使用者為該指令設定的快捷鍵。
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+- `keybind(command)` 會回傳指令目前採用的快捷鍵顯示文字，例如 `["Ctrl", "K"]`。指令未設定快捷鍵時，
+  為空。
+- `keys(bind)` 會回傳應用程式未擁有之組合鍵的顯示部分，例如頁面自行處理的組合鍵。
+- 事件與指令目前採用的快捷鍵相符時，`matches(command, event)` 為 `true`。
+
+#### 參考
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### 執行指令
+
+`ctx.commands.run(id)` 的效果和在指令面板選取指令相同。指令無法執行時，
+它會傳回 `false`：
+
+```ts
+if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })
+```
+
+- `id` 是任何外掛的已發布外掛指令 `<plugin id>.<command id>`，或應用程式自己的指令之一，
+  例如 `command.palette`。
+- 應用程式的指令 ID 不是穩定 API，可能會在版本之間變更。
+- 沒有已啟用指令具有該 id 時，`run` 會傳回 `false`。已列出但停用的指令不會執行。
+- 應用程式介面掛載前，沒有註冊任何指令，因此 `run` 會傳回 `false`。
+- `run` 不會等待指令的非同步工作。
+
+#### 參考
+
+```ts
+interface Commands {
+  run(id: string): boolean
+}
+```
+
+### 系統與環境
+
+`ctx.system` 在所有平台都能運作。`ctx.desktop` 會新增僅限桌面端的能力，在 Web 上為 `undefined`。
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save` 會在桌面顯示儲存對話框，在 Web 則下載。使用者取消對話框時，它會傳回 `false`。
+- `system.openExternal` 會在系統瀏覽器中開啟 URL。應用程式內的連結請使用 `ctx.links.open`，它會將
+  `Link` 路由到其[連結處理常式](#link-handlers)。
+- `desktop.launch(path, app?)` 會以應用程式或預設應用程式開啟路徑。`desktop.reveal(path)` 會在
+  檔案管理員中顯示它。
+- `ctx.embeds` 會在視窗中呈現主處理程序的 Web 檢視；請參閱
+  [嵌入式 Web 檢視](#embedded-web-views)。
+- `ctx.locale` 會讀取介面語言及其書寫方向。`ctx.appearance.font("mono")` 是使用者終端機字型的 CSS 字型
+  系列。
+- `ctx.router` 會讀取目前的路由路徑，以及是否有路由轉場正在進行。
+- 使用者從伺服器移除工作區目錄時，`ctx.workspaces.on("remove", handler)` 會執行，讓你可以
+  清理以它為範圍的 store。
+
+`desktop.pick(options)` 會以系統的開啟對話框要求使用者選擇檔案或資料夾，並解析其絕對
+路徑：
+
+```ts
+const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })
+```
+
+- `directory: true` 會選取資料夾而非檔案，`multiple: true` 則讓使用者選取多個。
+- `extensions` 會限制提供的檔案，不含點，例如 `["json"]`。資料夾會忽略它。
+- `title` 是對話框的標題。並非每個系統都會顯示它。
+- 使用者取消時，路徑會是空的。對話框無法開啟時，`pick` 會拒絕。
+- `pick` 僅限桌面端：瀏覽器永遠不會告訴頁面所選檔案的位置。
+
+`ctx.appearance.mode()` 是介面顯示的色彩配置，`"light"` 或 `"dark"`。它是反應式的：
+
+```ts
+const background = () => (ctx.appearance.mode() === "dark" ? "#000" : "#fff")
+```
+
+- 它會遵循使用者在 **Settings > Appearance** 中的選擇，並將 **System** 解析為系統目前的配置。
+- 應用程式介面掛載前，它是系統的配置。
+
+#### 參考
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  pick(options?: PickOptions): Promise<string[]>
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
+## 儲存狀態
+
+桌面視窗會透過 IPC 載入儲存狀態，Web 則立即讀取 `localStorage`。請在
+`Plugin.define({ stores })` 中宣告 store，讓主機替你載入它們。
+
+- **`Store.global`** 會為應用程式保留一個值。它會在 `setup` 執行前載入，因此 `ctx.stores.name.value` 永遠不會是
+  `undefined`。
+- **`Store.session`** 會為每個工作階段保留一個值。它會在工作階段掛載時載入；在此之前
+  `ctx.stores.name(session).value` 是 `undefined`。
+
+宣告的 store 供視窗使用。`main` 會以 `ctx.storage.store` 開啟其狀態，它會同步讀取；請參閱
+[主上下文](#main-context)。
+
+使用 `update(draft => …)` 就地變更值（它必須不回傳任何內容），或以 `set(next)` 取代它：
+
+```ts
+const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) => {
+  draft.enabled = !draft.enabled
+})
+```
+
+- 值載入後，`ready()` 為 `true`。在此之前進行的寫入會等待，並依呼叫順序套用。
+- `from` 會指定其他已儲存的鍵，在 store 尚未保有值時從中匯入一次，例如你重新命名之
+  store 的鍵：`"plugin.acme.settings"`。傳入清單可嘗試多個鍵，最新的在前。其他鍵會保留其
+  複本，直到 store 被移除。
+
+```ts
+stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}
+```
+
+#### 參考
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted<T, V = T | undefined> {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
+
+### 執行階段 store
+
+`ctx.storage.store(key, options)` 會為執行階段才知道的鍵開啟 store。`scope` 會為每個伺服器、
+目錄或工作階段保留一個值。
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+- `scope: "global"`（預設）會為應用程式保留一個值。
+- `scope: { server, directory? }` 會為每個伺服器，或伺服器上的每個工作區目錄保留一個值。
+- `scope: { session }` 會為每個工作階段保留一個值，並在工作階段移到新目錄時再次開啟。
+- 執行階段 store 的 `value` 在載入前是 `undefined`。
+- `ctx.storage.memory(key, { initial })` 會保留視窗本機狀態，它會在外掛重新載入後保留，但不會在視窗重新載入後保留。
+- `ctx.storage.remove(key, { scope, from })` 會刪除值，因此該鍵會再次讀取為 `initial`。
+
+#### 參考
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
+
+## 反應式基礎
+
+請優先使用這些輔助函式，而不是原始的 `createEffect`、`createRenderEffect` 與 `createComputed`。它們會遵循外掛的存留期
+及其相依性的重新啟動，而手寫的 effect 往往會弄錯。
+
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })` 會為每個鍵在全新的 owner 中執行 `fn`：`ctx.use` 存取子的每個作用中世代，
+或純存取子的每個值。在 `fn` 內註冊的任何內容都會隨該次執行結束。
+
+```tsx
+import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
+```
+
+- `otherwise` 會在來源沒有鍵時執行：未作用的 `Live` 存取子，或值為 `undefined`、`null` 或 `false`
+  的純存取子。
+- `equals` 會判斷純存取子的新值是否為相同鍵，讓 `fn` 不再執行。當來源每次都會建立新物件時，
+  請使用它。`Live` 存取子一律依世代作為鍵。
+
+#### 參考
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)` 會在 `source` 變更時擷取、中止過期請求，且永不
+暫停。
+
+```ts
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+const text = () => summary.latest ?? ""
+```
+
+- `latest` 是最後一個結果，會在較新的請求執行期間保留。第一次之前它是 `undefined`。
+- 目前值的請求正在進行時，`loading` 為 `true`。
+- `error` 是目前請求的拒絕原因（若有）。
+
+#### 參考
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
+
+### createVisitState
+
+`createVisitState(initial)` 會建立一個 `[value, setValue]` 訊號，當使用者離開工作階段並
+返回時重設。
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+#### 參考
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
+### usePanel 與 useDrawer
+
+`usePanel()` 會讀取所在的面板框架，在面板的算繪函式外呼叫則會擲出錯誤。`useDrawer()` 會回傳包住外掛內容的行動版
+滑出面板；如果不在這種面板中，就回傳 `undefined`。
+
+```ts
+const panel = usePanel()
+const drawer = useDrawer()
+const compact = () => panel.placement() === "mobile"
+const close = () => drawer?.close()
+```
+
+- `placement()` 在側邊區域為 `"side"`，在窄螢幕檢視為 `"mobile"`。
+- 區域開啟且此分頁被選取時，`visible()` 為 `true`。區域以動畫關閉期間，`present()` 保持 `true`。
+- `reserve()` 要求你在標頭結尾留出空間給主機的區域切換按鈕。
+- `sidebar` 是每個側邊面板共用的內部側邊欄偏好設定。有側邊欄的面板會顯示自己的
+  切換按鈕。
+- `drawer.open(view)` 會以內容取代抽屜的檢視，並附有返回控制項。
+
+#### 參考
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}
+```
+
+## 應用程式契約
+
+應用程式會向每個外掛提供這些契約。請以 `ctx.use(token)` 跟隨一個契約，並在它不是
+`active` 時處理它，就像處理其他外掛的契約一樣。例如，`Browser` 在 Web 上是 `inactive`。
+
+### 檔案
+
+`@opencode/plugin/gui/file` 會匯出應用程式的檔案樹與 **Open in** 按鈕，以及 `FileViewer` 登錄。
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+- **`FileTree`** 是契約。`Tree` 與 `List` 會以虛擬化的樹狀檢視或清單呈現工作區檔案，並標示變更。
+  請以 `ctx.use(FileTree)` 讀取契約。樹狀檢視的 `labels` 會在資料夾名稱後加上文字，例如資料夾內有多少
+  項目。
+- **`OpenInApp`** 是契約。`Button` 是工作階段工作區的桌面 **Open in** 按鈕。
+- **`FileViewer`** 是登錄。檢視器會列出它支援呈現的 `kinds`，可用 `problem` 拒絕無法處理的位元組資料，並算繪
+  透過 `onDetails` 與 `onError` 回報狀態的 `View`。
+
+#### 參考
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<FileViewerProps>
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}
+```
+
+### 審查變更
+
+`@opencode/plugin/gui/review` 會匯出 `Changes`（應用程式對工作階段變更的檢視）與 `ChangeKind`
+（`"add"`、`"del"` 或 `"mix"`）。
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () => {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" && session ? live.value.diffs(session).length : 0
+}
+```
+
+- `diffs(session)` 是目前審查模式的差異，`ready(session)` 會在它們載入後為 `true`。兩者都是
+  反應式的。只有被路由的工作階段有變更；其他工作階段讀取為空。
+- `kinds(session)` 會將每個變更的檔案與目錄對應到其 `ChangeKind`。
+- `active(session)` 是審查面板顯示的檔案。
+- `details(session)` 是工作階段目錄的未提交變更，無論審查模式為何。
+- `focus(session, path)` 會在審查面板中顯示檔案，`open(session)` 則會顯示所有變更。
+- `watch(screen, source)` 會在檢視顯示變更期間保持其載入，並跨越檢視的工作階段切換。
+  請從面板或插槽輸入傳入擁有它的畫面。它會回傳一個停止監看的函式；請參閱
+  [createKeyed](#createkeyed)。
+- `tree` 監看是持久的變更清單：開啟側邊區域會重新整理它。`details` 監看會載入
+  `details(session)`。
+
+#### 參考
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
+
+### 瀏覽器
+
+`@opencode/plugin/gui/browser` 會匯出 `Browser`，即工作階段的桌面瀏覽器窗格。
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+- 工作階段有瀏覽器窗格時，`attached(session)` 為 `true`。
+- 工作區檔案或 http(s) URL 可在窗格中開啟時，`canOpen(session, path?)` 為 `true`。
+- `open(session, url)` 會在工作階段的側邊面板中將 URL 作為瀏覽器分頁開啟。
+- `openFile(session, path)` 會將工作區檔案作為 `file://` 分頁開啟。
+
+#### 參考
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
+
+## 主處理程序
+
+在 OpenCode Desktop 上，外掛的 `main` setup 會在 Electron 主處理程序中以應用程式範圍的單例執行一次。它擁有
+對 Node.js 內建模組、`electron` 與主機 API 的完整存取權。請在外掛的
+[`./gui-experimental` 檔案](#define-the-gui-plugin)中將它傳遞給 `Plugin.define`，可放在視窗 `setup` 旁或獨立存在。
+
+```tsx title="src/gui.tsx"
+import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () => {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) => {
+      if (enabled && blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () => blockerId !== undefined && powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) => setActive(enabled),
+    })
+
+    return release
+  },
+})
+```
+
+在視窗中，`electron` 是無作用的替代品，因此該匯入在共用的 `./gui-experimental` 檔案中是安全的。請參閱
+[一個檔案，兩個處理程序](#one-file-two-processes)。
+
+## 主上下文
+
+`main` 會收到 `MainContext`。與視窗 `setup` 不同，`main` 可以是 `async`，可以直接回傳清理函式，
+或回傳以清理函式為結果的 Promise。
+
+```ts
+main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}
+```
+
+- `ctx.options`、`ctx.client` 與 `ctx.app` 是[共用上下文](#shared-context)。在 `main` 中，
+  `ctx.app.platform` 一律是 `"desktop"`。
+- `ctx.storage.store(key, { schema, initial })` 會在外掛的命名空間中同步開啟 store。其 `value`
+  一律有定義，且每個 `set` 或 `update` 都會在傳回前寫入資料庫。`ctx.storage.remove(key)` 會刪除
+  該值。
+- 外掛被停用、重新載入或移除，或應用程式結束時，`ctx.signal` 會中止。`ctx.onCleanup(fn)` 會在
+  此時執行 `fn`；請參閱[生命週期與清理](#lifetimes-and-cleanup)。
+- `ctx.provide` 會在外掛的 id 下實作 `Ipc`；請參閱[定義並提供 Ipc](#define-and-provide-an-ipc)。
+- `ctx.add` 可將項目加入主處理程序的登錄，例如 [`MenubarItem`](#native-app-menu)。
+- `ctx.windows` 會列出應用程式的視窗，並回報視窗開啟或關閉。
+- `ctx.embeds` 會將 `WebContentsView` 放入視窗版面；請參閱[嵌入式 Web 檢視](#embedded-web-views)。
+- `ctx.serverEndpoints.get(id)` 會回傳伺服器的 URL 與憑證。桌面應用程式自己的伺服器是 `"sidecar"`。
+- `ctx.cli` 描述桌面應用程式執行的 OpenCode CLI。
+- `ctx.log.write` 會寫入桌面日誌檔。
+
+#### 參考
+
+`@opencode/plugin/gui/main` 會將下列 `MainStorage` 與 `MainEmbeds` 匯出為 `Storage` 與 `Embeds`。
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted<T, T>
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  sameMachine: boolean
+  password?: string
+}
+```
+
+## 定義並提供 Ipc
+
+`Ipc` 規格可以宣告每個視窗的 `state`、可呼叫的 `methods` 與推送的 `events`。Effect `Schema` 會驗證並
+編碼跨橋接的每個值。
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})
+```
+
+- id 是外掛的 id 或以它開頭，例如 `acme.counter`。`main` 中的 `ctx.provide` 與視窗中的 `ctx.main`
+  對任何其他 id 都會擲出。
+- 不接受引數的方法請省略 `input`，不回傳值的方法請省略 `output`。
+
+#### 參考
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
+### 在主處理程序中實作提供者
+
+每個方法會收到解碼後的輸入與 `Caller`（`{ window, signal }`）。當 `state` 變更時，呼叫
+`provider.changed(window?)` 將新快照推送給已訂閱的視窗，或呼叫 `provider.emit(name, payload, window?)` 傳送
+事件。
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const counts = new Map<number, number>()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) => ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) => {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next > 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) => {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}
+```
+
+- 具有 `state` 的規格也需要實作中的 `state(window)`。主機會在視窗訂閱時及每次
+  `changed` 時讀取它。
+- 擲出的方法會拒絕視窗的呼叫。
+- 省略 `window` 時，`changed` 與 `emit` 會觸及每個視窗。
+- `dispose()` 會提早撤回 `Ipc`。視窗會看到它為 `pending`，且 `ctx.main` 呼叫會等待，直到外掛再次提供
+  它或停止。外掛停止時，主機也會撤回它。
+
+#### 參考
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}
+```
+
+### 在視窗中使用 Ipc
+
+在視窗中，`ctx.main(Counter)` 會回傳你的 `main` 所提供 `Ipc` 的用戶端。沒有 `input`
+schema 的方法只接受選用的 `{ signal }` 呼叫選項。請勿將 `undefined` 作為其第一個引數。
+
+```tsx title="src/gui/window.tsx"
+import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  const counter = ctx.main(Counter)
+
+  // Follows main across restarts; removed when the plugin stops.
+  counter.on("overflow", (data) => console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () => ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () => {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}
+```
+
+- 呼叫會在 `main` 啟動期間等待。`main` 無法回答時會拒絕：在 Web 上、外掛的 `main` 關閉
+  或失敗時，或方法擲出時。請在使用者需要回饋的位置捕捉拒絕。
+- `state()` 與 `on()` 會跨重新啟動跟隨 `main`。監聽器會隨目前擁有者結束，否則隨外掛結束。
+- 對同一個權杖的每次呼叫，`ctx.main` 都會回傳相同的用戶端。
+
+使用 `client.state()` 讀取此視窗的 `state`。收到第一個快照前，此值為 `undefined`，並在每次
+`main` 呼叫 `changed` 時更新。
+
+```tsx
+const count = () => ctx.main(Counter).state()?.count ?? 0
+```
+
+#### 參考
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
+}
+```
+
+在 `src/gui.tsx` 中以兩個 setup 定義外掛：`Plugin.define({ ...definition, setup, main })`。
+
+### 其他外掛
+
+另一個外掛會像跟隨契約一樣，以 `ctx.use(Counter)` 跟隨你的 `Ipc`。它為 `active` 時，其值
+是同一個 `IpcClient`。
+
+```ts
+const counter = ctx.use(Counter)
+
+const count = () => {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+- 每個 `Ipc` 在 Web 上都是 `inactive`，因為該處沒有主處理程序執行。
+
+## 原生應用程式選單
+
+`main` 會使用 `@opencode/plugin/gui/main` 的 `MenubarItem`，將項目加入原生選單（macOS 應用程式選單、File、Edit、View、Go、Window 與 Help），
+以及 Windows 與 Linux 上的應用程式內選單：
+
+```ts
+import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem => ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () => true,
+    run: (focusedWindow) => {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)
+```
+
+- `after` 指定新項目要排在哪一項之後：此外掛的項目按 ID 指定，內建項目則依序按指令、動作、
+  角色比對，例如 `logs.export`、`edit.copy` 或 `about`。沒有相符項目時，新項目會放在
+  選單結尾。
+- `app` 項目只會出現在 macOS 上。
+- `run` 會收到取得焦點的視窗（若有）。
+- 主機會在每次建立選單時讀取函式，因此標籤會跟隨語言。
+
+#### 參考
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
+
+## 嵌入式 Web 檢視
+
+若要在面板中嵌入隔離的 `WebContentsView`，請在 `main` 中建立檢視，並由視窗算繪承載它的區塊。
+
+```ts title="src/gui/main.ts"
+import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const attach = (window: BrowserWindow) => {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // Send embed.id to the window over your Ipc.
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}
+```
+
+```tsx title="src/gui/pane.tsx"
+<ctx.embeds.View id={embedId} visible radius={8} />
+```
+
+- `"open"` 只會為之後開啟的視窗觸發，因此請先附加到 `ctx.windows.list()`。
+- 視窗會將嵌入項的 `id` 傳遞給 `ctx.embeds.View` 與 `ctx.embeds.capture`。
+- `show(visible)` 是頁面端的可見性：檢視只在視窗配置它且 `show(true)`
+  成立時顯示。
+- `on("visible", handler)` 會在檢視進入或離開畫面時執行，包括視窗在其位置繪製靜態畫面時。
+- `capture()` 會回傳頁面的靜態畫面，或在隱藏時回傳 `undefined`。
+- `dispose()` 會從視窗移除檢視，但不會關閉其頁面；完成後請呼叫 `view.webContents.close()`。
+  外掛結束時，主機也會處置嵌入項。
+- 在視窗中，`View` 會以嵌入項填滿其方塊。主機會讓檢視的邊界、縮放、圓角與
+  對話框遮擋保持同步，並在視窗隱藏或對話框開啟時隱藏它。
+- `frozen` 會以靜態畫面取代即時檢視，讓 DOM 內容可以浮在其上。`radius` 會將底部
+  圓角設為圓弧，`background` 是圓角顯示的顏色。
+- `page` 是嵌入項顯示的內容，例如其 URL。面板移動時，主機會在其位置繪製嵌入項的靜態畫面，
+  並丟棄在 `page` 有其他值時取得的靜態畫面。
+- 視窗的 `capture(id)` 會回傳 JPEG 靜態畫面，或在嵌入項隱藏時及 Web 上一律回傳 `undefined`。
+
+#### 參考
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```
+
+## Live 相依性與失敗處理
+
+`ctx.use(token)` 會回傳反應式 `Live<T>` 的存取子：提供權杖之外掛的狀態。你的
+外掛會在該提供者關閉時繼續執行，因此請處理不是 `active` 的狀態。不應有任何控制項失效，
+也不應有任何載入動畫永遠執行。
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () => {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" && !!session,
+    run: () => {
+      if (live.status === "active" && session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})
+```
+
+- **`pending`：** 提供者尚未啟動，例如其外掛載入或重新啟動期間。請顯示載入
+  狀態，或隱藏選用控制項。
+- **`active`：** 提供者正在執行，`value` 是其契約或 `Ipc` 用戶端。`generation` 會計算啟用次數，因此
+  重新啟動的提供者會以新的世代回來。
+- **`inactive`、`disabled`：** 提供者已關閉、不存在或在此平台上無法使用，就像每個
+  `Ipc` 在 Web 上一樣。請顯示無法使用狀態，或省略控制項。
+- **`inactive`、`failed`：** 提供者的 setup 擲出錯誤。請顯示無法使用狀態。
+- 你自己的 `main` 沒有 `Live` 狀態。透過 [`ctx.main`](#use-the-ipc-in-a-window) 的呼叫會在其啟動期間等待，
+  並在無法回答時拒絕。
+
+#### 參考
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }
+```
+
+## 生命週期與清理
+
+透過 `ctx` 註冊的所有內容（`ctx.add`、`ctx.provide`、`ctx.dialogs.open`、`ctx.embeds.create` 與 `Ipc`
+事件監聽器）都會在其擁有的 scope 結束時撤回：
+
+- 在元件或 `createKeyed` 回呼內，註冊會在該元件或 `createKeyed` 執行處置時結束。
+- 在 `setup` 頂層，註冊會在外掛被停用、重新載入或移除，或其視窗
+  關閉時結束。
+- 在 `main` 中，註冊會在外掛被停用、重新載入或移除，或應用程式結束時結束。嵌入項也會在
+  其視窗關閉時結束。
+
+對於計時器或通訊端等其他資源，請從 setup 傳回清理函式。它會在相同時間執行。
+
+- **視窗 `setup`** 不能是 `async`，因為它在 Solid 的擁有者作用域內執行。請傳回清理函式，或使用
+  `onCleanup` 或 `ctx.signal`。
+- **`main`** 可以是 `async`。請傳回或解析為清理函式，或使用 `ctx.onCleanup(fn)`。
+
+### 視窗 setup
+
+視窗 `setup` 必須是同步的。請在 `createKeyed` 或 `createLatest` 內啟動非同步工作。
+
+```tsx title="src/gui.tsx"
+import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // Runs once per active generation of Changes; the command is withdrawn with it.
+    createKeyed(ctx.use(Changes), (changes) => {
+      ctx.add(Command, () => ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () => {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() => console.log("still here"), 60_000)
+
+    return () => clearInterval(timer)
+  },
+})
+```
+
+### 主 setup
+
+`main` 可以是 `async`。對於它開啟的資源，請直接回傳清理函式、回傳以清理函式為結果的 Promise，
+或用 `ctx.onCleanup(fn)` 註冊清理函式。
+
+```ts
+async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() => socket.close())
+}
+```
+
+- `ctx.onCleanup` 會在外掛被停用、重新載入或移除，或應用程式結束時執行其函式，最後
+  註冊者先執行。外掛已結束時，它會立即執行函式。
+- `await` 之後，若 `ctx.signal` 已中止，請在註冊或變更任何內容前傳回。
+- `async` 清理會延遲結束，直到它完成，最多 3 秒。

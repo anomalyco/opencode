@@ -1,5 +1,7 @@
 import { createServer, type ServerResponse } from "node:http"
 import electron from "electron"
+import { Schema } from "effect"
+import { RpcError } from "@opencode/protocol/errors"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import type { Browser } from "@opencode/plugin-browser/rpc"
@@ -23,7 +25,7 @@ const loading = `<!doctype html><title>Still loading</title><p>shown</p><img src
 // The pages the tabs open.
 function createPages() {
   return createServer((request, response) => {
-    if (request.url === "/never") return
+    if (request.url === "/never" || request.url?.startsWith("/hung")) return
 
     // The server drops the connection, so Chromium fails the load at once.
     if (request.url?.startsWith("/dropped")) return void request.socket.destroy()
@@ -49,14 +51,22 @@ type Outcome = { type: "success" } | { type: "failure"; code: string; message: s
 
 const frame = (event: Frame) => `data: ${JSON.stringify({ id: `evt_${Date.now()}`, ...event })}\n\n`
 
-// The session's server, as far as a pane's attachment asks: the session, the event stream, and the browser RPC. It
-// answers `attach` with the `attached` handshake on the stream and then holds the call open, and it hands the pane
-// the agent's commands as the server does: a control event names a request, the pane fetches it and posts its result.
+// The body of the 400 a server answers a call with while no plugin of the Location has registered the RPC.
+const unavailable = JSON.stringify(Schema.encodeSync(RpcError)(new RpcError({ type: "rpc.unavailable", message: "RPC is unavailable: experimental.browser" })))
+
+// The session's server, as far as a pane's attachment asks: the session, the event stream, the plugin list and the
+// browser RPC. It answers `attach` with the `attached` handshake on the stream and then holds the call open, and it
+// hands the pane the agent's commands as the server does: a control event names a request, the pane fetches it and
+// posts its result. It has only just started the session's project, as after the app updates or the project sat
+// idle: until its third answer to the plugin list it lists no plugin and has no browser RPC to call.
 function createApi(directory: string) {
   const streams = new Set<ServerResponse>()
   const commands = new Map<string, Browser.Action>()
   const results = new Map<string, (outcome: Outcome) => void>()
   const attached = { connectionID: "" }
+  // How often it refused `attach` for having no browser RPC yet, and how often it answered the plugin list.
+  const startup = { refused: 0, listed: 0 }
+  const loading = () => startup.listed < 3
 
   const session = {
     id: "ses_fixture",
@@ -89,6 +99,14 @@ function createApi(directory: string) {
       return void response.end(JSON.stringify({ data: session }))
     }
 
+    if (path === "/api/plugin") {
+      startup.listed += 1
+      response.writeHead(200, { "content-type": "application/json" })
+      const data = loading() ? [] : [{ id: "opencode.browser", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } }]
+
+      return void response.end(JSON.stringify({ location: session.location, data }))
+    }
+
     if (!path.startsWith("/api/rpc/experimental.browser/")) return void response.writeHead(404).end()
     const chunks: Buffer[] = []
     request.on("data", (chunk: Buffer) => chunks.push(chunk))
@@ -96,6 +114,13 @@ function createApi(directory: string) {
       const input: { connectionID: string; requestID?: string; outcome?: Outcome } = JSON.parse(Buffer.concat(chunks).toString()).input
 
       if (path.endsWith("/attach")) {
+        if (loading()) {
+          startup.refused += 1
+          response.writeHead(400, { "content-type": "application/json" })
+
+          return void response.end(unavailable)
+        }
+
         attached.connectionID = input.connectionID
 
         return control({ type: "attached", connectionID: input.connectionID, version: 4 })
@@ -112,6 +137,7 @@ function createApi(directory: string) {
 
   return {
     server,
+    startup,
     /** Runs a command of the agent's on the attached pane, and resolves with what the pane answered. */
     agent(action: Browser.Action) {
       const requestID = `request-${commands.size}`
@@ -147,9 +173,12 @@ void electron.app.whenReady().then(async () => {
   const { createSitePermissions } = await import("./site-permissions")
   const { createSystemMedia } = await import("./system-media")
   const pages = createPages()
+  // Dedicated loopback origin for the uncommitted /hung stall so it never shares Chromium's per-origin socket pool with /loading tabs.
+  const hungPages = createServer((_request, _response) => undefined)
   // The session's workspace, which holds `report.html`: a page that shows and takes over a second to finish loading.
   const api = createApi(process.env.ELECTRON_OPEN_ROOT ?? "")
   const origin = await listen(pages)
+  const hungOrigin = await listen(hungPages)
   const server = await listen(api.server)
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
   const values = new Map<string, unknown>()
@@ -228,6 +257,8 @@ void electron.app.whenReady().then(async () => {
   })
 
   await pane.register(win.id, "binding", { server: "sidecar", session: "ses_fixture" })
+  // What the first attachment asked of the server, before the registration at the end asks again.
+  const startup = { ...api.startup }
   const last = () => reported.at(-1) ?? []
   const view = (tab: Browser.Tab) => ({ url: tab.url, loading: tab.loading, failed: tab.loadError !== undefined })
   const tab = (address: string) => last().find((item) => item.url.endsWith(address))
@@ -274,12 +305,19 @@ void electron.app.whenReady().then(async () => {
   }
 
   // The agent: its command, what the pane answered, and what the pane asked the window to show meanwhile.
-  const asked = async (action: Browser.Action, address: string) => {
+  const asked = async (action: Browser.Action, address: string, commits = true) => {
     const from = shown.length
+    const beforeIDs = new Set(last().map((item) => item.id))
     const outcome = await api.agent(action)
-    // The tab is at its address: a web page still loading there, as the test compares.
-    await until(() => !!tab(address) && (action.type === "preview" || !!tab(address)?.loading), 3_000)
-    const listed = tab(address)
+    // A committed page reaches its address; an uncommitted stall stays on its initial tab.
+    await until(
+      () =>
+        commits
+          ? !!tab(address) && (action.type === "preview" || !!tab(address)?.loading)
+          : last().some((item) => !beforeIDs.has(item.id)),
+      3_000,
+    )
+    const listed = commits ? tab(address) : last().find((item) => !beforeIDs.has(item.id))
 
     return {
       answer: outcome.type === "failure" ? outcome.message : outcome.type,
@@ -293,6 +331,7 @@ void electron.app.whenReady().then(async () => {
     front: await asked({ type: "tabs.open", url: `${origin}/loading?agent` }, "/loading?agent"),
     behind: await asked({ type: "tabs.open", url: `${origin}/loading?behind`, focus: false }, "/loading?behind"),
     preview: await asked({ type: "preview", path: "report.html" }, "/report.html"),
+    hung: await asked({ type: "tabs.open", url: `${hungOrigin}/hung?agent` }, "/hung?agent", false),
   }
 
   // The window registers again with the inventory it last took in, as when its session moves or its server signs in
@@ -304,6 +343,7 @@ void electron.app.whenReady().then(async () => {
   process.stdout.write(
     `${JSON.stringify({
       origin,
+      startup,
       person,
       registered,
       // The still-loading page committed and showed: an inventory listed its tab at its address.
@@ -316,6 +356,8 @@ void electron.app.whenReady().then(async () => {
   await pane.dispose()
   lifetime.abort()
   api.close()
+  hungPages.closeAllConnections()
+  hungPages.close()
   pages.closeAllConnections()
   pages.close()
   electron.app.quit()

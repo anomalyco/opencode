@@ -1,0 +1,205 @@
+---
+title: "API listy modeli"
+description: "Wyświetlaj modele dostępne w obszarze roboczym wraz z ich limitami, cenami, możliwościami i adresem URL Console do wywoływania każdego z nich."
+---
+
+Istnieją dwa rodzaje listy modeli. [Lista Console](#console-model-list) zwraca wszystko, czego może używać obszar
+roboczy, w tym podłączonych dostawców. [Listy inferencji](#inference-model-lists) zwracają publiczne katalogi OpenCode
+Models i Go w formacie listy OpenAI.
+
+| Lista                                               | Zwraca                                                                                         | Klucz      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------- |
+| [`/console/api/v1/models`](#console-model-list)     | Każdy dostawca i model dostępny dla wywołującego, z zastosowanymi zmianami obszaru roboczego.   | Wymagany   |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models. Wszystkie publiczne modele bez klucza; z kluczem modele dostępne w jego obszarze roboczym. | Opcjonalny |
+| [`/inference/go/v1/models`](#inference-model-lists) | Modele [Go](/console/go) w tych samych formatach.                                              | Opcjonalny |
+
+Użyj listy Console, gdy Twój klient ma oferować te same modele co OpenCode, wraz z podłączonymi dostawcami. Użyj listy
+inferencji, gdy potrzebujesz tylko OpenCode Models lub Go albo nie masz jeszcze klucza i chcesz pobrać publiczny katalog.
+
+## Lista modeli Console
+
+`GET https://opencode.ai/console/api/v1/models` zwraca każdego dostawcę dostępnego dla wywołującego, a pod każdym
+modele, które może wywołać.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+Może ją wywołać każdy członek obszaru roboczego: z sesji przeglądarki, logowania OpenCode,
+[osobistego klucza API](/console/api#personal-api-keys) lub [klucza konta usługowego](/console/api#service-accounts)
+z **Models › Read**. Używa tych samych zasad co konfiguracja OpenCode generowana przez Console, więc lista odpowiada
+temu, co pokazuje `/models` w OpenCode. Odpowiedź nigdy nie jest cache'owana (`Cache-Control: private, no-store`).
+
+### Dostawcy
+
+Odpowiedź to obiekt z kluczami według ID dostawcy, czyli ID używanego przez OpenCode.
+
+| ID dostawcy                 | Dostawca                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models), opłacane ze środków obszaru roboczego.                                                       |
+| `opencode-go`               | Modele [Go](/console/go). Występuje tylko z subskrypcją Go.                                                                      |
+| `console-<connection slug>` | [Połączenie](/console/providers) dodane przez obszar roboczy, takie jak `console-openai`, `console-anthropic` lub `console-aws-bedrock`. |
+
+Każdy dostawca ma `id`, `name` i `models`. `name` to nazwa pokazywana przez OpenCode, zwykle nazwa obszaru roboczego,
+po której następuje nazwa dostawcy. `models` to obiekt z kluczami według ID modelu.
+
+### Przykład
+
+Skrócony do jednego dostawcy i jednego modelu:
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Pola
+
+Każdy model to wpis v2 z [models.dev](https://models.dev) z zastosowanymi zmianami obszaru roboczego, więc pola są
+tymi, które [publikuje models.dev](https://models.dev/experimental/v2.0/api.json). Wyłączone modele oraz modele
+oznaczone przez models.dev jako przestarzałe są pomijane.
+
+| Pole           | Znaczenie                                                                                                                                                                                                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | Rodzaj modelu, taki jak `chat`, `embedding`, `image` lub `decision`.                                                                                                                                                                                                                |
+| `id`           | ID modelu do wysyłania w żądaniach. Jest też kluczem w `models`.                                                                                                                                                                                                                    |
+| `name`         | Nazwa wyświetlana.                                                                                                                                                                                                                                                                  |
+| `limit`        | `context` to okno kontekstu. `input` ogranicza wejście żądania, gdy model je ustala. `output` ogranicza odpowiedź.                                                                                                                                                                  |
+| `cost`         | Dolary amerykańskie za 1 mln tokenów: `text.input.price`, `text.input.cache.read`, `text.input.cache.write` i `text.output.price`. `0` oznacza darmowy. Brak pól cache oznacza, że model nie ma ceny cache. Niektóre modele dodają `cost.multipliers`, które podnoszą cenę w podanych okresach. |
+| `capabilities` | Co potrafi model, na przykład wywołania narzędzi i wysiłek rozumowania.                                                                                                                                                                                                             |
+| `modalities`   | Akceptowane typy wejścia, takie jak `text`, `image/png` lub `application/pdf`, oraz typy wyjścia.                                                                                                                                                                                   |
+| `api`          | Adres URL Console i SDK do użycia dla tego modelu. Zobacz [API modelu](#model-api).                                                                                                                                                                                                 |
+
+### API modelu
+
+`api` ma jeden wpis, z kluczem według protokołu modelu: `chat-completions` dla OpenAI Chat Completions, `responses`
+dla OpenAI Responses, `messages` dla Anthropic Messages, `generate-content` dla Gemini i `embeddings` dla
+[OpenAI Embeddings](/console/models#embedding-models). To wpis protokołu z models.dev z adresem URL producenta
+zastąpionym adresem Console, bez pozostałych protokołów.
+
+| Pole             | Znaczenie                                                                                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | Dokąd wysyłać żądania dla tego modelu. OpenCode Models używa `https://opencode.ai/inference/...`, Go używa `https://opencode.ai/inference/go/...`, a połączenie używa swojego adresu Console API, `https://opencode.ai/inference/custom/<connection_id>`. |
+| `sdk.aisdk`      | Pakiet AI SDK dla protokołu, ten sam co w tabeli [endpointów modeli](/console/models#endpoints).                                                                                                                                                   |
+| `sdk.opencodeai` | Odpowiadający moduł dostawcy wczytywany przez OpenCode.                                                                                                                                                                                            |
+
+Model w dodanym przez Ciebie połączeniu wygląda tak. Dopisz ścieżkę protokołu, taką jak `/chat/completions` lub
+`/responses`, zgodnie z opisem w [API dostawców](/console/api/providers#endpoints).
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## Listy modeli inferencji
+
+`GET https://opencode.ai/inference/v1/models` wyświetla OpenCode Models, a `GET https://opencode.ai/inference/go/v1/models`
+modele Go. Oba zwracają format listy OpenAI.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+Skrócony do jednego modelu i jego typowych pól:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+Bez klucza lista zawiera wszystkie publiczne modele. Z kluczem zawiera tylko modele dostępne w obszarze roboczym tego
+klucza, więc klucz konta usługowego potrzebuje **Models › Read**. Wyślij go w `Authorization: Bearer` lub `x-api-key`.
+Modele prywatne i przestarzałe są pomijane.
+
+Każda pozycja zaczyna się od pól OpenAI `id`, `object`, `created` i `owned_by`, a następnie zawiera te same pola
+models.dev, których używa [lista Console](#fields): `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`,
+`api`, `family`, `release_date` i inne. W przeciwieństwie do listy Console listy inferencji nie obejmują połączeń
+obszaru roboczego. Jeśli dane models.dev są tymczasowo niedostępne, pozycje nadal się pojawiają, ale tylko z polami
+OpenAI, a `name` jest równe ID.
+
+Każdy model Go ma też pole `go`. Zawiera miesięczny limit użycia dla każdego planu (`monthly_usage`) oraz informacje
+o tym, czy dane z żądań służą do trenowania modelu (`training`), czy dostawca nie przechowuje Twoich danych (`zdr`)
+i czy model jest niedostępny w niektórych krajach (`limited_regions`).
+
+## Błędy
+
+| Status | Znaczenie                                                                              |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | Brak poświadczeń albo klucz wygasł lub został unieważniony.                            |
+| `403`  | Klucz nie może wyświetlać modeli. Klucze kont usługowych i ograniczone potrzebują **Models › Read**. |

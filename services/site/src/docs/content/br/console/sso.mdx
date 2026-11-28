@@ -1,0 +1,92 @@
+---
+title: "SSO"
+description: "Entre em um espaço de trabalho do OpenCode Console pelo seu provedor de identidade com OIDC ou SAML."
+---
+
+Com o login único (SSO), os membros do espaço de trabalho entram pelo provedor de identidade da empresa. O recurso
+está incluído em todos os espaços de trabalho, e os proprietários o configuram em **Settings › Security**.
+
+| Protocolo       | Provedores                                                                              |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity ou qualquer provedor OIDC |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta ou qualquer provedor SAML                       |
+
+Cada espaço de trabalho tem uma conexão SSO.
+
+## Configurar OIDC
+
+1. Abra **Settings › Security**, clique em **Configure SSO** e escolha **OpenID Connect** e o seu provedor.
+2. Crie um app no seu provedor seguindo os passos exibidos, com os escopos `openid`, `email` e `profile`.
+3. Informe a **Issuer URL**, ou o seu tenant ou domínio, além do **Client ID**, do **Client Secret** e de um
+   **Display Name**, e clique em **Save**.
+4. Copie a **Callback URL** da conexão para as URIs de redirecionamento permitidas do seu provedor.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+O Console verifica se o emissor está acessível ao salvar. O SSO fica ativo assim que a conexão é salva.
+
+## Configurar SAML
+
+1. Abra **Settings › Security**, clique em **Configure SSO** e escolha **SAML 2.0** e o seu provedor.
+2. Copie a **ACS URL** e o **SP Entity ID** para o seu provedor. Provedores personalizados podem usar a **SP Metadata URL** ou
+   baixar o XML.
+3. Adicione os metadados do provedor: informe a URL, envie um arquivo XML ou cole o conteúdo. Você também pode informar o **IdP Entity ID**, a **IdP SSO
+   URL** e o **IdP Certificate** manualmente.
+4. Revise os detalhes e clique em **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Seu provedor precisa assinar a resposta ou a asserção e enviar o email do usuário como um atributo `email` ou como o
+NameID.
+
+## Verificar domínios de email
+
+As pessoas que entram no [Console](https://opencode.ai/console) com um email de um domínio verificado são encaminhadas ao seu
+provedor de identidade. Com o SSO ativo, clique em **Add domain** em **Email domains**, informe o seu domínio e publique
+o registro TXT exibido.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Clique em **Verify Domain** depois que o registro for publicado. Alterações de DNS podem levar um tempo para propagar. Cada domínio pode
+pertencer a apenas um espaço de trabalho.
+
+## Exigência de SSO
+
+Quando um espaço de trabalho tem SSO, admins e membros precisam entrar por ele para abrir o espaço de trabalho, e o Console os redireciona
+automaticamente. Conectar o OpenCode com `/connect` segue a mesma regra.
+
+Os proprietários também podem entrar sem SSO. Assim, mesmo que haja um erro na configuração do provedor, eles ainda conseguem acessar as configurações do espaço de trabalho.
+
+## Entrada automática de membros
+
+Pessoas de um domínio verificado entram no espaço de trabalho como **Member** na primeira vez que fazem login por SSO. Elas não são
+adicionadas automaticamente quando:
+
+- Têm um convite pendente. Nesse caso, entram pelo convite.
+- O espaço de trabalho usa [sincronização de diretório](/console/scim), que define quem pode entrar.
+- O espaço de trabalho tem uma assinatura [Go](/console/go).
+
+Convites para um espaço de trabalho com SSO encaminham a pessoa convidada ao seu provedor de identidade quando ela abre o link.
+
+## Contas existentes
+
+Se alguém já tem uma conta no Console com o mesmo email, entra de novo durante o fluxo de SSO e confirma
+com **Link account**. Mesmo quem recebeu um convite precisa confirmar. Contas provisionadas por SCIM em um domínio verificado
+do espaço de trabalho ainda podem ser vinculadas automaticamente.
+
+## Editar ou excluir
+
+Clique em **Edit** na conexão para alterar os detalhes. Deixe o segredo ou o certificado em branco para manter o atual.
+Para trocar entre OIDC e SAML, exclua a conexão e crie uma nova.
+
+Exclua a conexão em **⋯ › Delete...**. Os membros voltam a usar os outros métodos de login. A sincronização de diretório é interrompida
+e seus tokens são revogados. Os domínios de email são mantidos.

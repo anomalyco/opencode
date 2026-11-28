@@ -1,0 +1,188 @@
+---
+title: Fournisseurs de la Console
+description: Connectez vos propres comptes de fournisseurs de modèles à un espace de travail OpenCode Console et choisissez les modèles que les membres peuvent utiliser.
+---
+
+Connectez les comptes que vous payez déjà chez des fournisseurs comme Anthropic, OpenAI ou AWS Bedrock, puis partagez leurs modèles avec tous les membres de l’espace de travail. La Console conserve le secret d’authentification et donne accès à chaque fournisseur via sa passerelle. Les membres peuvent ainsi utiliser les modèles sans jamais voir la clé du fournisseur. La même passerelle est accessible à vos propres outils via l’[API des fournisseurs](/console/api/providers).
+
+Les propriétaires et administrateurs gèrent les fournisseurs depuis l’onglet **Providers**. Les membres obtiennent les modèles activés dans OpenCode après avoir lancé `/connect`.
+
+## Connecter un fournisseur
+
+1. Ouvrez **Providers** et cliquez sur **Connect Provider**.
+2. Choisissez un fournisseur dans le catalogue et saisissez sa clé d’API.
+3. Cliquez éventuellement sur **Test connection**, puis sur **Save**.
+
+Le catalogue inclut Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter et bien d’autres. Les modèles de ces fournisseurs sont préconfigurés.
+
+### Fournisseurs cloud
+
+Les fournisseurs cloud nécessitent quelques détails supplémentaires.
+
+| Fournisseur | Détails |
+| --- | --- |
+| Azure | Nom de ressource et clé d’API |
+| AWS Bedrock | Région et clé d’API |
+| Google Vertex AI | Région et JSON de compte de service |
+| Cloudflare AI Gateway | ID de compte, ID de passerelle et token d’API |
+| Databricks | URL de l’espace de travail et token |
+
+### Fournisseurs personnalisés
+
+Cliquez sur **Add Custom Provider** pour connecter tout autre endpoint, puis ajoutez ses modèles avec **Add Model**.
+
+| Champ | Description |
+| --- | --- |
+| URL de base | Où Console transmet les requêtes, par exemple `https://api.deepseek.com/v1`. |
+| Format | Chat Completions, Responses API, Anthropic Compatible ou Google Generative AI. |
+| Mode d’authentification | Bearer, en-tête de clé d’API ou en-tête personnalisé. |
+| Secret d’authentification | La clé que la Console envoie au fournisseur. |
+
+## Choisir les modèles
+
+Ouvrez un fournisseur pour voir ses modèles. Seuls les modèles activés sont disponibles pour les membres.
+
+- Utilisez l’interrupteur **Enabled** pour activer ou désactiver un modèle.
+- Activez **New models** pour activer les modèles que le fournisseur ajoutera à l’avenir.
+
+## Modifier les modèles
+
+Cliquez sur un modèle pour le modifier. Les modifications sont enregistrées à la fermeture du panneau.
+
+| Section | Ce que vous pouvez modifier |
+| --- | --- |
+| Général | Nom d’affichage, ID d’API, prise en charge des outils, types d’entrée et de sortie |
+| Variantes | Variantes avec leurs propres en-têtes ou corps |
+| Configuration | Variante par défaut, en-têtes et corps de requête, limites de tokens |
+| Paliers de coût | Prix d’entrée, de sortie, de lecture et d’écriture du cache par million de tokens |
+
+### Tarification personnalisée
+
+Par défaut, les modèles du catalogue utilisent le tarif public du fournisseur. Si vous avez négocié des tarifs, par exemple une remise sur votre contrat OpenAI, remplacez les prix sous **Cost Tiers** pour que les rapports d’utilisation et les [budgets](/console/budgets) correspondent à ce que vous payez réellement.
+
+| Champ | Prix catalogue | Votre prix |
+| --- | --- | --- |
+| Prix d’entrée | 2,50 $ | 2,00 $ |
+| Prix de sortie | 15,00 $ | 12,00 $ |
+| Prix de lecture du cache | 0,25 $ | 0,20 $ |
+
+Les prix que vous modifiez sont mis en évidence sur la page du fournisseur. Utilisez **Restore default value** sur un champ, ou **⋯ › Restore...** sur le modèle, pour revenir au prix catalogue.
+
+Ajoutez un palier **Context** lorsqu’un modèle facture plus au-delà d’une certaine longueur de contexte, par exemple pour les prompts de plus de 200K tokens.
+
+### Modèles personnalisés
+
+Cliquez sur **Add Model** pour ajouter un modèle absent du catalogue, avec son **Display name** et son **Model ID**. Utilisez **⋯ › Duplicate...** sur un modèle existant pour partir de ses réglages.
+
+## Modèles OpenCode
+
+L’onglet **Models** gère les [modèles](/console/models) fournis par Console, payés depuis les crédits de l’espace de travail. Il fonctionne comme une page de fournisseur :
+
+- Activez ou désactivez des modèles individuellement.
+- Désactivez **Free models** pour bloquer les modèles gratuits pour l’espace de travail.
+- Activez **New models** pour activer automatiquement les nouveaux modèles Console.
+
+Désactivez tout le fournisseur depuis **⋯ › Disable** pour n’utiliser que vos propres fournisseurs.
+
+## Utilisation dans OpenCode
+
+Les membres lancent `/connect` et choisissent l’espace de travail. Chaque fournisseur activé apparaît sous la forme du nom de l’espace de travail suivi du nom du fournisseur, et `/models` liste ses modèles activés.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Activez **Managed providers only** dans **Settings › General** pour restreindre OpenCode aux fournisseurs de l’espace de travail pour tout le monde.
+
+## Envoyer l’identité
+
+Lorsqu’un fournisseur est une passerelle que vous exploitez, activez **Send identity** sur sa page. Console ajoute alors un en-tête `x-opencode-actor` à chaque requête de modèle qu’il lui envoie. L’en-tête indique le membre ou le compte de service à l’origine de la requête, afin que votre passerelle puisse journaliser ou restreindre les requêtes par expéditeur.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- Il est désactivé par défaut, et changer l’URL de base le désactive.
+- Un fournisseur encore sur l’API propre à son éditeur, comme `https://api.openai.com/v1`, n’affiche pas le réglage, car l’éditeur ignore l’en-tête.
+- Console supprime tout en-tête `x-opencode-*` envoyé par un client : le seul `x-opencode-actor` que votre passerelle reçoit est donc celui signé par Console.
+- **Test connection** et le listage des modèles appellent `GET <base URL>/models` avec le seul identifiant : n’exigez donc pas l’en-tête sur cette route.
+
+### Token
+
+L’en-tête est un JWT que Console signe pour chaque requête.
+
+| Champ | Valeur |
+| --- | --- |
+| `alg` | `ES256` |
+| `typ` | `opencode-actor+jwt` |
+| `iss` | `https://opencode.ai/inference` |
+| `aud` | L’URL de base du fournisseur sans barres obliques finales |
+| `iat`, `exp` | `exp` correspond à `iat` plus 120 secondes |
+
+| Attribut JWT | Valeur |
+| --- | --- |
+| `sub` | `user_id` pour un membre, `service_account_id` sinon |
+| `workspace_id` | L’espace de travail dans lequel la requête s’est exécutée |
+| `user_id`, `email` | Le membre, lorsqu’un membre a envoyé la requête |
+| `service_account_id` | Le compte de service, lorsqu’un compte de service l’a envoyée (agents compris) |
+| `session_id` | L’ID de session du client, lorsqu’il en a envoyé un |
+| `request_id` | L’ID que le client reçoit dans l’en-tête de réponse `x-opencode-log-id` |
+
+La requête d’un membre porte une charge utile comme celle-ci :
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Vérifier le token
+
+Console publie ses clés publiques sur `https://opencode.ai/inference/.well-known/jwks.json`, servies avec `Cache-Control: public, max-age=300`. Vérifiez la signature, l’émetteur, l’audience, le type et l’âge, puis l’espace de travail. Cet exemple utilise [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Définissez `audience` sur l’URL de base du fournisseur telle qu’enregistrée dans Console, sans barre oblique finale, et remplacez `org_...` par l’ID d’espace de travail tiré de votre URL Console. Console publie une nouvelle clé de signature avant de signer avec, afin qu’un vérificateur qui recherche les clés par `kid`, comme le fait `createRemoteJWKSet`, continue de fonctionner pendant une rotation.
+
+## Désactiver ou supprimer
+
+Ouvrez le menu **⋯** du fournisseur :
+
+- **Disable** masque le fournisseur et ses modèles aux membres mais conserve ses réglages.
+- **Remove...** supprime le fournisseur et ses modèles. La boîte de dialogue indique qui l’a utilisé récemment et propose **Disable instead**.
+
+Pour changer une clé, cliquez sur l’identifiant sur la page du fournisseur et saisissez la nouvelle clé.
+
+## Facturation
+
+Le fournisseur vous facture les tokens ; la Console ne déduit aucun crédit de votre solde. Console enregistre tout de même chaque requête et son coût avec la tarification du modèle, afin que les rapports d’utilisation et les [budgets](/console/budgets) les incluent.
+
+Pour appeler un fournisseur depuis vos propres outils plutôt que depuis OpenCode, utilisez l’[API des fournisseurs](/console/api/providers).

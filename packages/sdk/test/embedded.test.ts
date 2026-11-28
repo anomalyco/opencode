@@ -10,6 +10,8 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Plugin } from "@opencode/plugin/effect"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
+import { AbsolutePath, Identity, Location } from "../src/effect"
+import { EffectSdk } from "../src/internal/effect"
 import { OpenCodeWorkerd } from "../src/effect/workerd"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
@@ -53,7 +55,7 @@ for (const selection of ["explicit", "default"] as const) {
         const llm = yield* TestLLM.Test.pipe(
           Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
         )
-        const opencode = yield* fixture.sdk.OpenCode.create(
+        const opencode = yield* EffectSdk.create(
           {
             config: {
               directory: fixture.directory,
@@ -132,7 +134,7 @@ it.live("seeds host plugins from CreateOptions and loads delayed model plugins w
             })
           }).pipe(Effect.orDie),
       })
-      const opencode = yield* fixture.sdk.OpenCode.create(
+      const opencode = yield* EffectSdk.create(
         {
           config: {
             directory: fixture.directory,
@@ -241,8 +243,16 @@ it.live(
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
-        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
-        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
+        yield* opencode.experimental.session.instructions.entry.put({
+          sessionID: id,
+          key: "deploy-target",
+          value: "production",
+        })
+        yield* opencode.experimental.session.instructions.entry.put({
+          sessionID: id,
+          key: "flags",
+          value: { beta: true },
+        })
         const contextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
         yield* opencode.experimental.session.instructions.entry.remove({ sessionID: id, key: "flags" })
         const remainingContextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
@@ -275,7 +285,9 @@ it.live(
           [
             opencode.experimental.session.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
-            opencode.sessions.message.get({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+            opencode.sessions.message
+              .get({ sessionID: missingSessionID, messageID: modelMessage.id })
+              .pipe(Effect.flip),
             opencode.experimental.session.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
@@ -528,7 +540,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     })
     const configDirectory = path.join(fixture.directory, "config")
     yield* Effect.promise(() => fs.mkdir(configDirectory))
-    const opencode = yield* fixture.sdk.OpenCode.create(
+    const opencode = yield* EffectSdk.create(
       {
         config: { directory: configDirectory, project: false, content: "{}" },
         workspaceProviders: { fake: driver },
@@ -630,7 +642,7 @@ it.live(
         })
         const configDirectory = path.join(fixture.directory, "config")
         yield* Effect.promise(() => fs.mkdir(configDirectory))
-        const opencode = yield* fixture.sdk.OpenCode.create(
+        const opencode = yield* EffectSdk.create(
           {
             config: { directory: configDirectory, project: false, content: "{}" },
             workspaceProviders: { fake: driver },
@@ -679,4 +691,59 @@ it.live("preserves unknown workspace provider errors", () =>
       expect(error).toEqual(new WorkspaceDriver.ProviderNotFound({ provider: "missing" }))
     }),
   ),
+)
+
+it.live("OpenCodeWorkerd exposes alarm(), workspace.attach, and KV-backed Identity for WorkspaceDriver", () =>
+  Effect.gen(function* () {
+    const storage = makeDurableObjectStorage()
+    const memory = makeMemoryDriver()
+    const seenKeys: Uint8Array[] = []
+    const suspended: string[] = []
+    const recordKey = Effect.gen(function* () {
+      const identity = yield* Identity.Service
+      seenKeys.push(yield* identity.publicKey().pipe(Effect.orDie))
+    })
+    const driver = WorkspaceDriver.make({
+      create: (input) => Effect.as(recordKey, { binding: { workspaceID: input.workspaceID } }),
+      connect: () => Effect.as(recordKey, memory),
+      suspendForIdle: (input) => Effect.sync(() => void suspended.push(input.workspaceID)),
+      destroy: () => Effect.void,
+    })
+
+    const opencode = yield* OpenCodeWorkerd.create({
+      storage,
+      models: { fetch: false },
+      workspaceProviders: { sandbox: driver },
+    })
+
+    // Provisioning calls driver.create() with the DO's persistent 32-byte KV Identity key.
+    const createdID = yield* opencode.workspace.create({ provider: "sandbox" })
+    yield* opencode.workspace.provision({ workspaceID: createdID })
+    expect(seenKeys).toHaveLength(1)
+    expect(seenKeys[0]?.length).toBe(32)
+
+    // Attach registers an already-provisioned binding without calling driver.create().
+    const attachedID = yield* opencode.workspace.attach({
+      provider: "sandbox",
+      binding: { url: "wss://sandbox.example/ws" },
+    })
+    expect(seenKeys).toHaveLength(1)
+
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace"), workspaceID: attachedID }),
+    })
+    expect(session.location.workspaceID).toBe(attachedID)
+
+    // alarm() and workspace.suspendIdle() run cleanly when no workspaces are past idleThreshold.
+    yield* opencode.alarm
+    expect(yield* opencode.workspace.suspendIdle()).toEqual([])
+    expect(suspended).toEqual([])
+
+    // Promise OpenCodeWorkerd also exposes alarm(): Promise<void> and Symbol.asyncDispose.
+    yield* Effect.promise(async () => {
+      const { OpenCodeWorkerd } = await import("../src/workerd")
+      await using sdk = await OpenCodeWorkerd.create({ storage: makeDurableObjectStorage(), models: { fetch: false } })
+      await sdk.alarm()
+    })
+  }),
 )

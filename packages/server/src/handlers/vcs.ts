@@ -42,7 +42,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
               return new ServiceUnavailableError({ service: providerID, message: "VCS initialization failed" })
             }),
           )
-          const resolved = yield* project.resolve(directory)
+          const resolved = yield* project.resolve(directory, { local: location.workspaceID === undefined })
           if (!resolved.vcs)
             return yield* new ServiceUnavailableError({ service: providerID, message: "VCS initialization failed" })
           yield* locations.invalidate(

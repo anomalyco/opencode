@@ -1,0 +1,82 @@
+---
+title: "OpenClaw"
+description: "OpenClaw から Console と Go のモデルを使用します。"
+---
+
+[OpenClaw](https://openclaw.ai) には、従量課金と Go の OpenCode プロバイダーが組み込まれています。有料モデルや Go のモデルごとに適切な API を選択し、Go のすべてのリクエストにセッション ID を送信します。無料枠のチャットモデルは OpenCode が必要で、OpenClaw からは HTTP `403` が返ります。
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) を使えば、1 つのコマンドで OpenClaw を設定できます。ワークスペースのポリシー、MCP サーバー、スキル、指示も含まれます。`npx @opencode/console setup openclaw` を実行し、続いて `openclaw gateway
+  restart` を実行してください。以下の手順は手動で設定する方法です。
+</Callout>
+
+| プロバイダー  | プラン   | モデルのプレフィックス |
+| ------------- | -------- | ---------------------- |
+| `opencode`    | 従量課金 | `opencode/...`         |
+| `opencode-go` | Go       | `opencode-go/...`      |
+
+Go のプロバイダーは OpenClaw に同梱されています。従量課金のプロバイダーはプラグインであり、`openclaw models list` に表示されない場合はインストールします。
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## サインイン
+
+キーを貼り付ける代わりに、ブラウザからサインインできます。OpenClaw 2026.11.7 以降が必要です。
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+OpenClaw が表示するリンクを開き、Console でコードを確認して、[Go](/console/go) のサブスクリプションがあるワークスペースを選択します。OpenClaw はサインイン情報を保持し、自身で更新します。
+
+プロバイダーごとに個別にサインインします。従量課金のモデルを使うには、`opencode` にもサインインします。
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+`openclaw onboard` の実行中、チャットでの `/login`、または **Settings › Models › Add account** から **OpenCode Go (browser sign-in)** を選ぶこともできます。
+
+## API キーを使用する
+
+どちらのプロバイダーも、同じキーを `OPENCODE_API_KEY` から読み取ります。[パーソナル API キー](/console/harnesses#get-an-api-key)を作成し、オンボーディングに渡します。
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+または、`~/.openclaw/openclaw.json` に設定します。
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+Go を契約していないワークスペースのキーでも、一覧には Go のモデルが表示されます。ただし、そのワークスペースで Go を契約するまでは、Go のモデルへのリクエストは失敗します。
+
+## モデル
+
+[Console](/console/models#endpoints) または [Go](/console/go#endpoints) の表にある ID を使って、`<provider>/<model-id>` の形式でモデルを選択します。OpenClaw は Console からモデル一覧を読み取るため、新しいモデルは更新なしで表示されます。
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+エージェントのデフォルトモデルを設定します。
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## Console MCP
+
+OAuth を使って [Console MCP](/console/harnesses#console-mcp) サーバーを追加し、Gateway の実行中にブラウザからサインインします。
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```

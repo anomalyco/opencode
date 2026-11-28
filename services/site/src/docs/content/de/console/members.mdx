@@ -1,0 +1,79 @@
+---
+title: "Mitglieder"
+description: "Lade Personen in einen OpenCode Console-Workspace ein, verwalte ihre Rollen und entferne sie."
+---
+
+Owner und Admins verwalten die Mitglieder unter **Settings › Members**. Öffne die Seite eines Mitglieds, um
+seine Nutzung und Budget-Policies einzusehen.
+
+## Mitglieder einladen
+
+1. Öffne **Settings › Members** und klicke auf **Invite Members**.
+2. Füge eine oder mehrere E-Mail-Adressen hinzu. Trenne sie mit Leerzeichen, Kommas oder Semikolons, oder füge eine
+   Liste ein.
+3. Klicke auf **Send invitations**.
+
+Jede Person erhält eine E-Mail mit dem Titel **Join Acme Inc. on OpenCode** und einer Schaltfläche **Join workspace**.
+
+Einladungen verfallen nach 7 Tagen. Eingeladene treten mit der Rolle **Member** bei. Du kannst
+[ihre Rolle ändern](#change-a-role), sobald sie beigetreten sind.
+
+<Callout>
+Bei [OpenCode Go](/console/go) und Go Plus nutzen eingeladene Personen kostenlose Modelle oder das Guthaben
+des Workspace. Wechsle zu Go Teams, wenn alle eigene Go-Limits erhalten sollen ($20 pro Mitglied und Monat,
+mindestens 2 Mitglieder). Ab dem dritten Mitglied fallen pro zusätzlichem Mitglied ab dessen Beitritt $20 im
+Monat an.
+</Callout>
+
+Mitglieder können auch automatisch beitreten:
+
+- [SSO](/console/sso#automatic-membership) fügt Personen mit einer E-Mail-Adresse aus einer deiner
+  verifizierten Domains bei der ersten Anmeldung hinzu.
+- Die [Verzeichnissynchronisierung](/console/scim) fügt Personen hinzu oder entfernt sie, je nachdem, ob du
+  sie im Identity-Provider zuweist oder die Zuweisung aufhebst.
+
+## Einladung annehmen
+
+Die eingeladene Person muss sich mit der E-Mail-Adresse anmelden, an die die Einladung ging. Es gibt zwei Wege,
+sie anzunehmen:
+
+- Klicke in der Einladungs-E-Mail auf **Join workspace** und melde dich dann an oder erstelle ein Konto.
+- Melde dich in der Console an, öffne das Workspace-Menü und klicke unter **Pending invitations** auf **Join**.
+
+Ist die Person mit einem anderen Konto angemeldet, fordert die Console sie mit **Sign out and continue** auf,
+sich abzumelden und mit der E-Mail-Adresse aus der Einladung fortzufahren.
+
+## Offene Einladungen verwalten
+
+Offene Einladungen erscheinen in der Mitgliedertabelle als **Pending · Expires** gefolgt vom Datum, oder als
+**Expired**.
+
+| Aktion    | Vorgehen                                                                                     |
+| --------- | -------------------------------------------------------------------------------------------- |
+| Erneut senden | **⋯ › Resend invitation**. Sendet einen neuen 7 Tage gültigen Link; der alte Link funktioniert nicht mehr. |
+| Widerrufen | **⋯ › Remove...**. Der Link wird sofort ungültig. |
+
+## Rolle ändern
+
+Öffne das Rollenmenü in der Zeile eines Mitglieds und wähle **Member**, **Admin** oder **Owner**.
+
+Du kannst nur Rollen bis zu deiner eigenen vergeben, und der Workspace behält immer mindestens einen Owner. Siehe
+[Rollen](/console/workspaces#roles).
+
+## Mitglied entfernen
+
+1. Klicke in der Zeile des Mitglieds auf **⋯ › Remove...**.
+2. Bestätige mit **Remove member**.
+
+Der Zugriff wird sofort widerrufen, und du kannst die Person später erneut einladen. Ihre bisherige Nutzung bleibt in
+den Berichten des Workspace erhalten.
+
+Das Entfernen eines Mitglieds widerruft auch die API-Schlüssel, die es im Workspace erstellt hat, einschließlich der
+Schlüssel von Service-Konten. Die Service-Konten selbst bleiben, und Schlüssel, die andere Personen erstellt haben,
+funktionieren weiter. Siehe [Widerruf](/console/api#revocation).
+
+## Mitgliederdetails
+
+Klicke auf ein Mitglied, um sein Monatsbudget, die genutzten Modelle und Clients, Nutzungsdiagramme und Request-Logs zu
+sehen. Von hier aus kannst du sein [Budget](/console/budgets#member-budgets) festlegen und seine Nutzung als CSV
+exportieren.

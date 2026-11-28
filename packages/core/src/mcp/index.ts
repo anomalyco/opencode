@@ -17,12 +17,15 @@ import {
   FiberSet,
   Latch,
   Layer,
+  Queue,
+  Result,
   Schedule,
   Schema,
   Scope,
   Semaphore,
   Stream,
   Types,
+  absurd,
 } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -39,14 +42,18 @@ import { Hash } from "@opencode/util/hash"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
-import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
+import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
 import { canonicalJson } from "../util/canonical-json.js"
 import { McpConnection } from "./connection.js"
+import type { McpError } from "./errors.js"
 import { McpPool } from "./pool.js"
+import { McpTarget } from "./target.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
 export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
+/** Experimental: a server's MCP Skills list changed. */
+export const SkillsChanged = ephemeral({ type: "mcp.skills.changed", schema: { server: Schema.String } })
 
 export const Status = Mcp.Status
 export type Status = Mcp.Status
@@ -63,6 +70,11 @@ export type ToolResultContent = McpClient.CallToolContent
 export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
 export type PromptResult = McpClient.GetPromptResult
+/** Experimental: a skill entry a server lists through MCP Skills, a beta extension. */
+export interface Skill {
+  readonly server: ServerName
+  readonly entry: McpClient.Skill
+}
 
 export const Resource = Mcp.Resource
 export type Resource = Mcp.Resource
@@ -87,7 +99,9 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
   message: Schema.String,
 }) {}
 
-const unavailable = (server: ServerName, status: Status) => {
+type Offline = Exclude<Status, { readonly status: "connected" }>
+
+const unavailable = (server: ServerName, status: Offline) => {
   switch (status.status) {
     case "failed":
       return `MCP server "${server}" is not connected: ${status.error}. Reconnect it from /mcps.`
@@ -95,23 +109,139 @@ const unavailable = (server: ServerName, status: Status) => {
       return `MCP server "${server}" needs authentication: ${status.error}. Sign in from /mcps.`
     case "disabled":
       return `MCP server "${server}" is disabled.`
-    default:
+    case "pending":
       return `MCP server "${server}" is not connected.`
+    default:
+      return absurd<string>(status)
   }
 }
 
+// Where a server stands apart from its connection. Only the connection says whether it is connected.
+type Phase =
+  // An attempt is in flight: when it began, and a latch that opens once it settles.
+  | Starting
+  // Nothing in flight and nothing wrong: connected while the connection is live, between connections otherwise.
+  | { readonly _tag: "Idle" }
+  | { readonly _tag: "Disabled" }
+  | { readonly _tag: "Failed"; readonly failure: McpConnection.Failure }
+
+type Starting = { readonly _tag: "Starting"; readonly started: number; readonly settled: Latch.Latch }
+
+type Transition =
+  | { readonly _tag: "Connecting"; readonly attempt: Starting }
+  // The attempt ended without anything wrong: it connected, was interrupted, or its server went away.
+  | { readonly _tag: "Settled" }
+  | { readonly _tag: "Disabled" }
+  | { readonly _tag: "Failed"; readonly failure: McpConnection.Failure }
+
 type ServerEntry = {
   readonly config: Mcp.ServerConfig
-  status: Status
+  readonly target: Result.Result<McpTarget.Target, McpError.InvalidConfigError>
+  phase: Phase
   readonly startup: Latch.Latch
-  // The connection attempt in flight: when it began and a latch that opens once it settles.
-  attempt?: { readonly started: number; readonly settled: Latch.Latch }
   readonly connection: McpConnection.Connection
   // The connection's tool list tagged for this server, rebuilt only when the connection lists again.
   tagged?: { readonly source: ReadonlyArray<McpClient.Tool>; readonly tools: ReadonlyArray<Tool> }
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
   registration?: State.Registration
+}
+
+// Only a remote server whose config parsed can sign in.
+const remoteTarget = (entry: ServerEntry) =>
+  Result.isSuccess(entry.target) && entry.target.success.type === "remote" ? entry.target.success : undefined
+
+const next = (phase: Phase, transition: Transition): Phase => {
+  switch (transition._tag) {
+    case "Connecting":
+      // A server still starting keeps the startup window it began with.
+      return starting(phase) ?? transition.attempt
+    case "Settled":
+      return starting(phase) ? { _tag: "Idle" } : phase
+    case "Disabled":
+      return { _tag: "Disabled" }
+    case "Failed":
+      return { _tag: "Failed", failure: transition.failure }
+    default:
+      return absurd<Phase>(transition)
+  }
+}
+
+// Every phase change goes through here. The phase changes before a latch opens, which can resume a waiter at once.
+const advance = (entry: ServerEntry, transition: Transition) => {
+  const previous = entry.phase
+  entry.phase = next(previous, transition)
+  if (entry.phase !== previous) settle(previous)
+}
+
+// Leaving an attempt opens its latch, so no one waits out its startup window for nothing.
+const settle = (phase: Phase) => {
+  switch (phase._tag) {
+    case "Starting":
+      phase.settled.openUnsafe()
+      return
+    case "Idle":
+    case "Disabled":
+    case "Failed":
+      return
+    default:
+      return absurd<void>(phase)
+  }
+}
+
+const starting = (phase: Phase): Starting | undefined => {
+  switch (phase._tag) {
+    case "Starting":
+      return phase
+    case "Idle":
+    case "Disabled":
+    case "Failed":
+      return undefined
+    default:
+      return absurd<undefined>(phase)
+  }
+}
+
+const disabled = (phase: Phase) => {
+  switch (phase._tag) {
+    case "Disabled":
+      return true
+    case "Starting":
+    case "Idle":
+    case "Failed":
+      return false
+    default:
+      return absurd<boolean>(phase)
+  }
+}
+
+const status = (entry: ServerEntry): Status => {
+  const phase = entry.phase
+  switch (phase._tag) {
+    case "Idle":
+      return entry.connection.client ? { status: "connected" } : offline(phase)
+    case "Starting":
+    case "Disabled":
+    case "Failed":
+      return offline(phase)
+    default:
+      return absurd<Status>(phase)
+  }
+}
+
+// What a server reports while it has no live connection.
+const offline = (phase: Phase): Offline => {
+  switch (phase._tag) {
+    case "Starting":
+    case "Idle":
+      return { status: "pending" }
+    case "Disabled":
+      return { status: "disabled" }
+    case "Failed":
+      return phase.failure
+    default:
+      return absurd<Offline>(phase)
+  }
 }
 
 // A client-hosted MCP server attached over a connection the client opened. Internal: never listed,
@@ -134,18 +264,23 @@ const FALLBACK_LIST_TIMEOUT = "5 seconds"
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 
-const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
+const changes = {
+  tools: McpEvent.ToolsChanged,
+  resources: McpEvent.ResourcesChanged,
+  prompts: PromptsChanged,
+  skills: SkillsChanged,
+} satisfies Record<McpConnection.Kind, unknown>
 
-// A broken, silent or closed event stream reopens after a delay growing from a second to this cap.
-const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")])
+// Event IDs a subscription remembers to skip a duplicate the server replays.
+const SEEN_EVENTS = 100
+const MAX_CURSOR = 4096
 
 const isEnded = (error: Error) =>
-  error instanceof EventStreamRejectedError || error instanceof EventStreamTerminatedError
+  error instanceof EventStreamRejectedError ||
+  error instanceof EventStreamTerminatedError ||
+  error instanceof EventsUnavailableError
 
-type Data = {
-  servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
-  removed: Set<ServerName>
-}
+type Data = Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
 
 export type Editor = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
@@ -187,15 +322,45 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly name: string
     readonly args?: Record<string, string>
-  }) => Effect.Effect<PromptResult | undefined, NotFoundError>
+  }) => Effect.Effect<PromptResult | undefined, NotFoundError | Error>
   readonly resourceCatalog: () => Effect.Effect<ResourceCatalog>
   readonly resources: (input: { readonly server: ServerName | string }) => Effect.Effect<ResourceCatalog, Error>
   readonly readResource: (input: {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
-  /** Experimental: MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
+  /** Experimental: skills that connected servers list through MCP Skills. */
+  readonly skills: () => Effect.Effect<Skill[]>
+  /**
+   * Experimental: reads one verified file of a skill from the server that listed it, its `SKILL.md` when `ref` is
+   * omitted.
+   */
+  readonly readSkill: (input: {
+    readonly server: ServerName | string
+    readonly entry: McpClient.Skill
+    readonly ref?: string
+  }) => Effect.Effect<McpClient.SkillFile, NotFoundError | McpClient.SkillMismatchError | Error>
+  /** Experimental: one skill of a server by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
+  readonly getSkill: (input: {
+    readonly server: ServerName | string
+    readonly uri: string
+  }) => Effect.Effect<McpClient.Skill, NotFoundError | Error>
+  /** Experimental: MCP Events of a connected server that offers them. */
   readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
+  /**
+   * Experimental: follows an event type of a server from `position`, or from now. It reopens a broken stream and waits
+   * for a disconnected server, skips events in `seen`, and yields each event with the position after it, a new
+   * position when the cursor moves without one, and `pending` while it waits to reopen. Fails when the server
+   * rejects or terminates the subscription, or is removed, disabled or offers no events.
+   */
+  readonly follow: (
+    server: ServerName | string,
+    input: {
+      readonly name: string
+      readonly arguments?: Schema.JsonObject
+      readonly position?: EventPosition
+    },
+  ) => Stream.Stream<EventUpdate, Error>
   /**
    * Experimental: follows an event type of a server, publishing each event as `experimental.mcp.event` while the
    * server is connected, and resuming from the last cursor after a reconnect or a broken stream. Its status changes
@@ -207,10 +372,10 @@ export interface Interface extends State.Transformable<Editor> {
     input: {
       readonly name: string
       readonly arguments?: Schema.JsonObject
-      /** Where to start; omitted or null starts from now. */
+      /** Where to start; null starts from now, and omitted resumes an ended subscription or starts from now. */
       readonly cursor?: string | null
     },
-  ) => Effect.Effect<Subscription, NotFoundError | EventsUnavailableError>
+  ) => Effect.Effect<Subscription, NotFoundError>
   /** Experimental: stops following a subscription. */
   readonly unsubscribe: (id: string) => Effect.Effect<void>
   /** Experimental: every subscription, with its status. */
@@ -221,7 +386,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/MC
 
 /**
  * Why `subscribe` cannot follow a server's events.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export class EventsUnavailableError extends Schema.TaggedError<EventsUnavailableError>()("MCP.EventsUnavailableError", {
   server: ServerName,
@@ -230,7 +395,7 @@ export class EventsUnavailableError extends Schema.TaggedError<EventsUnavailable
 
 /**
  * An event type of a server, followed onto the bus as `experimental.mcp.event`.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export interface Subscription {
   /** The same for every subscribe to this server, event name and arguments, within this Location. */
@@ -243,6 +408,27 @@ export interface Subscription {
   readonly cursor: string | null
 }
 
+/**
+ * Where following an event type resumes: the last cursor, and the latest event IDs it delivered, oldest first.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
+ */
+export interface EventPosition {
+  readonly cursor: string | null
+  readonly seen: ReadonlyArray<string>
+}
+
+/** What `follow` yields. Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
+export type EventUpdate =
+  | {
+      readonly type: "event"
+      readonly event: Extract<McpClient.EventMessage, { type: "event" }>
+      readonly position: EventPosition
+      /** Events before this one may have been missed. */
+      readonly truncated?: true
+    }
+  | { readonly type: "position"; readonly position: EventPosition }
+  | { readonly type: "pending" }
+
 export const Options = Schema.Struct({
   clientInfo: Schema.optional(
     Schema.Struct({
@@ -253,19 +439,85 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
+/**
+ * Follows an event type through the server's events `open` gives, as `Mcp.follow` does. `open` fails with
+ * EventsUnavailableError when following can't go on, and with another error to retry later.
+ */
+export const followEvents = (
+  server: ServerName,
+  input: Parameters<Interface["follow"]>[1],
+  open: Effect.Effect<McpClient.Events, Error>,
+) =>
+  Stream.callback<EventUpdate, Error>((queue) =>
+    Effect.gen(function* () {
+      let position = input.position ?? { cursor: null, seen: [] }
+      let gap = false
+      const move = (next: EventPosition) => {
+        const moved = next.cursor !== position.cursor
+        position = next
+        return moved ? Queue.offer(queue, { type: "position", position }) : Effect.void
+      }
+      yield* Stream.unwrap(
+        open.pipe(
+          Effect.map((events) =>
+            events.stream({ name: input.name, arguments: input.arguments, cursor: position.cursor }),
+          ),
+        ),
+      ).pipe(
+        Stream.tap((message) => {
+          if (message.type === "error")
+            return Effect.logWarning("mcp event stream error", { server, name: input.name, code: message.error.code })
+          // A cursor is kept and sent back on every reopen, so a server can't make it arbitrarily large.
+          if ((message.cursor?.length ?? 0) > MAX_CURSOR)
+            return Effect.fail(
+              new EventsUnavailableError({ server, message: "The MCP server sent an oversized event cursor." }),
+            )
+          if (message.type === "heartbeat") return move({ ...position, cursor: message.cursor })
+          if (message.type === "active") {
+            gap ||= message.cursor !== null && message.truncated
+            position = { ...position, cursor: message.cursor }
+            return Queue.offer(queue, { type: "position", position })
+          }
+          // A server replaying from an older cursor can send an event again; the last ones are remembered.
+          if (position.seen.includes(message.eventId)) return move({ ...position, cursor: message.cursor })
+          position = { cursor: message.cursor, seen: [...position.seen, message.eventId].slice(-SEEN_EVENTS) }
+          const update = {
+            type: "event" as const,
+            event: message,
+            position,
+            ...(gap ? { truncated: true as const } : {}),
+          }
+          gap = false
+          return Queue.offer(queue, update)
+        }),
+        // Stream.retry resets on output. Only a confirmed open resets the delay, not a failed attempt.
+        Stream.filter((message) => message.type === "active"),
+        Stream.concat(Stream.fail(new Error(`MCP server ${server} closed the event stream`))),
+        Stream.tapError((error) => (isEnded(error) ? Effect.void : Queue.offer(queue, { type: "pending" }))),
+        Stream.retry(
+          reopen.pipe(
+            Schedule.setInputType<Error>(),
+            Schedule.while(({ input }) => !isEnded(input)),
+          ),
+        ),
+        Stream.runDrain,
+      )
+    }),
+  )
+
 export const layer = (options?: Options) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const location = yield* Location.Service
       const environment = yield* Environment.Service
+      const skills = yield* Flag.enabled("mcp_skills")
       const bus = yield* Bus.Service
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
-      const mcpEvents = yield* Flag.enabled("mcp_events")
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -293,10 +545,40 @@ export const layer = (options?: Options) =>
       // Legacy era only: pending URL-mode elicitation forms, settled by notifications/elicitation/complete.
       const urlElicitations = new Map<string, Form.ID>()
 
-      // Experimental MCP Events subscriptions, by server. Each streams while its server is connected; the streams
-      // run here, in this Location, not in a pooled connection's scope.
-      type Followed = { -readonly [K in keyof Subscription]: Subscription[K] } & { gap: boolean }
-      const followed = new Map<ServerName, Map<string, Followed>>()
+      const follow: Interface["follow"] = (server, input) => {
+        const name = ServerName.make(server)
+        return Stream.unwrap(
+          requireServer(name).pipe(
+            Effect.as(
+              followEvents(
+                name,
+                input,
+                Effect.suspend(() => {
+                  const entry = entries.get(name)
+                  if (!entry || disabled(entry.phase))
+                    return Effect.fail(
+                      new EventsUnavailableError({ server: name, message: "The MCP server was removed or disabled." }),
+                    )
+                  const client = entry.connection.client
+                  if (!client) return Effect.fail(new Error(`MCP server ${name} is not connected`))
+                  const events = client.events
+                  if (!events)
+                    return Effect.fail(
+                      new EventsUnavailableError({ server: name, message: "The MCP server offers no events." }),
+                    )
+                  return Effect.succeed(events)
+                }),
+              ),
+            ),
+          ),
+        )
+      }
+
+      // Experimental MCP Events subscriptions, by ID. Each follows its event type while this service lives.
+      type Followed = { -readonly [K in Exclude<keyof Subscription, "cursor">]: Subscription[K] } & {
+        position: EventPosition
+      }
+      const followed = new Map<string, Followed>()
       const streams = yield* FiberMap.make<string>()
       const runStream = yield* FiberMap.runtime(streams)<never>()
       const view = (sub: Followed): Subscription => ({
@@ -305,7 +587,7 @@ export const layer = (options?: Options) =>
         name: sub.name,
         arguments: sub.arguments,
         status: sub.status,
-        cursor: sub.cursor,
+        cursor: sub.position.cursor,
       })
 
       const setStatus = (sub: Followed, status: Mcp.SubscriptionStatus) =>
@@ -315,106 +597,58 @@ export const layer = (options?: Options) =>
           return bus.publish(McpEvent.ExperimentalSubscriptionChanged, { id: sub.id })
         })
 
-      const receive = (sub: Followed, message: McpClient.EventMessage) => {
-        if (message.type === "error")
-          return Effect.logWarning("mcp event stream error", {
-            server: sub.server,
-            name: sub.name,
-            code: message.error.code,
-          })
-        if (message.type === "heartbeat")
-          return Effect.sync(() => {
-            sub.cursor = message.cursor
-          })
-        if (message.type === "active")
-          return Effect.sync(() => {
-            sub.cursor = message.cursor
-            sub.gap ||= message.cursor !== null && message.truncated
-          }).pipe(Effect.andThen(setStatus(sub, { status: "active" })))
-        // The cursor moves past the event only once it is published.
-        return bus
-          .publish(McpEvent.ExperimentalEvent, {
-            id: sub.id,
-            server: sub.server,
-            name: sub.name,
-            eventId: message.eventId,
-            timestamp: message.timestamp,
-            data: message.data,
-            cursor: message.cursor,
-            ...(sub.gap ? { truncated: true } : {}),
-          })
-          .pipe(
-            Effect.andThen(
-              Effect.sync(() => {
-                sub.cursor = message.cursor
-                sub.gap = false
-              }),
-            ),
-          )
-      }
-
-      // Streams until the server terminates or rejects the subscription. A clean close reopens like a broken stream.
-      const follow = (sub: Followed, events: McpClient.Events) =>
-        Stream.suspend(() => events.stream({ name: sub.name, arguments: sub.arguments, cursor: sub.cursor })).pipe(
-          Stream.tap((message) => receive(sub, message)),
-          // Stream.retry resets on output. Only a confirmed open resets the delay, not a failed attempt.
-          Stream.filter((message) => message.type === "active"),
-          Stream.concat(Stream.fail(new Error(`MCP server ${sub.server} closed the event stream`))),
-          Stream.tapError((error) => (isEnded(error) ? Effect.void : setStatus(sub, { status: "pending" }))),
-          Stream.retry(
-            EVENT_REOPEN.pipe(
-              Schedule.setInputType<Error>(),
-              Schedule.while(({ input }) => !isEnded(input)),
-            ),
-          ),
-          Stream.runDrain,
+      const publish = (sub: Followed) =>
+        follow(sub.server, { name: sub.name, arguments: sub.arguments, position: sub.position }).pipe(
+          Stream.runForEach((update) => {
+            if (update.type === "pending") return setStatus(sub, { status: "pending" })
+            // The position moves past an event only once it is published.
+            const publish =
+              update.type === "event"
+                ? bus.publish(McpEvent.ExperimentalEvent, {
+                    id: sub.id,
+                    server: sub.server,
+                    name: sub.name,
+                    eventId: update.event.eventId,
+                    timestamp: update.event.timestamp,
+                    data: update.event.data,
+                    cursor: update.event.cursor,
+                    ...(update.truncated ? { truncated: true } : {}),
+                  })
+                : Effect.void
+            return publish.pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  sub.position = update.position
+                }),
+              ),
+              Effect.andThen(setStatus(sub, { status: "active" })),
+            )
+          }),
           Effect.catch((error) =>
-            isEnded(error)
-              ? setStatus(sub, {
-                  status: "ended",
-                  reason: error instanceof EventStreamRejectedError ? "rejected" : "terminated",
-                  error: { code: error.code, message: error.message },
-                })
-              : Effect.void,
+            setStatus(
+              sub,
+              error instanceof EventStreamRejectedError || error instanceof EventStreamTerminatedError
+                ? {
+                    status: "ended",
+                    reason: error instanceof EventStreamRejectedError ? "rejected" : "terminated",
+                    error: { code: error.code, message: error.message },
+                  }
+                : { status: "ended", reason: "unavailable" },
+            ),
           ),
-        )
-
-      // Starts or stops a server's subscriptions to match its status; runs on every status change.
-      const follows = Effect.fnUntraced(function* (server: ServerName) {
-        const entry = entries.get(server)
-        const client = entry?.status.status === "connected" ? entry.connection.client : undefined
-        for (const sub of followed.get(server)?.values() ?? []) {
-          if (sub.status.status === "ended") continue
-          if (client?.events) {
-            runStream(sub.id, follow(sub, client.events), { onlyIfMissing: true })
-            continue
-          }
-          yield* FiberMap.remove(streams, sub.id)
-          yield* setStatus(
-            sub,
-            !entry || entry.status.status === "disabled" || client
-              ? { status: "ended", reason: "unavailable" }
-              : { status: "pending" },
-          )
-        }
-      })
-      if (mcpEvents)
-        yield* bus.subscribe(McpEvent.StatusChanged).pipe(
-          Stream.runForEach((event) => follows(ServerName.make(event.data.server))),
-          Effect.forkScoped({ startImmediately: true }),
         )
 
       // Register every remote server as an OAuth integration so credentials live in the global store
       // rather than in committed config. Servers that connect anonymously simply never use the method.
       const register = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
-        if (entry.config.type !== "remote" || entry.config.oauth === false) return
-        const remote = entry.config
+        const target = remoteTarget(entry)
+        if (!target || target.config.oauth === false) return
         // Key identity on name + url, not url alone: two configs for the same url under different names are
         // distinct logical servers that may hold different accounts, so they must not share a credential row.
         const suffix =
           "mcp_" +
           createHash("sha1")
-            .update(name + "\u0000" + remote.url)
+            .update(name + "\u0000" + target.config.url)
             .digest("hex")
             .slice(0, 16)
         const integrationID = Integration.ID.make(suffix)
@@ -437,7 +671,7 @@ export const layer = (options?: Options) =>
               authorize: () =>
                 Effect.gen(function* () {
                   const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-                  return yield* McpOAuth.authorize({ name, config: remote, integrationID, methodID }).pipe(
+                  return yield* McpOAuth.authorize({ name, target, integrationID, methodID }).pipe(
                     Effect.provideService(Credential.Service, credentials),
                     Effect.provideService(FetchHttpClient.Fetch, fetch),
                   )
@@ -469,9 +703,10 @@ export const layer = (options?: Options) =>
         entry: ServerEntry,
         credential: Credential.Info | undefined,
       ) {
-        if (entry.config.type !== "remote" || !entry.integrationID) return undefined
+        const target = remoteTarget(entry)
+        if (!target || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ server: name, config: entry.config, credential }).pipe(
+        return yield* McpOAuth.connectProvider({ server: name, target, credential }).pipe(
           Effect.provideService(Credential.Service, credentials),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
@@ -558,89 +793,99 @@ export const layer = (options?: Options) =>
         const pooled =
           config.pool === true &&
           config.protocol !== "legacy" &&
-          (config.type === "remote" || location.workspaceID === undefined)
-        const share = (input: McpConnection.Input) =>
-          pool.connection({
-            ...input,
-            select: Effect.gen(function* () {
-              if (input.config.type === "remote") {
-                const credential = yield* selectCredential(entry)
-                return {
-                  key: McpPool.key({ ...input, credential: credential?.id }),
-                  authProvider: connectProvider(name, entry, credential),
-                }
-              }
-              // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
-              const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
-              return {
-                key: McpPool.key({ ...input, cwd: McpStdio.resolveCwd(input.directory, input.config.cwd) }),
-                authProvider: input.authProvider,
-              }
+          (config.type === "remote" || environment.local === true)
+        const base: Omit<McpConnection.Input, "endpointLoads" | "shared" | "spec"> = {
+          authProvider: Effect.suspend(() =>
+            selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
+          ),
+          elicitation,
+          environment,
+          fetch,
+          scope: servers,
+          lock: locks.withLock(name),
+          callbacks,
+          fork,
+          events: {
+            connecting: Effect.gen(function* () {
+              // A server still pending from creation keeps the window that started with its entry. Announce the
+              // handshake so connect() and credential reconnects don't show a stale disabled/failed status for the
+              // duration of the connection attempt.
+              advance(entry, {
+                _tag: "Connecting",
+                attempt: { _tag: "Starting", started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() },
+              })
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
             }),
-          })
+            connected: Effect.gen(function* () {
+              advance(entry, { _tag: "Settled" })
+              yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
+              // Announce every list a consumer may read, since each reads them only on these events. A
+              // connection another Location already holds has loaded its prompts, and no later change
+              // would tell this one; prompts still loading read empty now and announce themselves later.
+              for (const kind of McpConnection.KINDS) yield* bus.publish(changes[kind], { server: name })
+              yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            }),
+            failed: (failure) =>
+              Effect.gen(function* () {
+                advance(entry, { _tag: "Failed", failure })
+                yield* Effect.logWarning("mcp connect failed", { server: name, status: failure })
+                yield* bus.publish(McpEvent.StatusChanged, { server: name })
+              }),
+            // An attempt interrupted before it reported an outcome stays pending, but no longer holds anyone up.
+            settled: Effect.suspend(() => {
+              advance(entry, { _tag: "Settled" })
+              return entry.startup.open
+            }),
+            closed: (failure) =>
+              Effect.gen(function* () {
+                advance(entry, { _tag: "Failed", failure })
+                yield* entry.connection.stop
+                yield* bus.publish(McpEvent.StatusChanged, { server: name })
+              }),
+            changed: (kind) => bus.publish(changes[kind], { server: name }),
+          },
+        }
+        const connection = (spec: McpConnection.Spec) =>
+          pooled
+            ? pool.connection({
+                ...base,
+                spec,
+                select: Effect.gen(function* () {
+                  if (spec.target.type === "remote") {
+                    const credential = yield* selectCredential(entry)
+                    return {
+                      key: McpPool.key({ ...spec, config: spec.target.config, credential: credential?.id }),
+                      authProvider: connectProvider(name, entry, credential),
+                    }
+                  }
+                  // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
+                  const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
+                  return {
+                    key: McpPool.key({
+                      ...spec,
+                      config: spec.target.config,
+                      cwd: McpStdio.resolveCwd(spec.directory, spec.target.config.cwd),
+                    }),
+                    authProvider: base.authProvider,
+                  }
+                }),
+              })
+            : McpConnection.make({ ...base, spec, endpointLoads: pool.endpointLoads })
+        const target = McpTarget.parse(name, config)
         const entry: ServerEntry = {
           config,
-          status: { status: "pending" },
+          target,
+          phase: { _tag: "Starting", started, settled: Latch.makeUnsafe() },
           startup: Latch.makeUnsafe(),
-          attempt: { started, settled: Latch.makeUnsafe() },
-          connection: (pooled ? share : McpConnection.make)({
-            name,
-            config,
-            directory: location.directory,
-            clientInfo: options?.clientInfo,
-            mcpEvents,
-            authProvider: Effect.suspend(() =>
-              selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
-            ),
-            elicitation,
-            environment,
-            fetch,
-            scope: servers,
-            lock: locks.withLock(name),
-            callbacks,
-            fork,
-            events: {
-              connecting: Effect.gen(function* () {
-                // A server still pending from creation keeps the window that started with its entry.
-                if (!entry.attempt || entry.status.status !== "pending")
-                  entry.attempt = { started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() }
-                // Announce the handshake so connect() and credential reconnects don't show a stale
-                // disabled/failed status for the duration of the connection attempt.
-                entry.status = { status: "pending" }
-                yield* bus.publish(McpEvent.StatusChanged, { server: name })
+          connection: Result.isFailure(target)
+            ? McpConnection.invalid(base.events, target.failure)
+            : connection({
+                name,
+                target: target.success,
+                directory: location.directory,
+                clientInfo: options?.clientInfo,
+                skills,
               }),
-              connected: Effect.gen(function* () {
-                entry.status = { status: "connected" }
-                yield* Effect.logInfo("mcp connected", { server: name, tools: entry.connection.tools?.length })
-                // Announce every list a consumer may read, since each reads them only on these events. A
-                // connection another Location already holds has loaded its prompts, and no later change
-                // would tell this one; prompts still loading read empty now and announce themselves later.
-                yield* bus.publish(McpEvent.ToolsChanged, { server: name })
-                yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
-                yield* bus.publish(PromptsChanged, { server: name })
-                yield* bus.publish(McpEvent.StatusChanged, { server: name })
-              }),
-              failed: (failure) =>
-                Effect.gen(function* () {
-                  entry.status = failure
-                  yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
-                  yield* bus.publish(McpEvent.StatusChanged, { server: name })
-                }),
-              // Every start runs under the server lock, so the attempt read here is the one it began.
-              settled: Effect.suspend(() => {
-                const attempt = entry.attempt
-                entry.attempt = undefined
-                return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
-              }),
-              closed: (reason) =>
-                Effect.gen(function* () {
-                  entry.status = { status: "failed", error: reason }
-                  yield* entry.connection.stop
-                  yield* bus.publish(McpEvent.StatusChanged, { server: name })
-                }),
-              changed: (kind) => bus.publish(changes[kind], { server: name }),
-            },
-          }),
         }
         return entry
       }
@@ -687,6 +932,7 @@ export const layer = (options?: Options) =>
         })
 
       const disposeServer = Effect.fnUntraced(function* (entry: ServerEntry) {
+        advance(entry, { _tag: "Settled" })
         yield* entry.connection.stop
         if (entry.registration) yield* entry.registration.dispose
       })
@@ -699,14 +945,19 @@ export const layer = (options?: Options) =>
         yield* Effect.gen(function* () {
           yield* register(name, entry)
           if (serverConfig.disabled) {
-            entry.status = { status: "disabled" }
+            advance(entry, { _tag: "Disabled" })
             yield* bus.publish(McpEvent.StatusChanged, { server: name })
             return
           }
           yield* entry.connection.start
         }).pipe(
           // Settle startup even when registration fails or replacement is interrupted, so readers cannot hang.
-          Effect.ensuring(entry.startup.open),
+          Effect.ensuring(
+            Effect.suspend(() => {
+              advance(entry, { _tag: "Settled" })
+              return entry.startup.open
+            }),
+          ),
         )
       })
 
@@ -761,7 +1012,7 @@ export const layer = (options?: Options) =>
         let closed = false
         const result = yield* McpClient.connect({
           server: name,
-          config: { type: "attached", transport },
+          target: { type: "attached", transport },
           directory: location.directory,
           elicitation,
           clientInfo: options?.clientInfo,
@@ -817,7 +1068,7 @@ export const layer = (options?: Options) =>
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcileLock = Semaphore.makeUnsafe(1)
       const reconcile = Effect.fnUntraced(function* () {
-        const servers = state.get().servers
+        const servers = state.get()
         if (!booted) {
           booted = true
           const started = yield* Clock.currentTimeMillis
@@ -829,7 +1080,7 @@ export const layer = (options?: Options) =>
           // Initial connections stay asynchronous so one slow server does not block Location startup.
           for (const [name, entry] of entries) {
             if (entry.config.disabled) {
-              entry.status = { status: "disabled" }
+              advance(entry, { _tag: "Disabled" })
               entry.startup.openUnsafe()
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
               continue
@@ -837,7 +1088,7 @@ export const layer = (options?: Options) =>
             fork(
               Effect.gen(function* () {
                 // connect() or disconnect() may have settled the server while this startup waited to run.
-                if (entry.status.status !== "pending") return yield* entry.startup.open
+                if (!starting(entry.phase)) return yield* entry.startup.open
                 yield* entry.connection.start
               }).pipe(locks.withLock(name)),
             )
@@ -866,7 +1117,7 @@ export const layer = (options?: Options) =>
             // add() or remove() may have replaced or deleted the entry while we waited for the lock.
             const entry = entries.get(name)
             if (!entry || entry.integrationID !== integrationID) return
-            if (entry.status.status === "disabled") return
+            if (disabled(entry.phase)) return
             yield* entry.connection.stop
             yield* entry.connection.start
           }).pipe(locks.withLock(name))
@@ -876,30 +1127,32 @@ export const layer = (options?: Options) =>
           .subscribe(Credential.Event.Switched)
           .pipe(Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID))))),
       )
+      // Runtime `add`/`remove` overrides seed initial state so downstream transforms (codemode defaults,
+      // plugin updates, and managed policy denials) still see and govern runtime-added servers. Skipping
+      // `editor.set` only for runtime-removed names keeps third-party plugin `set` semantics unchanged
+      // while eliminating separate `removed` tombstones from `Data`.
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
-        initial: () => ({
-          servers: new Map(
+        initial: () =>
+          new Map(
             Array.from(overrides).flatMap(([name, config]) =>
               config === false ? [] : [[name, cloneConfig(config)] as const],
             ),
           ),
-          removed: new Set(Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : []))),
-        }),
-        editor: (editor) => ({
-          list: () => Array.from(editor.servers),
-          get: (server) => editor.servers.get(ServerName.make(server)),
+        editor: (servers) => ({
+          list: () => Array.from(servers),
+          get: (server) => servers.get(ServerName.make(server)),
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
-            if (editor.removed.has(name)) return
-            editor.servers.set(name, cloneConfig(serverConfig))
+            if (overrides.get(name) === false) return
+            servers.set(name, cloneConfig(serverConfig))
           },
           update: (server, update) => {
-            const current = editor.servers.get(ServerName.make(server))
+            const current = servers.get(ServerName.make(server))
             if (!current) return
             update(current)
           },
-          remove: (server) => editor.servers.delete(ServerName.make(server)),
+          remove: (server) => servers.delete(ServerName.make(server)),
         }),
         notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
@@ -913,7 +1166,7 @@ export const layer = (options?: Options) =>
             .map(
               ([name, entry]): ServerInfo => ({
                 name,
-                status: entry.status,
+                status: status(entry),
                 title: entry.connection.client?.title,
                 integrationID: entry.integrationID,
               }),
@@ -940,7 +1193,7 @@ export const layer = (options?: Options) =>
             Effect.gen(function* () {
               const entry = yield* requireServer(name)
               yield* entry.connection.stop
-              entry.status = { status: "disabled" }
+              advance(entry, { _tag: "Disabled" })
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
             }).pipe(locks.withLock(name)),
           )
@@ -970,9 +1223,10 @@ export const layer = (options?: Options) =>
           const now = yield* Clock.currentTimeMillis
           yield* Effect.all(
             Array.from(entries.values()).flatMap((entry) => {
-              if (entry.status.status !== "pending" || !entry.attempt) return []
-              const remaining = entry.attempt.started + STARTUP_GRACE_MS - now
-              return remaining > 0 ? [entry.attempt.settled.await.pipe(Effect.raceFirst(Effect.sleep(remaining)))] : []
+              const attempt = starting(entry.phase)
+              if (!attempt) return []
+              const remaining = attempt.started + STARTUP_GRACE_MS - now
+              return remaining > 0 ? [attempt.settled.await.pipe(Effect.raceFirst(Effect.sleep(remaining)))] : []
             }),
             { concurrency: "unbounded", discard: true },
           )
@@ -1000,7 +1254,7 @@ export const layer = (options?: Options) =>
             return yield* new ToolCallError({
               server,
               tool: input.name,
-              message: unavailable(server, target.entry.status),
+              message: unavailable(server, offline(target.entry.phase)),
             })
           return yield* target.entry.connection.recovering(target.client, call).pipe(failed("server"))
         }),
@@ -1008,7 +1262,8 @@ export const layer = (options?: Options) =>
           return Array.from(entries)
             .flatMap(([server, entry]) => {
               const instructions = entry.connection.client?.instructions
-              if (!instructions) return []
+              // A server that offers skills says what it needs to in them. Dynamic skills aren't registered.
+              if (!instructions || entry.connection.skills?.some((skill) => skill.resources !== "dynamic")) return []
               return [{ server, instructions }]
             })
             .toSorted((a, b) => a.server.localeCompare(b.server))
@@ -1023,9 +1278,9 @@ export const layer = (options?: Options) =>
         prompt: Effect.fn("MCP.prompt")(function* (input) {
           const target = yield* connected(ServerName.make(input.server))
           if (!target.client) return undefined
-          return yield* target.entry.connection
-            .recovering(target.client, (connection) => connection.prompt({ name: input.name, args: input.args }))
-            .pipe(Effect.orElseSucceed(() => undefined))
+          return yield* target.entry.connection.recovering(target.client, (connection) =>
+            connection.prompt({ name: input.name, args: input.args }),
+          )
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
           const empty = ResourceCatalog.make({ resources: [], templates: [] })
@@ -1066,18 +1321,40 @@ export const layer = (options?: Options) =>
             ),
           })
         }),
+        skills: Effect.fn("MCP.skills")(function* () {
+          return Array.from(entries).flatMap(([server, entry]) =>
+            (entry.connection.skills ?? []).map((skill): Skill => ({ server, entry: skill })),
+          )
+        }),
+        getSkill: Effect.fn("MCP.getSkill")(function* (input) {
+          const name = ServerName.make(input.server)
+          const target = yield* connected(name)
+          if (!target.client) return yield* Effect.fail(new Error(unavailable(name, offline(target.entry.phase))))
+          return yield* target.entry.connection.recovering(target.client, (connection) =>
+            connection.skills
+              ? connection.skills.get(input.uri)
+              : Effect.fail(new Error(`MCP server "${name}" does not offer skills`)),
+          )
+        }),
+        readSkill: Effect.fn("MCP.readSkill")(function* (input) {
+          const name = ServerName.make(input.server)
+          const target = yield* connected(name)
+          if (!target.client) return yield* Effect.fail(new Error(unavailable(name, offline(target.entry.phase))))
+          return yield* target.entry.connection.recovering(target.client, (connection) =>
+            connection.skills
+              ? connection.skills.read(input.entry, input.ref)
+              : Effect.fail(new Error(`MCP server "${name}" does not offer skills`)),
+          )
+        }),
         events: Effect.fn("MCP.events")(function* (server) {
           return (yield* connected(ServerName.make(server))).client?.events
         }),
+        follow,
         subscribe: Effect.fn("MCP.subscribe")(function* (server, input) {
           const name = ServerName.make(server)
-          if (!mcpEvents)
-            return yield* new EventsUnavailableError({ server: name, message: "MCP events need the mcp_events flag." })
           yield* requireServer(name)
           const id = "mcpsub_" + Hash.sha256(canonicalJson([name, input.name, input.arguments ?? {}])).slice(0, 24)
-          const subs = followed.get(name) ?? new Map<string, Followed>()
-          followed.set(name, subs)
-          const existing = subs.get(id)
+          const existing = followed.get(id)
           if (existing && existing.status.status !== "ended") return view(existing)
           const sub: Followed = {
             id,
@@ -1085,23 +1362,24 @@ export const layer = (options?: Options) =>
             name: input.name,
             arguments: input.arguments,
             status: { status: "pending" },
-            cursor: input.cursor ?? existing?.cursor ?? null,
-            gap: false,
+            // Only a resumed subscription keeps the event IDs it delivered; one given a cursor starts over from it.
+            position:
+              input.cursor === undefined
+                ? (existing?.position ?? { cursor: null, seen: [] })
+                : { cursor: input.cursor, seen: [] },
           }
-          subs.set(id, sub)
+          followed.set(id, sub)
           yield* bus.publish(McpEvent.ExperimentalSubscriptionChanged, { id })
-          yield* follows(name)
+          runStream(id, publish(sub))
           return view(sub)
         }),
         unsubscribe: Effect.fn("MCP.unsubscribe")(function* (id) {
-          const subs = Array.from(followed.values()).find((subs) => subs.has(id))
-          if (!subs) return
-          subs.delete(id)
+          if (!followed.delete(id)) return
           yield* FiberMap.remove(streams, id)
           yield* bus.publish(McpEvent.ExperimentalSubscriptionChanged, { id })
         }),
         subscriptions: Effect.fn("MCP.subscriptions")(function* () {
-          return Array.from(followed.values()).flatMap((subs) => Array.from(subs.values(), view))
+          return Array.from(followed.values(), view)
         }),
       })
     }),
@@ -1132,11 +1410,11 @@ export function configured(options?: Options) {
     deps: [
       Location.node,
       Environment.node,
-      Flag.node,
       Bus.node,
       Form.node,
       Integration.node,
       Credential.node,
+      Flag.node,
       httpFetch,
       McpPool.node,
     ],

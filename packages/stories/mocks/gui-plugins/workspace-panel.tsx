@@ -66,13 +66,23 @@ export default function WorkspacePanel(props: {
 
   const [opened, setOpened] = createSignal(true)
 
+  const [side, setSide] = createSignal<"start" | "end">("start")
+
   const frame: PanelFrame = {
     visible: () => true,
     present: () => true,
     placement: () => "side",
     reserve: () => false,
     animate: () => false,
-    sidebar: { opened, width, resize: setWidth, toggle: () => setOpened((value) => !value), transition: () => false },
+    sidebar: {
+      opened,
+      width,
+      resize: setWidth,
+      toggle: () => setOpened((value) => !value),
+      transition: () => false,
+      side,
+      move: setSide,
+    },
     open: () => [tab()],
   }
 

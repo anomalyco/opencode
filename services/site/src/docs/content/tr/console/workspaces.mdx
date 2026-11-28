@@ -1,0 +1,96 @@
+---
+title: "Temel bilgiler"
+description: "OpenCode Console çalışma alanları oluşturun, aralarında geçiş yapın, adlarını değiştirin ve onları silin; üye rollerini öğrenin."
+---
+
+Bir çalışma alanı [Console](https://opencode.ai/console) içindeki her şeyi barındırır: üyeler, krediler, bütçeler,
+sağlayıcılar, politikalar ve hizmet hesapları. Kullanım ve faturalandırma çalışma alanı başına izlenir.
+
+Bir çalışma alanının tek üyesi olabilir. Kredileri, [kendi sağlayıcılarınızı](/console/providers), bütçeleri ve
+[Go](/console/go) hizmetini kendi başınıza kullanabilir ve [üyeleri](/console/members) yalnızca ihtiyaç duyduğunuzda davet
+edebilirsiniz.
+
+## İlk çalışma alanınız
+
+Console, kaydolduğunuzda sizi sahibi ve tek üyesi yapan **Personal** adlı bir çalışma alanı oluşturur. Bir davetten
+kaydolursanız bunun yerine davet eden çalışma alanına katılırsınız ve Personal çalışma alanı oluşturulmaz.
+
+## Çalışma alanı oluşturma
+
+1. Üst çubuktaki çalışma alanı menüsünü açın.
+2. **Create Workspace** düğmesine tıklayın.
+3. Bir **Workspace name** girin ve **Create** düğmesine tıklayın.
+
+Yeni çalışma alanının sahibi siz olursunuz.
+
+## Çalışma alanları arasında geçiş
+
+Çalışma alanı menüsünden başka bir çalışma alanı seçin. Console sizi aynı sayfada tutar; bu nedenle
+`/acme/settings/members` sayfasından geçiş yapmak diğer çalışma alanının Members sayfasını açar.
+
+Bekleyen davetler aynı menünün üstünde görünür. Bkz. [Üyeler](/console/members#accept-an-invitation).
+
+## OpenCode'u bağlama
+
+OpenCode'da `/connect` çalıştırın ve tarayıcıda çalışma alanını seçin. OpenCode ardından o çalışma alanının modellerini,
+politikalarını ve bütçelerini kullanır.
+
+```text
+/connect
+```
+
+OpenCode'u başka bir çalışma alanına geçirmek için `/connect` komutunu yeniden çalıştırın. Çalışma alanı
+[politikaları](/policies#console) yeni çalışma alanının politikalarıyla değiştirilir ve bağlantıyı kestiğinizde temizlenir.
+
+## Roller
+
+Her üyenin tek bir rolü vardır. Yeni üyeler her zaman **Member** olarak katılır.
+
+| Rol    | Yapabildikleri                                                                                                       |
+| ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Member | OpenCode'u kullanmak, kendi kullanımını, günlüklerini ve bütçesini görmek.                                           |
+| Admin  | Bir üyenin yapabildikleri ve ayrıca üyeleri, faturalandırmayı, bütçeleri, sağlayıcıları, politikaları, hizmet hesaplarını ve ayarları yönetmek. |
+| Owner  | Bir yöneticinin yapabildikleri ve ayrıca SSO ile dizin eşitlemeyi yönetmek, Owner rolü vermek ve çalışma alanını silmek. |
+
+Üyeler **Activity** sayfasında kendi kullanımlarını ve günlüklerini, ayrıca üyelere görünür olduğunda liderlik tablosunu
+görür. Çalışma alanında bir [Go Teams](/console/go) aboneliği olduğunda kendi limitleriyle **Go** bölümünü de görürler.
+**Account** bölümünü hesap menüsünden açarlar.
+
+### Rol kuralları
+
+- Bir çalışma alanının birden fazla sahibi olabilir ancak her zaman en az bir sahibi olmalıdır.
+- Kendi rolünüzden daha yetkili bir rol atayamazsınız. Bu nedenle **Owner** rolünü yalnızca çalışma alanı sahipleri verebilir.
+- Kendi rolünüzü değiştiremezsiniz.
+
+### Sahipliği devretme
+
+1. Sahip olarak **Settings › Members** bölümünü açın ve yeni sahibin rolünü **Owner** yapın.
+2. Yeni sahipten sizin rolünüzü **Admin** veya **Member** olarak değiştirmesini isteyin.
+
+## Çalışma alanı silme
+
+Bir çalışma alanını yalnızca sahipler ve yalnızca en az bir başka çalışma alanına üye olduklarında silebilir.
+
+1. **Settings › General** bölümünü açın ve **Delete workspace** düğmesine tıklayın.
+2. Her onay kutusunu işaretleyin.
+3. Onaylamak için **Delete workspace** düğmesine tıklayın.
+
+Silme işlemi hemen gerçekleşir ve geri alınamaz:
+
+- Üyeler erişimini hemen kaybeder.
+- Tüm hizmet hesabı API anahtarları ve bekleyen davetler iptal edilir.
+- Otomatik yükleme durur.
+- Etkin bir Go aboneliği sona erer.
+- Kalan kredi bakiyesi kaybedilir.
+
+<Callout type="warning">Bir ödeme işlenirken çalışma alanını silemezsiniz. Birkaç dakika sonra yeniden deneyin.</Callout>
+
+## Çalışma alanından ayrılma
+
+1. Hesap menüsünden **Account** bölümünü açın.
+2. **Connected workspaces** altında çalışma alanının yanındaki **Leave** düğmesine tıklayın.
+3. **Leave workspace** ile onaylayın.
+
+Son sahip ayrılamaz; önce başka bir üyeyi sahip yapın. SSO veya dizin eşitleme kullanan çalışma alanlarında üyeliği
+kimlik sağlayıcınız yönetir; bu nedenle Console'dan ayrılamazsınız. Ayrıldıktan sonra yeniden katılmak için yeni bir davet
+isteyin.

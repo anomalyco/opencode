@@ -288,3 +288,28 @@ for (const width of [840, 390]) {
       .toBe(true)
   })
 }
+
+for (const width of [1280, 390]) {
+  story(`truncates a label naming many tools at ${width}px`, async ({ mount, page }) => {
+    await page.setViewportSize({ width, height: 400 })
+    const root = await mount("current-tool-group--many-tools")
+    const group = root.locator('[data-component="collapsed-tool-group"]')
+    const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+    const title = group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]')
+    await expect(title).toHaveText(/^Shell, Read, Write, .*browser\.type$/)
+
+    for (const open of [false, true]) {
+      if (open) await trigger.click()
+      await expect(trigger).toHaveAttribute("aria-expanded", String(open))
+
+      const fits = await title.evaluate((element) => {
+        const row = element.closest('[data-slot="collapsible-trigger"]')!.getBoundingClientRect()
+        const box = element.getBoundingClientRect()
+
+        return { truncated: element.scrollWidth > element.clientWidth, inside: box.right <= row.right + 0.5 }
+      })
+
+      expect(fits).toEqual({ truncated: true, inside: true })
+    }
+  })
+}

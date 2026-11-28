@@ -404,8 +404,9 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     void entry.ctx.data.session.message.sync(entry.session.id).catch((error) => {
       if (isSessionNotFoundError(error)) forget(entry.conn, entry.session.id)
     })
+    // The inbox stands in for tabs, so it only routes to the session; route sync adds no tab in this layout.
     void startTransition(() => {
-      tabs.select(tabs.addSessionTab({ server: entry.server, sessionId: entry.session.id }))
+      tabs.select({ type: "session", server: entry.server, sessionId: entry.session.id })
       entry.ctx.data.session.remember(entry.ctx.data.session.get(entry.session.id) ?? entry.session)
       entry.ctx.projects.touch(directory)
     })
@@ -517,6 +518,11 @@ export type SessionInbox = ReturnType<typeof createSessionInbox>
 
 export function inboxArchived(entry: InboxEntry) {
   return entry.session.time.archived !== undefined
+}
+
+/** Waiting on a person: a permission to decide or a question to answer. */
+export function inboxWaiting(entry: Pick<InboxEntry, "status">) {
+  return entry.status === "approval" || entry.status === "input"
 }
 
 export function inboxBusy(status: InboxStatus) {

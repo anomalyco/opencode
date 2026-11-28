@@ -1,0 +1,112 @@
+---
+title: "API المزوّدين"
+description: "استدع المزوّدين المرتبطين بمساحة عملك عبر بوابة Console بمفتاح Console."
+---
+
+تتيح بوابة Console عنوان URL خاصًا بكل [مزوّد](/console/providers) مرتبط بمساحة عملك.
+يستخدم OpenCode هذا العنوان تلقائيًا بعد `/connect`، ويمكنك إرسال الطلبات إليه مباشرةً من أدواتك لاستخدام المزوّدين أنفسهم.
+وتضيف Console بيانات اعتماد المزوّد قبل التمرير، فلا يغادر سرّ المزوّد مساحة العمل أبدًا.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## عنوان URL للمزوّد
+
+انسخ **Console API URL** من صفحة المزوّد تحت **Providers**.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## المصادقة
+
+استبدل `<token>` بـ[مفتاح حساب خدمة](/console/api#service-accounts) أنشأته في Console. فتبدله Console
+ببيانات اعتماد الاتصال قبل التمرير.
+
+```text
+Authorization: Bearer <token>
+```
+
+وتقرأ Console المفتاح أيضًا من `x-api-key` أو `api-key` أو `x-goog-api-key`، لذا تعمل حزم SDK الخاصة بالمزوّدين عند توجيهها إلى
+عنوان Console API URL.
+
+## نقاط النهاية
+
+أضف مسار API الخاص بالمزوّد إلى عنوان Console API URL. فتمرّر Console الطلب إلى عنوان URL الأساسي للاتصال
+وتعيد استجابة المزوّد دون تغيير.
+
+| الصيغة               | المسار                            |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+| Embeddings           | `/embeddings`                     |
+
+أرسل معرّف النموذج كما يظهر في صفحة المزوّد. وإذا كان للنموذج معرّف API مختلف لدى المزوّد، تعيد Console كتابته.
+وتُرفض طلبات النماذج غير المفعّلة على الاتصال.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+يُشترط `max_tokens`.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+النموذج والطريقة جزء من المسار. استبدل `:generateContent` بـ`:streamGenerateContent` لبثّ
+الاستجابة.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## الاستخدام
+
+تُحتسب تكلفة الطلبات ضمن [الميزانيات](/console/budgets) وفق التسعير المحدّد لكل نموذج.
+ويحصّل المزوّد منك تكلفة الرموز.

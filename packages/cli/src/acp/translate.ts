@@ -59,7 +59,7 @@ export type TurnState = {
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
   readonly stepError?: SessionError.Error
-  readonly executionError?: { readonly type: string; readonly message: string }
+  readonly executionError?: SessionError.Error
 }
 
 type PermissionEvent = Extract<OpenCodeEvent, { type: "permission.asked" }>
@@ -159,6 +159,8 @@ export function failure(state: TurnState) {
       safeMessage: error.message || "OpenCode prompt failed",
       service: "session",
       errorName: error.type,
+      status: error.status,
+      retryAfterMs: error.retryAfterMs,
     })
   }
   return undefined

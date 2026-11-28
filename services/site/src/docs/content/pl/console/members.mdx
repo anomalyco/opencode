@@ -1,0 +1,71 @@
+---
+title: "Członkowie"
+description: "Zapraszaj osoby do obszaru roboczego OpenCode Console, zarządzaj ich rolami i usuwaj je."
+---
+
+Właściciele i administratorzy zarządzają członkami obszaru roboczego w **Settings › Members**. Otwórz stronę członka, aby
+sprawdzić jego użycie i obowiązujące go zasady budżetowe.
+
+## Zapraszanie członków
+
+1. Otwórz **Settings › Members** i kliknij **Invite Members**.
+2. Dodaj jeden lub więcej adresów e-mail. Oddziel je spacjami, przecinkami lub średnikami albo wklej listę.
+3. Kliknij **Send invitations**.
+
+Każda osoba otrzymuje e-mail o tytule **Join Acme Inc. on OpenCode** z przyciskiem **Join workspace**.
+
+Zaproszenia wygasają po 7 dniach. Każdy dołącza jako **Member**; [zmień jego rolę](#change-a-role) po dołączeniu.
+
+<Callout>
+  W [OpenCode Go](/console/go) i Go Plus zaproszone osoby korzystają z darmowych modeli lub salda obszaru roboczego. Aby
+  każdy miał własne limity Go, przejdź na Go Teams ($20 za członka miesięcznie, minimum 2 członków). Od chwili dołączenia
+  trzeciej i każdej kolejnej osoby naliczamy za nią $20 miesięcznie.
+</Callout>
+
+Członkowie mogą też dołączać automatycznie:
+
+- [SSO](/console/sso#automatic-membership) dodaje osoby z Twoich zweryfikowanych domen e-mail przy pierwszym logowaniu.
+- [Synchronizacja katalogu](/console/scim) dodaje i usuwa osoby zgodnie z przydziałami w Twoim dostawcy tożsamości.
+
+## Akceptowanie zaproszenia
+
+Zaproszona osoba musi zalogować się adresem e-mail, na który wysłano zaproszenie. Są dwa sposoby akceptacji:
+
+- Kliknij **Join workspace** w e-mailu z zaproszeniem, a następnie zaloguj się lub utwórz konto.
+- Zaloguj się do Console, otwórz menu obszaru roboczego i kliknij **Join** w sekcji **Pending invitations**.
+
+Jeśli zaproszona osoba korzysta z innego konta, Console wyświetla **Sign out and continue**, aby mogła się wylogować
+i użyć adresu e-mail, na który wysłano zaproszenie.
+
+## Zarządzanie oczekującymi zaproszeniami
+
+Oczekujące zaproszenia pojawiają się w tabeli Members jako **Pending · Expires** z datą lub jako **Expired**.
+
+| Działanie       | Jak                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| Wyślij ponownie | **⋯ › Resend invitation**. Wysyła nowy link ważny 7 dni; stary link przestaje działać.      |
+| Unieważnij      | **⋯ › Remove...**. Link przestaje działać natychmiast.                                       |
+
+## Zmiana roli
+
+Otwórz menu roli w wierszu członka i wybierz **Member**, **Admin** lub **Owner**.
+
+Możesz przyznawać tylko role równe własnej lub niższe, a obszar roboczy zawsze zachowuje co najmniej jednego właściciela.
+Zobacz [Role](/console/workspaces#roles).
+
+## Usuwanie członka
+
+1. Kliknij **⋯ › Remove...** w wierszu członka.
+2. Potwierdź przyciskiem **Remove member**.
+
+Dostęp zostaje odebrany natychmiast, a osobę możesz później zaprosić ponownie. Jej dotychczasowe użycie pozostaje
+w raportach obszaru roboczego.
+
+Usunięcie członka unieważnia też utworzone przez niego klucze API w obszarze roboczym, w tym klucze kont usługowych.
+Same konta usługowe pozostają, a klucze utworzone przez inne osoby nadal działają. Zobacz
+[Unieważnianie](/console/api#revocation).
+
+## Szczegóły członka
+
+Kliknij członka, aby zobaczyć jego miesięczny budżet, używane modele i klientów, wykresy użycia i logi żądań. Tutaj
+możesz ustawić jego [budżet](/console/budgets#member-budgets) i wyeksportować użycie do CSV.

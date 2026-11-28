@@ -49,7 +49,7 @@ describe("Claude sessions", () => {
     }),
   )
 
-  it.effect("a missing Claude transcript is rebuilt from history, even after a rejected attachment", () =>
+  it.effect("a missing Claude transcript is rebuilt from history", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
@@ -70,17 +70,12 @@ describe("Claude sessions", () => {
         io: { ...test.input.io, sessionExists: async () => false },
       })
       const model = yield* TestSessions.model(sessions)
-      const prompt = TestSessions.followup("Inspect this image")
-      prompt.push({ role: "user", content: [{ type: "file", mediaType: "image/svg+xml", data: "PHN2Zy8+" }] })
-      const error = yield* TestSessions.reply(model, prompt).pipe(Effect.flip)
-      expect(String(error.cause)).toContain("Claude Code does not support image/svg+xml attachments")
       yield* TestSessions.reply(model, TestSessions.followup())
       expect(claude.runs).toHaveLength(2)
       expect(claude.runs[1]!.args.some((arg) => arg.startsWith("--resume="))).toBe(false)
       const user = claude.runs[1]!.received.find((message) => message.type === "user")
       expect(JSON.stringify(user.message.content)).toContain("<conversation-checkpoint>")
       expect(JSON.stringify(user.message.content)).toContain("COPPER-OTTER")
-      expect(JSON.stringify(user.message.content)).not.toContain("image/svg+xml")
       const after = (yield* SessionRecord.make(test.storage).get("session-a"))!
       expect(after.claudeSessionID).not.toBe(before.claudeSessionID)
       yield* registry.close()

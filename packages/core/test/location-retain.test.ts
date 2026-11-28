@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Clock, Context, Duration, Effect, Exit, Layer, RcMap, Schedule, Scope } from "effect"
+import { Clock, Context, Duration, Effect, Exit, Layer, Schedule, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -72,7 +72,7 @@ it.live(
       yield* locations.contextEffect(sibling).pipe(Effect.scoped)
       const hold = yield* Scope.make()
       yield* lifecycle.retain.pipe(Scope.provide(hold))
-      const cached = (ref: Location.Ref) => RcMap.has(locations.rcMap, ref)
+      const cached = (ref: Location.Ref) => locations.has(ref)
       // Each poll idles every location for a full TTL, whenever the sweep first saw it.
       const until = (check: Effect.Effect<boolean>) =>
         Effect.sync(() => {

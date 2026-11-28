@@ -18,13 +18,14 @@ import { cssVariantsForProduction, devOnlyCss } from "../../../script/css-varian
 import { foldSettingsForProduction } from "../../../script/fold-settings"
 import { config } from "../../config"
 import { docsSets, latestDocs, v1Docs } from "../config"
-import { docsHref, docsMarkdownHref } from "../lib/navigation"
+import { docsLocaleHref, docsLocaleMarkdownHref } from "../lib/navigation"
 import type {
+  docsPageLocales,
   docsSlugs,
   renderDocsMarkdown,
   renderDocsPage,
+  renderDocsSitemap,
   renderLlmsTxt,
-  renderSitemap,
   v1EnglishSection,
 } from "../render"
 import { docs } from "../vite"
@@ -94,13 +95,19 @@ await build({
   ssr: { noExternal: true },
 })
 const render = (await import(path.join(cache, "render/render.js"))) as {
+  docsPageLocales: typeof docsPageLocales
   docsSlugs: typeof docsSlugs
   renderDocsPage: typeof renderDocsPage
   renderDocsMarkdown: typeof renderDocsMarkdown
+  renderDocsSitemap: typeof renderDocsSitemap
   renderLlmsTxt: typeof renderLlmsTxt
-  renderSitemap: typeof renderSitemap
   v1EnglishSection: typeof v1EnglishSection
 }
+// Every page in every language it is prerendered in: the latest docs' languages, and the V1 docs'
+// own slugs (their languages are in the slug).
+const pages = docsSets.flatMap((set) =>
+  render.docsPageLocales[set.id].flatMap((locale) => render.docsSlugs[set.id].map((slug) => ({ set, slug, locale }))),
+)
 
 const write = (href: string, body: string) => Bun.write(path.join(output, href), body)
 // Copy public assets before Bun.write can create the same output directories.
@@ -111,20 +118,19 @@ await Promise.all(
 // client build's; the render's own code stays in the cache.
 const emitted = new Set<string>()
 await Promise.all([
-  ...docsSets.flatMap((set) =>
-    render.docsSlugs[set.id].map(async (slug) => {
-      const html = await render.renderDocsPage(set, slug, assets)
-      if (html === undefined) throw new Error(`docs: ${set.base}${slug} did not render`)
-      for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
-      await write(`${docsHref(slug, set).replace(/\/?$/, "/")}index.html`, html)
-      const markdown = await render.renderDocsMarkdown(set, slug)
-      if (markdown !== undefined) await write(docsMarkdownHref(slug, set), markdown)
-    }),
-  ),
+  ...pages.map(async ({ set, slug, locale }) => {
+    const html = await render.renderDocsPage(set, slug, assets, locale)
+    if (html === undefined) throw new Error(`docs: ${docsLocaleHref(slug, set, locale)} did not render`)
+    for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
+    await write(`${docsLocaleHref(slug, set, locale).replace(/\/?$/, "/")}index.html`, html)
+    const markdown = await render.renderDocsMarkdown(set, slug, locale)
+    if (markdown !== undefined) await write(docsLocaleMarkdownHref(slug, set, locale), markdown)
+  }),
   write(`${base}llms.txt`, render.renderLlmsTxt(site)),
   write(`${v1Docs.base}llms.txt`, render.renderLlmsTxt(site, v1Docs, [await render.v1EnglishSection()])),
-  // Only the latest docs are in the sitemap: the V1 docs are noindex.
-  write(`${base}sitemap.xml`, render.renderSitemap(site)),
+  // Only the latest docs are in the sitemap: the V1 docs are noindex. It lists each page's
+  // translated languages too, with their alternates (lib/sitemap.ts).
+  write(`${base}sitemap.xml`, await render.renderDocsSitemap(site)),
 ])
 
 await Promise.all(
@@ -134,20 +140,29 @@ await Promise.all(
   }),
 )
 
-// One search index per set, so each searches only its own pages. The phone Contents bar repeats the
-// page's headings, and code headers and screen reader text ("Copy", "Copied", "Opens in a new tab")
-// aren't content, so they stay out of the index.
+// One search index per set and language, beside that language's pages, so each searches only its
+// own pages (and a fallback page's English text is in its language's index). The phone Contents bar
+// repeats the page's headings, code headers and screen reader text ("Copy", "Copied", "Opens in a
+// new tab") aren't content, and a fallback page's notice is chrome: they stay out of the index.
 const exclude =
-  "[data-component=contents-menu], [data-slot=code-head], [data-component=code-tabs] [data-slot=copy], [data-slot=sr-only]"
-for (const set of docsSets) {
-  const pagefind = path.join(output, set.base)
+  "[data-component=contents-menu], [data-component=docs-translation-notice], [data-slot=code-head], [data-component=code-tabs] [data-slot=copy], [data-slot=sr-only]"
+const pagefindSites = [
+  ...docsSets.flatMap((set) => render.docsPageLocales[set.id].map((locale) => docsLocaleHref("index", set, locale))),
+]
+for (const href of pagefindSites) {
+  const pagefind = path.join(output, href)
   await mkdir(pagefind, { recursive: true })
   await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} --exclude-selectors ${exclude}`.quiet()
 }
 checkFileNames()
 await checkAssetPrefix()
 await Bun.$`bun ${path.join(import.meta.dir, "validate-links.ts")} ${output}`
-console.log(`docs: built ${Object.values(render.docsSlugs).flat().length} pages`)
+console.log(`docs: built ${pages.length} pages (${docsSlugsForLog()})`)
+function docsSlugsForLog() {
+  return docsSets
+    .map((set) => `${set.id}: ${render.docsSlugs[set.id].length} x ${render.docsPageLocales[set.id].length}`)
+    .join(", ")
+}
 
 /**
  * Fails when the docs' first JavaScript or stylesheet outgrows its budget (gzipped): every docs
@@ -183,7 +198,13 @@ async function checkAssetPrefix() {
   const origin = "https://opencode.local"
   const pages = (
     await Promise.all(
-      docsSets.map((set) => Array.fromAsync(new Bun.Glob(`${set.base.slice(1)}**/*.html`).scan({ cwd: output }))),
+      docsSets.flatMap((set) =>
+        render.docsPageLocales[set.id].map((locale) =>
+          Array.fromAsync(
+            new Bun.Glob(`${docsLocaleHref("index", set, locale).slice(1)}**/*.html`).scan({ cwd: output }),
+          ),
+        ),
+      ),
     )
   ).flat()
   const found = new Map<string, string>()
@@ -191,8 +212,12 @@ async function checkAssetPrefix() {
     const html = await Bun.file(path.join(output, page)).text()
     for (const tag of html.matchAll(/<(\w+)\b[^>]*>/g)) {
       const src = tag[0].match(/\ssrc="([^"]+)"/)?.[1]
+      // Canonical and alternate links name other addresses (another language's page, the page's
+      // Markdown); the rest are files the page loads.
       const href =
-        tag[1] === "link" && !/\srel="canonical"/.test(tag[0]) ? tag[0].match(/\shref="([^"]+)"/)?.[1] : undefined
+        tag[1] === "link" && !/\srel="(?:canonical|alternate)"/.test(tag[0])
+          ? tag[0].match(/\shref="([^"]+)"/)?.[1]
+          : undefined
       for (const url of [src, href]) if (url) found.set(new URL(url, `${origin}/${page}`).href, page)
     }
   }
@@ -202,7 +227,12 @@ async function checkAssetPrefix() {
     for (const match of css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g))
       if (!match[1].startsWith("data:")) found.set(new URL(match[1], style).href, pathname)
   }
-  const outside = [...found].filter(([url]) => !docsSets.some((set) => url.startsWith(origin + set.base)))
+  // A page's files live under its set, or under its language's copy of it (a locale page's Markdown
+  // twin sits beside its page, not under /docs).
+  const roots = docsSets.flatMap((set) =>
+    render.docsPageLocales[set.id].map((locale) => origin + docsLocaleHref("index", set, locale).replace(/\/$/, "")),
+  )
+  const outside = [...found].filter(([url]) => !roots.some((base) => url.startsWith(`${base}/`) || url === base))
   if (!outside.length) return
   throw new Error(
     `docs: these files load from outside the docs:\n${outside.map(([url, from]) => `  ${url.replace(origin, "")} (from ${from})`).join("\n")}`,

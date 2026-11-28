@@ -1,0 +1,174 @@
+---
+title: Préchauffage
+description: Envoyez des requêtes périodiques pour empêcher l’expiration du cache de prompt du fournisseur d’une session pendant vos pauses entre deux prompts.
+---
+
+Le préchauffage de session envoie des requêtes de modèle périodiques pour préserver les caches de prompt côté fournisseur ou d’autres états de courte durée pendant vos pauses entre deux prompts. Il est désactivé par défaut.
+
+Activez le préchauffage dans n’importe quel [fichier de configuration OpenCode](/config) :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Avec cette configuration, OpenCode préchauffe une session récemment active juste avant l’expiration de son cache de prompt : à 90 % du [`cache.ttl`](/models#cache-lifetime) du modèle, ou toutes les quatre minutes lorsque le modèle n’en a pas. Il continue jusqu’à 30 minutes après la dernière requête non liée au préchauffage.
+
+## Options
+
+Utilisez la forme objet pour modifier le prompt de préchauffage, l’intervalle d’inactivité ou la fenêtre d’activité :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Champ | Valeur par défaut | Rôle |
+| --- | --- | --- |
+| `prompt` | Instruction de maintien de connexion | Ajouté comme message utilisateur transitoire à chaque requête de préchauffage. La valeur par défaut demande au modèle de ne rien faire, de n’utiliser aucun outil et de répondre `OK`. |
+| `interval` | `"auto"` | Temps d’inactivité avant la prochaine requête de préchauffage. `"auto"` utilise 90 % du `cache.ttl` du modèle, ou quatre minutes à défaut. |
+| `duration` | `"30 minutes"` | Fenêtre de préchauffage mesurée depuis la dernière requête de modèle non liée au préchauffage. |
+
+Les champs omis d’un objet conservent leurs valeurs par défaut. Par exemple, ceci ne change que l’intervalle :
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Intervalle automatique
+
+Par défaut, `interval` vaut `"auto"`, ce qui préchauffe juste avant l’expiration du cache de prompt de chaque modèle. OpenCode utilise 90 % du réglage [`cache.ttl`](/models#cache-lifetime) du modèle : un cache de `"5m"` est donc préchauffé toutes les 4,5 minutes. Les modèles sans `cache.ttl` sont préchauffés toutes les quatre minutes.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+Un cache plus long que `duration`, par exemple `"1h"` avec la valeur par défaut de 30 minutes, n’est pas préchauffé, puisqu’il survit de toute façon à la fenêtre de préchauffage. OpenCode le journalise une fois par session. Augmentez `duration` pour le préchauffer.
+
+## Par fournisseur et par modèle
+
+Définissez `settings.cache.warming` sur un fournisseur ou un modèle pour ne préchauffer que ses sessions, ou leur donner leur propre cadence. Cette valeur accepte les mêmes réglages que `warming` au niveau supérieur, sauf `prompt`, et les remplace. Un réglage de modèle remplace celui du fournisseur.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Ici, les sessions Anthropic sont préchauffées toutes les 4,5 minutes, sauf sur Claude Haiku 5.5, et les autres fournisseurs ne sont pas préchauffés. Les champs absents de la forme objet proviennent de `warming` au niveau supérieur, puis des valeurs par défaut. Un réglage invalide journalise un avertissement et retombe sur `warming` au niveau supérieur.
+
+## Durées
+
+`interval` et `duration` acceptent des chaînes de durée. Les deux doivent donner des valeurs finies supérieures à zéro, et `interval` doit être inférieur à `duration` ; sinon OpenCode ignore le préchauffage et journalise un avertissement.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Cadencement
+
+Le préchauffage démarre après une requête de modèle non liée au préchauffage dans une session de premier niveau. Les sessions de subagents ne sont pas préchauffées. Chaque intervalle est compté depuis l’envoi de la dernière requête (ou requête de préchauffage), et non depuis la fin de sa réponse, car la durée de vie du cache d’un fournisseur commence lorsque la requête lui parvient. Une requête de préchauffage ne prolonge pas la fenêtre d’activité.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Toute nouvelle activité de modèle hors préchauffage, y compris un compactage, réinitialise les deux minuteries. Un intervalle explicite supérieur ou égal à la durée est rejeté avec un avertissement, et un intervalle `"auto"` aussi long ignore le préchauffage, car le cache survit à la fenêtre.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode n’envoie jamais de requête de préchauffage pendant qu’une requête de modèle, y compris un compactage, est en cours. Si une requête tourne encore lorsque l’intervalle arrive à échéance, le préchauffage attend sa fin puis envoie immédiatement, tant que le cache de cette requête n’a pas expiré. S’il a expiré, le préchauffage s’arrête jusqu’à la prochaine requête normale.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## Requêtes
+
+Une requête de préchauffage utilise le modèle, l’agent, les instructions et le contexte de conversation actuels de la session. OpenCode ajoute le prompt configuré de façon transitoire, effectue un appel au modèle et ignore la réponse.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+La requête n’admet aucune entrée, n’ajoute pas de messages à l’historique et ne modifie pas l’état durable de la session. OpenCode n’envoie pas d’appels d’outils locaux et ne poursuit pas de boucle d’outils ; le prompt par défaut demande aussi au modèle de ne pas utiliser d’outils.
+
+## Échecs
+
+Les échecs de préchauffage sont journalisés sans faire échouer ni modifier la session. OpenCode attend le prochain intervalle avant de réessayer, pendant que la fenêtre d’activité d’origine continue de s’écouler.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+Si une requête de préchauffage lit moins de données dans le cache qu’elle n’en écrit, le préchauffage de la session s’arrête jusqu’à sa prochaine requête ordinaire. Si le fournisseur ne communique aucune statistique d’utilisation du cache, OpenCode ne considère jamais la requête comme un échec de réutilisation du cache.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Coûts
+
+Les requêtes de préchauffage sont de vraies requêtes au fournisseur. Elles peuvent consommer des tokens, générer des coûts, être décomptées des limites de débit et échouer comme les autres requêtes de modèle.
+
+- Des intervalles plus courts augmentent le volume de requêtes.
+- Des durées plus longues permettent plus de requêtes de préchauffage.
+- N’activez le préchauffage que si son bénéfice côté fournisseur justifie l’utilisation supplémentaire.
+
+Par exemple, sur un modèle sans `cache.ttl`, les valeurs par défaut permettent jusqu’à sept tentatives de préchauffage pendant une fenêtre ininterrompue de 30 minutes : aux minutes 4, 8, 12, 16, 20, 24 et 28.
+
+## Désactivation
+
+Définissez `warming` sur `false` pour le désactiver explicitement. Omettre le champ laisse aussi le préchauffage désactivé.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

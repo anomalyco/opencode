@@ -158,6 +158,8 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** The server's `full_codemode` flag: without it, a script's changes neither show nor count. */
+  scriptDiffs?: Accessor<boolean>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -169,12 +171,9 @@ export function createReactiveTimelineProjection(input: {
   // Row structure depends on the empty/non-empty boundary, not each text delta.
   // Keep the original content objects so row renderers still read live text.
   const textParts = mapArray(
-    () =>
-      input
-        .sessionMessages()
-        .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
-        ),
+    messageParts(input.sessionMessages, (message) =>
+      message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+    ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
       // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
@@ -187,7 +186,7 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
-  const factOf = placeFacts(input.sessionMessages)
+  const factOf = placeFacts(input.sessionMessages, input.scriptDiffs)
 
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
@@ -1206,34 +1205,48 @@ function isNotice(message: SessionMessageInfo): message is Notice {
 }
 
 /**
+ * The picked parts of every message, in order. A message is read again only when it changes, so a history page that
+ * lands reads its own messages and not the loaded transcript.
+ */
+function messageParts<Part>(
+  messages: Accessor<SessionMessageInfo[]>,
+  pick: (message: SessionMessageInfo) => Part[],
+): Accessor<Part[]> {
+  const each = mapArray(messages, (message) => createMemo(() => pick(message)))
+
+  return createMemo(() => each().flatMap((parts) => parts()))
+}
+
+/**
  * Reads what placing each call needs through a signal per call. Streamed input and progress reports change a call many
  * times a second without moving it, and a signal notifies the rows only when what they read of it changes.
  */
-export function placeFacts(messages: Accessor<SessionMessageInfo[]>): PlaceFactOf {
+export function placeFacts(
+  messages: Accessor<SessionMessageInfo[]>,
+  /** The server's `full_codemode` flag: without it, a script places no changes. */
+  scriptDiffs: Accessor<boolean> = () => true,
+): PlaceFactOf {
   const parts = mapArray(
-    () =>
-      messages().flatMap((message) =>
-        message.type === "assistant"
-          ? message.content.filter((content): content is Tool => content.type === "tool")
-          : [],
-      ),
+    messageParts(messages, (message) =>
+      message.type === "assistant" ? message.content.filter((content): content is Tool => content.type === "tool") : [],
+    ),
     (tool) => {
       const [fact, setFact] = createSignal(
-        untrack(() => placeFactOf(tool)),
+        untrack(() => placeFactOf(tool, tool.id, scriptDiffs())),
         { equals: samePlaceFact },
       )
 
-      createComputed(() => setFact(placeFactOf(tool)))
+      createComputed(() => setFact(placeFactOf(tool, tool.id, scriptDiffs())))
 
       // The signal only says when the fact changes, one computation after the write that changed it, so the value
       // comes from the part itself.
-      return [tool, () => (fact(), untrack(() => placeFactOf(tool)))] as const
+      return [tool, () => (fact(), untrack(() => placeFactOf(tool, tool.id, scriptDiffs())))] as const
     },
   )
 
   const byTool = createMemo(() => new Map<Tool, Accessor<PlaceFact>>(parts()))
 
-  return (tool) => byTool().get(tool)?.() ?? placeFactOf(tool)
+  return (tool) => byTool().get(tool)?.() ?? placeFactOf(tool, tool.id, scriptDiffs())
 }
 
 const placeFactKeys = [

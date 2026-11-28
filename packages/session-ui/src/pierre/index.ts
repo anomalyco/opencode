@@ -31,6 +31,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T, undefined> & {
 const unsafeCSS = `
 :host {
   --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
+  --diffs-fg: var(--opencode-diffs-fg, light-dark(var(--diffs-light, #000), var(--diffs-dark, #fff)));
   /* Pierre mixes 15% in dark mode, which makes collapsed rows read as highlighted. */
   --diffs-bg-separator-override: light-dark(
     color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
@@ -149,6 +150,11 @@ const unsafeCSS = `
   ) {
   --mix-light: 0%;
   --mix-dark: 0%;
+}
+
+/* A host can set --opencode-diffs-fg to tint plain text lines (such as error output) across all browsers. */
+[data-file] [data-line] span {
+  color: var(--opencode-diffs-fg, light-dark(var(--diffs-token-light, var(--diffs-light)), var(--diffs-token-dark, var(--diffs-dark))));
 }
 
 /* Syntax colors are inline styles on token spans, so emphasized text needs !important to stay legible on its highlight. */

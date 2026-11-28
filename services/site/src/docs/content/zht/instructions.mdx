@@ -1,0 +1,139 @@
+---
+title: "指示"
+description: "使用 AGENTS.md 檔案為 OpenCode 提供持續的專案指引，並了解其適用範圍、載入順序，以及 CLAUDE.md 備援的運作方式。"
+---
+
+新增 `AGENTS.md` 檔案，為 OpenCode 提供持續的專案指引。可用於建置指令、架構說明、程式碼慣例與驗證要求。
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+請提交專案指示檔案，讓在儲存庫中工作的每個人都收到相同的指引。
+
+## 範圍
+
+將 `AGENTS.md` 放在其指引應適用的目錄。OpenCode 會載入全域檔案，接著從目前工作區目錄往主目錄方向載入每個 `AGENTS.md`。若工作區位於主目錄之外，則會在專案根目錄停止。
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+在此範例中，四個檔案都會載入。它們會依下列順序合併：
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+適用於所有地方的指引請放在全域檔案。儲存庫範圍的指引放在專案根目錄，較特定的指引則放在更接近其涵蓋程式碼的位置。OpenCode 會合併這些檔案，不會解決它們之間的衝突。
+
+若工作區位於專案根目錄之外，只會載入全域檔案。設定 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 可略過專案 `AGENTS.md` 的探索，而不停用全域檔案。
+
+### CLAUDE.md 備援
+
+在任何沒有 `AGENTS.md` 的目錄中，OpenCode 會改讀 `CLAUDE.md`。若沒有全域
+`~/.config/opencode/AGENTS.md`，則會讀取 `~/.claude/CLAUDE.md`。目錄的 `AGENTS.md` 一律優先於其
+`CLAUDE.md`，因此兩者之間的符號連結只會載入一次。
+
+設定 `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` 可略過所有 `CLAUDE.md`，或設定 `OPENCODE_DISABLE_CLAUDE_CODE=1` 一併略過
+`.claude` 技能。伺服器會在啟動時讀取兩者。對於背景服務，請使用
+`opencode service set env` 保存它們，並執行 `opencode service restart`。
+
+## 探索
+
+工作區下方的指示檔案會在 agent 探索專案時被發現。讀取檔案或列出目錄時，會載入該目標與工作區之間的任何 `AGENTS.md` 檔案。
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+巢狀檔案會由近到遠載入，並在其指示項目仍位於模型可見的記錄中時去重。再次讀取同一區域通常不會重新注入它們。若壓縮或還原移除了該項目，之後的讀取可能會再次載入該檔案。
+
+巢狀檔案載入後，對它的編輯不會自動偵測。若更新後的文字必須立即生效，請開始新的工作階段。
+
+## 順序
+
+所選 agent 或供應商的系統提示詞會先送出。接著 OpenCode 會依下列順序組合初始指示：
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+這些來源會合併，而不是作為覆寫。之後發現的巢狀 `AGENTS.md` 檔案會依探索順序加入工作階段記錄。
+
+## 更新
+
+在工作階段執行期間編輯全域或向上探索到的 `AGENTS.md`，即可更新其指引。
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+在下一次模型請求之前，OpenCode 會偵測到變更，並在傳遞待處理輸入前加入指示更新：
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- 移除所有環境 `AGENTS.md` 會告知工作階段，先前的環境指示不再適用。
+- 暫時讀取失敗會保留最後已知的指示，而不是將它們視為已刪除。
+- 移動工作階段會保留其指示狀態，因此目的地的指引會以更新形式引入。
+- 確認工作階段還原會清除其指示狀態，並在下一個提示詞之前重新載入指示。
+
+指示內容仍受權限保護。用戶端可以看到哪些來源有變更，但看不到內容。
+
+## 設定
+
+除了自動找到的 `AGENTS.md` 檔案，也可在 `instructions` 陣列中指定其他檔案、glob 模式或 HTTP(S) URL：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+設定的指示會在 `AGENTS.md` 檔案之後載入，依列出順序。每個設定文件的項目都會合併。
+
+| 項目 | 解析方式 |
+| --- | --- |
+| 相對路徑或 glob | 在從工作區到專案根目錄的每個目錄中搜尋 |
+| `~/` 路徑 | 從你的主目錄解析 |
+| 絕對路徑 | 原樣使用；檔案名稱可以是 glob |
+| `http://` 或 `https://` | 載入設定時擷取，逾時五秒 |
+
+- 本機檔案變更時會像 `AGENTS.md` 一樣更新。符合 glob 的新檔案會在下一次設定變更時載入。
+- 缺少的檔案會略過。無法擷取的 URL 會略過，或保留上次擷取的內容。
+- 使用 `OPENCODE_DISABLE_PROJECT_CONFIG=1`，或工作區位於專案之外時，相對項目會依全域設定目錄解析。
+
+已連接的 [OpenCode 控制台](/console)工作區也可以分享指示。
+
+設定位置與優先順序請參閱[設定](/config)。

@@ -3,16 +3,24 @@ export * as Tool from "./tool.js"
 import { Effect, JsonSchema, Schema } from "effect"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
+import type { Automation } from "./automation.js"
 import type { Session } from "./session.js"
 import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
-/** Optional wire encoding of a tool's single required string field. Execution still receives the object. */
+const field = Schema.optionalKey(Schema.String)
+
+/**
+ * Optional wire encoding of a tool's single required string field. Execution still receives the object.
+ *
+ * `field` names that required string field, so the tool can have other parameters. Models that take raw text then set
+ * those on an optional first line, which the AI package describes and parses; the format constrains the rest.
+ */
 export const Freeform = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("text"), field }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String, field }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String, field }),
 ]).annotate({ identifier: "Tool.Freeform" })
 export type Freeform = typeof Freeform.Type
 
@@ -36,6 +44,21 @@ export interface Context {
   readonly cancel?: Effect.Effect<void>
   /** True when the tool is invoked from inside Code Mode (`execute`). */
   readonly codemode?: boolean
+  /**
+   * Set when an automation's code makes the call. No model waits on it, and nobody hears about work it leaves
+   * running, so a tool must finish its work within the call.
+   */
+  readonly automation?: { readonly id: Automation.ID }
+  /** Calls other tools from inside this one. */
+  readonly tool: Calls
+}
+
+export interface Calls {
+  /**
+   * Calls another registered tool as part of this call: the same input checks, `execute` hooks and permission rules as
+   * a call the model makes, with permission requests shown on this call. Fails with the tool's error.
+   */
+  readonly call: (name: string, input: unknown) => Effect.Effect<Result, Error>
 }
 
 export interface Namespace {

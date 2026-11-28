@@ -1,0 +1,280 @@
+---
+title: "権限"
+description: "アクションとパスやコマンドなどのリソースに照合する allow、deny、ask のルールで、OpenCode のエージェントが実行できる操作を制御します。ルールは記述順に評価されます。"
+---
+
+権限は、エージェントがリソースに対して操作を実行できるかどうかを制御します。
+
+## 設定
+
+たとえば、シェルコマンドの実行前には確認を求め、日常的な Git の状態確認はそのまま許可し、プッシュは常に拒否する設定がよく使われます。次のルールを、この順序で `opencode.jsonc` に追加します。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+一致するルールのうち最後のものが優先されるので、個別の例外は適用範囲の広いルールの後ろに置きます。
+
+<Callout type="warning">
+  V1 ではフィールド名とアクション名が異なります。V2 では `permission`、`bash`、`task` の代わりに `permissions`、`shell`、`subagent` を使用します。
+</Callout>
+
+## ルール
+
+各ルールには 3 つの文字列フィールドが必要です。
+
+| フィールド | 意味                                                                     |
+| ---------- | ------------------------------------------------------------------------ |
+| `action`   | ツールの権限アクション                                                   |
+| `resource` | 使用される値（パス、コマンド、URL、クエリ、スキル ID、エージェント ID など） |
+| `effect`   | `allow`、`deny`、`ask`                                                   |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| 効果    | 結果                     |
+| ------- | ------------------------ |
+| `allow` | 確認せずに続行           |
+| `deny`  | 操作をブロック           |
+| `ask`   | クライアントの判断を待つ |
+
+一致するルールがない場合、OpenCode は `ask` を使用します。
+
+## マッチング
+
+アクションとリソースは、次のワイルドカードを使って値全体と照合します。
+
+| パターン | 一致                       |
+| -------- | -------------------------- |
+| `*`      | 0 文字以上（`/` を含む）   |
+| `?`      | 正確に 1 文字              |
+| その他   | その文字そのもの           |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+このパターンは正規化されたパス全体に一致します。バックスラッシュはスラッシュに正規化され、Windows では大文字と小文字を区別しません。
+
+` *` で終わるシェルパターンは、引数なしのコマンドにも一致します。
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+これは `git status` と `git status --short` の両方に一致します。
+
+OpenCode はルールを順番に結合し、最後に一致したものを使用します。優先度の低い設定が最初に読み込まれ、次にグローバルルール、最後にエージェントルールが追加されます。
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+複数のファイルを変更するパッチなど、1 つの操作で複数のリソースを確認することがあります。どれかが `deny` なら操作を拒否します。拒否がなく、どれかが `ask` なら承認を求めます。それ以外は操作を許可します。
+
+## アクション
+
+V2 のアクション名は文字列であるため、プラグインがアクションを追加できます。組み込みツールが現在使用しているアクションとリソースは次のとおりです。
+
+| アクション                    | リソース                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `read`                        | 内部パスは Location からの相対パス、外部パスは正規化済みの絶対パス |
+| `edit`                        | `edit`、`write`、`patch` の対象パス                                      |
+| `glob`                        | 要求された glob パターン                                                 |
+| `grep`                        | 要求された正規表現（検索パスではない）                                   |
+| `shell`                       | スキャナーが生成したコマンド文字列。複合コマンドでは複数になることがあります |
+| `subagent`                    | 対象のエージェント ID                                                    |
+| `skill`                       | スキル ID                                                                |
+| `question`                    | `*`                                                                      |
+| `webfetch`                    | 要求された URL                                                           |
+| `websearch`                   | 検索クエリ                                                               |
+| `generate_image`              | 選択した画像モデル（`providerID/modelID`）。設定されている場合は `#variant` も付きます |
+| `external_directory`          | 正規化された外部ディレクトリの境界。通常は `/*` で終わります             |
+| `<server>_<tool>`             | MCP ツールの場合は `*`。サーバー名とツール名では、英字、数字、`_`、`-` をそのまま使い、それ以外の文字は `_` に置き換えます |
+| `opencode_list_mcp_resources` | MCP サーバー名                                                           |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                         |
+| `execute`                     | `*`。deny の場合は Code Mode が使われず、個々のツールが直接表示されます。Code Mode からツールを呼び出す場合も、ツールごとのルールが適用されます |
+
+MCP のアクション名ではハイフンがそのまま残ります。たとえば、`mcp-atlassian` というサーバーのツールに一致するのは `mcp-atlassian_*` であり、`mcp_atlassian_*` ではありません。
+
+たとえば、1 つのスキルだけを許可し、他のすべてのスキルを拒否するには次のようにします。
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` と `lsp` は、現在の V2 Core の権限アクションではありません。
+
+## ディレクトリ
+
+パスが現在の Location にも、そのプロジェクトのワークツリー（ルートを除く）にも属さない場合、OpenCode は `read` や `edit` のルールを適用する前に `external_directory` のルールを確認します。デフォルトでは `external_directory` が許可されているため、ルールを追加しない限り、外部パスへのアクセス時に確認は求められません。プロジェクト外へのアクセス前に確認を求めるには、次のように設定します。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+その後ろに対象を絞ったルールを書くと、特定のディレクトリへのアクセスを許可または拒否できます。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+これは `read`、`edit`、`write`、`patch` が使用する外部パスに適用されます。シェルは、`shell` リソースをチェックする前に、外部の作業ディレクトリとスキャナーが推測したディレクトリをチェックします。
+
+`external_directory`、`read`、`edit` では、先頭の `~`、`~/`、`$HOME`、`$HOME/` が設定の読み込み時に展開されます。
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+シェルのリソースは生のコマンドテキストのままで、ホームディレクトリは展開されません。
+
+<Callout type="warning">
+  `shell` は、ホストユーザーが持つファイルシステム、プロセス、ネットワークの権限で実行されます。コマンド文字列からディレクトリを推定しますが、すべて検出できるとは限りません。危険なコマンドをすべて検出しようとするパターンではなく、必要なコマンドだけを許可するリストを使ってください。
+</Callout>
+
+変更先を相対パスで指定すると、プロジェクトのワークツリー内であっても、現在の Location の外を指すことがあります。明示的に指定された外部パスはルールとの照合前に正規化されるため、信頼できるディレクトリの範囲に限って許可してください。
+
+## スキャナー
+
+シェルの権限チェックには、Bash、Zsh、POSIX `sh`、PowerShell に対応した OpenCode 組み込みのシェルスキャナーを使います。不正な構文や `eval` のような動的評価を含むコマンドは、安全に解析できないことがあります。その場合、`shell` の deny ルールが 1 つでも適用されると、サブコマンドをそのルールと照合できないため、スキャナーエラーになります。それ以外の場合は、コマンド全体を 1 つの `shell` リソースとして承認し、さらに `external_directory` の `*` を承認する必要があります。2 つ目の承認には、すべてのディレクトリを許可するルールか、ユーザーの承認が必要です。どちらの承認もパターンとして保存されません。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}
+```
+
+抽出されたすべてのサブコマンドと `cd` の対象について、権限ルールと保存済みの承認パターンを適用し、可能な範囲でディレクトリを推定します。不明なディレクトリに対する追加の承認モードや一律の制限はありません。
+
+## デフォルト
+
+カスタムエージェントを含むすべてのエージェントに、基本ポリシーとして次のルールがこの順序で適用されます。
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+同梱のエージェントは次のポリシーを追加します。
+
+| エージェント | 追加されるポリシー                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `build`      | 質問を許可                                                                                                               |
+| `plan`       | 質問を許可。`~/.opencode/plan` 以下のファイルを除き編集を拒否                                                            |
+| `general`    | 質問とサブエージェントの起動を拒否                                                                                       |
+| `explore`    | シェル、読み取り、glob、grep、Web フェッチ、Web 検索、外部ディレクトリ以外のすべてを拒否。`.env` の読み取りは確認         |
+| `title`      | すべてのアクションを拒否                                                                                                 |
+| `summary`    | すべてのアクションを拒否                                                                                                 |
+| `compaction` | 基本ポリシーを維持                                                                                                       |
+
+デフォルトでは `external_directory` に対して承認を求めるルールがないため、Location とワークツリーの外でも確認なしで読み取りや編集が行われます。[ディレクトリ](#directories)の例のように、`external_directory` に `ask` または `deny` のルールを追加すれば、外部アクセス時に承認を求めるか、外部アクセス自体を拒否できます。後から追加されるグローバルルールとエージェントルールは、これらのデフォルトを上書きします。
+
+## エージェント
+
+共通のルールはトップレベルに、エージェント固有のルールは `agents.<id>.permissions` の下に置きます。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+エージェントのルールはグローバルルールの後ろに追加されます。グローバルルールの配列を置き換えるわけではありません。カスタムサブエージェントには、親エージェントの権限の一部ではなく、サブエージェント自身の権限が適用されます。
+
+## 承認
+
+ルールが `ask` になった場合、クライアントは次のように応答できます。
+
+| 選択肢       | 応答     | 結果                                                               |
+| ------------ | -------- | ------------------------------------------------------------------ |
+| 1 回だけ許可 | `once`   | 保留中のリクエストだけを承認                                       |
+| 常に許可     | `always` | 承認し、ツールが提案したパターンをプロジェクトに保存               |
+| 拒否         | `reject` | そのリクエストと、そのセッションで保留中の他のすべての権限リクエストを拒否 |
+
+たとえば、`git status --short` に対して **Allow always** を選ぶと、以降の `git status` コマンドにも一致するコマンドの先頭部分が、パターンとして保存されることがあります。
+
+```text
+shell: git status * → allow
+```
+
+承認を保存すると、プロジェクト単位で永続的な `allow` ルールになります。設定済みの `deny` を上書きすることはありません。保存するパターンはツールによって異なります。`*` を提案するツールもありますが、シェルはコマンドの先頭部分、Web フェッチは URL のサイト全体（`https://opencode.ai/*` など）、スキルとサブエージェントは自身の ID を提案します。適用範囲の広い承認は見直し、不要になったものを削除してください。
+
+クライアントは拒否時にフィードバックを添えられます。非対話型のクライアントは承認リクエストの扱いを決める必要があります。設定済みの `deny` ルールは常に適用されます。
+
+## ポリシー
+
+[ポリシー](/policies)では、権限ルールと保存済みの承認を適用した後でも、操作を強制的に拒否できます。ポリシーは `allow` や `ask` を `deny` に変えることはできますが、アクセスを新たに許可することはありません。
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+グローバルポリシーと Console のマネージドポリシーはプロジェクト設定を上書きします。これにより、組織はリポジトリが許可するコマンドをブロックできます。

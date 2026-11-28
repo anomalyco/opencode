@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "description": "",
   "type": "module",
   "exports": {
@@ -21,9 +21,9 @@
     "build": "vite build",
     "serve": "vite preview",
     "test": "bun run test:unit && bun run test:browser",
-    "test:unit": "bun test --conditions=solid --only-failures --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src",
+    "test:unit": "bun test --conditions=browser --only-failures --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src",
     "test:browser": "bun test --conditions=browser --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./test-browser",
-    "test:unit:watch": "bun test --conditions=solid --watch --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src",
+    "test:unit:watch": "bun test --conditions=browser --watch --isolate --preload ../ui/test/solid-jsx.ts --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
     "test:e2e:built": "PLAYWRIGHT_BUILD=1 playwright test",
     "test:e2e:local": "playwright test",
@@ -59,7 +59,6 @@
     "@dnd-kit/abstract": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/solid": "0.5.0",
-    "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/schema": "workspace:*",
