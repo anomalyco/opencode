@@ -22,15 +22,25 @@ export interface Options {
    * shared memo: the default scans every message, which subscribes the caller to the whole history.
    */
   readonly legacy?: boolean
+  /** Creation time of a fork, so copied prompts do not inflate its new replies. */
+  readonly forkCreatedAt?: number
 }
 
 /** Milliseconds from the prompt that started the turn until `message` completed, or 0 while it runs. */
 export function duration(messages: readonly Message[], message: Message, options: Options = {}) {
   if (message.time.completed === undefined) return 0
   const index = options.index ?? messages.findIndex((item) => item.id === message.id)
-  const input =
-    messages[inputIndex(messages, index === -1 ? messages.length : index, options.legacy ?? legacy(messages))]
-  return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
+  const end = index === -1 ? messages.length : index
+  const isLegacy = options.legacy ?? legacy(messages)
+  const input = messages[inputIndex(messages, end, isLegacy)]
+  const fork = options.forkCreatedAt
+  // Leave copied historical footers alone. For a new reply, prefer an input in the fork;
+  // when answering an inherited prompt, count no time from before the fork.
+  const start =
+    fork !== undefined && message.time.created >= fork && input && input.time.created < fork
+      ? (messages[inputIndex(messages, end, isLegacy, fork)]?.time.created ?? fork)
+      : (input?.time.created ?? message.time.created)
+  return Math.max(0, message.time.completed - start)
 }
 
 /**
@@ -66,7 +76,7 @@ function turnSteps(messages: readonly Message[], message: Message, options: Opti
   return messages.slice(start + 1, end).filter((item) => item.type === "assistant")
 }
 
-function inputIndex(messages: readonly Message[], end: number, legacy: boolean) {
+function inputIndex(messages: readonly Message[], end: number, legacy: boolean, minimumCreated?: number) {
   // Reading a sliced prefix subscribes every caller to unrelated historical messages, so walk
   // back only as far as the turn boundary: the nearest input in legacy sessions, otherwise the
   // first input after the previous idle marker.
@@ -75,6 +85,7 @@ function inputIndex(messages: readonly Message[], end: number, legacy: boolean) 
     const message = messages[index]
     if (message.type === "idle") return input
     if (message.type !== "user" && message.type !== "synthetic") continue
+    if (minimumCreated !== undefined && message.time.created < minimumCreated) continue
     if (legacy) return index
     input = index
   }

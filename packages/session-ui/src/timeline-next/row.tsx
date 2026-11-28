@@ -115,6 +115,13 @@ export function createNextTimelineRowRenderer(input: {
 }) {
   const i18n = useI18n()
   const data = useData()
+
+  const forkCreatedAt = createMemo(() => {
+    const session = data.store.session.find((session) => session.id === input.sessionID())
+
+    return session?.fork ? session.time.created : undefined
+  })
+
   const sourcesHost = useSources()
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
@@ -301,6 +308,7 @@ export function createNextTimelineRowRenderer(input: {
     return SessionTurn.duration(turns().messages, message, {
       index: turns().indexes.get(message.id),
       legacy: turns().legacy,
+      forkCreatedAt: forkCreatedAt(),
     })
   }
 
