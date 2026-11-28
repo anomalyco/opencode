@@ -6,7 +6,7 @@ import { getConfig } from "../electron-builder.config"
 import { getCurrentCli, resolveChannel } from "./utils"
 
 // Packages the built app (out/) for OPENCODE_TARGET into dist/desktop at the repository root, unsigned:
-// macOS: the .app as a tarball. Windows: the unpacked app in app/, or with OPENCODE_DESKTOP_APP, the NSIS
+// macOS: the .app as a tarball and the disk image layout. Windows: the unpacked app in app/, or with OPENCODE_DESKTOP_APP, the NSIS
 // installer around that (signed) app. Linux: AppImage, deb and rpm. The release workflow signs afterwards.
 const dir = path.resolve(import.meta.dir, "..")
 
@@ -53,6 +53,15 @@ if (!app && os === "mac") {
   if (bundles.length !== 1) throw new Error(`Expected one .app bundle in ${parent}, found ${bundles.join(", ")}`)
   await writeUpdateConfig(path.join(parent, bundles[0], "Contents", "Resources"))
   await $`tar -cf ${path.join(out, `opencode-desktop-mac-${cli.cpu}.app.tar`)} -C ${parent} ${bundles[0]}`
+  // The disk image layout (background, icon positions and volume icon) around an empty app folder, with room
+  // for sign-desktop-macos.sh to put the notarized app in its place.
+  const placeholder = path.join("dist", "dmg", bundles[0])
+  await mkdir(placeholder, { recursive: true })
+  await $`bunx electron-builder ${flags} -c.mac.target=dmg -c.dmg.size=2g -c.dmg.shrink=false --prepackaged ${placeholder}`
+  await cp(
+    path.join("dist", `opencode-desktop-mac-${cli.cpu}.dmg`),
+    path.join(out, `opencode-desktop-mac-${cli.cpu}.layout.dmg`),
+  )
 }
 
 if (!app && os === "win") {
