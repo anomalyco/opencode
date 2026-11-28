@@ -346,6 +346,10 @@ export const dict = {
   "site.contents": "목차",
   "docs.section.overview": "개요",
   "docs.section.build": "개발",
+  "docs.nav.configure": "구성",
+  "docs.nav.plugins": "플러그인",
+  "docs.nav.client": "클라이언트",
+  "docs.nav.workspace": "워크스페이스",
   "docs.lockup.sectionDocs": "{{section}} 문서",
   "docs.lockup.switchLabel": "{{name}}, 문서 전환",
   "docs.lockup.home": "{{name}} 홈",
@@ -382,6 +386,7 @@ export const dict = {
   "docs.callout.danger": "위험",
   "docs.v1.markdownNote":
     "OpenCode V1 문서입니다. OpenCode V2의 최신 문서는 https://opencode.ai/docs/llms.txt 에 있습니다.",
+  "docs.translation.missing": "이 페이지는 아직 번역되지 않았습니다. 영어 버전을 표시합니다.",
   "site.companions": "OpenCode와 함께 쓰면 좋은 앱",
   "site.notFound.title": "페이지를 찾을 수 없습니다",
   "site.arcade.alt":

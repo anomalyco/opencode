@@ -1,16 +1,23 @@
 // Fails when a link on a prerendered docs page points at a missing file or anchor in the site's built
 // assets (the directory given), or, outside /docs, at a page the site doesn't have (the shell's nav and
 // footer link the site's pages, which render in the Worker, so they're checked against src/routes).
-// The V1 docs (/v1/docs, redirected to their own app), the status page, Data and the Console are other
-// apps.
+// The V1 docs (/v1/docs, redirected to their own app), the status page, Data and the Console are
+// other apps.
 //
 //   bun src/docs/script/validate-links.ts .output/public
 import path from "node:path"
+import { LOCALES, strip } from "../../lib/language"
 import { docsSets } from "../config"
+import { docsLocaleHref } from "../lib/navigation"
 
 const root = path.resolve(process.argv[2] ?? ".output/public")
 const routes = path.resolve(import.meta.dir, "../../routes")
 const externalRoutes = /^\/(v1\/docs|status|data|console)(\/|$)/
+// Every language's docs pages, beside the set (V1's languages are in its slugs, so it has one root).
+const docsRoots = docsSets.flatMap((set) =>
+  set.id === "latest" ? LOCALES.map((locale) => docsLocaleHref("index", set, locale)) : [set.base],
+)
+const isDocs = (pathname: string) => docsRoots.some((base) => `${pathname}/`.startsWith(base))
 
 /** Whether the site renders a page at `pathname` (src/routes/x.tsx or src/routes/x/index.tsx). */
 async function sitePage(pathname: string) {
@@ -27,8 +34,8 @@ async function readIds(file: string) {
 }
 const files = (
   await Promise.all(
-    docsSets.map((set) =>
-      Array.fromAsync(new Bun.Glob(`${set.base.slice(1)}**/*.html`).scan({ cwd: root, absolute: true })),
+    docsRoots.map((base) =>
+      Array.fromAsync(new Bun.Glob(`${base.slice(1)}**/*.html`).scan({ cwd: root, absolute: true })),
     ),
   )
 ).flat()
@@ -44,8 +51,8 @@ const failures = (
           const url = new URL(match[1], page)
           if (url.origin !== "https://opencode.local") return
           if (externalRoutes.test(url.pathname)) return
-          const docs = docsSets.some((set) => `${url.pathname}/`.startsWith(set.base))
-          if (!docs && !url.hash && (await sitePage(url.pathname))) return
+          // The shell's links take the page's language; the site's routes are written without it.
+          if (!isDocs(url.pathname) && !url.hash && (await sitePage(strip(url.pathname)))) return
 
           const targetPath = path.join(root, decodeURIComponent(url.pathname))
           const target = (

@@ -7,6 +7,8 @@
 @import "../../component/site/site.css";
 @import "../../component/site/rtl.css";
 @import "../../component/site/locale-type.css";
+@import "../../component/dropdown.css";
+@import "../../component/language-picker.css";
 @import "../../component/site/github-link.css";
 @import "../../component/site/tap-targets.css";
 @import "../../component/site/docs-lockup.css";
@@ -747,6 +749,15 @@
   [data-site][data-layout="docs"] [data-component="docs-article"] :is(h2, h3, h4, h5, h6)[id] {
     scroll-margin-top: calc(var(--docs-header-height) + 1.5rem);
   }
+}
+
+/* A page without a translation in its language: the English page in that language's chrome. */
+[data-site][data-page="docs"] [data-component="docs-translation-notice"] {
+  margin: 0 0 1.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 /* The V1 notice (DocsLayout.tsx) sits inline above the article title so it stays clear of the

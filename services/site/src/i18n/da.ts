@@ -354,6 +354,10 @@ export const dict = {
   "site.contents": "Indhold",
   "docs.section.overview": "Oversigt",
   "docs.section.build": "Byg",
+  "docs.nav.configure": "Konfiguration",
+  "docs.nav.plugins": "Udvidelser",
+  "docs.nav.client": "Klient",
+  "docs.nav.workspace": "Arbejdsområde",
   "docs.lockup.sectionDocs": "Dokumentation til {{section}}",
   "docs.lockup.switchLabel": "{{name}}, skift dokumentation",
   "docs.lockup.home": "{{name}}-forside",
@@ -390,6 +394,7 @@ export const dict = {
   "docs.callout.danger": "Fare",
   "docs.v1.markdownNote":
     "Dette er dokumentationen til OpenCode V1. Den nyeste dokumentation, til OpenCode V2, findes på https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Denne side er ikke oversat endnu. Den engelske version vises.",
   "site.companions": "Fungerer godt sammen med OpenCode",
   "site.notFound.title": "Siden blev ikke fundet",
   "site.arcade.alt":

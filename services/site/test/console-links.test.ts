@@ -58,7 +58,7 @@ describe("localized Console links", () => {
     expect(nav.models).toBe("/de/console/models")
     expect(nav.subscriptions).toBe("/de/console/go")
     expect(nav.enterprise).toBe("/de/console/enterprise")
-    expect(nav.docs).toBe("/docs")
+    expect(nav.docs).toBe("/de/docs")
     const anomaly = links.columns.find((column) => column.title === "Anomaly")
     expect(anomaly?.links.filter((item) => item.href.startsWith("/de/console")).map((item) => item.href)).toEqual([
       "/de/console",

@@ -353,6 +353,10 @@ export const dict = {
   "site.contents": "Inhalt",
   "docs.section.overview": "Übersicht",
   "docs.section.build": "Entwickeln",
+  "docs.nav.configure": "Konfiguration",
+  "docs.nav.plugins": "Erweiterungen",
+  "docs.nav.client": "Klient",
+  "docs.nav.workspace": "Arbeitsbereich",
   "docs.lockup.sectionDocs": "{{section}}-Doku",
   "docs.lockup.switchLabel": "{{name}}, Doku wechseln",
   "docs.lockup.home": "{{name}}-Startseite",
@@ -389,6 +393,7 @@ export const dict = {
   "docs.callout.danger": "Gefahr",
   "docs.v1.markdownNote":
     "Dies ist die Doku für OpenCode V1. Die aktuelle Doku für OpenCode V2 findest du unter https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Diese Seite wurde noch nicht übersetzt. Die englische Version wird angezeigt.",
   "site.companions": "Passt perfekt zu OpenCode",
   "site.notFound.title": "Seite nicht gefunden",
   "site.arcade.alt":

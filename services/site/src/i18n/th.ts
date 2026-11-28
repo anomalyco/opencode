@@ -352,6 +352,10 @@ export const dict = {
   "site.contents": "สารบัญ",
   "docs.section.overview": "ภาพรวม",
   "docs.section.build": "การพัฒนา",
+  "docs.nav.configure": "การกำหนดค่า",
+  "docs.nav.plugins": "ปลั๊กอิน",
+  "docs.nav.client": "ไคลเอนต์",
+  "docs.nav.workspace": "พื้นที่ทำงาน",
   "docs.lockup.sectionDocs": "เอกสาร {{section}}",
   "docs.lockup.switchLabel": "{{name}} สลับเอกสาร",
   "docs.lockup.home": "หน้าแรกของ {{name}}",
@@ -388,6 +392,7 @@ export const dict = {
   "docs.callout.danger": "อันตราย",
   "docs.v1.markdownNote":
     "นี่คือเอกสารของ OpenCode V1 เอกสารล่าสุดสำหรับ OpenCode V2 อยู่ที่ https://opencode.ai/docs/llms.txt",
+  "docs.translation.missing": "หน้านี้ยังไม่ได้รับการแปล กำลังแสดงฉบับภาษาอังกฤษ",
   "site.companions": "ใช้คู่กับ OpenCode ได้อย่างลงตัว",
   "site.notFound.title": "ไม่พบหน้านี้",
   "site.arcade.alt": "ร้านเกมตู้ร้างยามค่ำคืน หน้าจอของตู้หนึ่งยังเรืองแสงเป็นเลข 404 และมีเหรียญตกอยู่บนพื้นตรงหน้า",

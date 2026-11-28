@@ -355,6 +355,10 @@ export const dict = {
   "site.contents": "Spis treści",
   "docs.section.overview": "Przegląd",
   "docs.section.build": "Tworzenie",
+  "docs.nav.configure": "Konfiguracja",
+  "docs.nav.plugins": "Wtyczki",
+  "docs.nav.client": "Klient",
+  "docs.nav.workspace": "Obszar roboczy",
   "docs.lockup.sectionDocs": "Dokumentacja {{section}}",
   "docs.lockup.switchLabel": "{{name}}, przełącz dokumentację",
   "docs.lockup.home": "{{name}}, strona główna",
@@ -391,6 +395,7 @@ export const dict = {
   "docs.callout.danger": "Niebezpieczeństwo",
   "docs.v1.markdownNote":
     "To dokumentacja OpenCode V1. Najnowsza dokumentacja, dla OpenCode V2, jest dostępna pod adresem https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Ta strona nie została jeszcze przetłumaczona. Wyświetlana jest wersja angielska.",
   "site.companions": "Świetnie działa z OpenCode",
   "site.notFound.title": "Nie znaleziono strony",
   "site.arcade.alt":
