@@ -193,7 +193,7 @@ const provider = (options: Options): OAuthClientProvider => {
     state: () => redirect.state,
     clientMetadata: {
       redirect_uris: redirect.registered,
-      client_name: "opencode",
+      client_name: "OpenCode",
       client_uri: "https://opencode.ai",
       logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
       grant_types: ["authorization_code", "refresh_token"],

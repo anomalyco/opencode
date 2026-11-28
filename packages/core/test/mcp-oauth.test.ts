@@ -566,7 +566,7 @@ describe("MCP OAuth", () => {
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
       expect(registrations[0]).toMatchObject({
-        client_name: "opencode",
+        client_name: "OpenCode",
         client_uri: "https://opencode.ai",
         logo_uri: "https://opencode.ai/web-app-manifest-512x512.png",
       })

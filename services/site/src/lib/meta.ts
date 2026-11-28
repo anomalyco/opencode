@@ -30,7 +30,7 @@ export function metaResponse(request: Request) {
 function client(origin: string) {
   const document = {
     client_id: origin + paths.client,
-    client_name: "opencode",
+    client_name: "OpenCode",
     client_uri: origin,
     logo_uri: origin + "/web-app-manifest-512x512.png",
     application_type: "native",
