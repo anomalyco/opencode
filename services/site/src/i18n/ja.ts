@@ -351,8 +351,8 @@ export const dict = {
   "docs.nav.plugins": "プラグイン",
   "docs.nav.client": "クライアント",
   "docs.nav.workspace": "ワークスペース",
-
-  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "{{section}}ドキュメント",
+  "docs.nav.console": "Console",
+  "docs.lockup.sectionDocs": "{{section}}ドキュメント",
   "docs.lockup.switchLabel": "{{name}}、ドキュメントを切り替え",
   "docs.lockup.home": "{{name}}ホーム",
   "docs.lockup.switch": "ドキュメントを切り替え",

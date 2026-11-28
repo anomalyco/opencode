@@ -350,8 +350,8 @@ export const dict = {
   "docs.nav.plugins": "플러그인",
   "docs.nav.client": "클라이언트",
   "docs.nav.workspace": "워크스페이스",
-
-  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "{{section}} 문서",
+  "docs.nav.console": "Console",
+  "docs.lockup.sectionDocs": "{{section}} 문서",
   "docs.lockup.switchLabel": "{{name}}, 문서 전환",
   "docs.lockup.home": "{{name}} 홈",
   "docs.lockup.switch": "문서 전환",

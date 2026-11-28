@@ -357,8 +357,8 @@ export const dict = {
   "docs.nav.plugins": "Erweiterungen",
   "docs.nav.client": "Klient",
   "docs.nav.workspace": "Arbeitsbereich",
-
-  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "{{section}}-Doku",
+  "docs.nav.console": "Console",
+  "docs.lockup.sectionDocs": "{{section}}-Doku",
   "docs.lockup.switchLabel": "{{name}}, Doku wechseln",
   "docs.lockup.home": "{{name}}-Startseite",
   "docs.lockup.switch": "Doku wechseln",
