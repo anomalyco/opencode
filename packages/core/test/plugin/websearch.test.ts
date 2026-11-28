@@ -167,14 +167,15 @@ describe("built-in web search providers", () => {
     }),
   )
 
-  it.effect("registers Parallel and keeps its credential in the authorization header", () =>
+  it.effect("registers Parallel and reads an SSE response from the unified MCP endpoint", () =>
     Effect.gen(function* () {
       resetWebSearchFixture(
-        JSON.stringify({
+        `event: message\ndata: ${JSON.stringify({
           jsonrpc: "2.0",
           id: 1,
           result: {
             content: [{ type: "text", text: "search results" }],
+            isError: false,
             structuredContent: {
               search_id: "search_1",
               results: [
@@ -186,12 +187,12 @@ describe("built-in web search providers", () => {
                 },
               ],
               warnings: null,
-              usage: [{ name: "sku_search", count: 1 }],
               session_id: "ses_parallel",
             },
           },
-        }),
+        })}\n\n`,
       )
+      setResponseHeaders({ "content-type": "text/event-stream" })
       const integrations = yield* Integration.Service
       const websearch = yield* WebSearch.Service
       yield* WebSearchParallel.Plugin.effect(
@@ -223,8 +224,8 @@ describe("built-in web search providers", () => {
         }),
       )
       expect(requests[0]).toMatchObject({
-        url: WebSearchParallel.endpoint,
-        headers: { authorization: "Bearer parallel-secret" },
+        url: "https://mcp.parallel.ai/mcp",
+        headers: { authorization: "Bearer parallel-secret", "user-agent": "opencode/test/test/test" },
         body: {
           jsonrpc: "2.0",
           id: 1,
