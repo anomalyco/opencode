@@ -264,7 +264,7 @@ it.effect("reads Go through the account whose workspace has it", () =>
     const requests: HttpClientRequest.HttpClientRequest[] = []
     const go = yield* readGo({ credentials: { opencode: signedIn }, provider: consoleGo }, goUsage, requests)
 
-    expect(go).toEqual({ connection: "account", integrationID: "opencode", workspace: anomaly, usage: allowance })
+    expect(go).toEqual({ connection: "account", workspace: anomaly, usage: allowance })
     expect(headers(requests)).toEqual([
       {
         url: "https://dev.opencode.ai/zen/go/v1/usage",
@@ -281,7 +281,7 @@ it.effect("has no allowance for an account whose workspace has no active Go", ()
       Response.json({ type: "error" }, { status: 403 }),
     )
 
-    expect(go).toEqual({ connection: "account", integrationID: "opencode", workspace: anomaly })
+    expect(go).toEqual({ connection: "account", workspace: anomaly })
   }),
 )
 
@@ -290,7 +290,7 @@ it.effect("reads Go for a key without naming its workspace", () =>
     const requests: HttpClientRequest.HttpClientRequest[] = []
     const go = yield* readGo({ credentials: { "opencode-go": goKey }, provider: modelsDevGo }, goUsage, requests)
 
-    expect(go).toEqual({ connection: "key", integrationID: "opencode-go", usage: allowance })
+    expect(go).toEqual({ connection: "key", usage: allowance })
     expect(headers(requests)).toEqual([
       { url: "https://dev.opencode.ai/zen/go/v1/usage", authorization: "Bearer go-key", workspace: [] },
     ])
@@ -303,7 +303,7 @@ it.effect("has no allowance for a key whose workspace has no active Go", () =>
       Response.json({ type: "error" }, { status: 403 }),
     )
 
-    expect(go).toEqual({ connection: "key", integrationID: "opencode-go" })
+    expect(go).toEqual({ connection: "key" })
   }),
 )
 
@@ -316,7 +316,7 @@ it.effect("reads the key that Go requests use while the account's workspace has 
       requests,
     )
 
-    expect(go).toEqual({ connection: "key", integrationID: "opencode-go", usage: allowance })
+    expect(go).toEqual({ connection: "key", usage: allowance })
     expect(headers(requests).map((request) => request.authorization)).toEqual(["Bearer go-key"])
   }),
 )
@@ -330,7 +330,7 @@ it.effect("reads the account once its workspace's Go provider replaces the key's
       requests,
     )
 
-    expect(go).toEqual({ connection: "account", integrationID: "opencode", workspace: anomaly, usage: allowance })
+    expect(go).toEqual({ connection: "account", workspace: anomaly, usage: allowance })
     expect(headers(requests).map((request) => request.authorization)).toEqual(["Bearer console-access"])
   }),
 )

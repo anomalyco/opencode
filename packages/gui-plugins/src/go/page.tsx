@@ -68,10 +68,24 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
     return ctx.t("connected.account", { workspace: value.workspace.name ?? value.workspace.id })
   }
 
-  const connect = (integration: string) => {
-    const server = props.server()
+  // The two ways Go connects, as Settings › Providers offers them: the account's device sign-in, or a Go key.
+  const connect = (label: string) => {
+    const open = (integration: string, method: "oauth" | "key") => {
+      const server = props.server()
 
-    if (server) ctx.layout.connect({ server: server.id, integration })
+      if (server) ctx.layout.connect({ server: server.id, integration, method })
+    }
+
+    return (
+      <ui.Menu
+        label={label}
+        trigger="button"
+        items={[
+          { label: ctx.t("connect.account"), onSelect: () => open("opencode", "oauth") },
+          { label: ctx.t("connect.key"), onSelect: () => open("opencode-go", "key") },
+        ]}
+      />
+    )
   }
 
   // The workspace's own Go page; a key doesn't say which workspace it belongs to.
@@ -87,12 +101,6 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
 
     return ctx.t("duration.minutes", { minutes })
   }
-
-  const change = (value: UsageLimitsGoConnection) => (
-    <ui.Button variant="ghost" onClick={() => connect(value.integrationID)}>
-      {ctx.t("change")}
-    </ui.Button>
-  )
 
   return (
     <ui.SettingsLayout
@@ -113,7 +121,7 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
                 <ui.SettingsSection>
                   <ui.SettingsRow title={ctx.t("renew.title")} description={ctx.t("renew.description")}>
                     <div class="flex flex-wrap justify-end gap-2">
-                      {change(value())}
+                      {connect(ctx.t("change"))}
                       <ui.Button variant="submit" onClick={() => system.openExternal(goURL())}>
                         {ctx.t("subscribe.action")}
                       </ui.Button>
@@ -134,7 +142,7 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
                   <ui.SettingsSection>
                     <ui.SettingsRow title={ctx.t("manage.title")} description={ctx.t("manage.description")}>
                       <div class="flex flex-wrap justify-end gap-2">
-                        {change(value())}
+                        {connect(ctx.t("change"))}
                         <ui.Button variant="neutral" onClick={() => system.openExternal(goURL())}>
                           {ctx.t("manage.action")}
                         </ui.Button>
@@ -170,9 +178,7 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
               </ui.Button>
             </ui.SettingsRow>
             <ui.SettingsRow title={ctx.t("connect.title")} description={ctx.t("connect.description")}>
-              <ui.Button variant="neutral" onClick={() => connect("opencode")}>
-                {ctx.t("connect.action")}
-              </ui.Button>
+              {connect(ctx.t("connect.action"))}
             </ui.SettingsRow>
           </ui.SettingsSection>
         </Match>

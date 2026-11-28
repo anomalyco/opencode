@@ -15,11 +15,10 @@ const usage = (weekly: { percent: number; limited: boolean }): UsageLimitsGo => 
 
 const account = {
   connection: "account",
-  integrationID: "opencode",
   workspace: { id: "wrk_story", name: "Acme", goURL: "https://opencode.ai/console/wrk_story/go" },
 } as const satisfies UsageLimitsGoConnection
 
-const key = { connection: "key", integrationID: "opencode-go" } as const satisfies UsageLimitsGoConnection
+const key = { connection: "key" } as const satisfies UsageLimitsGoConnection
 
 type Fixture = {
   readonly go: UsageLimitsGoConnection | null
@@ -49,7 +48,8 @@ function GoStory(props: { fixture: Fixture }) {
     system: { value: { openExternal: (url: string) => setAction(`Opened ${url}`) } },
     layout: {
       value: {
-        connect: (input: { integration: string }) => setAction(`Connecting ${input.integration}`),
+        connect: (input: { integration: string; method?: string }) =>
+          setAction(`Connecting ${input.integration} by ${input.method}`),
       },
     },
   })

@@ -1,17 +1,21 @@
 import { expect, story } from "../../stories/playwright/story"
 
-story("not connected, the Go page offers Subscribe and connects OpenCode", async ({ mount }) => {
+story("not connected, the Go page offers Subscribe and both ways to connect", async ({ mount, page: window }) => {
   const page = await mount("plugins-go--not-connected")
 
   await expect(page.getByText("A subscription to the best open-weight coding models")).toBeVisible()
   await page.getByRole("button", { name: "Subscribe", exact: true }).click()
   await expect(page.getByRole("status")).toHaveText("Opened https://opencode.ai/go")
   await page.getByRole("button", { name: "Connect", exact: true }).click()
-  await expect(page.getByRole("status")).toHaveText("Connecting opencode")
+  await window.getByRole("menuitem", { name: "OpenCode account" }).click()
+  await expect(page.getByRole("status")).toHaveText("Connecting opencode by oauth")
+  await page.getByRole("button", { name: "Connect", exact: true }).click()
+  await window.getByRole("menuitem", { name: "OpenCode Go API key" }).click()
+  await expect(page.getByRole("status")).toHaveText("Connecting opencode-go by key")
   await expect(page.getByRole("meter")).toHaveCount(0)
 })
 
-story("connected through the account, the page shows its workspace and usage", async ({ mount }) => {
+story("connected through the account, the page shows its workspace and usage", async ({ mount, page: window }) => {
   const page = await mount("plugins-go--account")
 
   await expect(page.getByText("Connected to Acme")).toBeVisible()
@@ -20,10 +24,11 @@ story("connected through the account, the page shows its workspace and usage", a
   await page.getByRole("button", { name: "Manage subscription", exact: true }).click()
   await expect(page.getByRole("status")).toHaveText("Opened https://opencode.ai/console/wrk_story/go")
   await page.getByRole("button", { name: "Change connection", exact: true }).click()
-  await expect(page.getByRole("status")).toHaveText("Connecting opencode")
+  await window.getByRole("menuitem", { name: "OpenCode Go API key" }).click()
+  await expect(page.getByRole("status")).toHaveText("Connecting opencode-go by key")
 })
 
-story("connected with a key, the page shows its usage and changes the key", async ({ mount }) => {
+story("connected with a key, the page shows its usage and changes the connection", async ({ mount, page: window }) => {
   const page = await mount("plugins-go--key")
 
   await expect(page.getByText("Connected with an API key")).toBeVisible()
@@ -31,7 +36,8 @@ story("connected with a key, the page shows its usage and changes the key", asyn
   await page.getByRole("button", { name: "Manage subscription", exact: true }).click()
   await expect(page.getByRole("status")).toHaveText("Opened https://opencode.ai/go")
   await page.getByRole("button", { name: "Change connection", exact: true }).click()
-  await expect(page.getByRole("status")).toHaveText("Connecting opencode-go")
+  await window.getByRole("menuitem", { name: "OpenCode account" }).click()
+  await expect(page.getByRole("status")).toHaveText("Connecting opencode by oauth")
 })
 
 story("without an active subscription, Subscribe opens the workspace's Go page", async ({ mount }) => {

@@ -1045,6 +1045,11 @@ export interface Layout {
     readonly server: string
     /** The integration's id, as the server's integration list names it. */
     readonly integration: string
+    /**
+     * Starts the integration's first method of this kind instead of listing its methods, such as `oauth` for an
+     * account sign-in. Omit it to list them; the user can still go back to the list.
+     */
+    readonly method?: "oauth" | "key"
   }): void
 }
 

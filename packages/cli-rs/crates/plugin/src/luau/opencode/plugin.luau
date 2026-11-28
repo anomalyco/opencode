@@ -4632,7 +4632,6 @@ export type UsageLimitsGo = {
 
 export type UsageLimitsGoConnection = {
     connection: ("account" | "key"),
-    integrationID: string,
     workspace: {
         id: string,
         name: string?,

@@ -45,11 +45,11 @@ export const layer = Layer.effect(
         .resolve(connection)
         .pipe(Effect.mapError((error) => new UnavailableError({ message: error.message })))
       if (!credential || credential.type === "external") return undefined
-      return { integrationID, credential }
+      return credential
     })
 
     const get = Effect.fn("UsageLimits.get")(function* () {
-      const credential = (yield* active(Integration.ID.make("opencode")))?.credential
+      const credential = yield* active(Integration.ID.make("opencode"))
       if (!credential) return undefined
       const workspaceID = credential.metadata?.orgID
       if (typeof workspaceID !== "string") return undefined
@@ -78,11 +78,10 @@ export const layer = Layer.effect(
     // Console's provider while the signed-in workspace has Go, else the models.dev provider's own key.
     const go = Effect.fn("UsageLimits.go")(function* () {
       const provider = yield* providers.get(Provider.ID.make("opencode-go"))
-      const used =
+      const value =
         (yield* active(provider?.integrationID ?? Integration.ID.make("opencode-go"))) ??
         (yield* active(Integration.ID.make("opencode")))
-      if (!used) return undefined
-      const value = used.credential
+      if (!value) return undefined
       if (value.type === "oauth") {
         const workspaceID = value.metadata?.orgID
         if (typeof workspaceID !== "string") return undefined
@@ -90,7 +89,6 @@ export const layer = Layer.effect(
         const usage = yield* readGo(http, new URL(server).origin, value, workspaceID).pipe(timeout)
         return {
           connection: "account" as const,
-          integrationID: used.integrationID,
           workspace: {
             id: workspaceID,
             ...(typeof value.metadata?.orgName === "string" ? { name: value.metadata.orgName } : {}),
@@ -105,7 +103,6 @@ export const layer = Layer.effect(
       const usage = yield* readGo(http, origin, value).pipe(timeout)
       return {
         connection: "key" as const,
-        integrationID: used.integrationID,
         ...(usage === undefined ? {} : { usage }),
       }
     })

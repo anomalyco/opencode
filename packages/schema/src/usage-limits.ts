@@ -83,8 +83,6 @@ export interface GoConnection extends Schema.Schema.Type<typeof GoConnection> {}
 export const GoConnection = Schema.Struct({
   /** `account`: the OpenCode account sign-in. `key`: an API key, entered in the app, from the environment or config. */
   connection: Schema.Literals(["account", "key"]),
-  /** The integration whose connection Go uses, to change it. */
-  integrationID: Schema.String,
   /** The account's workspace; a key doesn't say which workspace it belongs to. */
   workspace: Schema.Struct({
     id: Schema.String,

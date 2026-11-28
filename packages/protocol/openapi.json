@@ -28171,9 +28171,6 @@
             "type": "string",
             "enum": ["account", "key"]
           },
-          "integrationID": {
-            "type": "string"
-          },
           "workspace": {
             "type": "object",
             "properties": {
@@ -28194,7 +28191,7 @@
             "$ref": "#/components/schemas/UsageLimits.Go"
           }
         },
-        "required": ["connection", "integrationID"],
+        "required": ["connection"],
         "additionalProperties": false
       },
       "UsageLimits.Info": {

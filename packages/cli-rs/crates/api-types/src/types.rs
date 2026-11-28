@@ -12391,8 +12391,6 @@ pub struct UsageLimitsGoConnectionWorkspace {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageLimitsGoConnection {
     pub connection: UsageLimitsGoConnectionConnection,
-    #[serde(rename = "integrationID")]
-    pub integration_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<UsageLimitsGoConnectionWorkspace>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

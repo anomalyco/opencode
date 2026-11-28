@@ -2451,7 +2451,6 @@ export type PushDevice = {
 
 export type UsageLimitsGoConnection = {
   connection: "account" | "key"
-  integrationID: string
   workspace?: { id: string; name?: string; goURL: string }
   usage?: UsageLimitsGo
 }

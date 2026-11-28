@@ -1211,7 +1211,7 @@ export function createPluginAttachment(apis: HostApis) {
       controller.select(input.integration)
       void dialog.show(() => (
         <ServerProvider conn={conn}>
-          <DialogConnectProvider controller={controller} defaultLocation standalone />
+          <DialogConnectProvider controller={controller} defaultLocation standalone method={input.method} />
         </ServerProvider>
       ))
     },
