@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import path from "path"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Context, Duration, Effect, Exit, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
@@ -116,7 +116,7 @@ export namespace RipgrepBinary {
       }, Effect.scoped)
 
       return Service.of({
-        filepath: yield* Effect.cached(
+        filepath: yield* Effect.cachedWithTTL(
           Effect.gen(function* () {
             const system = yield* Effect.sync(() => findExecutable(process.platform === "win32" ? "rg.exe" : "rg"))
             if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
@@ -147,6 +147,8 @@ export namespace RipgrepBinary {
             yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
             return target
           }),
+          // A failed resolution would otherwise stay cached until restart, so only a resolved path is kept.
+          (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
         ),
       })
     }),
