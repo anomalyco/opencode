@@ -92,6 +92,22 @@ Fix it in one of two ways:
 - Export the inspection certificate authority as a PEM file and trust it with `NODE_EXTRA_CA_CERTS`, as shown in
   [Certificates](#certificates).
 
+## Networks that drop the TLS handshake
+
+OpenCode's TLS handshake includes a post-quantum key share, which makes its first message too large for one network
+packet. Some networks drop a handshake that arrives in two packets, so requests to an affected host hang or fail with
+`ECONNRESET`, while `curl` reaches the same host.
+
+OpenCode detects this for each host and switches that host to the classical handshake. The first request to an affected
+host takes about five seconds longer, and later requests are not delayed. The server certificate is still verified. The
+service log records the switch:
+
+```text
+The network drops the post-quantum TLS handshake to this host; using the classical handshake origin=https://opencode.ai
+```
+
+OpenCode tries the post-quantum handshake again every hour and returns to it when the network passes it.
+
 ## Client certificates
 
 Set `settings.tls` on a provider whose gateway requires mutual TLS. Its model requests present the certificate, and the
