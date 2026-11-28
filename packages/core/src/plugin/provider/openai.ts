@@ -2,6 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionRequest } from "@opencode/plugin/effect/session"
 import { Deferred, Effect, Exit, Option, Schema, Semaphore } from "effect"
+import { HttpClientRequest } from "effect/http"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
@@ -13,6 +14,7 @@ import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
+import { OpenAIAccountModels } from "./openai-account-models.js"
 import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -263,6 +265,25 @@ export const OpenAIPlugin = define({
     yield* load()
     // Temporary: the Codex list from models.dev, see openai-subscription-models.ts.
     const plan = yield* OpenAISubscriptionModels.track("openai-codex", ctx.provider.reload())
+    const account = yield* OpenAIAccountModels.track(ctx, {
+      name: "codex",
+      request: (value) => {
+        if (value.type !== "oauth" || (value.methodID !== browserMethodID && value.methodID !== headlessMethodID))
+          return
+        // The list leaves out models newer than client_version, so ask as the newest client.
+        return HttpClientRequest.get(`${codexBaseURL}/models`).pipe(
+          HttpClientRequest.setUrlParam("client_version", "99.0.0"),
+          HttpClientRequest.bearerToken(value.access),
+          HttpClientRequest.setHeaders({
+            originator: "opencode",
+            "User-Agent": App.useragent(ctx.app),
+            ...(typeof value.metadata?.accountID === "string"
+              ? { "chatgpt-account-id": value.metadata.accountID }
+              : {}),
+          }),
+        )
+      },
+    })
     // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
     const configured = yield* configuredSettings(Provider.ID.openai)
     yield* ctx.provider.transform((providers) => {
@@ -290,8 +311,9 @@ export const OpenAIPlugin = define({
         // subscription covers usage, so hide the rest and zero the cost.
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
-          if (plan.current) {
-            if (plan.current.has(draft.id)) draft.cost = []
+          const listed = OpenAIAccountModels.allowed(draft, plan.current, account.current)
+          if (listed !== undefined) {
+            if (listed) draft.cost = []
             else draft.enabled = false
             return
           }
