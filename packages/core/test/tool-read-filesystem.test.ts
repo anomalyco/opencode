@@ -80,14 +80,22 @@ describe("ReadToolFileSystem scan ranges", () => {
       })
       expect(yield* file.read({ offset: 2, limit: 2 })).toEqual({
         type: "text",
-        content: `one\n${"x".repeat(2_000)}... (line truncated to 2000 chars)`,
+        content: "one",
         offset: 2,
-        lineCount: 2,
+        lineCount: 1,
+        next: 3,
       })
       // Once the scan reaches line 2 (after the 256 KiB + 1 MiB seek), later reads stay capped at 256 KiB.
       expect(file.calls[0]?.length).toBe(256 * 1024)
       expect(file.calls[1]?.length).toBe(1024 * 1024)
       expect(file.calls.slice(2).every((call) => call.length <= 256 * 1024)).toBe(true)
+      expect(yield* file.read({ offset: 3 })).toEqual({
+        type: "text",
+        content: "",
+        note: "Line 3 is 513 KB, more than the 50 KB one read returns, so it isn't shown.",
+        offset: 3,
+        lineCount: 0,
+      })
     }),
   )
 
@@ -274,14 +282,9 @@ describe("ReadToolFileSystem", () => {
       yield* files.writeFileString(file, exact)
       expect(yield* read()).toEqual({ type: "text", content: exact, offset: 1, lineCount: 32 })
 
-      // Each truncation marker takes more bytes than the one character it replaces.
-      yield* files.writeFileString(file, ("x".repeat(2_001) + "\n").repeat(25) + "é".repeat(500))
-      const page = yield* read()
-      expect(page.type).toBe("text")
-      if (page.type !== "text") return
-      expect(page).toMatchObject({ offset: 1, lineCount: 25, next: 26 })
-      expect(page.content.split("\n")).toHaveLength(25)
-      expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(50 * 1024)
+      const long = "x".repeat(40 * 1024) + "\n" + "é".repeat(500)
+      yield* files.writeFileString(file, long)
+      expect(yield* read()).toEqual({ type: "text", content: long, offset: 1, lineCount: 2 })
     }),
   )
 
@@ -462,20 +465,15 @@ describe("ReadToolFileSystem", () => {
         offset: 12,
       })
       expect(huge).toEqual([
-        "Read file huge-last.txt, lines 1-11 (offset 12 is past the end; the file has 11 lines)",
-        ...expected(1).slice(0, 10),
-        `11: ${"z".repeat(2_000)}... (line truncated to 2000 chars)`,
+        "Read file huge-last.txt, line 11 (offset 12 is past the end; the file has 11 lines)",
+        "Line 11 is 300 KB, more than the 50 KB one read returns, so it isn't shown.",
       ])
 
-      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      // Each line is 3001 bytes with its separator, so 17 of them fit in the 50 KB cap.
       const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
       const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
-      expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
-      expect(capped.slice(1)).toEqual(
-        wide
-          .slice(175)
-          .map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
-      )
+      expect(capped[0]).toBe("Read file wide.txt, lines 184-200 (offset 201 is past the end; the file has 200 lines)")
+      expect(capped.slice(1)).toEqual(wide.slice(183).map((line, index) => `${184 + index}: ${line}`))
 
       // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.
       const early = new TextEncoder().encode(lines.join("\n"))
@@ -560,19 +558,23 @@ describe("ReadToolFileSystem", () => {
         `506: ${lines[505]}`,
         "[Output truncated. Continue reading with offset: 507]",
       ])
-      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      // Each line is 3001 bytes with its separator, so 17 of them fit in the 50 KB cap.
       const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
       const clipped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: -100 })
       expect([clipped[0], clipped.at(-1)]).toEqual([
-        "Read file wide.txt, lines 101-125",
-        "[Output truncated. Continue reading with offset: 126]",
+        "Read file wide.txt, lines 101-117",
+        "[Output truncated. Continue reading with offset: 118]",
       ])
       const short = lines.slice(0, 10)
       const huge = yield* read("huge.txt", `${short.join("\n")}\n${"z".repeat(300 * 1024)}`, { offset: -20 })
       expect(huge).toEqual([
-        "Read file huge.txt, lines 1-11",
+        "Read file huge.txt, lines 1-10",
         ...expected(1, 10),
-        `11: ${"z".repeat(2_000)}... (line truncated to 2000 chars)`,
+        "[Output truncated. Continue reading with offset: 11]",
+      ])
+      expect(yield* read("huge.txt", `${short.join("\n")}\n${"z".repeat(300 * 1024)}`, { offset: -1 })).toEqual([
+        "Read file huge.txt, line 11",
+        "Line 11 is 300 KB, more than the 50 KB one read returns, so it isn't shown.",
       ])
     }),
   )
@@ -652,7 +654,7 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("truncates long lines", () =>
+  it.effect("returns long lines whole and a note for a line over a page", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = path.join(directory, "long.txt")
@@ -662,10 +664,23 @@ describe("ReadToolFileSystem", () => {
 
       expect(result).toEqual({
         type: "text",
-        content: `${"a".repeat(1_999)}... (line truncated to 2000 chars)`,
+        content: `${"a".repeat(1_999)}😀tail`,
         offset: 1,
         lineCount: 1,
       })
+
+      yield* files.writeFileString(file, `one\n${"z".repeat(60 * 1024)}\nthree\n`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, absolute(file), "long.txt", { offset })
+      expect(yield* read(1)).toEqual({ type: "text", content: "one", offset: 1, lineCount: 1, next: 2 })
+      expect(yield* read(2)).toEqual({
+        type: "text",
+        content: "",
+        note: "Line 2 is 60 KB, more than the 50 KB one read returns, so it isn't shown. Continue at offset 3.",
+        offset: 2,
+        lineCount: 0,
+        next: 3,
+      })
+      expect(yield* read(3)).toEqual({ type: "text", content: "three", offset: 3, lineCount: 1 })
     }),
   )
 

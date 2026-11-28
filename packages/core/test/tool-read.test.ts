@@ -235,7 +235,7 @@ describe("ReadTool", () => {
         signature: expect.not.stringContaining("lineCount"),
       })
       expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toBe(
-        "Read a file or directory: text, images, and PDFs. An image or PDF is attached to the execute result even if the program doesn't return it. A call returns one page, at most 2000 lines or 50 KB, and `next` is where the following page starts.",
+        "Read a file or directory: text, images, and PDFs. An image or PDF is attached to the execute result even if the program doesn't return it. A call returns one page, at most 2000 lines or 50 KB, and `next` is where the following page starts. Lines come back whole; a line over 50 KB gets a note instead of its content.",
       )
       const demoted = yield* registry.snapshot(undefined, { tools: { direct: new Set(["read"]) } })
       expect(demoted.definitions.map((tool) => tool.name)).toEqual(["read", "execute"])
