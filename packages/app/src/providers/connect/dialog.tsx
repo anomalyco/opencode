@@ -280,6 +280,8 @@ const providerNote = (id: string) => {
   if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
 }
 
+const rank = (id: string) => (popularProviders.includes(id) ? popularProviders.indexOf(id) : popularProviders.length)
+
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
@@ -306,7 +308,8 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const connected = createMemo(() =>
     all()
       .filter((row) => row.connections.length > 0)
-      .toSorted((a, b) => a.name.localeCompare(b.name)),
+      // Popular providers keep their Popular order; the rest are alphabetical after them.
+      .toSorted((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name)),
   )
 
   const unconnected = createMemo(() => all().filter((row) => row.connections.length === 0))
