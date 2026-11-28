@@ -1,7 +1,7 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 for (const theme of ["light", "dark"]) {
-  story(`keeps the Open in border visible without hovering (${theme})`, async ({ mount, page }, testInfo) => {
+  test(`keeps the Open in border visible without hovering (${theme})`, async ({ mount, page }, testInfo) => {
     const component = await mount("ui-split-button--open-in", { globals: { theme } })
     const control = component.locator('[data-component="split-button-v2"]')
     await page.mouse.move(0, 0)

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import { timelinePresets, type TimelineDetail } from "./detail"
 import { placeFactOf, type PlaceFact } from "./facts"
 import { place, placeContent, placeNotice, placer } from "./place"
@@ -10,7 +10,7 @@ const preset = (id: string) => timelinePresets.find((item) => item.id === id)!.v
 const custom = (overrides: Partial<TimelineDetail>): TimelineDetail => ({ ...preset("detailed"), ...overrides })
 
 const call = (overrides: Partial<PlaceFact>): PlaceFact => ({
-  ...placeFactOf(storyTool("c", "custom", "completed", {})),
+  ...placeFactOf(labTool("c", "custom", "completed", {})),
   ...overrides,
 })
 
@@ -83,7 +83,7 @@ describe("place", () => {
   })
 
   test("the placer places each call once", () => {
-    const tool = storyTool("r", "read", "completed", { path: "/a.ts" })
+    const tool = labTool("r", "read", "completed", { path: "/a.ts" })
     let reads = 0
     const placeOf = placer(preset("detailed"), "current", (part) => (reads++, placeFactOf(part)))
 

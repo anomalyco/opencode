@@ -24,7 +24,7 @@ Compact single-line text field with neutral elevation, optional trailing copy ac
 - Uses \`data-component="text-input-v2"\` with \`--v2-background-bg-base\`, \`--v2-elevation-input\`, \`--v2-text-text-faint\` (placeholder), and \`--v2-icon-icon-muted\` (copy icon).
 
 ### Field
-Compose with \`Field\` for label, helper prefix/suffix, and tooltip — see the **Field** story.
+Compose with \`Field\` for label, helper prefix/suffix, and tooltip — see the **Field** page.
 `
 
 type Controls = TextInputProps & {

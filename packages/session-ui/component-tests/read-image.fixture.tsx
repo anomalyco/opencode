@@ -5,8 +5,8 @@ import { DialogProvider } from "@opencode/ui/context/dialog"
 import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 import { MarkdownProvider } from "../src/context/markdown"
-import { CurrentSessionProviders } from "../src/storybook/current-session-story"
-import { storyDocument, storyTool } from "../src/storybook/current-session-scenarios"
+import { CurrentSessionProviders } from "../src/lab/current-session-lab"
+import { labDocument, labTool } from "../src/lab/current-session-scenarios"
 import { CurrentContextToolGroup, ToolDisplay } from "../src/tools/tool-renderer"
 
 export function mountReadImage(options: { path: string; grouped: boolean; running?: boolean }) {
@@ -23,9 +23,9 @@ export function mountReadImage(options: { path: string; grouped: boolean; runnin
     const status = () => (state.running ? "running" : "completed")
 
     const tools = createMemo(() => [
-      storyTool("read_image", "read", status(), { path: options.path }),
-      storyTool("read_text", "read", "completed", { path: "src/example.ts", limit: 20 }),
-      ...(state.appended ? [storyTool("read_next", "read", "completed", { path: "src/next.ts" })] : []),
+      labTool("read_image", "read", status(), { path: options.path }),
+      labTool("read_text", "read", "completed", { path: "src/example.ts", limit: 20 }),
+      ...(state.appended ? [labTool("read_next", "read", "completed", { path: "src/next.ts" })] : []),
     ])
 
     return (
@@ -35,7 +35,7 @@ export function mountReadImage(options: { path: string; grouped: boolean; runnin
           <button onClick={() => setState("appended", true)}>Append read</button>
           <button onClick={() => setState("visible", false)}>Unmount tools</button>
           <MarkdownProvider readImage={(path, signal) => readLocalImage(api, "C:/project", path, signal)}>
-            <CurrentSessionProviders document={storyDocument(tools())}>
+            <CurrentSessionProviders document={labDocument(tools())}>
               <Show when={state.visible}>
                 <Show
                   when={options.grouped}

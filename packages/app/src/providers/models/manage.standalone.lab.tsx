@@ -1,10 +1,10 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, on, onMount } from "solid-js"
-import { DialogStoryRuntime } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime } from "@/lab/dialog-runtime"
 import { DialogManageModels } from "./manage"
 
-function ManageModelsStory(props: { query: string }) {
+function ManageModelsLab(props: { query: string }) {
   const dialog = useDialog()
 
   // The dialog owns its filter. Send inspector edits through the same field as keyboard input.
@@ -46,9 +46,9 @@ export default {
   id: "app-dialog-manage-models",
   args: { query: "" },
   render: (args: { query: string }) => (
-    <DialogStoryRuntime>
-      <ManageModelsStory query={args.query} />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <ManageModelsLab query={args.query} />
+    </DialogLabRuntime>
   ),
 }
 

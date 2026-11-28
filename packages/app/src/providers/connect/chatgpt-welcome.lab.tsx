@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 
-function WelcomeStory() {
+function WelcomeLab() {
   const dialog = useDialog()
   const open = () => dialog.show(() => <DialogChatGPTPlanWelcome />)
   onMount(open)
@@ -20,4 +20,4 @@ export default {
   id: "app-dialog-chatgpt-welcome",
 }
 
-export const ChatGPTPlanWelcome = { render: () => <WelcomeStory /> }
+export const ChatGPTPlanWelcome = { render: () => <WelcomeLab /> }

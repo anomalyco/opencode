@@ -11,11 +11,11 @@ import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
 import { CommentCard, commentCardTarget } from "../message/comment-card"
 import type { ReasoningMode } from "./projection"
-import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
+import { CurrentSessionProviders, CurrentSessionTimelineLab } from "../lab/current-session-lab"
 import {
   CURRENT_SESSION_ID,
-  STORY_MODEL,
-  STORY_TIME,
+  LAB_MODEL,
+  LAB_TIME,
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
   compactionCancelledDocument,
@@ -32,7 +32,7 @@ import {
   thinkingDocument,
   voiceDocument,
   voicePresentation,
-} from "../storybook/current-session-fixtures"
+} from "../lab/current-session-fixtures"
 
 export default {
   title: "OpenCode/Conversation/Message states",
@@ -56,13 +56,13 @@ export const AgentThinking = {
     reasoning: { options: ["none", "blank", "heading"] },
   },
   render: (args: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => (
-    <AgentReasoningStory {...args} />
+    <AgentReasoningLab {...args} />
   ),
 }
 
 export const StreamingReasoningAndText = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Streaming reasoning and text"
       description="The active turn contains a reasoning summary and a partial response."
       document={streamingDocument}
@@ -74,7 +74,7 @@ export const StreamingReasoningAndText = {
 export const ResponseSpeed = {
   args: { measured: true, steered: false },
   render: (args: { measured: boolean; steered: boolean }) => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Response speed"
       description="Hover the response to reveal tokens per second across both model steps."
       width="720px"
@@ -87,19 +87,19 @@ export const ResponseSpeed = {
             id: "msg_speed_user",
             type: "user",
             text: "Check the timeline performance.",
-            time: { created: STORY_TIME },
+            time: { created: LAB_TIME },
           },
           {
             id: "msg_speed_inspect",
             type: "assistant",
             agent: "build",
-            model: STORY_MODEL,
+            model: LAB_MODEL,
             content: [{ type: "text", text: "I'll inspect the timeline before checking the results." }],
             tokens: { input: 1000, output: 270, reasoning: 30, cache: { read: 0, write: 0 } },
             time: {
-              created: STORY_TIME + 100,
-              streamed: args.measured ? STORY_TIME + 3100 : undefined,
-              completed: STORY_TIME + 290_000,
+              created: LAB_TIME + 100,
+              streamed: args.measured ? LAB_TIME + 3100 : undefined,
+              completed: LAB_TIME + 290_000,
             },
           },
           ...(args.steered
@@ -108,7 +108,7 @@ export const ResponseSpeed = {
                   id: "msg_speed_steer",
                   type: "user" as const,
                   text: "Include narrow layouts in the check.",
-                  time: { created: STORY_TIME + 290_000 },
+                  time: { created: LAB_TIME + 290_000 },
                 },
               ]
             : []),
@@ -116,23 +116,23 @@ export const ResponseSpeed = {
             id: "msg_speed_reply",
             type: "assistant",
             agent: "build",
-            model: STORY_MODEL,
+            model: LAB_MODEL,
             content: [{ type: "text", text: "The timeline checks passed. No performance regressions were found." }],
             tokens: { input: 2000, output: 500, reasoning: 100, cache: { read: 0, write: 0 } },
             time: {
-              created: STORY_TIME + 290_000,
-              streamed: STORY_TIME + 302_000,
-              completed: STORY_TIME + 302_000,
+              created: LAB_TIME + 290_000,
+              streamed: LAB_TIME + 302_000,
+              completed: LAB_TIME + 302_000,
             },
           },
-          { id: "msg_speed_idle", type: "idle", outcome: "succeeded", time: { created: STORY_TIME + 302_000 } },
+          { id: "msg_speed_idle", type: "idle", outcome: "succeeded", time: { created: LAB_TIME + 302_000 } },
         ],
       }}
     />
   ),
 }
 
-function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
+function AgentReasoningLab(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
   const content = createMemo(
     () =>
       [
@@ -146,8 +146,8 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
                     ? "   "
                     : "## Inspecting stability\n\nI will inspect the timeline before changing its state.",
                 time: {
-                  created: STORY_TIME + 100,
-                  completed: props.tool || props.text ? STORY_TIME + 7100 : undefined,
+                  created: LAB_TIME + 100,
+                  completed: props.tool || props.text ? LAB_TIME + 7100 : undefined,
                 },
               },
             ]),
@@ -158,7 +158,7 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
                 id: "tool_reasoning_projection_skill",
                 name: "skill",
                 state: { status: "running" as const, input: { name: "inspect" }, metadata: {} },
-                time: { created: STORY_TIME + 7200, ran: STORY_TIME + 7250 },
+                time: { created: LAB_TIME + 7200, ran: LAB_TIME + 7250 },
               },
             ]
           : []),
@@ -176,9 +176,9 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
             id: "msg_projection_assistant",
             type: "assistant",
             agent: "build",
-            model: STORY_MODEL,
+            model: LAB_MODEL,
             content: content(),
-            time: { created: STORY_TIME },
+            time: { created: LAB_TIME },
           },
         ],
         status: { type: "busy" },
@@ -195,7 +195,7 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
   )
 }
 
-function HiddenReasoningStory() {
+function HiddenReasoningLab() {
   const [state, setState] = createStore({ phase: "thinking" })
 
   const document = createMemo(() => {
@@ -210,9 +210,9 @@ function HiddenReasoningStory() {
           id: "msg_hidden_reasoning_lifecycle",
           type: "assistant",
           agent: "build",
-          model: STORY_MODEL,
+          model: LAB_MODEL,
           content: [
-            { type: "reasoning", text: "## Inspecting stability", time: { created: STORY_TIME + 100 } },
+            { type: "reasoning", text: "## Inspecting stability", time: { created: LAB_TIME + 100 } },
             ...(running || finished
               ? [
                   {
@@ -228,15 +228,15 @@ function HiddenReasoningStory() {
                         }
                       : { status: "running" as const, input: { command: "printf done" }, metadata: {} },
                     time: {
-                      created: STORY_TIME + 200,
-                      ran: STORY_TIME + 250,
-                      completed: finished ? STORY_TIME + 300 : undefined,
+                      created: LAB_TIME + 200,
+                      ran: LAB_TIME + 250,
+                      completed: finished ? LAB_TIME + 300 : undefined,
                     },
                   },
                 ]
               : []),
           ],
-          time: { created: STORY_TIME, completed: finished ? STORY_TIME + 400 : undefined },
+          time: { created: LAB_TIME, completed: finished ? LAB_TIME + 400 : undefined },
         },
       ],
       status: { type: finished ? "idle" : "busy" },
@@ -261,9 +261,9 @@ function HiddenReasoningStory() {
   )
 }
 
-const WorkingWithoutReasoningDetails = { render: () => <HiddenReasoningStory /> }
+const WorkingWithoutReasoningDetails = { render: () => <HiddenReasoningLab /> }
 
-function RetryAndRecoverStory() {
+function RetryAndRecoverLab() {
   const [state, setState] = createStore({ phase: "thinking" })
 
   const document = createMemo(() => {
@@ -278,7 +278,7 @@ function RetryAndRecoverStory() {
           id: "msg_retry_recovery_lifecycle",
           type: "assistant",
           agent: "build",
-          model: STORY_MODEL,
+          model: LAB_MODEL,
           content: finished ? [{ type: "text" as const, text: "Recovered response" }] : [],
           retry: retry
             ? {
@@ -290,7 +290,7 @@ function RetryAndRecoverStory() {
                 },
               }
             : undefined,
-          time: { created: STORY_TIME, completed: finished ? STORY_TIME + 300 : undefined },
+          time: { created: LAB_TIME, completed: finished ? LAB_TIME + 300 : undefined },
         },
       ],
       status: { type: finished ? "idle" : "busy" },
@@ -318,11 +318,11 @@ function RetryAndRecoverStory() {
   )
 }
 
-const RetryAndRecover = { render: () => <RetryAndRecoverStory /> }
+const RetryAndRecover = { render: () => <RetryAndRecoverLab /> }
 
 export const ProviderRetry = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Provider retry"
       description="A temporary provider limit keeps the turn active and explains the scheduled retry."
       document={retryDocument}
@@ -331,20 +331,20 @@ export const ProviderRetry = {
   ),
 }
 
-const noticeUser = { id: "msg_notice_user", type: "user", text: "Run it", time: { created: STORY_TIME } } as const
+const noticeUser = { id: "msg_notice_user", type: "user", text: "Run it", time: { created: LAB_TIME } } as const
 
 const noticeAssistant = {
   id: "msg_notice_assistant",
   type: "assistant",
   agent: "build",
-  model: STORY_MODEL,
+  model: LAB_MODEL,
   content: [{ type: "text", text: "Working" }],
-  time: { created: STORY_TIME + 1, completed: STORY_TIME + 2 },
+  time: { created: LAB_TIME + 1, completed: LAB_TIME + 2 },
 } satisfies SessionMessageInfo
 
 const AgentActivityNotices = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Agent activity and Session notices"
       description="Agent changes, delegated work, restarted Sessions, and loaded skills appear in their original order."
       document={{
@@ -353,7 +353,7 @@ const AgentActivityNotices = {
         diffs: [],
         messages: [
           noticeUser,
-          { id: "msg_notice_agent", type: "agent-switched", agent: "explore", time: { created: STORY_TIME + 1 } },
+          { id: "msg_notice_agent", type: "agent-switched", agent: "explore", time: { created: LAB_TIME + 1 } },
           noticeAssistant,
           {
             id: "msg_notice_subagent",
@@ -361,14 +361,14 @@ const AgentActivityNotices = {
             text: "done",
             description: "Search code",
             metadata: { source: "subagent", agent: "explore", state: "completed" },
-            time: { created: STORY_TIME + 3 },
+            time: { created: LAB_TIME + 3 },
           },
           {
             id: "msg_notice_restart",
             type: "synthetic",
             text: "continue",
             description: "Continuing after restart",
-            time: { created: STORY_TIME + 4 },
+            time: { created: LAB_TIME + 4 },
           },
           {
             id: "msg_notice_skill",
@@ -376,7 +376,7 @@ const AgentActivityNotices = {
             skill: "review",
             name: "Review",
             text: "instructions",
-            time: { created: STORY_TIME + 5 },
+            time: { created: LAB_TIME + 5 },
           },
         ],
       }}
@@ -385,7 +385,7 @@ const AgentActivityNotices = {
   ),
 }
 
-function CompactSessionStory() {
+function CompactSessionLab() {
   const [state, setState] = createStore({ phase: "running", summary: "", second: false })
 
   const document = createMemo(() => {
@@ -405,7 +405,7 @@ function CompactSessionStory() {
             },
           }
         : { summary: state.summary }),
-      time: { created: STORY_TIME + 10 },
+      time: { created: LAB_TIME + 10 },
     }
 
     const cancelled = {
@@ -414,7 +414,7 @@ function CompactSessionStory() {
       status: "failed" as const,
       reason: "manual" as const,
       error: { type: "aborted", message: "Cancellation detail should stay hidden." },
-      time: { created: STORY_TIME + 20 },
+      time: { created: LAB_TIME + 20 },
     }
 
     return {
@@ -451,11 +451,11 @@ function CompactSessionStory() {
   )
 }
 
-const CompactSession = { render: () => <CompactSessionStory /> }
+const CompactSession = { render: () => <CompactSessionLab /> }
 
 export const CompactionInProgress = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Compaction in progress"
       description="An automatic compaction is one quiet divider whose lines carry light toward Compacting."
       document={compactionRunningDocument}
@@ -466,7 +466,7 @@ export const CompactionInProgress = {
 
 export const CompactionAndContinuation = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Compaction and continuation"
       description="A finished automatic compaction reads Compacted; clicking it opens the summary."
       document={compactionDocument}
@@ -477,7 +477,7 @@ export const CompactionAndContinuation = {
 
 export const CompactionManual = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Manual compaction"
       description="A /compact keeps the full record: started divider, summary and usage."
       document={compactionManualDocument}
@@ -487,7 +487,7 @@ export const CompactionManual = {
 }
 
 /** Replays an automatic compaction live: Working, then the divider for `duration` ms, then the continued reply. */
-function CompactionReplayStory(props: { duration: number }) {
+function CompactionReplayLab(props: { duration: number }) {
   // The fixture's earlier reply was cut off for the compaction; here it finished, so no Interrupted divider shows first.
   const prelude = compactionDocument.messages
     .slice(0, 2)
@@ -546,13 +546,13 @@ export const CompactionReplay = {
   argTypes: { run: { control: "select", options: Object.keys(replayDurations) } },
   render: (args: { run: string }) => (
     // SAFETY: the run control only offers replayDurations keys.
-    <CompactionReplayStory duration={replayDurations[args.run as keyof typeof replayDurations]} />
+    <CompactionReplayLab duration={replayDurations[args.run as keyof typeof replayDurations]} />
   ),
 }
 
 export const CompactionFailed = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Compaction failed"
       description="A failed compaction keeps the production divider and shows the provider error."
       document={compactionFailedDocument}
@@ -563,7 +563,7 @@ export const CompactionFailed = {
 
 export const CompactionCancelled = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Compaction cancelled"
       description="An interrupted compaction keeps the production divider without an empty error block."
       document={compactionCancelledDocument}
@@ -574,7 +574,7 @@ export const CompactionCancelled = {
 
 export const AnsweredQuestionAndDeclinedCommand = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Answered question and declined command"
       description="The chosen answer remains in history, and the declined command keeps its user-visible result."
       document={requestHistoryDocument}
@@ -586,7 +586,7 @@ export const AnsweredQuestionAndDeclinedCommand = {
 
 export const RevertBoundary = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Revert boundary"
       description="The latest user message exposes the production revert action for choosing a rollback point."
       document={revertDocument}
@@ -597,7 +597,7 @@ export const RevertBoundary = {
 
 export const PromptWithAttachments = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Prompt with attachments"
       description="A user message combines text, two files, an agent mention, and a selected-line comment."
       document={attachmentsAndCommentsDocument}
@@ -657,7 +657,7 @@ export const NoteAttachments = {
 
 export const VoiceMessages = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Voice messages"
       description="A voice call's agent prompts on the user's behalf: its framing, or the user's spoken words, with a Voice badge on the bubble."
       document={voiceDocument}
@@ -670,7 +670,7 @@ export const VoiceMessages = {
 export const MixedDirectionRtl = {
   globals: { direction: "rtl" },
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Mixed-direction prompt in RTL"
       description="Forced RTL keeps file paths and code readable without changing the message order."
       document={attachmentsAndCommentsDocument}
@@ -682,7 +682,7 @@ export const MixedDirectionRtl = {
 
 const MovedLocation = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Moved Session location"
       description="A changed working directory renders as a timeline divider, truncates, and exposes its tooltip."
       document={{
@@ -691,7 +691,7 @@ const MovedLocation = {
         messages: [
           ...thinkingDocument.messages,
           {
-            id: "msg_story_location",
+            id: "msg_lab_location",
             type: "location-switched",
             location: { directory: `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session` },
             time: { created: 1_735_689_633_000 },
@@ -705,7 +705,7 @@ const MovedLocation = {
 
 const InterruptedTurn = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Interrupted assistant turn"
       description="The interruption divider stays between the original response and its continuation."
       document={{
@@ -714,7 +714,7 @@ const InterruptedTurn = {
         messages: [
           ...thinkingDocument.messages,
           {
-            id: "msg_story_interrupted_before",
+            id: "msg_lab_interrupted_before",
             type: "assistant",
             agent: "build",
             model: { id: "claude-sonnet-4", providerID: "anthropic" },
@@ -723,7 +723,7 @@ const InterruptedTurn = {
             time: { created: 1_735_689_633_000, completed: 1_735_689_634_000 },
           },
           {
-            id: "msg_story_interrupted_after",
+            id: "msg_lab_interrupted_after",
             type: "assistant",
             agent: "build",
             model: { id: "claude-sonnet-4", providerID: "anthropic" },
@@ -739,7 +739,7 @@ const InterruptedTurn = {
 
 const AliasedModelNotices = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Aliased model notices"
       description="Provider display names, model variants, and long-name truncation use the production notice component."
       document={{
@@ -747,28 +747,28 @@ const AliasedModelNotices = {
         status: { type: "idle" },
         messages: [
           {
-            id: "msg_story_fast_nano",
+            id: "msg_lab_fast_nano",
             type: "model-switched",
             model: { providerID: "company-gateway", id: "fast-nano", variant: "xhigh" },
             previous: { providerID: "company-gateway", id: "long-context" },
             time: { created: 1_735_689_590_000 },
           },
           {
-            id: "msg_story_fast_nano_default",
+            id: "msg_lab_fast_nano_default",
             type: "model-switched",
             model: { providerID: "company-gateway", id: "fast-nano" },
             previous: { providerID: "company-gateway", id: "fast-nano", variant: "xhigh" },
             time: { created: 1_735_689_590_100 },
           },
           {
-            id: "msg_story_fast_nano_high",
+            id: "msg_lab_fast_nano_high",
             type: "model-switched",
             model: { providerID: "company-gateway", id: "fast-nano", variant: "high" },
             previous: { providerID: "company-gateway", id: "fast-nano" },
             time: { created: 1_735_689_590_200 },
           },
           {
-            id: "msg_story_long_context",
+            id: "msg_lab_long_context",
             type: "model-switched",
             model: { providerID: "company-gateway", id: "long-context" },
             time: { created: 1_735_689_591_000 },
@@ -783,7 +783,7 @@ const AliasedModelNotices = {
 
 const RichUserAttachments = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Prompt with rich attachments"
       description="An image, JSON attachment, source-file reference, and agent mention remain individually visible."
       document={{
@@ -791,7 +791,7 @@ const RichUserAttachments = {
         status: { type: "idle" },
         messages: [
           {
-            id: "msg_story_rich_user",
+            id: "msg_lab_rich_user",
             type: "user",
             text: "Use @explore with @src/a.ts and inspect the attachments",
             agents: [{ name: "explore", mention: { text: "@explore", start: 4, end: 12 } }],
@@ -822,7 +822,7 @@ const RichUserAttachments = {
 
 const UserMessageLinks = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Prompt with links"
       description="URLs in a prompt open externally; trailing punctuation and mentions stay plain text."
       document={{
@@ -830,7 +830,7 @@ const UserMessageLinks = {
         status: { type: "idle" },
         messages: [
           {
-            id: "msg_story_user_links",
+            id: "msg_lab_user_links",
             type: "user",
             text: "set it up on this pc https://github.com/Hona/mesh, then compare @src/a.ts with (https://opencode.ai/docs).",
             agents: [],
@@ -852,7 +852,7 @@ const UserMessageLinks = {
   ),
 }
 
-const storyChart = `data:image/svg+xml,${encodeURIComponent(
+const labChart = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120"><rect width="160" height="120" fill="#f3f4f6"/><path d="M16 96h128" stroke="#9ca3af"/><rect x="28" y="56" width="20" height="40" fill="#009fff"/><rect x="60" y="36" width="20" height="60" fill="#009fff"/><rect x="92" y="68" width="20" height="28" fill="#009fff"/><rect x="124" y="24" width="12" height="72" fill="#009fff"/></svg>',
 )}`
 
@@ -869,11 +869,11 @@ const MediaAttachmentRetry = {
     const failed = new Set<string>()
 
     return (
-      <CurrentSessionTimelineStory
+      <CurrentSessionTimelineLab
         title="Prompt with unreadable media"
         description="A stored image that fails to load shows a failed tile; clicking it reads the image again."
         readMedia={(uri) => {
-          if (uri !== flakyMedia || failed.has(uri)) return Promise.resolve(storyChart)
+          if (uri !== flakyMedia || failed.has(uri)) return Promise.resolve(labChart)
           failed.add(uri)
 
           return Promise.reject(new Error("offline"))
@@ -883,7 +883,7 @@ const MediaAttachmentRetry = {
           status: { type: "idle" },
           messages: [
             {
-              id: "msg_story_media_user",
+              id: "msg_lab_media_user",
               type: "user",
               text: "Compare these charts",
               agents: [],
@@ -1023,7 +1023,7 @@ export const Conversation = {
 
 export const InstructionsUpdatedSingle = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Instructions updated (single)"
       description="A system notice in the timeline showing a single updated instruction source."
       document={instructionsUpdatedSingleDocument}
@@ -1034,7 +1034,7 @@ export const InstructionsUpdatedSingle = {
 
 export const InstructionsUpdatedMultiple = {
   render: () => (
-    <CurrentSessionTimelineStory
+    <CurrentSessionTimelineLab
       title="Instructions updated (multiple)"
       description="A system notice in the timeline showing multiple updated instruction sources."
       document={instructionsUpdatedMultipleDocument}

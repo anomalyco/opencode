@@ -1077,7 +1077,7 @@ function groupContent(
   return groups
 }
 
-// Without a detail setting, as in stories and embeds, groups follow the older shell and edit toggles.
+// Without a detail setting, as in pages and embeds, groups follow the older shell and edit toggles.
 function contentGroupType(
   content: Content,
   shellExpanded: boolean,

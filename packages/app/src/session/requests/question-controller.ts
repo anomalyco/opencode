@@ -19,7 +19,7 @@ import {
 import { questionCache } from "./question-state"
 
 // The answers, the question shown and the reply of one question dock. Focus, the custom field's editing and
-// minimizing stay with the dock. Without an SDK, `respond` receives the reply instead, as stories do.
+// minimizing stay with the dock. Without an SDK, `respond` receives the reply instead, as pages do.
 export function createQuestionDock(
   input: {
     language: { t: (key: "common.requestFailed") => string }

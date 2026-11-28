@@ -1,9 +1,9 @@
 import type { Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./markdown.fixture.tsx", import.meta.url))
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   const root = await mount("components-markdown--complete-response")
   await expect(root.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
 })
@@ -29,7 +29,7 @@ function recordReadiness(page: Page) {
   })
 }
 
-story("keeps completed Markdown ready when an unrelated input reruns its render", async ({ page }) => {
+test("keeps completed Markdown ready when an unrelated input reruns its render", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "```sh\necho hello\n```" })
@@ -46,7 +46,7 @@ story("keeps completed Markdown ready when an unrelated input reruns its render"
   await readiness.dispose()
 })
 
-story("does not report a finished stream ready before its settled render checks paths", async ({ page }) => {
+test("does not report a finished stream ready before its settled render checks paths", async ({ page }) => {
   const check = await page.evaluateHandle(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     const exists = Promise.withResolvers<boolean>()
@@ -81,7 +81,7 @@ story("does not report a finished stream ready before its settled render checks 
   await check.dispose()
 })
 
-story("reports completed Markdown ready when an inline path check never settles", async ({ page }) => {
+test("reports completed Markdown ready when an inline path check never settles", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Edit `src/file.ts`", localFileExists: () => new Promise<boolean>(() => {}) })

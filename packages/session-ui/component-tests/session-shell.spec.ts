@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("requests live output only when the shell is expanded", async ({ mount }) => {
+test("requests live output only when the shell is expanded", async ({ mount }) => {
   const root = await mount("current-session-terminal-work--live-user-command", { args: { expanded: false } })
   const shell = root.locator('[data-component="session-shell-message"]')
   const trigger = shell.locator('[data-slot="collapsible-trigger"]')
@@ -18,7 +18,7 @@ story("requests live output only when the shell is expanded", async ({ mount }) 
   await expect(shell.locator('[data-slot="bash-result"]')).toHaveText("ready\nnext line\nnext line\n")
 })
 
-story("streams user shell output and retains the saved completion", async ({ mount }) => {
+test("streams user shell output and retains the saved completion", async ({ mount }) => {
   const root = await mount("current-session-terminal-work--live-user-command")
   const shell = root.locator('[data-component="session-shell-message"]')
   const output = shell.locator('[data-slot="bash-result"]')
@@ -36,7 +36,7 @@ for (const [outcome, error] of [
   ["timeout", "Command timed out"],
   ["killed", "Command cancelled"],
 ]) {
-  story(`shows a direct shell ${outcome} outcome even without output`, async ({ mount }) => {
+  test(`shows a direct shell ${outcome} outcome even without output`, async ({ mount }) => {
     const root = await mount("current-session-terminal-work--live-user-command", { args: { outcome, output: false } })
     const shell = root.locator('[data-component="session-shell-message"]')
     await root.getByRole("button", { name: "Complete command", exact: true }).click()
@@ -50,13 +50,13 @@ for (const [id, output] of [
   ["running-a-user-command", "Starting Storybook manager...\nBuilding preview..."],
   ["user-command-completed", " M packages/session-ui/src/timeline/session-timeline.tsx"],
 ]) {
-  story(`keeps captured output without a live reader: ${id}`, async ({ mount }) => {
+  test(`keeps captured output without a live reader: ${id}`, async ({ mount }) => {
     const root = await mount(`current-session-terminal-work--${id}`)
     await expect(root.locator('[data-component="session-shell-message"] [data-slot="bash-result"]')).toHaveText(output)
   })
 }
 
-story("copies the shell command and its output separately", async ({ mount, page }) => {
+test("copies the shell command and its output separately", async ({ mount, page }) => {
   const root = await mount("current-session-terminal-work--expanded-shell")
   const shell = root.locator('[data-component="bash-output"]')
   const command = (await shell.locator('[data-slot="bash-command"]').textContent())!
@@ -73,7 +73,7 @@ story("copies the shell command and its output separately", async ({ mount, page
   expect(output).toContain('"name":"OpenCode"')
 })
 
-story("keeps Copied for two seconds after the latest click", async ({ mount, page }) => {
+test("keeps Copied for two seconds after the latest click", async ({ mount, page }) => {
   await page.clock.install()
   const root = await mount("current-session-terminal-work--expanded-shell")
   const result = root.locator('[data-component="bash-output"] [data-slot="bash-result"]')

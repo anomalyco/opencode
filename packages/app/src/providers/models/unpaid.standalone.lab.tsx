@@ -1,7 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, createSignal, onMount } from "solid-js"
-import { DialogStoryRuntime } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime } from "@/lab/dialog-runtime"
 import { isFreeModel } from "./models"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { DialogSelectModelUnpaid } from "./unpaid"
@@ -65,9 +65,9 @@ export default {
   args: { count: names.length },
   argTypes: { count: { control: { type: "range", min: 0, max: names.length, step: 1 } } },
   render: (args: { count: number }) => (
-    <DialogStoryRuntime>
+    <DialogLabRuntime>
       <SelectModelWithoutProviders count={args.count} />
-    </DialogStoryRuntime>
+    </DialogLabRuntime>
   ),
 }
 

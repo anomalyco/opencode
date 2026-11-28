@@ -11,7 +11,7 @@ const roots = ["app", "desktop", "gui-plugins", "session-ui", "ui"].map((name) =
 const sourceFiles = new Bun.Glob("**/*.{ts,tsx}")
 
 const excluded =
-  /(?:^|\/)(?:lab|fixtures|i18n|locales|stories|storybook)\/|(?:[.-](?:test|spec|fixture|fixtures|lab|stories|story|bench|generated))\.tsx?$/
+  /(?:^|\/)(?:lab|fixtures|i18n|locales)\/|(?:[.-](?:test|spec|fixture|fixtures|lab|bench|generated))\.tsx?$/
 
 const iconProperty =
   /^(?:icon|activeIcon|clearIcon|closeIcon|emptyIcon|errorIcon|leadingIcon|secondaryIcon|successIcon|targetIcon|titleIcon|trailingIcon|triggerIcon)$/
@@ -104,7 +104,7 @@ export function iconsInSource(file: string, source: string) {
       if (ts.isFunctionDeclaration(parent)) {
         const name = parent.name?.getText(tree) ?? ""
 
-        // TextField's copyKind variants are only enabled by its story.
+        // TextField's copyKind variants are only enabled by its page.
         if (name === "selectTextFieldCopyIcon") return false
 
         return iconBinding.test(name) || suppliers?.includes(name) === true

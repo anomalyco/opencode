@@ -1,7 +1,7 @@
 import type { SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import type { TimelineRow } from "./timeline-row"
 
 // Counts how often a projection rebuilds its rows while calls stream input and report progress, as a running script
@@ -18,12 +18,12 @@ const source = (): SessionMessageInfo[] => [
     model: { id: "model", providerID: "provider" },
     time: { created: 2 },
     content: [
-      storyTool("write", "write", "streaming", {}, { raw: '{"path":"/repo/a.ts","content":"a' }),
-      storyTool("edit", "edit", "streaming", {}, { raw: '{"path":"/repo/b.ts","oldString":"b' }),
-      storyTool("execute", "execute", "streaming", {}, { raw: '{"code":"1' }),
-      storyTool("shell", "shell", "running", { command: "make" }, { metadata: { output: "a" } }),
-      storyTool("subagent", "subagent", "running", { description: "look" }, { metadata: { sessionID: "ses_c" } }),
-      storyTool("script", "execute", "running", { code: "await edit()" }, { metadata: { toolCalls: [] } }),
+      labTool("write", "write", "streaming", {}, { raw: '{"path":"/repo/a.ts","content":"a' }),
+      labTool("edit", "edit", "streaming", {}, { raw: '{"path":"/repo/b.ts","oldString":"b' }),
+      labTool("execute", "execute", "streaming", {}, { raw: '{"code":"1' }),
+      labTool("shell", "shell", "running", { command: "make" }, { metadata: { output: "a" } }),
+      labTool("subagent", "subagent", "running", { description: "look" }, { metadata: { sessionID: "ses_c" } }),
+      labTool("script", "execute", "running", { code: "await edit()" }, { metadata: { toolCalls: [] } }),
     ],
   },
 ]

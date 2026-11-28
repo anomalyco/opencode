@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal } from "solid-js"
 import type { SessionDocument } from "../document"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "../lab/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -54,15 +54,15 @@ function StateGraphTimeline() {
         id: "msg_state_graph_user",
         type: "user",
         text: "Show me the state graph of a session.",
-        time: { created: STORY_TIME },
-        metadata: { agent: "build", model: STORY_MODEL },
+        time: { created: LAB_TIME },
+        metadata: { agent: "build", model: LAB_MODEL },
       },
       {
         id: "msg_state_graph_assistant",
         type: "assistant",
         agent: "build",
-        model: STORY_MODEL,
-        time: { created: STORY_TIME + 100, completed: STORY_TIME + 1000 },
+        model: LAB_MODEL,
+        time: { created: LAB_TIME + 100, completed: LAB_TIME + 1000 },
         content: [{ type: "text", text: "## State graph\n\n```mermaid\n" + SESSION_STATES + "\n```" }],
       },
     ],
@@ -91,15 +91,15 @@ function MermaidTimeline(props: { streaming: boolean }) {
           id: "msg_mermaid_user",
           type: "user",
           text: "Show the request flow and sequence as Mermaid diagrams.",
-          time: { created: STORY_TIME },
-          metadata: { agent: "build", model: STORY_MODEL },
+          time: { created: LAB_TIME },
+          metadata: { agent: "build", model: LAB_MODEL },
         },
         {
           id: "msg_mermaid_assistant",
           type: "assistant",
           agent: "build",
-          model: STORY_MODEL,
-          time: { created: STORY_TIME + 100, completed: completed() ? STORY_TIME + 1000 : undefined },
+          model: LAB_MODEL,
+          time: { created: LAB_TIME + 100, completed: completed() ? LAB_TIME + 1000 : undefined },
           content: [
             {
               type: "text",

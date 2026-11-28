@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
-import { commentaryRuns } from "../storybook/current-session-fixtures"
-import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { commentaryRuns } from "../lab/current-session-fixtures"
+import { labDocument, labTool } from "../lab/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 
@@ -257,14 +257,14 @@ describe("current session timeline rows", () => {
       { content: [active, { type: "text", text: "Answer" }], thinking: false },
       ...(["streaming", "running", "completed", "error"] as const).flatMap((status) =>
         ["shell", "read", "subagent", "question"].map((name) => ({
-          content: [active, storyTool("tool", name, status, {})],
+          content: [active, labTool("tool", name, status, {})],
           thinking: false,
         })),
       ),
     ]
 
     cases.forEach((profile) => {
-      const document = storyDocument(profile.content, true)
+      const document = labDocument(profile.content, true)
 
       const result = createTimelineProjection({
         sessionMessages: document.messages,
@@ -283,7 +283,7 @@ describe("current session timeline rows", () => {
 
     const rows = (content: SessionMessageAssistant["content"], busy: boolean) =>
       createTimelineProjection({
-        sessionMessages: storyDocument(content, busy).messages,
+        sessionMessages: labDocument(content, busy).messages,
         status: { type: busy ? "busy" : "idle" },
         reasoningMode: "compact",
         timelineDetail: timelinePresets[2].value,
@@ -304,11 +304,11 @@ describe("current session timeline rows", () => {
       "AssistantPart",
     ])
     expect(
-      rows([thought, storyTool("read", "read", "running", { filePath: "package.json" })], true).map((row) => row._tag),
+      rows([thought, labTool("read", "read", "running", { filePath: "package.json" })], true).map((row) => row._tag),
     ).toEqual(["UserMessage", "AssistantPart"])
     expect(rows([thought], false).map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
 
-    const failed = storyDocument([thought], true)
+    const failed = labDocument([thought], true)
 
     const messages = failed.messages.map((message) =>
       message.type === "assistant" ? { ...message, error: { type: "provider.error", message: "Failed" } } : message,
@@ -336,7 +336,7 @@ describe("current session timeline rows", () => {
   })
 
   test("stops thinking on idle, message completion, errors and retries", () => {
-    const document = storyDocument([{ type: "reasoning", text: "Current thought" }], true)
+    const document = labDocument([{ type: "reasoning", text: "Current thought" }], true)
     expect(
       Timeline.constructSessionMessageRows(document.messages, true, { type: "idle" }).rows.map((row) => row._tag),
     ).toEqual(["UserMessage", "AssistantPart"])
@@ -361,10 +361,10 @@ describe("current session timeline rows", () => {
   })
 
   test("uses the latest reasoning part and groups earlier thoughts with tools", () => {
-    const document = storyDocument(
+    const document = labDocument(
       [
         { type: "reasoning", text: "Old thought", time: { created: 1, completed: 2 } },
-        storyTool("read", "read", "completed", {}),
+        labTool("read", "read", "completed", {}),
         { type: "reasoning", text: "New thought", time: { created: 3 } },
       ],
       true,
@@ -379,7 +379,7 @@ describe("current session timeline rows", () => {
   })
 
   test("keeps actual thinking with the active prompt above an undelivered prompt", () => {
-    const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
+    const document = labDocument([{ type: "reasoning", text: "Active thought" }], true)
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
@@ -399,7 +399,7 @@ describe("current session timeline rows", () => {
   })
 
   test("places live status, then a queued compaction, after the active turn and before undelivered prompts", () => {
-    const document = storyDocument([{ type: "text", text: "Working" }], true)
+    const document = labDocument([{ type: "text", text: "Working" }], true)
 
     const result = Timeline.constructSessionMessageRows(
       [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
@@ -425,7 +425,7 @@ describe("current session timeline rows", () => {
   })
 
   test("places a queued compaction ahead of a pending notice, which the server delivers after it", () => {
-    const document = storyDocument([{ type: "text", text: "Working" }], true)
+    const document = labDocument([{ type: "text", text: "Working" }], true)
 
     const notice = {
       id: "notice",
@@ -457,7 +457,7 @@ describe("current session timeline rows", () => {
   })
 
   test("keeps a grouped undelivered notice out of accepted work and spaced from it", () => {
-    const document = storyDocument([{ type: "text", text: "Working" }], true)
+    const document = labDocument([{ type: "text", text: "Working" }], true)
 
     const notice = {
       id: "notice",
@@ -486,7 +486,7 @@ describe("current session timeline rows", () => {
   })
 
   test("keeps live thinking above a notice that arrives while it streams", () => {
-    const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
+    const document = labDocument([{ type: "reasoning", text: "Active thought" }], true)
 
     const notice = {
       id: "notice",
@@ -511,10 +511,10 @@ describe("current session timeline rows", () => {
   })
 
   test.each(["shell", "execute", "subagent"])("does not hide active %s behind a preceding thought", (name) => {
-    const document = storyDocument(
+    const document = labDocument(
       [
         { type: "reasoning", text: "Finished thought", time: { created: 1, completed: 2 } },
-        storyTool("active", name, "running", {}),
+        labTool("active", name, "running", {}),
       ],
       true,
     )
@@ -534,7 +534,7 @@ describe("current session timeline rows", () => {
         type: "assistant",
         agent: "build",
         model: { id: "model", providerID: "provider" },
-        content: [storyTool("tool_read", "read", "completed", {})],
+        content: [labTool("tool_read", "read", "completed", {})],
         time: { created: 2, completed: 3 },
       },
       { id: "msg_moved", type: "location-switched", location: { directory: "/tmp/next" }, time: { created: 4 } },
@@ -573,7 +573,7 @@ describe("current session timeline rows", () => {
         type: "assistant",
         agent: "build",
         model: { id: "model", providerID: "provider" },
-        content: [storyTool(`${messageID}_read`, "read", "completed", {})],
+        content: [labTool(`${messageID}_read`, "read", "completed", {})],
         time: { created, completed: created },
       }) satisfies SessionMessageInfo
 
@@ -639,13 +639,13 @@ describe("current session timeline rows", () => {
 
     const source = [
       { id: "msg_user", type: "user", text: "fix", time: { created: 1 } },
-      step("msg_a1", [{ type: "text", text: "Checking." }, storyTool("tool_read", "read", "completed", {})]),
+      step("msg_a1", [{ type: "text", text: "Checking." }, labTool("tool_read", "read", "completed", {})]),
       step("msg_a2", [
         { type: "text", text: "Checks pass.", native: { phase: "commentary" } },
         { type: "text", text: "Fixed." },
       ]),
       { id: "msg_stop", type: "user", text: "stop", time: { created: 4 } },
-      step("msg_a3", [{ type: "text", text: "Looking." }, storyTool("tool_grep", "grep", "completed", {})]),
+      step("msg_a3", [{ type: "text", text: "Looking." }, labTool("tool_grep", "grep", "completed", {})]),
     ] satisfies SessionMessageInfo[]
 
     const rows = Timeline.constructSessionMessageRows(
@@ -1231,13 +1231,13 @@ describe("current session timeline rows", () => {
     const compact = timelinePresets.find((preset) => preset.id === "compact")!.value
 
     const rows = Timeline.constructSessionMessageRows(
-      storyDocument([
-        storyTool("read", "read", "completed", { path: "src/a.ts" }),
-        storyTool("grep", "grep", "completed", { pattern: "agent" }),
-        storyTool("agent_1", "subagent", "completed", { agent: "explore", description: "Map the code" }),
-        storyTool("agent_2", "subagent", "completed", { agent: "general", description: "Check the tests" }),
-        storyTool("glob", "glob", "completed", { pattern: "*.ts" }),
-        storyTool("read_2", "read", "completed", { path: "src/b.ts" }),
+      labDocument([
+        labTool("read", "read", "completed", { path: "src/a.ts" }),
+        labTool("grep", "grep", "completed", { pattern: "agent" }),
+        labTool("agent_1", "subagent", "completed", { agent: "explore", description: "Map the code" }),
+        labTool("agent_2", "subagent", "completed", { agent: "general", description: "Check the tests" }),
+        labTool("glob", "glob", "completed", { pattern: "*.ts" }),
+        labTool("read_2", "read", "completed", { path: "src/b.ts" }),
       ]).messages,
       true,
       { type: "idle" },
@@ -1264,17 +1264,17 @@ describe("current session timeline rows", () => {
 
   test("merges adjacent separate reads into one read row split by other parts", () => {
     const rows = Timeline.constructSessionMessageRows(
-      storyDocument([
-        storyTool("read_1", "read", "completed", { path: "src/a.ts" }),
-        storyTool("read_2", "read", "running", { path: "src/b.ts", limit: 120 }),
+      labDocument([
+        labTool("read_1", "read", "completed", { path: "src/a.ts" }),
+        labTool("read_2", "read", "running", { path: "src/b.ts", limit: 120 }),
         { type: "reasoning", text: "Keep reading." },
-        storyTool("read_3", "read", "completed", { path: "src/c.ts" }),
-        storyTool("read_image", "read", "completed", { path: "src/logo.png" }),
-        storyTool("read_failed", "read", "error", { path: "src/missing.ts" }),
-        storyTool("read_4", "read", "completed", { path: "src/d.ts" }),
-        storyTool("read_5", "read", "completed", { path: "src/e.ts" }),
-        storyTool("glob", "glob", "completed", { pattern: "*.ts" }),
-        storyTool("read_6", "read", "completed", { path: "src/f.ts" }),
+        labTool("read_3", "read", "completed", { path: "src/c.ts" }),
+        labTool("read_image", "read", "completed", { path: "src/logo.png" }),
+        labTool("read_failed", "read", "error", { path: "src/missing.ts" }),
+        labTool("read_4", "read", "completed", { path: "src/d.ts" }),
+        labTool("read_5", "read", "completed", { path: "src/e.ts" }),
+        labTool("glob", "glob", "completed", { pattern: "*.ts" }),
+        labTool("read_6", "read", "completed", { path: "src/f.ts" }),
       ]).messages,
       true,
       { type: "idle" },
@@ -1310,7 +1310,7 @@ describe("current session timeline rows", () => {
 
   test.each(["shell", "execute", "subagent"])("keeps %s in an existing group throughout execution", (name) => {
     const initial = createTimelineProjection({
-      sessionMessages: storyDocument([storyTool("earlier", "read", "completed", {})]).messages,
+      sessionMessages: labDocument([labTool("earlier", "read", "completed", {})]).messages,
       status: { type: "busy" },
       reasoningMode: "hidden",
     })
@@ -1326,9 +1326,9 @@ describe("current session timeline rows", () => {
     phases.reduce((previousRows, phase, index) => {
       const result = createTimelineProjection({
         sessionMessages: [
-          ...storyDocument([storyTool("earlier", "read", "completed", {})]).messages,
-          ...storyDocument([
-            storyTool("active", name, phase.status, {}, "metadata" in phase ? { metadata: phase.metadata } : {}),
+          ...labDocument([labTool("earlier", "read", "completed", {})]).messages,
+          ...labDocument([
+            labTool("active", name, phase.status, {}, "metadata" in phase ? { metadata: phase.metadata } : {}),
           ])
             .messages.filter((message) => message.type === "assistant")
             .map((message) => ({ ...message, id: "next-step" })),
@@ -1364,13 +1364,13 @@ describe("current session timeline rows", () => {
     { name: "shell", separator: "reasoning", showReasoning: false, types: ["context"] },
   ] as const)("respects active tool grouping boundaries: %j", (profile) => {
     const content = [
-      storyTool("earlier", "read", "completed", {}),
+      labTool("earlier", "read", "completed", {}),
       ...(profile.separator ? [{ type: profile.separator, text: "Visible boundary" }] : []),
-      storyTool("active", profile.name, "running", {}),
+      labTool("active", profile.name, "running", {}),
     ]
 
     const rows = Timeline.constructSessionMessageRows(
-      storyDocument(content).messages,
+      labDocument(content).messages,
       profile.showReasoning ?? false,
       { type: "busy" },
       undefined,
@@ -1585,7 +1585,7 @@ describe("current session timeline rows", () => {
         type: "assistant",
         agent: "build",
         model: { id: "model", providerID: "provider" },
-        content: [storyTool("tool_read", "read", "completed", {})],
+        content: [labTool("tool_read", "read", "completed", {})],
         finish: "tool-calls",
         time: { created: 2, completed: 3 },
       },

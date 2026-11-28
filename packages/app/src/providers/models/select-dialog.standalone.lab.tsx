@@ -2,11 +2,11 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DialogStoryRuntime } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime } from "@/lab/dialog-runtime"
 import type { ModelSelection } from "./selection"
 import { DialogSelectModel } from "./select-dialog"
 
-type StoryModel = NonNullable<ReturnType<ModelSelection["current"]>>
+type LabModel = NonNullable<ReturnType<ModelSelection["current"]>>
 
 function makeModel(input: {
   id: string
@@ -17,8 +17,8 @@ function makeModel(input: {
   inputCost: number
   outputCost: number
   latest?: boolean
-  variants?: StoryModel["variants"]
-}): StoryModel {
+  variants?: LabModel["variants"]
+}): LabModel {
   return {
     id: input.id,
     providerID: input.providerID,
@@ -57,7 +57,7 @@ function makeModel(input: {
   }
 }
 
-const models: StoryModel[] = [
+const models: LabModel[] = [
   makeModel({
     id: "kimi-k3",
     name: "Kimi K3",
@@ -100,7 +100,7 @@ const models: StoryModel[] = [
 ]
 
 // Enough rows under one provider that the list scrolls, below the favorite's own group.
-const manyModels: StoryModel[] = [
+const manyModels: LabModel[] = [
   ...models,
   ...Array.from({ length: 24 }, (_, index) =>
     makeModel({
@@ -115,9 +115,9 @@ const manyModels: StoryModel[] = [
   ),
 ]
 
-const keyOf = (model: StoryModel) => `${model.provider.id}:${model.id}`
+const keyOf = (model: LabModel) => `${model.provider.id}:${model.id}`
 
-function SelectorStory(props: { favorite?: boolean; provider?: string; empty?: boolean; many?: boolean }) {
+function SelectorLab(props: { favorite?: boolean; provider?: string; empty?: boolean; many?: boolean }) {
   const all = props.many ? manyModels : models
 
   const dialog = useDialog()
@@ -186,40 +186,40 @@ export default {
 
 export const Dialog = {
   render: () => (
-    <DialogStoryRuntime>
-      <SelectorStory />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <SelectorLab />
+    </DialogLabRuntime>
   ),
 }
 
 export const Favorites = {
   render: () => (
-    <DialogStoryRuntime>
-      <SelectorStory favorite />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <SelectorLab favorite />
+    </DialogLabRuntime>
   ),
 }
 
 export const LongList = {
   render: () => (
-    <DialogStoryRuntime>
-      <SelectorStory many />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <SelectorLab many />
+    </DialogLabRuntime>
   ),
 }
 
 export const ProviderOnly = {
   render: () => (
-    <DialogStoryRuntime>
-      <SelectorStory provider="opencode" />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <SelectorLab provider="opencode" />
+    </DialogLabRuntime>
   ),
 }
 
 export const NoModels = {
   render: () => (
-    <DialogStoryRuntime>
-      <SelectorStory empty />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <SelectorLab empty />
+    </DialogLabRuntime>
   ),
 }

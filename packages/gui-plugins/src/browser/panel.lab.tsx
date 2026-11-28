@@ -17,7 +17,7 @@ function composerDelivery(value: Delivery) {
   if (value === "Queue") return "queue"
 }
 
-function BrowserStory(props: BrowserArgs) {
+function BrowserLab(props: BrowserArgs) {
   const language = usePlugin()
 
   return (
@@ -112,7 +112,7 @@ export default {
       options: ["Page", "Empty", "Recent", "History", "Loading", "Failed", "Suspended"] satisfies BrowserScenario[],
     },
   },
-  render: (props: BrowserArgs) => <BrowserStory {...props} />,
+  render: (props: BrowserArgs) => <BrowserLab {...props} />,
 }
 
 export const Page = { args: { scenario: "Page" } }

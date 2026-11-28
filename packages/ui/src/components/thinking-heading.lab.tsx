@@ -575,7 +575,7 @@ const cardStyle = {
 const VARIANTS = ["spring-up", "spring-down", "spring-pop", "spring-blur", "odometer"]
 
 // ---------------------------------------------------------------------------
-// Story
+// Page
 // ---------------------------------------------------------------------------
 
 export const Playground = {

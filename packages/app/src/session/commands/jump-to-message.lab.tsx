@@ -72,7 +72,7 @@ function snapshot(scene: Args["scene"], history: typeof turns): JumpToMessageSta
   return { status: "ready", history, failed: scene === "openFailed", attempt: 1 }
 }
 
-function SessionStory(props: Args) {
+function SessionLab(props: Args) {
   const language = useLanguage()
 
   const dialog = useDialog()
@@ -207,7 +207,7 @@ function SessionStory(props: Args) {
 export default {
   title: "OpenCode/Session/Jump to message",
   id: "session-jump-to-message",
-  render: (args: Args) => <SessionStory {...args} />,
+  render: (args: Args) => <SessionLab {...args} />,
   args: { scene: "browse", query: "" },
   argTypes: { scene: { options: scenes } },
   parameters: { layout: "fullscreen" },

@@ -1,4 +1,4 @@
-// Story-only. Focus rings only show while an element matches :focus-visible, and only one element can. To show many at
+// Lab-only. Focus rings only show while an element matches :focus-visible, and only one element can. To show many at
 // once, this copies each stylesheet rule that mentions :focus, :focus-visible or :focus-within into a lab-only sheet,
 // with those pseudo-classes replaced by [data-lab-focus] (and :focus-within by the attribute on the element or a
 // descendant). Marked elements then render with the production declarations and their real cascade layer, specificity

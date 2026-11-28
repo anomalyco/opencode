@@ -1,7 +1,7 @@
 import type { Locator } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story(
+test(
   "code blocks offer Wrap only when a line overflows, and a block's choice overrides the setting",
   async ({ mount, page }) => {
     const root = await mount("components-markdown--long-code-lines")
@@ -39,7 +39,7 @@ story(
   },
 )
 
-story("code block actions sit in the block's top corner over the block's own background", async ({ mount, page }) => {
+test("code block actions sit in the block's top corner over the block's own background", async ({ mount, page }) => {
   const root = await mount("components-markdown--long-code-lines")
   await expect(root.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
   const blocks = root.locator('[data-component="markdown-code"]')
@@ -74,7 +74,7 @@ story("code block actions sit in the block's top corner over the block's own bac
 })
 
 // The fill sits over the block's 0.5px border, and one that reaches the hairline paints over it while hovered.
-story("the fill behind code block actions stays inside the block's border", async ({ mount, page }) => {
+test("the fill behind code block actions stays inside the block's border", async ({ mount, page }) => {
   const root = await mount("current-session-code-blocks--long-lines")
   const block = root.locator('[data-component="markdown-code"]').nth(2)
   const toolbar = block.locator('[data-slot="markdown-code-toolbar"]')

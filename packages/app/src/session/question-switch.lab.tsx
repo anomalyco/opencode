@@ -1,6 +1,6 @@
-import { activeQuestionRequest, questionPendingDocument } from "@opencode/session-ui/storybook"
+import { activeQuestionRequest, questionPendingDocument } from "@opencode/session-ui/lab"
 import type { FormInfo } from "@opencode/client/promise"
-import { SessionPreview } from "./story-model"
+import { SessionPreview } from "./lab-model"
 import { SessionQuestionDockClassic } from "./requests/session-question-dock-classic"
 
 export default {
@@ -94,7 +94,7 @@ export const ComposerAnswer = {
   parameters: {
     docs: {
       description: {
-        story:
+        page:
           "Focus stays in the composer: ↑ and ↓ highlight an answer, Space or its number marks it, and typing writes a custom answer. Answering or dismissing restores the chat draft. Use Reset to try again.",
       },
     },

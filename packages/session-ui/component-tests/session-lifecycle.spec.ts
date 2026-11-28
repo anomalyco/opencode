@@ -1,4 +1,4 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 for (const [tool, title] of [
   ["shell", "Shell"],
@@ -6,7 +6,7 @@ for (const [tool, title] of [
   ["subagent", "Agent"],
 ]) {
   for (const open of [false, true]) {
-    story(`keeps ${tool} inside an existing ${open ? "open" : "closed"} group through execution`, async ({ mount }) => {
+    test(`keeps ${tool} inside an existing ${open ? "open" : "closed"} group through execution`, async ({ mount }) => {
       const timeline = await mount("current-session-terminal-work--terminal-commands", {
         args: { existingGroup: true, tool },
       })
@@ -40,7 +40,7 @@ for (const [tool, title] of [
 
 for (const expanded of [false, true]) {
   // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
-  story(`preserves shell user intent from a ${expanded ? "expanded" : "collapsed"} default`, async ({ mount }) => {
+  test(`preserves shell user intent from a ${expanded ? "expanded" : "collapsed"} default`, async ({ mount }) => {
     const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { expanded } })
 
     const trigger = expanded
@@ -62,7 +62,7 @@ for (const expanded of [false, true]) {
 }
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
-story("transitions a streaming shell from writing through command execution", async ({ mount }) => {
+test("transitions a streaming shell from writing through command execution", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { streaming: true } })
   const tool = timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"]')
   const title = tool.locator('[data-slot="basic-tool-tool-title"]')
@@ -99,7 +99,7 @@ story("transitions a streaming shell from writing through command execution", as
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
-story("shimmers and expands a running shell command", async ({ mount }) => {
+test("shimmers and expands a running shell command", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { streaming: true } })
   await timeline.getByRole("button", { name: "Run command" }).click()
   const tool = timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"]')
@@ -117,7 +117,7 @@ story("shimmers and expands a running shell command", async ({ mount }) => {
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
 for (const open of [false, true]) {
-  story(
+  test(
     `keeps ${open ? "expanded" : "collapsed"} reasoning intent from Thinking through standalone shell into Used`,
     async ({ mount }) => {
       const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "hidden" } })
@@ -171,7 +171,7 @@ for (const open of [false, true]) {
 }
 
 // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
-story("does not infer Thinking from busy, retry, or recovery without reasoning", async ({ mount }) => {
+test("does not infer Thinking from busy, retry, or recovery without reasoning", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "retry" } })
   await expect(timeline.locator('[data-timeline-row="UserMessage"]')).toBeVisible()
   await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)

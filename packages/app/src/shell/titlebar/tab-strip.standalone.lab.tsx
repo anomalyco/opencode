@@ -1,4 +1,4 @@
-import { NavigationStory } from "./navigation-story"
+import { NavigationLab } from "./navigation-lab"
 
 type Args = { width: number }
 
@@ -9,11 +9,11 @@ export default {
   argTypes: { width: { control: { type: "range", min: 240, max: 1440, step: 8 } } },
 }
 
-export const SessionsAndDraft = { render: (args: Args) => <NavigationStory preset="sessions" width={args.width} /> }
+export const SessionsAndDraft = { render: (args: Args) => <NavigationLab preset="sessions" width={args.width} /> }
 
-export const ActiveDraft = { render: (args: Args) => <NavigationStory preset="draft" width={args.width} /> }
+export const ActiveDraft = { render: (args: Args) => <NavigationLab preset="draft" width={args.width} /> }
 
 export const Crowded = {
   args: { width: 600 },
-  render: (args: Args) => <NavigationStory preset="crowded" width={args.width} />,
+  render: (args: Args) => <NavigationLab preset="crowded" width={args.width} />,
 }

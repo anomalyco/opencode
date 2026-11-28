@@ -1,4 +1,4 @@
-import { markdown } from "@opencode/ui/storybook/fixtures"
+import { markdown } from "@opencode/ui/lab/fixtures"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 import { MarkdownProvider } from "../context/markdown"
 import { Markdown } from "./markdown"

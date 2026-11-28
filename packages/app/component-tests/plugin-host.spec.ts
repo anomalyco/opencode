@@ -15,7 +15,7 @@ import type { BuiltinContext, BuiltinPanelTab } from "@opencode/plugin/gui/built
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
 import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
@@ -37,12 +37,12 @@ type Asked = { dialogs?: Dialogs; end?: () => void; prompt?: Promise<string | un
 /** What the pre-mount case reads from inside its plugin's setup. */
 type Reads = { state?: () => string; font?: () => string; prefs?: { value?: { count: number }; ready(): boolean } }
 
-story.beforeEach(async ({ mount }) => {
-  // Any story loads the app; the fixture mounts the real host beside it.
+test.beforeEach(async ({ mount }) => {
+  // Any page loads the app; the fixture mounts the real host beside it.
   await mount("ui-line-comment--editor")
 })
 
-story("a plugin that finishes loading after the host unmounts is never set up", async ({ page }) => {
+test("a plugin that finishes loading after the host unmounts is never set up", async ({ page }) => {
   const setups = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
     const host = mountPluginHost()
@@ -57,7 +57,7 @@ story("a plugin that finishes loading after the host unmounts is never set up", 
   expect(setups).toBe(0)
 })
 
-story("async work from synchronous setup cannot register after the host unmounts", async ({ page }) => {
+test("async work from synchronous setup cannot register after the host unmounts", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPluginHost, onCleanup } = await import(fixture)
     const host = mountPluginHost()
@@ -90,7 +90,7 @@ story("async work from synchronous setup cannot register after the host unmounts
   expect(result).toEqual({ before: 1, after: 0, cleaned: ["owner"], aborted: true })
 })
 
-story("older loads neither set up nor fail over the replacement after reloads", async ({ page }) => {
+test("older loads neither set up nor fail over the replacement after reloads", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
     const host = mountPluginHost()
@@ -111,7 +111,7 @@ story("older loads neither set up nor fail over the replacement after reloads", 
   expect(result).toEqual({ setups: ["third"], status: "active" })
 })
 
-story("a dialog service kept from before a reload opens and closes nothing under the replacement", async ({ page }) => {
+test("a dialog service kept from before a reload opens and closes nothing under the replacement", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
     const host = mountPluginHost()
@@ -140,7 +140,7 @@ story("a dialog service kept from before a reload opens and closes nothing under
   expect(result).toEqual({ stale: false, fresh: true })
 })
 
-story("a dialog handle closes its own dialog, and a dialog closes with the scope that opened it", async ({ page }) => {
+test("a dialog handle closes its own dialog, and a dialog closes with the scope that opened it", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPluginHost, createKeyed, createSignal } = await import(fixture)
     const host = mountPluginHost()
@@ -184,7 +184,7 @@ story("a dialog handle closes its own dialog, and a dialog closes with the scope
   })
 })
 
-story("Escape closes the top dialog while a dialog below it plays its exit animation", async ({ page }) => {
+test("Escape closes the top dialog while a dialog below it plays its exit animation", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPluginHost, until } = await import(fixture)
     const host = mountPluginHost()
@@ -208,7 +208,7 @@ story("Escape closes the top dialog while a dialog below it plays its exit anima
   expect(result).toEqual(["below"])
 })
 
-story("a dialog closes itself while the dialog above it exits, and a double close never reaches below", async ({
+test("a dialog closes itself while the dialog above it exits, and a double close never reaches below", async ({
   page,
 }) => {
   const result = await page.evaluate(async (fixture) => {
@@ -244,7 +244,7 @@ story("a dialog closes itself while the dialog above it exits, and a double clos
   expect(result).toEqual(["base"])
 })
 
-story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
+test("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
   const shown = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
     const host = mountPluginHost()
@@ -264,7 +264,7 @@ story("a dialog pushed in the same tick as a reload never mounts", async ({ page
   expect(shown).toBe(false)
 })
 
-story(
+test(
   "confirm, alert, prompt and select answer once: with the user's pick, else when their dialog or plugin goes away",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -344,7 +344,7 @@ story(
   },
 )
 
-story("a plugin's toasts close when it goes away, and a handle closes only its own toast", async ({ page }) => {
+test("a plugin's toasts close when it goes away, and a handle closes only its own toast", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountHostApis, until } = await import(fixture)
     const shown = (title: string) => !!document.body.textContent?.includes(title)
@@ -381,7 +381,7 @@ story("a plugin's toasts close when it goes away, and a handle closes only its o
   expect(result).toEqual({ kept: true, setups: 2 })
 })
 
-story("ctx.ui renders the app's components in a contribution, a host menu and a dialog", async ({ page }) => {
+test("ctx.ui renders the app's components in a contribution, a host menu and a dialog", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountSessionRegion, until, createComponent, createSignal, Slot } = await import(fixture)
 
@@ -603,7 +603,7 @@ story("ctx.ui renders the app's components in a contribution, a host menu and a 
   )
 })
 
-story(
+test(
   "routing A, B, then A again: a kept session stays A, the same screen follows the route, and no render remounts",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -703,7 +703,7 @@ story(
   },
 )
 
-story(
+test(
   "before the app interface mounts, host APIs read their defaults and keep writes and dialogs until it mounts",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -832,7 +832,7 @@ const tiers: readonly { name: string; tabs: readonly BuiltinPanelTab[]; active?:
 ]
 
 tiers.forEach((row) => {
-  story(`panel fallback: ${row.name}`, async ({ page }) => {
+  test(`panel fallback: ${row.name}`, async ({ page }) => {
     const selected = await page.evaluate(
       async (input) => {
         const { mountSessionRegion, Panel, until } = await import(input.fixture)
@@ -863,7 +863,7 @@ tiers.forEach((row) => {
   })
 })
 
-story("a plugin reloaded while disabled starts when it is enabled again", async ({ page }) => {
+test("a plugin reloaded while disabled starts when it is enabled again", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPluginHost } = await import(fixture)
     const host = mountPluginHost()
@@ -892,7 +892,7 @@ story("a plugin reloaded while disabled starts when it is enabled again", async 
   expect(result).toEqual({ afterReload: "disabled", setups: ["first", "enabled"], status: "active" })
 })
 
-story(
+test(
   "a registration is withdrawn with the scope that made it, and at once when that scope already ended",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -935,7 +935,7 @@ story(
   },
 )
 
-story("a contribution that throws renders nothing and records the error; the others stay", async ({ page }) => {
+test("a contribution that throws renders nothing and records the error; the others stay", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPlugins, until, Slot } = await import(fixture)
     const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
@@ -986,7 +986,7 @@ story("a contribution that throws renders nothing and records the error; the oth
   })
 })
 
-story(
+test(
   "plugin GUIs join, hot-reload in place, run their returned cleanup and leave, without holding startup",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -1044,7 +1044,7 @@ story(
   },
 )
 
-story("a throwing effect or state reader fails only its own plugin; later plugins still activate", async ({ page }) => {
+test("a throwing effect or state reader fails only its own plugin; later plugins still activate", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPlugins, until, createMemo, createRoot } = await import(fixture)
     const later = Promise.withResolvers<void>()
@@ -1101,7 +1101,7 @@ story("a throwing effect or state reader fails only its own plugin; later plugin
   expect(result).toEqual({ acme: "active", broken: true, later: "active", escaped: [] })
 })
 
-story(
+test(
   "a plugin follows another's contract across load, reload and disable, provides only its own, and a failed one stays failed",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -1179,7 +1179,7 @@ story(
   },
 )
 
-story(
+test(
   "a plugin's own main client waits for main, follows its state, and rejects once main cannot answer",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -1260,7 +1260,7 @@ story(
   },
 )
 
-story("a scoped contract binds the consuming instance, not the plugin that happens to call a saved method", async ({ page }) => {
+test("a scoped contract binds the consuming instance, not the plugin that happens to call a saved method", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { Contract, mountPlugins, until } = await import(fixture)
     const token: Contract<() => string> = Contract.define("provider.scoped")
@@ -1288,7 +1288,7 @@ story("a scoped contract binds the consuming instance, not the plugin that happe
   expect(result).toEqual(["one", "two"])
 })
 
-story("a contract component reads its provider context and preserves reactive props", async ({ page }) => {
+test("a contract component reads its provider context and preserves reactive props", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { bindPlugin, createComponent, createSignal, Contract, mountPlugins, Slot, until, usePlugin } = await import(
       fixture
@@ -1357,7 +1357,7 @@ story("a contract component reads its provider context and preserves reactive pr
   expect(result).toEqual({ context: "provider", mounts: 1, before: "before", after: "after" })
 })
 
-story("Extensions › Plugins merges the own server's plugins with the desktop GUIs they run", async ({ page }, info) => {
+test("Extensions › Plugins merges the own server's plugins with the desktop GUIs they run", async ({ page }, info) => {
   const calls = await page.evaluateHandle(async (fixture) => {
     const { mountPlugins, until } = await import(fixture)
     const calls: string[] = []
@@ -1474,7 +1474,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
   await expect(plugins.getByRole("button", { name: "Reload" })).toHaveCount(5)
   await expect(plugins.getByText("Active", { exact: true })).toHaveCount(0)
 
-  // The fixture mounts below the story, out of the viewport, so the controls are driven from the keyboard.
+  // The fixture mounts below the page, out of the viewport, so the controls are driven from the keyboard.
   await plugins.getByRole("switch", { name: "acme" }).press("Space")
   await plugins.getByRole("button", { name: "Reload" }).nth(1).press("Enter")
   expect(await calls.jsonValue()).toEqual(["disable acme", "reload flaky"])
@@ -1483,7 +1483,7 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
 const invalidSetups = ["promise", "thenable"]
 
 invalidSetups.forEach((kind) => {
-  story(`window setup rejects a returned ${kind}`, async ({ page }) => {
+  test(`window setup rejects a returned ${kind}`, async ({ page }) => {
     const result = await page.evaluate(
       async (input) => {
         const { mountPlugins, until } = await import(input.fixture)
@@ -1544,7 +1544,7 @@ invalidSetups.forEach((kind) => {
   })
 })
 
-story("declared global stores load before setup, so setup reads the stored value", async ({ page }) => {
+test("declared global stores load before setup, so setup reads the stored value", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountPlugins, until, Schema, Store } = await import(fixture)
     const Prefs = Schema.Struct({ open: Schema.Boolean })
@@ -1577,7 +1577,7 @@ story("declared global stores load before setup, so setup reads the stored value
   expect(result).toEqual({ held: { status: "loading", seen: [] }, seen: [true] })
 })
 
-story("startup enable state does not wait for the manager, and live updates beat older replies", async ({ page }) => {
+test("startup enable state does not wait for the manager, and live updates beat older replies", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { Contract, mountPlugins, until } = await import(fixture)
     const Provider: Contract<number, "disabled.value"> = Contract.define("disabled.value")
@@ -1703,7 +1703,7 @@ story("startup enable state does not wait for the manager, and live updates beat
   })
 })
 
-story(
+test(
   "a plugin theme joins the theme picker and leaves it with its plugin, keeping the user's choice",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -1772,7 +1772,7 @@ story(
   },
 )
 
-story("a theme preview survives a system light/dark flip and a plugin theme arriving, and is never saved", async ({
+test("a theme preview survives a system light/dark flip and a plugin theme arriving, and is never saved", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" })
@@ -1888,7 +1888,7 @@ story("a theme preview survives a system light/dark flip and a plugin theme arri
   })
 })
 
-story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
+test("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountThemes, until } = await import(fixture)
     const root = document.documentElement
@@ -1924,7 +1924,7 @@ story("a selected plugin theme that never returns shows the default theme once p
   })
 })
 
-story(
+test(
   "a panel with a width of its own sizes the side region and keeps the width the user drags it to",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
@@ -1982,7 +1982,7 @@ story(
   },
 )
 
-story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
+test("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
   const statuses = await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
 
@@ -2070,7 +2070,7 @@ story("composer pills show per session, open their rows, and fail only their own
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
 })
 
-story("a composer pill with a menu opens only the plugin's content, named by the view", async ({ page }) => {
+test("a composer pill with a menu opens only the plugin's content, named by the view", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
 
@@ -2120,7 +2120,7 @@ story("a composer pill with a menu opens only the plugin's content, named by the
   await expect(page.getByTestId("goal-pause")).toBeVisible()
 })
 
-story(
+test(
   "a plugin's declared icons draw by name in SDK fields and in the app, move, and leave with the plugin",
   async ({ page }) => {
     await page.evaluate(async (fixture) => {
@@ -2214,7 +2214,7 @@ story(
   },
 )
 
-story("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
+test("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
   const host = await page.evaluateHandle(async (fixture) => {
     const { mountCodeBlocks, until, CodeBlock, CodeBlockAction } = await import(fixture)
 
@@ -2317,7 +2317,7 @@ story("code block content replaces complete blocks of its languages, and actions
   ).toHaveCount(0)
 })
 
-story("code block content follows plugins that join and leave after the message rendered", async ({ page }) => {
+test("code block content follows plugins that join and leave after the message rendered", async ({ page }) => {
   const host = await page.evaluateHandle(async (fixture) => {
     const { mountCodeBlocks, until } = await import(fixture)
     const host: CodeBlocksHost = mountCodeBlocks({ definitions: [] })

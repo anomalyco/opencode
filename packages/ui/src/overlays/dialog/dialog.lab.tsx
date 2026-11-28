@@ -55,7 +55,7 @@ function dialogHeader(title: string, description: string) {
 }
 
 // Opens through the dialog stack, so a preview that holds its dialogs holds this one too.
-function OpenStoryDialog(props: { render: () => JSX.Element }) {
+function OpenLabDialog(props: { render: () => JSX.Element }) {
   const dialog = useDialog()
 
   const open = () => void dialog.show(props.render)
@@ -71,7 +71,7 @@ function OpenStoryDialog(props: { render: () => JSX.Element }) {
 
 export const Basic = {
   render: () => (
-    <OpenStoryDialog
+    <OpenLabDialog
       render={() => (
         <Dialog>
           {dialogHeader("Dialog", "Description")}
@@ -129,7 +129,7 @@ export const Sizes = {
 
 export const Settings = {
   render: () => (
-    <OpenStoryDialog
+    <OpenLabDialog
       render={() => (
         <Dialog variant="settings" size="large">
           <DialogHeader hideClose>
@@ -144,7 +144,7 @@ export const Settings = {
 
 export const TitleOnly = {
   render: () => (
-    <OpenStoryDialog
+    <OpenLabDialog
       render={() => (
         <Dialog>
           <DialogHeader>
@@ -181,7 +181,7 @@ export const HeaderControls = {
 
 export const WithFooter = {
   render: () => (
-    <OpenStoryDialog
+    <OpenLabDialog
       render={() => (
         <Dialog fit>
           {dialogHeader("Save changes", "Your changes will be lost if you don't save them.")}
@@ -197,7 +197,7 @@ export const WithFooter = {
 
 export const WithFooterThreeButtons = {
   render: () => (
-    <OpenStoryDialog
+    <OpenLabDialog
       render={() => (
         <Dialog fit>
           {dialogHeader("Unsaved changes", "You have unsaved changes. What would you like to do?")}
@@ -359,7 +359,7 @@ export const WithPopups = {
   render: () => (
     <>
       <Toast.Region />
-      <OpenStoryDialog render={() => <PopupsDialog />} />
+      <OpenLabDialog render={() => <PopupsDialog />} />
     </>
   ),
 }

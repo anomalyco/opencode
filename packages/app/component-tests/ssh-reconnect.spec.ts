@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("settings menu reconnect retains its prompt handler across server updates", async ({ mount, page }) => {
+test("settings menu reconnect retains its prompt handler across server updates", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--settings-reconnect")
   await component.getByRole("button", { name: "More options" }).click()
   await page.getByRole("menuitem", { name: "Connect", exact: true }).click()
@@ -15,7 +15,7 @@ story("settings menu reconnect retains its prompt handler across server updates"
   await expect(component.getByRole("button", { name: "Authenticate", exact: true })).toHaveCount(0)
 })
 
-story("cancelling a sign-in from Home offers it again at once", async ({ mount, page }) => {
+test("cancelling a sign-in from Home offers it again at once", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--authentication-required")
   const projects = component.getByRole("button", { name: "Projects" })
   const authenticate = page.getByRole("button", { name: "Authenticate", exact: true })
@@ -32,7 +32,7 @@ story("cancelling a sign-in from Home offers it again at once", async ({ mount, 
   await expect(dialog.getByRole("textbox")).toBeVisible()
 })
 
-story("cancelling a version mismatch permits reconnecting again", async ({ mount, page }) => {
+test("cancelling a version mismatch permits reconnecting again", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--incompatible-session")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()
   const dialog = page.getByRole("dialog")
@@ -47,7 +47,7 @@ story("cancelling a version mismatch permits reconnecting again", async ({ mount
   await expect(dialog).toHaveCount(0)
 })
 
-story("adding a server keeps all SSH challenges in the original connection dialog", async ({ mount, page }) => {
+test("adding a server keeps all SSH challenges in the original connection dialog", async ({ mount, page }) => {
   await mount("app-dialog-ssh--host")
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("textbox", { name: "Host or SSH command" }).fill("ssh devbox")
@@ -62,7 +62,7 @@ story("adding a server keeps all SSH challenges in the original connection dialo
   await expect(dialog).toHaveCount(0)
 })
 
-story("adding an incompatible server advances to a dedicated update step", async ({ mount, page }) => {
+test("adding an incompatible server advances to a dedicated update step", async ({ mount, page }) => {
   await mount("app-dialog-ssh--incompatible-host")
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("textbox", { name: "Host or SSH command" }).fill("ssh devbox")
@@ -73,7 +73,7 @@ story("adding an incompatible server advances to a dedicated update step", async
   await expect(dialog.getByRole("button", { name: "Update and reconnect", exact: true })).toBeVisible()
 })
 
-story("updating an incompatible connection continues authentication in the same dialog", async ({ mount, page }) => {
+test("updating an incompatible connection continues authentication in the same dialog", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--incompatible-session")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()
   const dialog = page.getByRole("dialog")
@@ -87,7 +87,7 @@ story("updating an incompatible connection continues authentication in the same 
   await expect(component.getByText("Session connected")).toBeVisible()
 })
 
-story("key-based reconnect completes without opening an authentication dialog", async ({ mount, page }) => {
+test("key-based reconnect completes without opening an authentication dialog", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--key-reconnect")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()
   await expect(component.getByRole("button", { name: "Connecting to SSH server" })).toBeDisabled()

@@ -1,6 +1,6 @@
 import { Button } from "@opencode/ui/button"
 import { createSignal, Show } from "solid-js"
-import { DialogStoryRuntime, STORY_LOCKED_SERVER, STORY_SERVER } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime, LAB_LOCKED_SERVER, LAB_SERVER } from "@/lab/dialog-runtime"
 import { ServerProvider } from "@/runtime/server/current"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { ServerSignedOutPanel, ServerUnavailablePanel } from "./server-unavailable-panel"
@@ -9,13 +9,13 @@ const reasons = ["unreachable", "incompatible", "signedOutHttp", "signedOutPlugi
 
 type Args = { reason: (typeof reasons)[number]; closable: boolean }
 
-function PanelStory(props: Args) {
+function PanelLab(props: Args) {
   const [outcome, setOutcome] = createSignal("")
 
   const plugin: ServerConnection.Plugin = {
     type: "plugin",
-    key: "story:studio",
-    plugin: "story",
+    key: "lab:studio",
+    plugin: "lab",
     displayName: "Build workstation",
     managed: true,
     status: { type: props.reason === "incompatible" ? "incompatible" : "stopped" },
@@ -33,7 +33,7 @@ function PanelStory(props: Args) {
   const reason = () => (props.reason === "incompatible" ? "incompatible" : "unreachable")
 
   return (
-    <DialogStoryRuntime servers={[STORY_SERVER, STORY_LOCKED_SERVER, plugin]}>
+    <DialogLabRuntime servers={[LAB_SERVER, LAB_LOCKED_SERVER, plugin]}>
       <div class="flex h-[min(80dvh,640px)] w-full flex-col">
         <Show
           when={!outcome()}
@@ -48,7 +48,7 @@ function PanelStory(props: Args) {
         >
           <Show
             when={props.reason === "unreachable" || props.reason === "incompatible"}
-            fallback={<ServerSignedOutPanel conn={props.reason === "signedOutHttp" ? STORY_LOCKED_SERVER : plugin} />}
+            fallback={<ServerSignedOutPanel conn={props.reason === "signedOutHttp" ? LAB_LOCKED_SERVER : plugin} />}
           >
             <ServerProvider conn={plugin}>
               <ServerUnavailablePanel
@@ -59,7 +59,7 @@ function PanelStory(props: Args) {
           </Show>
         </Show>
       </div>
-    </DialogStoryRuntime>
+    </DialogLabRuntime>
   )
 }
 
@@ -70,7 +70,7 @@ export default {
   argTypes: { reason: { options: reasons } },
   render: (args: Args) => (
     <Show when={args.reason} keyed>
-      {(reason) => <PanelStory reason={reason} closable={args.closable} />}
+      {(reason) => <PanelLab reason={reason} closable={args.closable} />}
     </Show>
   ),
 }

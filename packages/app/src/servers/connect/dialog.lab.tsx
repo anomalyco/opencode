@@ -1,4 +1,4 @@
-import { address, field, link, password, serverStory, submit } from "./connect.fixture"
+import { address, field, link, password, serverLab, submit } from "./connect.fixture"
 import type { ServerConnectTarget } from "./machine"
 
 const edit = {
@@ -11,57 +11,57 @@ export default {
   id: "app-dialog-add-server",
 }
 
-export const PairingLink = serverStory()
+export const PairingLink = serverLab()
 
-export const Password = serverStory({ events: [password] })
+export const Password = serverLab({ events: [password] })
 
-export const ReadyToPair = serverStory({ events: [field("link", link), field("name", "Build cluster")] })
+export const ReadyToPair = serverLab({ events: [field("link", link), field("name", "Build cluster")] })
 
-export const InvalidLink = serverStory({ events: [field("link", "incomplete"), submit] })
+export const InvalidLink = serverLab({ events: [field("link", "incomplete"), submit] })
 
-export const LegacyLink = serverStory({ events: [field("link", `${address}/connect#example`), submit] })
+export const LegacyLink = serverLab({ events: [field("link", `${address}/connect#example`), submit] })
 
-export const ExpiredLink = serverStory({ events: [field("link", link), submit], exchange: "expired" })
+export const ExpiredLink = serverLab({ events: [field("link", link), submit], exchange: "expired" })
 
-export const UnreachableLink = serverStory({ events: [field("link", link), submit], exchange: "unreachable" })
+export const UnreachableLink = serverLab({ events: [field("link", link), submit], exchange: "unreachable" })
 
-export const InvalidAddress = serverStory({ events: [password, field("url", "file:///example"), submit] })
+export const InvalidAddress = serverLab({ events: [password, field("url", "file:///example"), submit] })
 
-export const ConnectionFailed = serverStory({ events: [password, field("url", address), submit], check: "unreachable" })
+export const ConnectionFailed = serverLab({ events: [password, field("url", address), submit], check: "unreachable" })
 
-export const MixedContent = serverStory({
+export const MixedContent = serverLab({
   events: [password, field("url", "http://build.example.test"), submit],
   check: "unreachable",
 })
 
-export const Checking = serverStory({ events: [field("link", link), submit], check: "pending" })
+export const Checking = serverLab({ events: [field("link", link), submit], check: "pending" })
 
-export const CameraProbing = serverStory({ camera: "probing" })
+export const CameraProbing = serverLab({ camera: "probing" })
 
-export const CameraUnavailable = serverStory({ camera: "unavailable" })
+export const CameraUnavailable = serverLab({ camera: "unavailable" })
 
-export const CameraInsecure = serverStory({ camera: "insecure" })
+export const CameraInsecure = serverLab({ camera: "insecure" })
 
-export const NativePairing = serverStory({ camera: "none" })
+export const NativePairing = serverLab({ camera: "none" })
 
-export const Scanning = serverStory({ scanner: "ready" })
+export const Scanning = serverLab({ scanner: "ready" })
 
-export const OpeningCamera = serverStory({ scanner: "opening" })
+export const OpeningCamera = serverLab({ scanner: "opening" })
 
-export const RedeemingScan = serverStory({ scanner: "redeeming" })
+export const RedeemingScan = serverLab({ scanner: "redeeming" })
 
-export const CameraError = serverStory({ scanner: "denied" })
+export const CameraError = serverLab({ scanner: "denied" })
 
-export const InvalidQrCode = serverStory({ scanner: "invalid" })
+export const InvalidQrCode = serverLab({ scanner: "invalid" })
 
-export const DecodeFailed = serverStory({ scanner: "decode" })
+export const DecodeFailed = serverLab({ scanner: "decode" })
 
-export const ExpiredQrCode = serverStory({ scanner: "expired" })
+export const ExpiredQrCode = serverLab({ scanner: "expired" })
 
-export const ScanTimedOut = serverStory({ scanner: "timeout" })
+export const ScanTimedOut = serverLab({ scanner: "timeout" })
 
-export const EditPassword = serverStory({ target: edit })
+export const EditPassword = serverLab({ target: edit })
 
-export const SignedOut = serverStory({ target: { ...edit, original: { ...edit.original, unauthorized: true } } })
+export const SignedOut = serverLab({ target: { ...edit, original: { ...edit.original, unauthorized: true } } })
 
-export const Closed = serverStory({ closed: true })
+export const Closed = serverLab({ closed: true })

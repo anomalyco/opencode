@@ -2,11 +2,11 @@ import type { SessionInfo } from "@opencode/client/promise"
 import { DragDropProvider } from "@dnd-kit/solid"
 import { createMemo, createSignal, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import {
-  DialogStoryRuntime,
-  STORY_DIRECTORY,
-  STORY_PROJECTS,
-  STORY_SERVER,
-} from "@/lab/dialog-story-runtime"
+  DialogLabRuntime,
+  LAB_DIRECTORY,
+  LAB_PROJECTS,
+  LAB_SERVER,
+} from "@/lab/dialog-runtime"
 import { HomeSessionsView } from "@/home/sessions/view"
 import { groupSessions } from "@/home/sessions/controller"
 import { buildHomeSessionRecords, homeSessionLocation } from "@/home/sessions/records"
@@ -41,18 +41,18 @@ const surfaces = [
 
 type Args = { surface: (typeof surfaces)[number]; title: "real" | "fallback"; state: "idle" | "unread" | "never-run" }
 
-const server = ServerConnection.key(STORY_SERVER)
+const server = ServerConnection.key(LAB_SERVER)
 
 const noop = () => {}
 
-function storySession(args: Args): SessionInfo {
+function labSession(args: Args): SessionInfo {
   const created = Date.UTC(2026, 10, 26, 9, 30)
 
   return {
-    id: "ses_story_menu",
-    projectID: STORY_PROJECTS[0].id,
+    id: "ses_lab_menu",
+    projectID: LAB_PROJECTS[0].id,
     title: args.title === "real" ? "Review the session copy menu" : "New session - 2026-11-26T09:30:00.000Z",
-    location: { directory: STORY_DIRECTORY },
+    location: { directory: LAB_DIRECTORY },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: {
@@ -64,10 +64,10 @@ function storySession(args: Args): SessionInfo {
   }
 }
 
-function MenuStory(props: Args) {
+function MenuLab(props: Args) {
   const global = useGlobal()
 
-  const session = createMemo(() => storySession(props))
+  const session = createMemo(() => labSession(props))
 
   global.serverCtx(server)?.data.session.remember(session())
 
@@ -157,7 +157,7 @@ function Surface(props: Args & { session: SessionInfo }) {
         />
       </Match>
       <Match when={props.surface === "pinned-tab"}>
-        <PinnedTabStory session={props.session} />
+        <PinnedTabLab session={props.session} />
       </Match>
       <Match when={props.surface === "recent-row" || props.surface === "recent-row-pinned"}>
         <RecentSessionTab
@@ -181,7 +181,7 @@ function Surface(props: Args & { session: SessionInfo }) {
         />
       </Match>
       <Match when={props.surface === "sidebar-pinned-row"}>
-        <SidebarPinnedRowStory session={props.session} />
+        <SidebarPinnedRowLab session={props.session} />
       </Match>
       <Match when={props.surface === "project-row"}>
         <ProjectSessionRow server={server} session={props.session} openTab={false} active={false} onOpen={noop} />
@@ -213,7 +213,7 @@ function Surface(props: Args & { session: SessionInfo }) {
         />
       </Match>
       <Match when={props.surface === "home-row"}>
-        <HomeRowStory session={props.session} />
+        <HomeRowLab session={props.session} />
       </Match>
       <Match when={props.surface === "mention"}>
         <MentionMenu session={props.session} />
@@ -222,19 +222,19 @@ function Surface(props: Args & { session: SessionInfo }) {
   )
 }
 
-function PinnedTabStory(props: { session: SessionInfo }) {
+function PinnedTabLab(props: { session: SessionInfo }) {
   const pins = usePins()
 
   const pin = { server, sessionId: props.session.id }
 
-  // Pins persist in the lab's storage, so unpin on the way out to leave the other stories unpinned.
+  // Pins persist in the lab's storage, so unpin on the way out to leave the other pages unpinned.
   if (!pins.pinned(pin)) pins.pin(pin)
   onCleanup(() => pins.unpin(pin))
 
   return <PinnedSession pin={pin} orientation="vertical" />
 }
 
-function SidebarPinnedRowStory(props: { session: SessionInfo }) {
+function SidebarPinnedRowLab(props: { session: SessionInfo }) {
   const pins = createSessionPins()
 
   return (
@@ -255,10 +255,10 @@ function SidebarPinnedRowStory(props: { session: SessionInfo }) {
   )
 }
 
-function HomeRowStory(props: { session: SessionInfo }) {
+function HomeRowLab(props: { session: SessionInfo }) {
   const language = useLanguage()
 
-  const projects = STORY_PROJECTS.map(normalizeProjectInfo)
+  const projects = LAB_PROJECTS.map(normalizeProjectInfo)
 
   const records = createMemo(() =>
     buildHomeSessionRecords({
@@ -344,14 +344,14 @@ export default {
     state: { control: "select", options: ["idle", "unread", "never-run"] },
   },
   render: (args: Args) => (
-    <DialogStoryRuntime>
+    <DialogLabRuntime>
       <PinsProvider currentTab={() => undefined}>
         {/* Remounts per state so each one seeds its session and opens its menu again. */}
         <Show when={`${args.surface}:${args.title}:${args.state}`} keyed>
-          <MenuStory {...args} />
+          <MenuLab {...args} />
         </Show>
       </PinsProvider>
-    </DialogStoryRuntime>
+    </DialogLabRuntime>
   ),
 }
 

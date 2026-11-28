@@ -118,7 +118,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const historyHeight = createMemo(() => composerHistoryPreviewHeight(state))
   // Phones and tablets, whatever their width: a narrow desktop window keeps the desktop composer.
   const touch = createMediaQuery("(hover: none) and (pointer: coarse)")
-  // The shell's slot at the bottom of the screen; without one (a story), the touch bar stays under the composer.
+  // The shell's slot at the bottom of the screen; without one (a page), the touch bar stays under the composer.
   const [dock, setDock] = createSignal<HTMLElement>()
 
   onMount(() => setDock(document.querySelector<HTMLElement>('[data-slot="composer-touch-bar-mount"]') ?? undefined))

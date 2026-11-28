@@ -1,8 +1,8 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./text-lifecycle.fixture.tsx", import.meta.url))
 
-story("the typewriter shows no cursor without text and clears when its text is cleared", async ({ mount, page }) => {
+test("the typewriter shows no cursor without text and clears when its text is cleared", async ({ mount, page }) => {
   await mount("ui-text-shimmer--inactive")
 
   const controls = await page.evaluateHandle(async (fixture) => {
@@ -24,7 +24,7 @@ story("the typewriter shows no cursor without text and clears when its text is c
   await expect(typewriter).toHaveText("")
 })
 
-story("a shimmer stops its sweep at once under reduced motion", async ({ mount, page }) => {
+test("a shimmer stops its sweep at once under reduced motion", async ({ mount, page }) => {
   await mount("ui-text-shimmer--inactive")
 
   const runs = await page.evaluate(async (fixture) => {

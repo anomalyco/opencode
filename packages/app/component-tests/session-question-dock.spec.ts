@@ -1,7 +1,7 @@
 import type { Locator } from "@playwright/test"
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("answer cards allow text selection without changing answers", async ({ mount, page }) => {
+test("answer cards allow text selection without changing answers", async ({ mount, page }) => {
   const component = await mount("app-current-session-surface--question-request")
 
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
@@ -58,7 +58,7 @@ story("answer cards allow text selection without changing answers", async ({ mou
   await expect(files).not.toBeChecked()
 })
 
-story("question text links URLs", async ({ mount }) => {
+test("question text links URLs", async ({ mount }) => {
   const component = await mount("session-question-switch--link-prompt")
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
   const url = "https://www.npmjs.com/auth/cli/2ff15723-dfa2-4eec-addd-53cb3ff7597f"
@@ -68,7 +68,7 @@ story("question text links URLs", async ({ mount }) => {
   await expect(link).toHaveAttribute("target", "_blank")
 })
 
-story("MCP elicitation message and field descriptions link URLs", async ({ mount }) => {
+test("MCP elicitation message and field descriptions link URLs", async ({ mount }) => {
   const component = await mount("app-current-session-surface--mcp-elicitation-request")
   const dock = component.locator('[data-component="dock-prompt"][data-kind="question"]')
 
@@ -76,7 +76,7 @@ story("MCP elicitation message and field descriptions link URLs", async ({ mount
     await expect(dock.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
 })
 
-story(
+test(
   "uses the original question cards by default and submits selected and custom answers",
   async ({ mount, page }) => {
     const component = await mount("app-current-session-surface--question-request")
@@ -130,7 +130,7 @@ story(
   },
 )
 
-story("keeps classic long answer lists inside the panel and scrolls them", async ({ mount, page }) => {
+test("keeps classic long answer lists inside the panel and scrolls them", async ({ mount, page }) => {
   const component = await mount("session-question-switch--long-list")
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
   const first = question.getByRole("checkbox", { name: /All typography/ })
@@ -154,7 +154,7 @@ story("keeps classic long answer lists inside the panel and scrolls them", async
   await expect(question.getByRole("radio", { name: "One pull request", exact: true })).toBeFocused()
 })
 
-story(
+test(
   "classic arrow keys land in the custom answer's field and Up from its start leaves it",
   async ({ mount, page }) => {
     const component = await mount("app-current-session-surface--question-request")
@@ -191,10 +191,10 @@ story(
   },
 )
 
-story.describe("on a 393x852 mobile viewport", () => {
-  story.use({ hasTouch: true, isMobile: true, viewport: { width: 393, height: 852 } })
+test.describe("on a 393x852 mobile viewport", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 393, height: 852 } })
 
-  story("keeps navigation visible and scrolls long prompts and 12 options", async ({ mount, page }) => {
+  test("keeps navigation visible and scrolls long prompts and 12 options", async ({ mount, page }) => {
     const component = await mount("session-question-switch--long-prompt")
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
     await page.evaluate(() => document.fonts.ready.then(() => undefined))
@@ -262,7 +262,7 @@ story.describe("on a 393x852 mobile viewport", () => {
   })
 })
 
-story(
+test(
   "minimizes and restores classic questions immediately for reduced motion and keyboard actions",
   async ({ mount, page }) => {
     const component = await mount("app-current-session-surface--question-request")
@@ -297,7 +297,7 @@ story(
   },
 )
 
-story.describe("New question UI", () => {
+test.describe("New question UI", () => {
   const mountComposer = async (mount: (id: string) => Promise<Locator>) => {
     const component = await mount("session-question-switch--composer-answer")
     const dock = component.locator('[data-component="session-question-dock"][data-composer]')
@@ -311,7 +311,7 @@ story.describe("New question UI", () => {
     }
   }
 
-  story("moves through the answers in the list and types in the field", async ({ mount, page }) => {
+  test("moves through the answers in the list and types in the field", async ({ mount, page }) => {
     const { component, dock, list, field, option } = await mountComposer(mount)
 
     const highlighted = async (name: string | RegExp) => {
@@ -358,7 +358,7 @@ story.describe("New question UI", () => {
     )
   })
 
-  story("picks with numbers in the list and types numbers in the field", async ({ mount, page }) => {
+  test("picks with numbers in the list and types numbers in the field", async ({ mount, page }) => {
     const { list, field, option } = await mountComposer(mount)
 
     await expect(list).toBeFocused()
@@ -374,7 +374,7 @@ story.describe("New question UI", () => {
     await expect(field).toHaveValue("2 columns")
   })
 
-  story("returns Up from the first line of a typed answer to the answers", async ({ mount, page }) => {
+  test("returns Up from the first line of a typed answer to the answers", async ({ mount, page }) => {
     const { list, field, option } = await mountComposer(mount)
 
     await field.click()
@@ -388,7 +388,7 @@ story.describe("New question UI", () => {
     await expect(list).toHaveAttribute("aria-activedescendant", (await option(/Wide/).getAttribute("id"))!)
   })
 
-  story("dismisses with Escape and gives focus back to the chat draft", async ({ mount, page }) => {
+  test("dismisses with Escape and gives focus back to the chat draft", async ({ mount, page }) => {
     const { component, list } = await mountComposer(mount)
 
     await expect(list).toBeFocused()

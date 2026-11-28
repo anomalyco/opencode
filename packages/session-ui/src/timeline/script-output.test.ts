@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { storyTool } from "../storybook/current-session-scenarios"
+import { labTool } from "../lab/current-session-scenarios"
 import { scriptOutputLayout } from "./script-output"
 import { TimelineRow } from "./timeline-row"
 
@@ -13,7 +13,7 @@ const messages = new Map<string, SessionMessageInfo>([
       agent: "build",
       model: { id: "model", providerID: "provider" },
       time: { created: 1 },
-      content: [storyTool("script", "execute", "completed", { code: "…" }, { output: "ok" })],
+      content: [labTool("script", "execute", "completed", { code: "…" }, { output: "ok" })],
     },
   ],
 ])

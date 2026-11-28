@@ -1,7 +1,7 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 for (const open of [true, false]) {
-  story(`preserves ${open ? "expanded" : "collapsed"} tool choices when calls join the group`, async ({ mount }) => {
+  test(`preserves ${open ? "expanded" : "collapsed"} tool choices when calls join the group`, async ({ mount }) => {
     const root = await mount("current-session-file-changes--appending-tool-calls")
     const group = root.locator('[data-component="collapsed-tool-group"]')
     const trigger = group.getByRole("button", { name: /^Used \d+ Shell, Patch$/ })

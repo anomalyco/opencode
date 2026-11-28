@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./session-containment.fixture.tsx", import.meta.url))
 
@@ -21,7 +21,7 @@ const legitimate = `${marker}\n\n| West | East |\n| :-- | --: |\n| Lettuce | Ran
 
 for (const delivery of ["text", "tool"] as const) {
   for (const [name, markup] of Object.entries(inputs)) {
-    story(`keeps ${name} inside its message as ${delivery}`, async ({ mount, page }) => {
+    test(`keeps ${name} inside its message as ${delivery}`, async ({ mount, page }) => {
       const root = await open(page, mount, markup, delivery)
 
       if (name.endsWith("math fence")) await expect(root.locator(".katex-display")).toHaveCount(1)
@@ -30,7 +30,7 @@ for (const delivery of ["text", "tool"] as const) {
     })
   }
 
-  story(`renders legitimate authored markup normally as ${delivery}`, async ({ mount, page }) => {
+  test(`renders legitimate authored markup normally as ${delivery}`, async ({ mount, page }) => {
     const root = await open(page, mount, legitimate, delivery)
     await expect(root.locator("th").filter({ hasText: "East" })).toHaveAttribute("align", "right")
     await expect(root.locator('img[alt="Sample image"]')).toHaveAttribute("width", "96")

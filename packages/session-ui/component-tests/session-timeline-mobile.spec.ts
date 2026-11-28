@@ -1,9 +1,9 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story.describe("touch timeline", () => {
-  story.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+test.describe("touch timeline", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
 
-  story("keeps message actions and metadata visible without hover", async ({ mount, page }) => {
+  test("keeps message actions and metadata visible without hover", async ({ mount, page }) => {
     const timeline = await mount("current-session-timeline-rows--response-speed")
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
 
@@ -29,7 +29,7 @@ story.describe("touch timeline", () => {
     await expect(responseMeta.locator('[data-slot="text-part-meta-speed"]')).toBeHidden()
   })
 
-  story("keeps the always-shown chevron clear of the prompt's text", async ({ mount }) => {
+  test("keeps the always-shown chevron clear of the prompt's text", async ({ mount }) => {
     const timeline = await mount("current-prompt-message--pending")
     await timeline.getByLabel("Delivery state").selectOption("delivered")
     const bubble = timeline.locator('[data-slot="user-message-text"]')
@@ -69,7 +69,7 @@ story.describe("touch timeline", () => {
     expect(overlaps).toBe(0)
   })
 
-  story("keeps shell copy visible without hover", async ({ mount }) => {
+  test("keeps shell copy visible without hover", async ({ mount }) => {
     const timeline = await mount("current-session-terminal-work--expanded-shell")
     const copy = timeline.locator('[data-slot="bash-copy"]')
     await expect(copy).toHaveCount(2)
@@ -80,7 +80,7 @@ story.describe("touch timeline", () => {
     }
   })
 
-  story("keeps error copy visible without hover", async ({ mount, page }) => {
+  test("keeps error copy visible without hover", async ({ mount, page }) => {
     const errors = await mount("components-tool-error-card--all")
     const patch = errors.locator('[data-kind="tool-error-card"]').filter({ hasText: "Patch" })
     await patch.getByRole("button", { name: /Patch.*Verification failed/ }).tap()
@@ -90,7 +90,7 @@ story.describe("touch timeline", () => {
     await expect(copy).toHaveCSS("pointer-events", "auto")
   })
 
-  story("keeps fenced code copy visible without hover", async ({ mount }) => {
+  test("keeps fenced code copy visible without hover", async ({ mount }) => {
     const markdown = await mount("components-markdown--complete-response")
     const code = markdown.locator('[data-component="markdown-code"]').filter({ hasText: "export const value = 42" })
     await expect(code).toHaveCount(1)
@@ -100,7 +100,7 @@ story.describe("touch timeline", () => {
     await expect(footer).toHaveCSS("pointer-events", "auto")
   })
 
-  story("stops lighting a compaction divider once a tap closes it", async ({ mount }) => {
+  test("stops lighting a compaction divider once a tap closes it", async ({ mount }) => {
     const timeline = await mount("current-session-timeline-rows--compaction-and-continuation")
     const divider = timeline.locator('[data-slot="session-compaction-divider"]')
     const label = divider.locator('[data-slot="session-compaction-label"]')
@@ -117,7 +117,7 @@ story.describe("touch timeline", () => {
   })
 })
 
-story("desktop user message actions still appear on hover and keyboard focus", async ({ mount, page }) => {
+test("desktop user message actions still appear on hover and keyboard focus", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
@@ -135,7 +135,7 @@ story("desktop user message actions still appear on hover and keyboard focus", a
   await expect(actions).toHaveCSS("pointer-events", "auto")
 })
 
-story("desktop keeps only the latest response copy visible at rest", async ({ mount, page }) => {
+test("desktop keeps only the latest response copy visible at rest", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 

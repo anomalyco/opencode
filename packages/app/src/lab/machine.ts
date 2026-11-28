@@ -1,5 +1,5 @@
 type Stage = {
-  /** The story's state names, in order. */
+  /** The page's state names, in order. */
   readonly names: readonly string[]
   /** The state shown. */
   readonly index: number
@@ -16,7 +16,7 @@ export type LabStageState =
 
 export type LabStageEvent =
   | { readonly type: "play" }
-  /** The Pause button, a press in the story or a knob edit. */
+  /** The Pause button, a press in the page or a knob edit. */
   | { readonly type: "pause" }
   | { readonly type: "tick"; readonly attempt: number }
   /** Previous and Next. */
@@ -147,8 +147,8 @@ function unchanged(state: LabStageState): LabStageTransition {
 export type LabTreeGesture = "none" | "pointer" | "space"
 
 /**
- * While browsing the tree by keys, a story that focuses something as it mounts (a dialog, a field) would take the
- * keys away. A press or Tab anywhere ends browsing; a few returns at most, so a story that traps focus still wins.
+ * While browsing the tree by keys, a page that focuses something as it mounts (a dialog, a field) would take the
+ * keys away. A press or Tab anywhere ends browsing; a few returns at most, so a page that traps focus still wins.
  */
 export type LabBrowseState =
   | { readonly status: "idle"; readonly gesture: LabTreeGesture }
@@ -160,7 +160,7 @@ export type LabBrowseEvent =
   | { readonly type: "key.down"; readonly key: string; readonly inTree: boolean }
   | { readonly type: "key.ended" }
   | { readonly type: "window.blurred" }
-  | { readonly type: "story.opened"; readonly fromTree: boolean }
+  | { readonly type: "page.opened"; readonly fromTree: boolean }
   /** Focus moved into the stage. */
   | { readonly type: "stage.focused" }
 
@@ -194,7 +194,7 @@ export function transitionLabBrowse(state: LabBrowseState, event: LabBrowseEvent
 
   if (event.type === "window.blurred") return { state: INITIAL_LAB_BROWSE_STATE, effects: [] }
 
-  if (event.type === "story.opened") {
+  if (event.type === "page.opened") {
     if (!event.fromTree) return { state: idle(state.gesture), effects: [] }
 
     return { state: { status: "browsing", redirects: 3, gesture: state.gesture }, effects: [] }

@@ -8,7 +8,7 @@ import { sessionTitle } from "@/session/title"
 
 type Args = { sessionTitle: string; deleting: boolean }
 
-function DeleteSessionStory(props: Args) {
+function DeleteSessionLab(props: Args) {
   const dialog = useDialog()
 
   const language = useLanguage()
@@ -60,7 +60,7 @@ export default {
   title: "App/Dialogs/Delete Session",
   id: "app-dialog-delete-session",
   args: { sessionTitle: "Refactor the dialog primitives", deleting: false } satisfies Args,
-  render: (args: Args) => <DeleteSessionStory {...args} />,
+  render: (args: Args) => <DeleteSessionLab {...args} />,
 }
 
 export const Default = {}

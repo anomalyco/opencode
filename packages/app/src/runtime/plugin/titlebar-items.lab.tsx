@@ -63,7 +63,7 @@ export default {
               <span class="w-10 shrink-0 font-mono text-[11px] text-v2-text-text-weak">{entry.locale}</span>
               <Show when={args.layout !== "vertical"}>
                 <div
-                  data-slot="story-horizontal"
+                  data-slot="lab-horizontal"
                   class="flex h-10 w-[320px] shrink-0 items-center justify-end rounded-md bg-v2-background-bg-deep/60"
                 >
                   <div class="relative z-20 flex shrink-0 items-center justify-end overflow-visible">
@@ -73,7 +73,7 @@ export default {
               </Show>
               <Show when={args.layout !== "horizontal"}>
                 <div
-                  data-slot="story-vertical"
+                  data-slot="lab-vertical"
                   class="flex w-[220px] shrink-0 flex-col rounded-md bg-v2-background-bg-deep/60 p-2"
                 >
                   <TitlebarItems items={items} vertical />

@@ -1,11 +1,11 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") })
   await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"))
 })
 
-story("cancels a pending hover on click and opens again on re-entry", async ({ mount, page }) => {
+test("cancels a pending hover on click and opens again on re-entry", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-button")
 
   const trigger = root.getByRole("button", { name: "Add" })
@@ -26,7 +26,7 @@ story("cancels a pending hover on click and opens again on re-entry", async ({ m
   await expect(tooltip).toBeVisible()
 })
 
-story("dismisses an open tooltip on pointerdown before the button activates", async ({ mount, page }) => {
+test("dismisses an open tooltip on pointerdown before the button activates", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-button")
 
   const tooltip = page.getByRole("tooltip", { name: "Add one to the count" })
@@ -43,7 +43,7 @@ story("dismisses an open tooltip on pointerdown before the button activates", as
   await expect(tooltip).toBeHidden()
 })
 
-story("shows the wrapped button's tooltip on Tab and Shift+Tab, even after a click", async ({ mount, page }) => {
+test("shows the wrapped button's tooltip on Tab and Shift+Tab, even after a click", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-button")
 
   const trigger = root.getByRole("button", { name: "Add" })
@@ -66,7 +66,7 @@ story("shows the wrapped button's tooltip on Tab and Shift+Tab, even after a cli
   await expect(trigger).toBeFocused()
 })
 
-story("restored focus does not open a tooltip after Tab leaves the window", async ({ mount, page }) => {
+test("restored focus does not open a tooltip after Tab leaves the window", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-button")
 
   await page.keyboard.down("Tab")
@@ -78,10 +78,10 @@ story("restored focus does not open a tooltip after Tab leaves the window", asyn
   await page.keyboard.up("Tab")
 })
 
-story.describe("touch", () => {
-  story.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+test.describe("touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
 
-  story("tapping the button preserves the tooltip's hover state", async ({ mount, page }) => {
+  test("tapping the button preserves the tooltip's hover state", async ({ mount, page }) => {
     const root = await mount("ui-tooltip--with-button")
 
     const trigger = root.getByRole("button", { name: "Add" })
@@ -104,7 +104,7 @@ story.describe("touch", () => {
   })
 })
 
-story("waits 600 ms on first hover and opens a neighbouring tooltip immediately", async ({ mount, page }) => {
+test("waits 600 ms on first hover and opens a neighbouring tooltip immediately", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--appearances")
 
   const tooltip = page.getByRole("tooltip", { name: "Standard tooltip" })
@@ -119,7 +119,7 @@ story("waits 600 ms on first hover and opens a neighbouring tooltip immediately"
   await expect(page.getByRole("tooltip", { name: "Compact tooltip" })).toBeVisible()
 })
 
-story("keeps a menu trigger's tooltip hidden when the menu closes under a still pointer", async ({ mount, page }) => {
+test("keeps a menu trigger's tooltip hidden when the menu closes under a still pointer", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-menu")
 
   const trigger = root.getByRole("button", { name: "Actions" })
@@ -146,7 +146,7 @@ story("keeps a menu trigger's tooltip hidden when the menu closes under a still 
   await expect(tooltip).toBeVisible()
 })
 
-story("opens a menu trigger's tooltip on the next hover after the menu closes", async ({ mount, page }) => {
+test("opens a menu trigger's tooltip on the next hover after the menu closes", async ({ mount, page }) => {
   const root = await mount("ui-tooltip--with-menu")
 
   const trigger = root.getByRole("button", { name: "Actions" })

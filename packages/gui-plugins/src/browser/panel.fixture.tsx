@@ -142,7 +142,7 @@ export type BrowserScenario = "Page" | "Empty" | "Recent" | "History" | "Loading
 
 type ElementRect = Pick<DOMRect, "x" | "y" | "width" | "height">
 
-type StoryHost = Pick<PaneHost, "useLanguage"> & {
+type LabHost = Pick<PaneHost, "useLanguage"> & {
   scenario: BrowserScenario
   /** How the composer would send a comment now; undefined while nothing can be sent. */
   delivery?: ComposerDelivery
@@ -253,7 +253,7 @@ export function mountBrowserPane(input: PaneHost) {
 
 // Both hosts exercise the real model and pane. The lab draws an in-memory document where the component tests
 // measure native embed layouts and captures.
-export function browserPaneFixture(input: PaneHost | StoryHost) {
+export function browserPaneFixture(input: PaneHost | LabHost) {
   return function Fixture() {
     const language = input.useLanguage()
     const messages = new Map(Object.entries(browserEn))

@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("maps grouped and collapsed switches to the timeline settings", async ({ mount }) => {
+test("maps grouped and collapsed switches to the timeline settings", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
   await component.getByRole("button", { name: "Advanced", exact: true }).click()
   const shell = component.getByRole("group", { name: "Shell", exact: true })
@@ -23,7 +23,7 @@ story("maps grouped and collapsed switches to the timeline settings", async ({ m
   await expect(component.getByRole("group", { name: "Subagents", exact: true }).getByRole("switch")).toHaveCount(1)
 })
 
-story("replaces hidden switches with solid lines and restores options", async ({ mount, page }) => {
+test("replaces hidden switches with solid lines and restores options", async ({ mount, page }) => {
   const component = await mount("settings-timeline-detail--interactive")
   await component.getByRole("button", { name: "Advanced", exact: true }).click()
   const shell = component.getByRole("group", { name: "Shell", exact: true })
@@ -75,7 +75,7 @@ story("replaces hidden switches with solid lines and restores options", async ({
   await expect(shell.getByRole("switch", { name: "Shell collapsed", exact: true })).not.toBeChecked()
 })
 
-story("toggles visibility by clicking the activity label", async ({ mount }) => {
+test("toggles visibility by clicking the activity label", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
   await component.getByRole("button", { name: "Advanced", exact: true }).click()
   const shell = component.getByRole("group", { name: "Shell", exact: true })
@@ -93,7 +93,7 @@ story("toggles visibility by clicking the activity label", async ({ mount }) => 
   await expect(shell.getByRole("switch", { name: "Shell collapsed", exact: true })).toBeChecked()
 })
 
-story("only highlights the eye when hovering the icon, not its activity label", async ({ mount }) => {
+test("only highlights the eye when hovering the icon, not its activity label", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
   await component.getByRole("button", { name: "Advanced", exact: true }).click()
   const shell = component.getByRole("group", { name: "Shell", exact: true })
@@ -109,7 +109,7 @@ story("only highlights the eye when hovering the icon, not its activity label", 
   }
 })
 
-story("opens advanced on returning to custom settings but not presets", async ({ mount }) => {
+test("opens advanced on returning to custom settings but not presets", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
   const advanced = component.getByRole("button", { name: "Advanced", exact: true })
   await expect(advanced).toHaveAttribute("aria-expanded", "false")
@@ -131,7 +131,7 @@ story("opens advanced on returning to custom settings but not presets", async ({
   await expect(advanced).toHaveAttribute("aria-expanded", "false")
 })
 
-story("keeps visibility and switches in sync with the preset slider", async ({ mount }) => {
+test("keeps visibility and switches in sync with the preset slider", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
   await component.getByRole("button", { name: "Advanced", exact: true }).click()
   const slider = component.getByRole("slider", { name: "Timeline detail" })
@@ -156,7 +156,7 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
 
 for (const direction of ["ltr", "rtl"]) {
   for (const theme of ["light", "dark"]) {
-    story(`fits narrow and wide layouts in ${direction}, ${theme}`, async ({ mount, page }, testInfo) => {
+    test(`fits narrow and wide layouts in ${direction}, ${theme}`, async ({ mount, page }, testInfo) => {
       await page.setViewportSize({ width: 900, height: 900 })
       const component = await mount("settings-timeline-detail--interactive", { globals: { direction, theme } })
       await expect(component.locator('[data-slot="timeline-detail-scale"]')).toHaveCSS("margin-top", "4px")

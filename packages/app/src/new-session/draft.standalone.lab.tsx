@@ -3,11 +3,11 @@ import { createStore } from "solid-js/store"
 import { createComposerEditor } from "@/composer/editor/interaction"
 import type { ComposerPersistedState } from "@/composer/types"
 import {
-  DialogStoryRuntime,
-  STORY_DIRECTORY,
-  STORY_PROJECTS,
-  STORY_SERVER,
-} from "@/lab/dialog-story-runtime"
+  DialogLabRuntime,
+  LAB_DIRECTORY,
+  LAB_PROJECTS,
+  LAB_SERVER,
+} from "@/lab/dialog-runtime"
 import { useLocal } from "@/providers/models/selection"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
@@ -20,7 +20,7 @@ import { createNewSessionWorkspaceController } from "./workspace/controller"
 const worktrees = {
   main: "main",
   "new worktree": "create",
-  "existing worktree": STORY_PROJECTS[0].sandboxes[0],
+  "existing worktree": LAB_PROJECTS[0].sandboxes[0],
   "checkout loading": "main",
   "detached HEAD": "main",
   "no project": "main",
@@ -28,14 +28,14 @@ const worktrees = {
 
 type DraftArgs = { location: keyof typeof worktrees; prompt: string }
 
-const projects = STORY_PROJECTS.map((project) => ({
+const projects = LAB_PROJECTS.map((project) => ({
   ...project,
   used: true,
   worktrees: project.sandboxes.map((directory) => ({ directory, strategy: "git" })),
 }))
 
-function DraftStory(props: DraftArgs) {
-  const [directory, setDirectory] = createSignal(STORY_DIRECTORY)
+function DraftLab(props: DraftArgs) {
+  const [directory, setDirectory] = createSignal(LAB_DIRECTORY)
 
   return (
     <LocationProvider directory={directory()}>
@@ -69,7 +69,7 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
     on(
       () => props.location,
       (value) => {
-        props.setDirectory(STORY_DIRECTORY)
+        props.setDirectory(LAB_DIRECTORY)
         setState({
           location: value,
           available: value === "no project" ? [] : projects,
@@ -88,8 +88,8 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
       select,
       add: (title) =>
         pickDirectory({
-          server: STORY_SERVER,
-          location: { directory: STORY_DIRECTORY },
+          server: LAB_SERVER,
+          location: { directory: LAB_DIRECTORY },
           title,
           onSelect: (result) => {
             const directory = Array.isArray(result) ? result[0] : result
@@ -193,9 +193,9 @@ export default {
   args: { location: "main", prompt: "" },
   argTypes: { location: { control: "select", options: Object.keys(worktrees) }, prompt: { control: "text" } },
   render: (args: DraftArgs) => (
-    <DialogStoryRuntime>
-      <DraftStory {...args} />
-    </DialogStoryRuntime>
+    <DialogLabRuntime>
+      <DraftLab {...args} />
+    </DialogLabRuntime>
   ),
 }
 

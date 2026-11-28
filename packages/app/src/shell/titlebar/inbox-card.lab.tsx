@@ -10,7 +10,7 @@ const now = Date.UTC(2026, 10, 3, 12)
 
 const statuses = ["done", "ready", "working", "approval", "input", "failed"] as const satisfies readonly InboxStatus[]
 
-function SessionCardStory(props: {
+function SessionCardLab(props: {
   status: InboxStatus
   selected: boolean
   archived: boolean
@@ -107,7 +107,7 @@ function SessionCardStory(props: {
 export default {
   title: "App/Inbox/Session card",
   id: "app-inbox-session-card",
-  render: SessionCardStory,
+  render: SessionCardLab,
   args: {
     status: "done",
     selected: false,
@@ -176,13 +176,13 @@ export const LongValues = {
 export const Narrow = { args: { width: 136, remote: true } }
 
 export const AllStates = {
-  render: (args: Parameters<typeof SessionCardStory>[0]) => (
+  render: (args: Parameters<typeof SessionCardLab>[0]) => (
     <div class="flex flex-wrap items-start gap-6">
       <For each={[args.status, ...statuses.filter((status) => status !== args.status)]}>
         {(status) => (
           <div class="flex flex-col gap-2">
             <span class="text-[13px] leading-4 text-v2-text-text-muted">{status}</span>
-            <SessionCardStory {...args} status={status} />
+            <SessionCardLab {...args} status={status} />
           </div>
         )}
       </For>

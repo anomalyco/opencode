@@ -99,7 +99,7 @@ export const FromMessage = {
       <div style={{ width: "640px", margin: "48px auto", display: "flex", "flex-direction": "column", gap: "16px" }}>
         <div style={{ display: "flex", "justify-content": "flex-end" }}>
           <img
-            data-story-image="thumbnail"
+            data-lab-image="thumbnail"
             src={src}
             alt="Poster thumbnail"
             onClick={open}
@@ -108,7 +108,7 @@ export const FromMessage = {
         </div>
         <p>Here is the poster for the garden open day, with the new colours.</p>
         <img
-          data-story-image="inline"
+          data-lab-image="inline"
           src={src}
           alt="Garden open day poster"
           onClick={open}
@@ -158,12 +158,12 @@ export const FromVideo = {
 
     return (
       <div
-        data-story-pane
+        data-lab-pane
         style={{ width: "640px", margin: "48px auto", display: "flex", "justify-content": "center" }}
       >
         <video
           ref={video}
-          data-story-video
+          data-lab-video
           muted
           autoplay
           playsinline

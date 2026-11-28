@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("the connect screen can retry a failed health check after scanning a one-time QR code", async ({ mount }) => {
+test("the connect screen can retry a failed health check after scanning a one-time QR code", async ({ mount }) => {
   const component = await mount("app-connect-to-server--retry-after-scan")
   await component.getByRole("button", { name: "Read fixture QR code" }).click()
   await expect(component.getByRole("alert")).toHaveText(
@@ -14,7 +14,7 @@ story("the connect screen can retry a failed health check after scanning a one-t
   await expect(component.getByRole("status")).toHaveText("Connected to https://build.example.test in this preview.")
 })
 
-story("a Keep screen active read that fails offers Try again and keeps the switch enabled", async ({ mount, page }) => {
+test("a Keep screen active read that fails offers Try again and keeps the switch enabled", async ({ mount, page }) => {
   // The page reads three more times, 1, 2 and 4 seconds apart, before it shows the failure.
   await page.clock.install()
   const component = await mount("plugins-pairing--screen-setting-fails")

@@ -1,44 +1,44 @@
-/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- CSF args are props each story owns; the lab forwards them */
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- CSF args are props each page owns; the lab forwards them */
 import { Schema } from "effect"
 import { choice, knob, text, toggle, type Field } from "knobs"
 import type { Component, JSX } from "solid-js"
 
-// Storybook's CSF as the stories in this repository write it: a default meta and named stories with args.
-type StoryArg = string | number | boolean | null | undefined | object
+// Storybook's CSF as the pages in this repository write it: a default meta and named pages with args.
+type LabArg = string | number | boolean | null | undefined | object
 
-export type StoryArgs = { [key: string]: StoryArg }
+export type LabArgs = { [key: string]: LabArg }
 
-type StoryRender = (args: StoryArgs) => JSX.Element
+type StateRender = (args: LabArgs) => JSX.Element
 
 type ArgType = {
   control?: string | { type?: string; min?: number; max?: number; step?: number }
   options?: readonly string[]
 }
 
-// The default export (a meta) and each named story share this shape; a story may also be a bare render function.
-type StoryObject = {
+// The default export (a meta) and each named page share this shape; a page may also be a bare render function.
+type PageExport = {
   title?: string
   name?: string
-  component?: Component<StoryArgs>
-  args?: StoryArgs
+  component?: Component<LabArgs>
+  args?: LabArgs
   argTypes?: { [key: string]: ArgType }
-  render?: StoryRender
-  // `motion` names the Knobs (by id, group or card) the story uses, so the inspector shows them beside its args.
+  render?: StateRender
+  // `motion` names the Knobs (by id, group or card) the page uses, so the inspector shows them beside its args.
   parameters?: { layout?: string; motion?: readonly string[]; gridPreview?: () => JSX.Element }
 }
 
-export type StoryModule = { [name: string]: StoryObject | StoryRender | string[] | undefined }
+export type PageModule = { [name: string]: PageExport | StateRender | string[] | undefined }
 
-/** One named story: a state of its component that the lab can switch to. */
-export type LabState = { name: string; args: StoryArgs; render?: StoryRender }
+/** One named page: a state of its component that the lab can switch to. */
+export type LabState = { name: string; args: LabArgs; render?: StateRender }
 
 export type LabEntry = {
   file: string
   title: string
-  component?: Component<StoryArgs>
-  args: StoryArgs
+  component?: Component<LabArgs>
+  args: LabArgs
   argTypes: { [key: string]: ArgType }
-  render?: StoryRender
+  render?: StateRender
   fullscreen: boolean
   gridPreview?: () => JSX.Element
   motion: readonly string[]
@@ -47,7 +47,7 @@ export type LabEntry = {
 
 /** Loads every Lab page. A file that fails to import is reported rather than hiding the rest. */
 export async function loadLabCatalog(
-  modules: Record<string, () => Promise<StoryModule>>,
+  modules: Record<string, () => Promise<PageModule>>,
   sources: Record<string, () => Promise<string>>,
 ) {
   const files = Object.entries(modules)
@@ -75,8 +75,8 @@ export async function loadLabCatalog(
 
 // A page as the lab shows it. A module lists its exports alphabetically, so `source`, the file's text, gives the
 // order the author wrote the states in.
-export function labEntry(file: string, module: StoryModule, source: string): LabEntry {
-  const meta = isStoryObject(module.default) ? module.default : {}
+export function labEntry(file: string, module: PageModule, source: string): LabEntry {
+  const meta = isPageExport(module.default) ? module.default : {}
   const order = [...source.matchAll(/^export const (\w+)/gm)].map((match) => match[1])
 
   const position = (key: string) => (order.includes(key) ? order.indexOf(key) : order.length)
@@ -86,9 +86,9 @@ export function labEntry(file: string, module: StoryModule, source: string): Lab
     .flatMap(([key, value]): LabState[] => {
       if (key === "default" || key === "__namedExportsOrder" || !value || Array.isArray(value)) return []
 
-      if (isRender(value)) return [{ name: storyName(key), args: {}, render: value }]
+      if (isRender(value)) return [{ name: stateName(key), args: {}, render: value }]
 
-      return [{ name: value.name ?? storyName(key), args: value.args ?? {}, render: value.render }]
+      return [{ name: value.name ?? stateName(key), args: value.args ?? {}, render: value.render }]
     })
 
   return {
@@ -100,7 +100,7 @@ export function labEntry(file: string, module: StoryModule, source: string): Lab
       ...meta.argTypes,
       ...Object.assign(
         {},
-        ...Object.values(module).flatMap((value) => (isStoryObject(value) && value.argTypes ? [value.argTypes] : [])),
+        ...Object.values(module).flatMap((value) => (isPageExport(value) && value.argTypes ? [value.argTypes] : [])),
       ),
     },
     render: meta.render,
@@ -123,7 +123,7 @@ export function stateArgs(entry: LabEntry, index: number) {
 
 /**
  * A knob for every arg the meta or a state sets, typed by its argType or else by its value. Each starts at the first
- * state's value, which the panel's default preset shows. Text and object args keep the story's values: knobs has no
+ * state's value, which the panel's default preset shows. Text and object args keep the page's values: knobs has no
  * text field.
  */
 export function labFields(entry: LabEntry) {
@@ -165,7 +165,7 @@ export function labFields(entry: LabEntry) {
 }
 
 /** The values a state gives those knobs. */
-export function knobArgs(fields: { [key: string]: Field }, args: StoryArgs) {
+export function knobArgs(fields: { [key: string]: Field }, args: LabArgs) {
   return Object.fromEntries(
     Object.keys(fields).flatMap((key) => {
       const value = args[key]
@@ -176,15 +176,15 @@ export function knobArgs(fields: { [key: string]: Field }, args: StoryArgs) {
 }
 
 // Storybook's name for an export: `QuestionAndPermission` reads "Question And Permission".
-function storyName(key: string) {
+function stateName(key: string) {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z])([A-Z][a-z])/g, "$1 $2")
 }
 
-function isRender(value: StoryObject | StoryRender): value is StoryRender {
+function isRender(value: PageExport | StateRender): value is StateRender {
   return value instanceof Function
 }
 
-function isStoryObject(value: StoryObject | StoryRender | string[] | undefined): value is StoryObject {
+function isPageExport(value: PageExport | StateRender | string[] | undefined): value is PageExport {
   return value !== undefined && !Array.isArray(value) && !isRender(value)
 }
 

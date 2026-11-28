@@ -1,8 +1,8 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const fixture = sourceURL(new URL("./file-viewer.fixture.tsx", import.meta.url))
 
-story("updates a text file in place when its props change", async ({ mount, page }) => {
+test("updates a text file in place when its props change", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountTextViewer(40), fixture)
   const root = page.getByTestId("file-viewer-fixture")
@@ -17,7 +17,7 @@ story("updates a text file in place when its props change", async ({ mount, page
   expect(await page.evaluate(async (fixture) => (await import(fixture)).controls.sameHost(), fixture)).toBe(true)
 })
 
-story("windows a medium text file and keeps selection and comment marks", async ({ mount, page }) => {
+test("windows a medium text file and keeps selection and comment marks", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountTextViewer(480), fixture)
   const root = page.getByTestId("file-viewer-fixture")
@@ -37,7 +37,7 @@ story("windows a medium text file and keeps selection and comment marks", async 
   await expect(root.locator('[data-line="400"]')).toBeInViewport()
 })
 
-story(
+test(
   "selects text when dragging over the code and lines when dragging over the line numbers",
   async ({ mount, page }) => {
     await mount("components-markdown--compact-result")
@@ -70,7 +70,7 @@ story(
   },
 )
 
-story("comments on the lines a selection covers, not the next one it ends at", async ({ mount, page }) => {
+test("comments on the lines a selection covers, not the next one it ends at", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountTextViewer(40), fixture)
   const root = page.getByTestId("file-viewer-fixture")
@@ -106,7 +106,7 @@ story("comments on the lines a selection covers, not the next one it ends at", a
     ])
 })
 
-story("releases the pinned height when a diff becomes empty", async ({ mount, page }) => {
+test("releases the pinned height when a diff becomes empty", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountChangingDiff(40), fixture)
   const root = page.getByTestId("file-viewer-fixture")
@@ -119,7 +119,7 @@ story("releases the pinned height when a diff becomes empty", async ({ mount, pa
   await expect.poll(pinned).toBe("")
 })
 
-story("scrolls a virtualized diff to an off-screen selection", async ({ mount, page }) => {
+test("scrolls a virtualized diff to an off-screen selection", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountDiffViewer(480), fixture)
   const root = page.getByTestId("file-viewer-fixture")

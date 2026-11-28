@@ -1,6 +1,6 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story(
+test(
   "chooses a worktree for a session whose folder is gone from the shared worktree dialog",
   async ({ mount, page }) => {
     await mount("session-missing-location--many-worktrees")

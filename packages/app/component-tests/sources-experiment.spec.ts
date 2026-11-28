@@ -1,6 +1,6 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { MotionKnob } from "@opencode/ui/motion-tuning"
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -38,12 +38,12 @@ const messages: SessionMessageInfo[] = [
   },
 ]
 
-story.beforeEach(async ({ mount }) => {
-  // Any story loads the app; the fixture mounts the real host beside it.
+test.beforeEach(async ({ mount }) => {
+  // Any page loads the app; the fixture mounts the real host beside it.
   await mount("ui-line-comment--editor")
 })
 
-story("turning the Sources experiment off closes its open panel and loads no more site icons", async ({ page }) => {
+test("turning the Sources experiment off closes its open panel and loads no more site icons", async ({ page }) => {
   // Site icons stay off the network, and load, so each stays an image until the experiment turns off.
   await page.route("**/favicon.ico", (route) =>
     route.fulfill({

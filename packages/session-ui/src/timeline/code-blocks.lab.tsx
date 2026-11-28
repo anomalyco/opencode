@@ -1,8 +1,8 @@
 import { createSignal } from "solid-js"
 import type { SessionDocument } from "../document"
 import { MarkdownProvider } from "../context/markdown"
-import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
+import { CURRENT_SESSION_ID, LAB_MODEL, LAB_TIME } from "../lab/current-session-fixtures"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
 import { SessionTimeline } from "./session-timeline"
 
 export default {
@@ -56,30 +56,30 @@ function CodeBlockTimeline(props: { wrap: boolean }) {
         id: "msg_code_blocks_earlier_user",
         type: "user",
         text: "Does the type check pass locally?",
-        time: { created: STORY_TIME },
-        metadata: { agent: "build", model: STORY_MODEL },
+        time: { created: LAB_TIME },
+        metadata: { agent: "build", model: LAB_MODEL },
       },
       {
         id: "msg_code_blocks_earlier_assistant",
         type: "assistant",
         agent: "build",
-        model: STORY_MODEL,
-        time: { created: STORY_TIME + 100, completed: STORY_TIME + 2000 },
+        model: LAB_MODEL,
+        time: { created: LAB_TIME + 100, completed: LAB_TIME + 2000 },
         content: [{ type: "text", text: earlier }],
       },
       {
         id: "msg_code_blocks_user",
         type: "user",
         text: "Why does the type check fail on CI but not locally?",
-        time: { created: STORY_TIME + 3000 },
-        metadata: { agent: "build", model: STORY_MODEL },
+        time: { created: LAB_TIME + 3000 },
+        metadata: { agent: "build", model: LAB_MODEL },
       },
       {
         id: "msg_code_blocks_assistant",
         type: "assistant",
         agent: "build",
-        model: STORY_MODEL,
-        time: { created: STORY_TIME + 3100, completed: STORY_TIME + 7000 },
+        model: LAB_MODEL,
+        time: { created: LAB_TIME + 3100, completed: LAB_TIME + 7000 },
         content: [{ type: "text", text: reply }],
       },
     ],

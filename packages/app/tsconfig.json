@@ -28,7 +28,7 @@
     "src",
     "component-tests",
     "playwright.components.config.ts",
-    "../stories/playwright/*.ts",
+    "../lab/playwright/*.ts",
     "package.json"
   ],
   "exclude": ["dist", "ts-dist"]

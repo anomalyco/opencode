@@ -1,7 +1,7 @@
 import { lazy, Show, Suspense } from "solid-js"
-import type { CommentDelivery } from "../../../stories/mocks/gui-plugins/workspace-panel"
+import type { CommentDelivery } from "../../../lab/mocks/gui-plugins/workspace-panel"
 
-const Panel = lazy(() => import("../../../stories/mocks/gui-plugins/workspace-panel"))
+const Panel = lazy(() => import("../../../lab/mocks/gui-plugins/workspace-panel"))
 
 export default {
   title: "App/Plugins/Files",

@@ -1,7 +1,7 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
-story("renders the moved location notice as a timeline divider", async ({ mount, page }) => {
+test("renders the moved location notice as a timeline divider", async ({ mount, page }) => {
   const directory = `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session`
   await page.setViewportSize({ width: 480, height: 720 })
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "location" } })

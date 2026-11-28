@@ -13,7 +13,7 @@ export const Desktop = {
       <div class="flex flex-col gap-1">
         <h2 class="text-14-medium text-v2-text-text-base">Unused desktop icons · {unusedDesktopIcons.length}</h2>
         <p class="text-[13px] leading-[var(--line-height-base)] text-v2-text-text-muted">
-          Built-in desktop screens don’t use these icons. Stories and installed plugins can still render them.
+          Built-in desktop screens don’t use these icons. Pages and installed plugins can still render them.
         </p>
       </div>
       <ul

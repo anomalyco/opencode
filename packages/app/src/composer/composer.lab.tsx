@@ -1,23 +1,23 @@
 import { Show, createEffect, createMemo, on, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
-import { STORY_MODEL, emptySessionDocument, pendingAndQueuedDocument } from "@opencode/session-ui/storybook"
+import { LAB_MODEL, emptySessionDocument, pendingAndQueuedDocument } from "@opencode/session-ui/lab"
 import { Composer } from "./composer"
 import type { ComposerModel } from "./model"
 import { createComposerEditor } from "./editor/interaction"
 import type { ComposerHistory, ComposerPersistedState, ComposerSuggestion } from "./types"
 import { buildPromptRequest } from "./request"
 import { promptLength } from "./prompt-parts"
-import { SessionPreview } from "@/session/story-model"
+import { SessionPreview } from "@/session/lab-model"
 import { Skill } from "@opencode/schema/skill"
 import { resolveSessionComposerSelection } from "@/session/composer/selection"
 
 const pixel = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
 
 const selectedModel = {
-  id: STORY_MODEL.id,
-  providerID: STORY_MODEL.providerID,
-  api: { id: STORY_MODEL.id, url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+  id: LAB_MODEL.id,
+  providerID: LAB_MODEL.providerID,
+  api: { id: LAB_MODEL.id, url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
   name: "Claude Sonnet 4",
   family: "claude-sonnet",
   capabilities: {
@@ -37,7 +37,7 @@ const selectedModel = {
   release_date: "2025-05-22",
   variants: { balanced: {}, high: {} },
   provider: {
-    id: STORY_MODEL.providerID,
+    id: LAB_MODEL.providerID,
     name: "Anthropic",
     source: "custom",
     env: [],
@@ -47,7 +47,7 @@ const selectedModel = {
   latest: true,
 } satisfies NonNullable<ReturnType<ModelSelection["current"]>>
 
-function ComposerStory(props: {
+function ComposerLab(props: {
   prompt?: ComposerPersistedState["prompt"]
   comments?: ComposerPersistedState["context"]["items"]
   working?: boolean
@@ -63,7 +63,7 @@ function ComposerStory(props: {
   manySuggestions?: boolean
   history?: boolean
   many?: boolean
-  /** File search waits for the story's "Return files" button, like a slow server. */
+  /** File search waits for the page's "Return files" button, like a slow server. */
   fileSearch?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
 }) {
@@ -73,13 +73,13 @@ function ComposerStory(props: {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
     cursor: props.prompt ? promptLength(props.prompt) : 0,
-    model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: STORY_MODEL.variant },
+    model: { providerID: LAB_MODEL.providerID, modelID: LAB_MODEL.id, variant: LAB_MODEL.variant },
     context: { items: props.comments ?? [] },
   })
 
-  const [story, setStory] = createStore({
+  const [lab, setLab] = createStore({
     activity: props.label ?? "Ready",
-    variant: STORY_MODEL.variant,
+    variant: LAB_MODEL.variant,
   })
 
   const modelOption = createMemo(() => ({
@@ -99,10 +99,10 @@ function ComposerStory(props: {
     visible: () => true,
     setVisibility() {},
     variant: {
-      configured: () => STORY_MODEL.variant,
-      current: () => story.variant,
+      configured: () => LAB_MODEL.variant,
+      current: () => lab.variant,
       list: () => ["balanced", "high"],
-      set: (variant: string | undefined) => setStory("variant", variant ?? "balanced"),
+      set: (variant: string | undefined) => setLab("variant", variant ?? "balanced"),
       cycle() {},
     },
   } satisfies ModelSelection
@@ -159,7 +159,7 @@ function ComposerStory(props: {
       if (!props.fileSearch) return []
 
       return new Promise<ComposerSuggestion[]>((resolve) => {
-        returnFiles = () => resolve(query.includes("z") ? [] : storyFiles(query))
+        returnFiles = () => resolve(query.includes("z") ? [] : labFiles(query))
         setFileSearch("pending", query)
         signal?.addEventListener("abort", () => setFileSearch("pending", undefined), { once: true })
       })
@@ -220,7 +220,7 @@ function ComposerStory(props: {
           { id: "review", label: "review" },
         ],
         current: () => "build",
-        onSelect: (agent) => setStory("activity", `Selected ${agent}`),
+        onSelect: (agent) => setLab("activity", `Selected ${agent}`),
       },
       variant: {
         options: () => [
@@ -228,8 +228,8 @@ function ComposerStory(props: {
           { id: "balanced", label: props.longLabels ? "Balanced reasoning with an extended label" : "balanced" },
           { id: "high", label: "high" },
         ],
-        current: () => story.variant,
-        onSelect: (variant) => setStory("variant", variant),
+        current: () => lab.variant,
+        onSelect: (variant) => setLab("variant", variant),
       },
       submit: {
         stopping: () => !!props.stopping,
@@ -271,19 +271,19 @@ function ComposerStory(props: {
 
           if (props.failure) {
             setDraft("prompt", props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }])
-            setStory("activity", "Submission failed; draft restored")
+            setLab("activity", "Submission failed; draft restored")
 
             return
           }
 
-          setStory(
+          setLab(
             "activity",
             request
               ? JSON.stringify({ files: request.files, agents: request.agents, skills: request.skills })
               : `Submitted: ${value}`,
           )
         },
-        onStop: () => setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
+        onStop: () => setLab("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
       },
     },
   })
@@ -305,7 +305,7 @@ function ComposerStory(props: {
     if (props.suggestions === "command" || props.suggestions === "context") suggest(props.suggestions)
   })
 
-  // The Lab keeps this story mounted across states that differ only in args, so the composer follows them
+  // The Lab keeps this page mounted across states that differ only in args, so the composer follows them
   // in place and its own transitions play. The prompt is compared by value: the lab updates its args store in place.
   // One effect, so the prompt lands before the suggestions open on it: an empty draft opens them inline, typing the
   // trigger, so a change of either starts over from the state's prompt.
@@ -324,7 +324,7 @@ function ComposerStory(props: {
   createEffect(
     on(
       () => props.label,
-      (label) => setStory("activity", label ?? "Ready"),
+      (label) => setLab("activity", label ?? "Ready"),
       { defer: true },
     ),
   )
@@ -335,7 +335,7 @@ function ComposerStory(props: {
       style={{ "min-height": props.many ? "512px" : undefined }}
     >
       <output class="text-12-regular text-text-weak" aria-live="polite">
-        {story.activity}
+        {lab.activity}
       </output>
       <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
       <Show when={props.fileSearch}>
@@ -360,7 +360,7 @@ const text = (content: string): ComposerPersistedState["prompt"] => [
   { type: "text", content, start: 0, end: content.length },
 ]
 
-const storyFiles = (query: string): ComposerSuggestion[] =>
+const labFiles = (query: string): ComposerSuggestion[] =>
   ["plan.md", "notes.md", "capture.ts", "corpus.ts", "cursor.png", "claude.png"].map((name) => {
     const path = `${query}/${name}`
 
@@ -404,7 +404,7 @@ export default {
     suggestions: { control: "select", options: ["none", "command", "context"] },
     alternate: { control: "select", options: ["none", "queue", "steer"] },
   },
-  render: (args: FlowArgs) => <ComposerStory {...args} />,
+  render: (args: FlowArgs) => <ComposerLab {...args} />,
 }
 
 export const EmptyDraft = {}
@@ -413,7 +413,7 @@ export const PromptHistory = {
   args: { many: false },
   render: (args: FlowArgs) => (
     <div class="w-[min(640px,calc(100vw-32px))]">
-      <ComposerStory {...args} history />
+      <ComposerLab {...args} history />
     </div>
   ),
 }
@@ -424,7 +424,7 @@ export const MultilineDraft = { args: { prompt: text("Review the implementation\
 
 export const MixedAttachments = {
   render: (args: FlowArgs) => (
-    <ComposerStory
+    <ComposerLab
       {...args}
       prompt={[
         { type: "text", content: "Review ", start: 0, end: 7 },
@@ -442,14 +442,14 @@ export const MixedAttachments = {
         },
         {
           type: "image",
-          id: "image-story",
+          id: "image-lab",
           filename: "layout.png",
           mime: "image/png",
-          blob: { id: "image-story", url: pixel },
+          blob: { id: "image-lab", url: pixel },
         },
         {
           type: "path",
-          id: "path-image-story",
+          id: "path-image-lab",
           filename: "screenshot.png",
           mime: "image/png",
           path: "C:/shots/screenshot.png",
@@ -470,14 +470,14 @@ export const MixedAttachments = {
 
 export const BrowserElementComment = {
   render: (args: FlowArgs) => (
-    <ComposerStory
+    <ComposerLab
       {...args}
       prompt={text("Tidy up the settings page")}
       comments={[
         {
           type: "note",
-          key: "note:story:c=save",
-          origin: "story",
+          key: "note:lab:c=save",
+          origin: "lab",
           label: "button.btn.primary",
           icon: "select-element",
           subject:
@@ -503,22 +503,22 @@ export const SlashSuggestions = { args: { suggestions: "command" } }
 
 export const ContextSuggestions = { args: { suggestions: "context" } }
 
-export const SlowFileSearch = { render: (args: FlowArgs) => <ComposerStory {...args} fileSearch /> }
+export const SlowFileSearch = { render: (args: FlowArgs) => <ComposerLab {...args} fileSearch /> }
 
-function ConstrainedCommandSuggestionsStory(props: FlowArgs) {
+function ConstrainedCommandSuggestionsLab(props: FlowArgs) {
   let boundary: HTMLDivElement | undefined
 
   return (
     <div class="mx-auto w-full max-w-200">
-      <div ref={boundary} data-slot="composer-suggestion-boundary-story" class="h-60" />
-      <ComposerStory {...props} manySuggestions suggestionBoundary={() => boundary} />
+      <div ref={boundary} data-slot="composer-suggestion-boundary-lab" class="h-60" />
+      <ComposerLab {...props} manySuggestions suggestionBoundary={() => boundary} />
     </div>
   )
 }
 
 export const ConstrainedCommandSuggestions = {
   args: { suggestions: "command" },
-  render: (args: FlowArgs) => <ConstrainedCommandSuggestionsStory {...args} />,
+  render: (args: FlowArgs) => <ConstrainedCommandSuggestionsLab {...args} />,
 }
 
 export const DetachedCommandSuggestionBoundary = {
@@ -526,7 +526,7 @@ export const DetachedCommandSuggestionBoundary = {
   render: (args: FlowArgs) => {
     const detached = document.createElement("div")
 
-    return <ComposerStory {...args} manySuggestions suggestionBoundary={() => detached} />
+    return <ComposerLab {...args} manySuggestions suggestionBoundary={() => detached} />
   },
 }
 
@@ -556,7 +556,7 @@ export const NarrowLayout = {
   args: { prompt: text("Verify the narrow Composer") },
   render: (args: FlowArgs) => (
     <div class="w-[340px]">
-      <ComposerStory {...args} />
+      <ComposerLab {...args} />
     </div>
   ),
 }
@@ -565,7 +565,7 @@ export const ToolbarOverflow = {
   args: { alternate: "queue", working: true, prompt: text("Keep all controls reachable when the toolbar overflows") },
   render: (args: FlowArgs) => (
     <div class="w-[min(420px,calc(100vw-80px))]">
-      <ComposerStory {...args} longLabels />
+      <ComposerLab {...args} longLabels />
     </div>
   ),
 }
@@ -578,7 +578,7 @@ export const DemoFirstClassSkillIDs = {
       title="First-class skill IDs"
       description="Choose @effect, then Send. The output shows the durable skill ID sent to the prompt API."
     >
-      <ComposerStory {...args} inspectRequest />
+      <ComposerLab {...args} inspectRequest />
     </DemoFrame>
   ),
 }
@@ -590,7 +590,7 @@ export const DemoStructuredCustomCommand = {
       title="Structured custom-command input"
       description="Send the draft. Files, agents, and skills remain structured instead of becoming plain command text."
     >
-      <ComposerStory
+      <ComposerLab
         {...args}
         inspectRequest
         prompt={[
@@ -637,7 +637,7 @@ export const DemoContinueOnStop = {
       title="Continue admitted work after Stop"
       description="Press Stop. The output shows the interrupt request used by the active Session adapter."
     >
-      <ComposerStory {...args} continueOnStop />
+      <ComposerLab {...args} continueOnStop />
     </DemoFrame>
   ),
 }
@@ -758,7 +758,7 @@ function SelectionPrecedenceDemo(props: FlowArgs) {
         >
           {store.durable ? "Remove durable Session state" : "Restore durable Session state"}
         </button>
-        <ComposerStory {...props} />
+        <ComposerLab {...props} />
       </div>
     </DemoFrame>
   )

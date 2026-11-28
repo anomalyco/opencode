@@ -1,12 +1,12 @@
-import { expect, sourceURL, story } from "../../stories/playwright/story"
+import { expect, sourceURL, test } from "../../lab/playwright/test"
 
 const toastModule = sourceURL(new URL("../../ui/src/feedback/toast/toast.tsx", import.meta.url))
 
-story.beforeEach(async ({ mount }) => {
+test.beforeEach(async ({ mount }) => {
   await mount("ui-toast--all-examples")
 })
 
-story("keeps toasts hidden behind the stack out of reach of the keyboard", async ({ page }) => {
+test("keeps toasts hidden behind the stack out of reach of the keyboard", async ({ page }) => {
   await page.evaluate(async (toastModule) => {
     const { showToast } = await import(toastModule)
     const titles = ["First", "Second", "Third", "Fourth"]

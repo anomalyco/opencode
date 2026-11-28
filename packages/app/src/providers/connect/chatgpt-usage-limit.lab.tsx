@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import { DialogChatGPTUsageLimit } from "./chatgpt-usage-limit"
 
-function UsageLimitStory(props: { workspace?: boolean }) {
+function UsageLimitLab(props: { workspace?: boolean }) {
   const dialog = useDialog()
   const open = () => dialog.show(() => <DialogChatGPTUsageLimit workspace={props.workspace} />)
   onMount(open)
@@ -20,6 +20,6 @@ export default {
   id: "app-dialog-chatgpt-usage-limit",
 }
 
-export const ChatGPTUsageLimit = { render: () => <UsageLimitStory /> }
+export const ChatGPTUsageLimit = { render: () => <UsageLimitLab /> }
 
-export const ChatGPTWorkspaceUsageLimit = { render: () => <UsageLimitStory workspace /> }
+export const ChatGPTWorkspaceUsageLimit = { render: () => <UsageLimitLab workspace /> }

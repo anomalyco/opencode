@@ -1,8 +1,8 @@
 import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createTwoFilesPatch } from "diff"
-import { CurrentSessionProviders } from "../storybook/current-session-story"
-import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { CurrentSessionProviders } from "../lab/current-session-lab"
+import { labDocument, labTool } from "../lab/current-session-scenarios"
 import { type ContextGroupPart, CurrentContextToolGroup } from "./tool-renderer"
 
 export default {
@@ -18,21 +18,21 @@ export const MixedTools = {
     createEffect(() => setOpen(args.open))
 
     const tools = [
-      storyTool(
+      labTool(
         "group_shell",
         "shell",
         "completed",
         { command: "printf 'group geometry'" },
         { output: "group geometry" },
       ),
-      storyTool("group_read", "read", "completed", { path: "src/group.ts" }),
-      storyTool("group_general", "subagent", "completed", { agent: "general", description: "Inspect grouped tools" }),
-      storyTool("group_explore", "subagent", "completed", { agent: "explore", description: "Check card geometry" }),
+      labTool("group_read", "read", "completed", { path: "src/group.ts" }),
+      labTool("group_general", "subagent", "completed", { agent: "general", description: "Inspect grouped tools" }),
+      labTool("group_explore", "subagent", "completed", { agent: "explore", description: "Check card geometry" }),
     ]
 
     return (
       <section style={{ width: "100%", "max-width": "720px", padding: "24px" }}>
-        <CurrentSessionProviders document={storyDocument(tools)}>
+        <CurrentSessionProviders document={labDocument(tools)}>
           <CurrentContextToolGroup parts={tools} busy={false} open={open()} onOpenChange={setOpen} />
         </CurrentSessionProviders>
       </section>
@@ -43,11 +43,11 @@ export const MixedTools = {
 export const NoticesOnly = {
   render: () => {
     const [open, setOpen] = createStore({ tools: false, notices: false })
-    const tools = [storyTool("notice_read", "read", "completed", { path: "AGENTS.md" })]
+    const tools = [labTool("notice_read", "read", "completed", { path: "AGENTS.md" })]
 
     return (
       <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
-        <CurrentSessionProviders document={storyDocument(tools)}>
+        <CurrentSessionProviders document={labDocument(tools)}>
           <CurrentContextToolGroup
             parts={tools}
             busy={false}
@@ -76,21 +76,21 @@ export const MixedReasoning = {
     createEffect(() => setAppended(args.appended))
 
     const parts = createMemo<ContextGroupPart[]>(() => [
-      storyTool("reasoning_read", "read", "completed", { path: "src/group.ts" }),
+      labTool("reasoning_read", "read", "completed", { path: "src/group.ts" }),
       {
         type: "reasoning",
         id: "reasoning_first",
         text: "The renderer groups adjacent tools. Check the relevant skills before changing it.",
       },
-      storyTool("reasoning_skill_first", "skill", "completed", { id: "opencode" }),
-      storyTool("reasoning_skill_second", "skill", "completed", { id: "frontend-design" }),
+      labTool("reasoning_skill_first", "skill", "completed", { id: "opencode" }),
+      labTool("reasoning_skill_second", "skill", "completed", { id: "frontend-design" }),
       {
         type: "reasoning",
         id: "reasoning_second",
         text: "Keep these skill groups separate so the reasoning stays in chronological order.",
       },
-      storyTool("reasoning_skill_third", "skill", "completed", { id: "rtl-aware-development" }),
-      ...(appended() ? [storyTool("reasoning_read_next", "read", "completed", { path: "src/group.test.ts" })] : []),
+      labTool("reasoning_skill_third", "skill", "completed", { id: "rtl-aware-development" }),
+      ...(appended() ? [labTool("reasoning_read_next", "read", "completed", { path: "src/group.test.ts" })] : []),
     ])
 
     return (
@@ -98,7 +98,7 @@ export const MixedReasoning = {
         <button type="button" onClick={() => setAppended((value) => !value)}>
           {appended() ? "Remove follow-up read" : "Append follow-up read"}
         </button>
-        <CurrentSessionProviders document={storyDocument(parts())}>
+        <CurrentSessionProviders document={labDocument(parts())}>
           <CurrentContextToolGroup
             parts={parts()}
             busy={false}
@@ -122,13 +122,13 @@ export const CountRollover = {
 
     const parts = createMemo(() =>
       Array.from({ length: state.count }, (_, index) =>
-        storyTool(`rollover_read_${index}`, "read", "completed", { path: `src/file-${index}.ts` }),
+        labTool(`rollover_read_${index}`, "read", "completed", { path: `src/file-${index}.ts` }),
       ),
     )
 
     // Created once, like a cached session timeline: detaching removes it from the page but keeps it updating.
     const group = (
-      <CurrentSessionProviders document={storyDocument(parts())}>
+      <CurrentSessionProviders document={labDocument(parts())}>
         <CurrentContextToolGroup
           parts={parts()}
           busy={false}
@@ -174,7 +174,7 @@ const stickySource = (lines: number, changed: boolean) =>
   ).join("")
 
 const stickyParts: ContextGroupPart[] = [
-  storyTool("sticky_write", "write", "completed", { path: "graph.js", content: stickySource(137, false) }),
+  labTool("sticky_write", "write", "completed", { path: "graph.js", content: stickySource(137, false) }),
   ...Array.from({ length: 36 }, (_, index): ContextGroupPart[] => [
     {
       type: "reasoning",
@@ -183,7 +183,7 @@ const stickyParts: ContextGroupPart[] = [
       time: { created: 0, completed: ((index * 7) % 5) * 1000 + 1000 },
     },
     index === 18
-      ? storyTool(
+      ? labTool(
           "sticky_edit",
           "edit",
           "completed",
@@ -195,14 +195,14 @@ const stickyParts: ContextGroupPart[] = [
           {},
         )
       : index % 6 === 5
-        ? storyTool(
+        ? labTool(
             `sticky_grep_${index}`,
             "grep",
             "completed",
             { path: "C:/tmp/opencode/stack/packages/plugin-review-desktop/", pattern: 'turn"|lastTurn|session\\.diff' },
             { metadata: { matches: 4 } },
           )
-        : storyTool(
+        : labTool(
             `sticky_shell_${index}`,
             "shell",
             "completed",
@@ -220,7 +220,7 @@ export const StickyHeader = {
 
     return (
       <section
-        data-story="sticky-header-scroll"
+        data-lab="sticky-header-scroll"
         class="relative w-full max-w-[1030px] overflow-y-auto bg-v2-background-bg-base"
         style={{ height: `${args.height}px`, "--sticky-accordion-top": "48px" }}
       >
@@ -233,7 +233,7 @@ export const StickyHeader = {
         </div>
         <div class="pointer-events-none sticky top-12 z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]" />
         <div class="px-6" style={{ "padding-bottom": `${args.height}px` }}>
-          <CurrentSessionProviders document={storyDocument(stickyParts.filter((part) => part.type === "tool"))}>
+          <CurrentSessionProviders document={labDocument(stickyParts.filter((part) => part.type === "tool"))}>
             <CurrentContextToolGroup
               parts={stickyParts}
               busy={false}
@@ -276,8 +276,8 @@ export const PatchFollowUps = {
     })
 
     const parts = createMemo<ContextGroupPart[]>(() => [
-      storyTool("patch_shell", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
-      storyTool(
+      labTool("patch_shell", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
+      labTool(
         "patch_first",
         "patch",
         "completed",
@@ -290,10 +290,10 @@ export const PatchFollowUps = {
         ? []
         : [
             ...(args.separator === "shell"
-              ? [storyTool("patch_separator", "shell", "completed", { command: "printf checked" })]
+              ? [labTool("patch_separator", "shell", "completed", { command: "printf checked" })]
               : []),
             ...(args.separator === "error"
-              ? [storyTool("patch_error", "patch", "error", {}, { error: "Patch failed" })]
+              ? [labTool("patch_error", "patch", "error", {}, { error: "Patch failed" })]
               : []),
             ...(args.separator === "reasoning" && state.reasoning
               ? [
@@ -304,7 +304,7 @@ export const PatchFollowUps = {
                   },
                 ]
               : []),
-            storyTool(
+            labTool(
               "patch_next",
               "patch",
               state.phase === "running" ? "running" : "completed",
@@ -331,7 +331,7 @@ export const PatchFollowUps = {
             </button>
           </Show>
         </div>
-        <CurrentSessionProviders document={storyDocument(parts())}>
+        <CurrentSessionProviders document={labDocument(parts())}>
           <CurrentContextToolGroup
             parts={parts()}
             busy={state.phase === "running"}

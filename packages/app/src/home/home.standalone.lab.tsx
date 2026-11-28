@@ -1,7 +1,7 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { createEffect, createMemo, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DialogStoryRuntime, STORY_PROJECTS, STORY_SERVER } from "@/lab/dialog-story-runtime"
+import { DialogLabRuntime, LAB_PROJECTS, LAB_SERVER } from "@/lab/dialog-runtime"
 import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import { useServer } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -18,7 +18,7 @@ const scenarios = ["populated", "loading", "empty", "offline"] as const
 
 type HomeArgs = { scenario: (typeof scenarios)[number]; project: string; search: string }
 
-const projects = STORY_PROJECTS.map(normalizeProjectInfo)
+const projects = LAB_PROJECTS.map(normalizeProjectInfo)
 
 function recentSessions(): SessionInfo[] {
   const titles = [
@@ -49,7 +49,7 @@ function recentSessions(): SessionInfo[] {
   })
 }
 
-function HomeStory(props: HomeArgs) {
+function HomeLab(props: HomeArgs) {
   const server = useServer()
 
   const language = useLanguage()
@@ -98,8 +98,8 @@ function HomeStory(props: HomeArgs) {
       focusServer: () => setDirectory(undefined),
     },
     server: {
-      list: () => [STORY_SERVER],
-      focused: () => STORY_SERVER,
+      list: () => [LAB_SERVER],
+      focused: () => LAB_SERVER,
       health: () => (state.scenario === "offline" ? { type: "unreachable" } : { type: "healthy" }),
       label: () => "This computer",
       context: () => server.ctx,
@@ -239,11 +239,11 @@ export default {
     search: { control: "select", options: ["none", "review", "worktree", "billing"] },
   },
   render: (args: HomeArgs) => (
-    <DialogStoryRuntime>
+    <DialogLabRuntime>
       <SettingsSurfaceProvider>
-        <HomeStory {...args} />
+        <HomeLab {...args} />
       </SettingsSurfaceProvider>
-    </DialogStoryRuntime>
+    </DialogLabRuntime>
   ),
 }
 

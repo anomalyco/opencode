@@ -1,13 +1,13 @@
-import { expect, story } from "../../stories/playwright/story"
+import { expect, test } from "../../lab/playwright/test"
 
-story("keeps the open Used header below the session title while scrolling", async ({ mount }) => {
+test("keeps the open Used header below the session title while scrolling", async ({ mount }) => {
   const root = await mount("current-tool-group--sticky-header", { args: { height: "720" } })
-  const scroller = root.locator('[data-story="sticky-header-scroll"]')
+  const scroller = root.locator('[data-lab="sticky-header-scroll"]')
   const header = root.getByRole("button", { name: "Used 37 Write, Shell, Grep, Edit", exact: true })
 
   const top = (locator: typeof header) =>
     locator.evaluate((node) => {
-      const scroller = node.closest('[data-story="sticky-header-scroll"]')!
+      const scroller = node.closest('[data-lab="sticky-header-scroll"]')!
 
       return node.getBoundingClientRect().top - scroller.getBoundingClientRect().top
     })
@@ -24,7 +24,7 @@ story("keeps the open Used header below the session title while scrolling", asyn
     .poll(() => file.evaluate((node) => node.parentElement!.getBoundingClientRect().height))
     .toBeGreaterThan(400)
   await file.evaluate((node) => {
-    const scroller = node.closest<HTMLElement>('[data-story="sticky-header-scroll"]')!
+    const scroller = node.closest<HTMLElement>('[data-lab="sticky-header-scroll"]')!
     scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 60
   })
   await expect.poll(() => top(header)).toBe(48)

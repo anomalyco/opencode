@@ -10,11 +10,11 @@ import {
   questionPendingDocument,
   retryDocument,
   streamingDocument,
-  STORY_TIME,
+  LAB_TIME,
   subagentDocument,
   terminalPassedDocument,
-} from "@opencode/session-ui/storybook"
-import { SessionPreview } from "./story-model"
+} from "@opencode/session-ui/lab"
+import { SessionPreview } from "./lab-model"
 import type { SubagentStatus } from "./composer/subagent-bar"
 
 const description = "opencode · modular-session-ui"
@@ -24,7 +24,7 @@ const retryAfterInterruption = {
   messages: [
     ...compactionDocument.messages,
     ...retryDocument.messages.map((message, index) => {
-      const created = STORY_TIME + 70_000 + index * 1_000
+      const created = LAB_TIME + 70_000 + index * 1_000
 
       if (message.type !== "assistant" || !message.retry) {
         return { ...message, time: { ...message.time, created } }

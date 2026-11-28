@@ -7,7 +7,7 @@ const projects = [
   "Documentation",
   "Release notes",
   "Release tools",
-  "Story browser",
+  "Page browser",
 ]
 
 const matches = (project: string, query: string) => project.toLowerCase().includes(query.toLowerCase())
