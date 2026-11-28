@@ -3,6 +3,7 @@ import { queryOptions, skipToken } from "@tanstack/solid-query"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import type { LocalProject } from "@/shell/state/layout"
+import { ProjectID } from "@opencode/schema/project-id"
 import { workspaceSelectionDirectories } from "@/workspaces/paths"
 import { isSessionNotFoundError } from "@/runtime/server/errors"
 import { looksLikeSessionID } from "@/session/search"
@@ -46,9 +47,10 @@ export function projectSessionsQuery(
   ctx: ServerCtx | undefined,
   directories: string[] | undefined,
   search = "",
+  project?: string,
 ) {
   return queryOptions({
-    queryKey: ["project-sessions", conn, directories, search] as const,
+    queryKey: ["project-sessions", conn, directories, search, project] as const,
     retry: false,
     gcTime: 30_000,
     queryFn:
@@ -67,10 +69,15 @@ export function projectSessionsQuery(
             }
 
             const results = await Promise.allSettled(
-              directories.map((directory) =>
+              [
+                ...directories.map((directory) => ({ directory })),
+                // Directory lists match exactly, so the project ID also finds sessions in its subfolders.
+                // The shared global project spans unrelated folders and is left to the directory lists.
+                ...(project && project !== ProjectID.global ? [{ project }] : []),
+              ].map((filter) =>
                 ctx.sdk.api.session.list(
                   {
-                    directory,
+                    ...filter,
                     parentID: null,
                     limit: HOME_SESSION_INDEX_LIMIT,
                     order: "desc",
