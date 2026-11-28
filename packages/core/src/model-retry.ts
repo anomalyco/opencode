@@ -48,6 +48,18 @@ const UNREACHABLE_GAP_MAX = 30_000
 export const isUnreachable = (error: AIError) =>
   error.reason._tag === "Transport" && error.reason.code !== undefined && UNREACHABLE_CODES.has(error.reason.code)
 
+// A response that died while being read: the network path (a proxy, load balancer, or VPN) is closing a
+// healthy connection, usually on an idle or read timeout. Re-running the step cannot change the path.
+// WebSocket reads and provider-protocol rejections (delivery "rejected") are the provider's behavior, not
+// the path's; unreachable hosts and read timeouts keep their own budgets.
+export const isMidstreamTransport = (error: AIError) =>
+  error.reason._tag === "Transport" &&
+  error.reason.transport === "http" &&
+  error.reason.operation === "read" &&
+  error.reason.delivery !== "rejected" &&
+  error.reason.code !== "Timeout" &&
+  !isUnreachable(error)
+
 const unreachableSchedule = Schedule.max([
   Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced(Duration.millis(UNREACHABLE_GAP_MAX))]),
   Schedule.during(UNREACHABLE_WINDOW),
@@ -64,11 +76,17 @@ const unreachableSchedule = Schedule.max([
 // dead provider hold a call for most of an hour. Cap those attempts well below it.
 const MAX_TIMEOUT_RETRIES = 3
 
+// A mid-response drop will drop again the same way on every attempt, and each retry re-runs the whole
+// step (re-billing it), so these get a small budget of their own; once it is spent, the session error
+// names the network path as the cause.
+const MAX_MIDSTREAM_TRANSPORT_RETRIES = 2
+
 export const policy = Effect.gen(function* () {
   const step = yield* Schedule.toStep(schedule)
   const unreachable = yield* Schedule.toStep(unreachableSchedule)
   let attempt = 1
   let timeouts = 0
+  let midstream = 0
   return (input: Input) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis
@@ -80,10 +98,11 @@ export const policy = Effect.gen(function* () {
       const [, duration] = next
       attempt++
       if (input.cause.reason._tag === "Transport" && input.cause.reason.code === "Timeout") timeouts++
+      if (isMidstreamTransport(input.cause)) midstream++
       return {
         attempt,
         delay: Math.ceil(Duration.toMillis(duration)),
-        retry: input.retry && timeouts <= MAX_TIMEOUT_RETRIES,
+        retry: input.retry && timeouts <= MAX_TIMEOUT_RETRIES && midstream <= MAX_MIDSTREAM_TRANSPORT_RETRIES,
       }
     })
 })

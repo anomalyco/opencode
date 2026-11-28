@@ -62,6 +62,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.content-filter", cause.reason)
       case "Transport":
         if (ModelRetry.isUnreachable(cause)) return unreachable(cause.reason)
+        if (ModelRetry.isMidstreamTransport(cause)) return midstream(cause.reason)
         return providerError("provider.transport", cause.reason)
       case "ProviderInternal":
         return providerError("provider.internal", cause.reason)
@@ -142,6 +143,15 @@ function unreachable(reason: AIError["reason"]): SessionError.Error {
   return {
     ...providerError("provider.transport", reason),
     message: `Can't reach ${host || "the provider"}. Check the network connection. (${reason.message})`,
+  }
+}
+
+// The connection died while the response was being read: the network path, not the model, is the problem,
+// so name it and point at what typically cuts long-lived connections.
+function midstream(reason: AIError["reason"]): SessionError.Error {
+  return {
+    ...providerError("provider.transport", reason),
+    message: `The provider dropped the connection while sending the response. Check the idle or read timeout of any proxy, load balancer, or VPN on the path. (${reason.message})`,
   }
 }
 

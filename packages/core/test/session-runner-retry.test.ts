@@ -32,6 +32,44 @@ const refused = new AIError({
     code: "ECONNREFUSED",
   }),
 })
+const midstreamDrop = new AIError({
+  reason: new TransportError({
+    message: "Connection lost while reading the response: ECONNRESET",
+    transport: "http",
+    operation: "read",
+    code: "ECONNRESET",
+    url: "https://provider.example/v1/chat/completions",
+  }),
+})
+const preRequestDrop = new AIError({
+  reason: new TransportError({ message: "ECONNRESET", transport: "http", operation: "request", code: "ECONNRESET" }),
+})
+const readTimeout = new AIError({
+  reason: new TransportError({ message: "Timed out", transport: "http", operation: "read", code: "Timeout" }),
+})
+const networkDownMidRead = new AIError({
+  reason: new TransportError({ message: "Network is down", transport: "http", operation: "read", code: "ENETDOWN" }),
+})
+const websocketClose = new AIError({
+  reason: new TransportError({
+    message: "WebSocket closed with code 1006",
+    transport: "websocket",
+    operation: "read",
+    phase: "close",
+    code: "1006",
+    delivery: "accepted",
+  }),
+})
+const continuationRejected = new AIError({
+  reason: new TransportError({
+    message: "Continuation rejected",
+    transport: "websocket",
+    operation: "read",
+    phase: "receive",
+    delivery: "rejected",
+    recovery: "retry-full",
+  }),
+})
 
 const input = (cause: AIError) => ({
   cause,
@@ -90,6 +128,42 @@ describe("SessionRunnerRetry.policy", () => {
     }),
   )
 
+  it.effect("stops retrying a mid-response drop after two retries", () =>
+    Effect.gen(function* () {
+      expect(ModelRetry.isMidstreamTransport(midstreamDrop)).toBe(true)
+      expect(yield* decisions(midstreamDrop, 4)).toEqual([true, true, false, false])
+    }),
+  )
+
+  it.effect("keeps a pre-request drop on the general allowance", () =>
+    Effect.gen(function* () {
+      expect(yield* decisions(preRequestDrop, 11)).toEqual([...Array(10).fill(true), false])
+    }),
+  )
+
+  it.effect("keeps a mid-response read timeout on the timeout allowance", () =>
+    Effect.gen(function* () {
+      expect(ModelRetry.isMidstreamTransport(readTimeout)).toBe(false)
+      expect(yield* decisions(readTimeout, 4)).toEqual([true, true, true, false])
+    }),
+  )
+
+  it.effect("keeps a mid-response drop from an unreachable host on the unreachable budget", () =>
+    Effect.gen(function* () {
+      expect(ModelRetry.isMidstreamTransport(networkDownMidRead)).toBe(false)
+      const policy = yield* SessionRunnerRetry.policy(SessionSchema.ID.make("ses_retry"))
+      for (let i = 0; i < 10; i++) expect((yield* policy(input(networkDownMidRead))).retry).toBe(true)
+    }),
+  )
+
+  it.effect("leaves WebSocket closes and rejected continuations on the general allowance", () =>
+    Effect.gen(function* () {
+      expect(ModelRetry.isMidstreamTransport(websocketClose)).toBe(false)
+      expect(ModelRetry.isMidstreamTransport(continuationRejected)).toBe(false)
+      expect(yield* decisions(websocketClose, 11)).toEqual([...Array(10).fill(true), false])
+    }),
+  )
+
   it.effect("doesn't spend the general allowance on an unreachable host", () =>
     Effect.gen(function* () {
       const policy = yield* SessionRunnerRetry.policy(SessionSchema.ID.make("ses_retry"))
@@ -143,5 +217,17 @@ describe("toSessionError", () => {
       message: "Can't reach opencode.ai. Check the network connection. (getaddrinfo ENOTFOUND opencode.ai)",
     })
     expect(toSessionError(refused)).toEqual({ type: "provider.transport", message: "Unable to connect" })
+  })
+
+  test("points at the network path when a response drops mid-stream", () => {
+    expect(toSessionError(midstreamDrop)).toEqual({
+      type: "provider.transport",
+      message:
+        "The provider dropped the connection while sending the response. Check the idle or read timeout of any proxy, load balancer, or VPN on the path. (Connection lost while reading the response: ECONNRESET)",
+    })
+    expect(toSessionError(websocketClose)).toEqual({
+      type: "provider.transport",
+      message: "WebSocket closed with code 1006",
+    })
   })
 })
