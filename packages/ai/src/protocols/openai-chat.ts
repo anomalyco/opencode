@@ -698,7 +698,8 @@ const lowerMessages = Effect.fnUntraced(function* (
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
   for (const message of request.messages) {
-    if (message.role === "user") bridgeTools()
+    // System updates are sent as user messages too, so they need the same bridge after tool results.
+    if (message.role === "user" || message.role === "system") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
       const cacheControl = options.cacheControl?.(part.cache)

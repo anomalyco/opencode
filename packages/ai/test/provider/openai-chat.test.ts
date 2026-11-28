@@ -776,6 +776,38 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("bridges tool results before a system update when required", () =>
+    Effect.gen(function* () {
+      const imageResult = {
+        type: "content" as const,
+        value: [{ type: "file" as const, uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" }],
+      }
+      yield* Effect.forEach(["Edit applied", imageResult], (result) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            ai.request({
+              model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+              messages: [
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "edit", input: {} })]),
+                Message.tool({ id: "call_1", name: "edit", result }),
+                Message.system("Instructions updated: AGENTS.md"),
+              ],
+            }),
+          )
+
+          expect(prepared.body.messages.map((message) => message.role)).toEqual([
+            "assistant",
+            "tool",
+            "assistant",
+            "user",
+          ])
+          expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
+          expect(JSON.stringify(prepared.body.messages[3])).toContain("Instructions updated: AGENTS.md")
+        }),
+      )
+    }),
+  )
+
   it.effect("orders parallel tool responses before one aggregated vision message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
