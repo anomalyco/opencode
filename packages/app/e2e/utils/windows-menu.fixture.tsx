@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import type { Bridge } from "@opencode/plugin/gui/host"
 import { AppBaseProviders, AppInterface } from "../../src/app"
+import type { DesktopCloseChoice } from "../../src/desktop-close"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
@@ -14,6 +15,7 @@ export function mount(input: {
   os?: "macos" | "linux"
   openApps?: boolean
   holdOpen?: boolean
+  closeAction?: DesktopCloseChoice
 }) {
   const root = document.getElementById("root")
 
@@ -26,9 +28,11 @@ export function mount(input: {
       actions: string[]
       opened: { path: string; app?: string }[]
       trafficLights?: { x: number; y: number }
+      closeActions: DesktopCloseChoice[]
     }>({
       actions: [],
       opened: [],
+      closeActions: [],
     })
 
     const unused = async () => {
@@ -65,6 +69,8 @@ export function mount(input: {
       plugins: bridge,
       runDesktopMenuAction: (action) => setStore("actions", (actions) => [...actions, action]),
       setTrafficLightsPosition: async (position) => void setStore("trafficLights", { x: position.x, y: position.y }),
+      getCloseAction: async () => input.closeAction ?? "quit",
+      setCloseAction: (choice) => setStore("closeActions", (actions) => [...actions, choice]),
     }
 
     if (input.openApps) {
@@ -87,6 +93,9 @@ export function mount(input: {
           </output>
           <output aria-label="Traffic lights" class="sr-only">
             {JSON.stringify(store.trafficLights ?? null)}
+          </output>
+          <output aria-label="Close actions" class="sr-only">
+            {store.closeActions.join(",")}
           </output>
           <AppInterface
             servers={[{ type: "sidecar", variant: "base", displayName: "Local Server", http: { url: input.server } }]}

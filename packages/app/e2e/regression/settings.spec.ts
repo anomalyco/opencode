@@ -105,6 +105,28 @@ test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
   await expect(page).toHaveURL("/settings")
 })
 
+test("desktop close action changes from Preferences", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "Close action demo",
+    directory,
+    provider: NO_PROVIDER,
+    sessions: [],
+    seed: { tabs: [] },
+  })
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: "/settings", closeAction: "ask" })}`,
+  )
+
+  const settings = page.getByTestId("settings-screen")
+  const closeAction = settings.locator('[data-action="settings-close-action"]')
+  await expect(closeAction).toBeVisible()
+  await expect(closeAction).toHaveText("Ask every time")
+  await closeAction.click()
+  await page.getByRole("option", { name: "Hide to tray", exact: true }).click()
+  await expect(closeAction).toHaveText("Hide to tray")
+  await expect(page.getByRole("status", { name: "Close actions" })).toHaveText("hide")
+})
+
 test("a settings page survives refresh", async ({ page }) => {
   const { settings } = await open(page)
   const appearance = settings.getByRole("tab", { name: "Appearance", exact: true })

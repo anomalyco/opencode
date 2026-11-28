@@ -100,6 +100,7 @@ export function settingsSearchIndex(input: {
     if (entry.available === "browser" && !input.browser) return
 
     if (entry.available === "mobile" && !input.mobile) return
+
     add(entry, { type: "root", tab: entry.tab, target: entry.target }, "")
   })
   plugins.forEach((item) => {

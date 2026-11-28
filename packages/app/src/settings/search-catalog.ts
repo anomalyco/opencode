@@ -71,6 +71,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.closeAction.title",
+    description: "settings.general.row.closeAction.description",
+    target: "settings-close-action",
+    keywords: "close window tray hide quit exit ask",
+    available: "desktop",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.pinchZoom.title",
     target: "settings-pinch-zoom",
     available: "desktop",

@@ -1,3 +1,4 @@
+import type { DesktopCloseChoice } from "@opencode/app/desktop-close"
 import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { StorageSnapshot } from "../shared/ipc-transport"
@@ -76,6 +77,8 @@ export type ElectronAPI = {
   getZoomLevel(): Promise<DesktopZoomLevel>
   setZoomLevel(level: DesktopZoomLevel): Promise<void>
   onZoomChanged(cb: (zoom: { factor: number; level: DesktopZoomLevel }) => void): () => void
+  getCloseAction(): Promise<DesktopCloseChoice>
+  setCloseAction(choice: DesktopCloseChoice): Promise<void>
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
   setTaskbarBadge(count: number, description: string): Promise<void>

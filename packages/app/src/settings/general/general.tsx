@@ -4,6 +4,7 @@ import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
+import type { DesktopCloseChoice } from "@/desktop-close"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -67,6 +68,45 @@ const WorkspaceDestinationSetting: Component = () => {
         placement="bottom-end"
         gutter={6}
         onSelect={(option) => option && settings.workspaces.setDefaultDestination(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
+const CloseActionSetting: Component = () => {
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  const options = createMemo((): { value: DesktopCloseChoice; label: string }[] => [
+    { value: "ask", label: language.t("settings.general.row.closeAction.ask") },
+    { value: "hide", label: language.t("settings.general.row.closeAction.hide") },
+    { value: "quit", label: language.t("settings.general.row.closeAction.quit") },
+  ])
+
+  const defaultChoice: DesktopCloseChoice = "quit"
+
+  const closeAction = createOptimisticSetting({
+    source: () => ("getCloseAction" in platform ? platform : undefined),
+    initial: defaultChoice,
+    initialMeta: undefined,
+    load: async (source) => ({ value: (await source.getCloseAction?.()) ?? defaultChoice, meta: undefined }),
+    write: (choice, source) => source.setCloseAction?.(choice),
+  })
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.closeAction.title")}
+      description={language.t("settings.general.row.closeAction.description")}
+    >
+      <Select
+        data-action="settings-close-action"
+        options={options()}
+        current={options().find((option) => option.value === closeAction.value())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && closeAction.select(option.value)}
       />
     </SettingsRow>
   )
@@ -333,6 +373,10 @@ export const SettingsGeneral: Component = () => {
         <FollowUpBehaviorSetting />
 
         <QuestionSubmitKeySetting />
+
+        <Show when={desktop() && platform.os !== "macos"}>
+          <CloseActionSetting />
+        </Show>
 
         <Show when={desktop()}>
           <SettingsRow

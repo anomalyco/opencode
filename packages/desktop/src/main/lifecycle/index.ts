@@ -2,14 +2,19 @@ export * as ApplicationLifecycle from "./index"
 
 import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Path } from "effect"
 import { DeepLinks } from "../deep-links"
 import { jumpList, jumpTask } from "../native/jump-list"
 import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { sendMenuCommand } from "../native/menu"
+import { refreshTrayMenu } from "../native/tray-menu"
+import { configureTray, setTrayActive } from "../native/tray"
 import { onNativeTranslations } from "../native/translations"
+import { DesktopPaths } from "../paths"
 import { DesktopStorage } from "../storage"
+import { trayIconPath } from "../windows/appearance"
+import { readCloseChoice } from "../windows/close"
 import { safeWebContentsOrigin } from "../windows/state"
 import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
@@ -88,10 +93,12 @@ const runtime = Layer.effect(
     })
 
     const relaunch = () => driver.dispatch({ type: "exit.requested", mode: "relaunch" })
+    const quit = () => driver.dispatch({ type: "exit.requested", mode: "quit" })
 
     const windows = yield* mainWindows({
       appState: driver.state,
       relaunch,
+      quit,
       sessionEnding: () => driver.dispatch({ type: "session.ending" }),
     })
 
@@ -104,9 +111,58 @@ const runtime = Layer.effect(
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
+      refreshTrayMenu()
     }
 
     const deepLinks = yield* DeepLinks.make(focusWindow)
+
+    // macOS keeps the app in the dock when its windows close, so only Windows and Linux need the tray the last
+    // window hides into.
+    if (process.platform !== "darwin") {
+      const path = yield* Path.Path
+      const paths = yield* DesktopPaths.resolve
+
+      const showWindow = () => {
+        const win = getLastFocusedWindow()
+
+        if (win) {
+          focusWindow(win)
+
+          return win
+        }
+
+        return createWindow()
+      }
+
+      configureTray(trayIconPath(path, paths), {
+        toggle: () => {
+          const win = getLastFocusedWindow()
+
+          if (win?.isVisible() && !win.isMinimized()) {
+            win.hide()
+            refreshTrayMenu()
+
+            return
+          }
+
+          showWindow()
+          refreshTrayMenu()
+        },
+        isHidden: () => {
+          const win = getLastFocusedWindow()
+
+          return !win || !win.isVisible() || win.isMinimized()
+        },
+        newTab: () => sendMenuCommand(showWindow(), "tab.new", false),
+        settings: () => sendMenuCommand(showWindow(), "settings.open", false),
+        quit,
+      })
+
+      // A remembered Ask or Hide brings the tray back on launch; without one the app closes as it always did.
+      setTrayActive(readCloseChoice() !== "quit")
+
+      yield* Effect.addFinalizer(() => Effect.sync(() => setTrayActive(false)))
+    }
 
     // A development build's jump list would start Electron without the app, so only installed builds set one.
     if (process.platform === "win32" && app.isPackaged) {
@@ -197,7 +253,7 @@ const runtime = Layer.effect(
       )
     }
 
-    const signal = () => driver.dispatch({ type: "exit.requested", mode: "quit" })
+    const signal = quit
 
     const windowAllClosed = () => {
       if (quitsWhenAllWindowsClosed(driver.state(), process.platform)) app.quit()

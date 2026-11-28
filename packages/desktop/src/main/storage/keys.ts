@@ -16,6 +16,8 @@ export const BACKGROUND_COLOR_KEY = "backgroundColor"
 
 export const WINDOW_IDS_KEY = "windowIds"
 
+export const CLOSE_ACTION_KEY = "closeAction"
+
 export const BUNDLED_CLI_VERSION_KEY = "bundledCliVersion"
 
 export const KEEP_SERVICE_RUNNING_KEY = "keepServiceRunning"

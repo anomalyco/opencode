@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./desktop": "./src/desktop.ts",
+    "./desktop-close": "./src/desktop-close.ts",
     "./desktop-menu": "./src/shell/commands/desktop-menu.ts",
     "./loopback": "./src/runtime/server/loopback.ts",
     "./i18n/desktop-native": "./src/runtime/i18n/desktop-native.ts",
