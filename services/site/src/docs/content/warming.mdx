@@ -118,10 +118,11 @@ otherwise OpenCode skips warming and logs a warning.
 ## Timing
 
 Warming starts after a non-warming model request in a top-level session.
-Subagent sessions are not warmed. Each interval counts from when the latest
-request or warming request was sent, not from when its response finished,
-because a provider's cache lifetime starts when the request reaches it. A
-warming request does not extend the active window.
+Subagent and archived sessions are not warmed, and archiving a session stops
+its warming loop. Each interval counts from when the latest request or warming
+request was sent, not from when its response finished, because a provider's
+cache lifetime starts when the request reaches it. A warming request does not
+extend the active window.
 
 ```text
 00:00  normal model request sent

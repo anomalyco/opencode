@@ -13,7 +13,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
-import { Clock, DateTime, Duration, Effect, Exit, Queue, Schema, Scope, Stream } from "effect"
+import { Clock, DateTime, Duration, Effect, Exit, Queue, Ref, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../lib/effect"
 import { host } from "./host"
@@ -56,8 +56,13 @@ const run = Effect.fnUntraced(function* (
   ping = Duration.zero,
 ) {
   const warms: number[] = []
+  const archived = yield* Ref.make<DateTime.Utc | undefined>(undefined)
   const events = yield* Queue.unbounded<
-    SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
+    | SessionEvent.Execution.Succeeded
+    | SessionEvent.Compaction.Failed
+    | SessionEvent.Archived
+    | SessionEvent.Unarchived
+    | SessionEvent.Deleted
   >()
   const hooks = new Map<string, (input: SessionContext) => Effect.Effect<void>>()
   yield* WarmingPlugin.Plugin.effect(
@@ -70,7 +75,12 @@ const run = Effect.fnUntraced(function* (
       },
       event: { subscribe: () => Stream.fromQueue(events) },
       session: {
-        get: () => Effect.succeed(session),
+        get: () =>
+          Ref.get(archived).pipe(
+            Effect.map((time) =>
+              time ? Session.Info.make({ ...session, time: { ...session.time, archived: time } }) : session,
+            ),
+          ),
         generate: () =>
           Clock.currentTimeMillis.pipe(
             Effect.map((now) => {
@@ -101,6 +111,8 @@ const run = Effect.fnUntraced(function* (
   const send = hook("context")
   /** A compaction request being sent. */
   const compact = hook("compaction")
+  /** A generate request being sent. */
+  const generate = hook("generate")
   /** The turn ending. */
   const end = emit(
     Queue.offer(events, {
@@ -121,13 +133,40 @@ const run = Effect.fnUntraced(function* (
       data: { sessionID, reason: "auto", error: { type: "compaction.failed", message: "no summary" } },
     }),
   )
+  const archive = Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) => Ref.set(archived, DateTime.makeUnsafe(now))),
+    Effect.andThen(
+      emit(
+        Queue.offer(events, {
+          id: Event.ID.create(),
+          created: 0,
+          durable,
+          type: "session.archived",
+          data: { sessionID },
+        }),
+      ),
+    ),
+  )
+  const unarchive = Ref.set(archived, undefined).pipe(
+    Effect.andThen(
+      emit(
+        Queue.offer(events, {
+          id: Event.ID.create(),
+          created: 0,
+          durable,
+          type: "session.unarchived",
+          data: { sessionID },
+        }),
+      ),
+    ),
+  )
   const remove = emit(
     Queue.offer(events, { id: Event.ID.create(), created: 0, durable, type: "session.deleted", data: { sessionID } }),
   )
   /** One whole turn whose response ends right away. */
   const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, send, end, compact, compactionFailed, remove, turn, at }
+  return { warms, send, end, compact, compactionFailed, generate, archive, unarchive, remove, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -287,6 +326,60 @@ describe("WarmingPlugin lifecycle", () => {
       yield* warming.compactionFailed
       for (const minutes of [9, 9.25]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4.75, 9.25])
+    }),
+  )
+
+  it.effect("stops warming an archived session", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.turn
+      yield* warming.at(4)
+      yield* warming.archive
+      for (const minutes of [8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("stops warming when archived while a request is running", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, { ttl: "5m" })
+      yield* warming.send
+      yield* warming.archive
+      yield* warming.at(4.5)
+      yield* warming.end
+      yield* warming.at(9)
+      expect(warming.warms).toEqual([])
+    }),
+  )
+
+  it.effect("does not schedule warming for an archived session", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.archive
+      yield* warming.turn
+      yield* warming.compact
+      yield* warming.compactionFailed
+      yield* warming.generate
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      yield* warming.unarchive
+      for (const minutes of [12, 16]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([])
+    }),
+  )
+
+  it.effect("does not auto-start warming on unarchive, and resumes on the next request", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true)
+      yield* warming.turn
+      yield* warming.at(4)
+      yield* warming.archive
+      yield* warming.at(8)
+      yield* warming.unarchive
+      for (const minutes of [12, 16]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+      yield* warming.turn
+      for (const minutes of [20, 24]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 20, 24])
     }),
   )
 
