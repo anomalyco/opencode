@@ -545,16 +545,21 @@ function App() {
     renderer.off(CliRenderEvents.FRAME, afterFrame)
     if (paletteTimer) clearTimeout(paletteTimer)
   })
-  createEffect(() => {
+  // Narrow to connection, route, and session presence so session record updates
+  // from another terminal do not cause an idle TUI to overwrite the environment.
+  const environmentSession = createMemo(() => {
     if (client.connection.status() !== "connected") return
     if (route.data.type !== "session") return
-    const session = data.session.get(route.data.sessionID)
-    if (!session) return
-    if (data.session.creating(session.id)) return
+    const sessionID = route.data.sessionID
+    if (!data.session.get(sessionID)) return
+    return sessionID
+  })
+  createEffect(() => {
+    const sessionID = environmentSession()
+    if (!sessionID) return
+    if (data.session.creating(sessionID)) return
     if (terminalEnvironment.variables === undefined) return
-    void client.api.session
-      .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
-      .catch(toast.error)
+    void client.api.session.environment({ sessionID, variables: terminalEnvironment.variables }).catch(toast.error)
   })
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
