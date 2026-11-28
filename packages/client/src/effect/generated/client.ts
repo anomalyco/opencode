@@ -247,6 +247,14 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalBlobListInput,
+  ExperimentalBlobListOutput,
+  ExperimentalBlobGetInput,
+  ExperimentalBlobGetOutput,
+  ExperimentalBlobUpdateInput,
+  ExperimentalBlobUpdateOutput,
+  ExperimentalBlobRemoveInput,
+  ExperimentalBlobRemoveOutput,
   ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
@@ -272,14 +280,6 @@ import type {
   ExperimentalArtifactsUpdateOutput,
   ExperimentalArtifactsDeleteInput,
   ExperimentalArtifactsDeleteOutput,
-  ExperimentalBlobListInput,
-  ExperimentalBlobListOutput,
-  ExperimentalBlobGetInput,
-  ExperimentalBlobGetOutput,
-  ExperimentalBlobUpdateInput,
-  ExperimentalBlobUpdateOutput,
-  ExperimentalBlobRemoveInput,
-  ExperimentalBlobRemoveOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
@@ -1661,6 +1661,40 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalBlobList = (raw: RawClient["server.experimental"]) => (input?: ExperimentalBlobListInput) =>
+  preserveEffect<ExperimentalBlobListOutput>()(
+    raw["blob.list"]({ query: { sessionID: input?.["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalBlobGet = (raw: RawClient["server.experimental"]) => (input: ExperimentalBlobGetInput) =>
+  preserveEffect<ExperimentalBlobGetOutput>()(
+    raw["blob.get"]({ params: { blobID: input["blobID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalBlobUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalBlobUpdateInput) =>
+    preserveEffect<ExperimentalBlobUpdateOutput>()(
+      raw["blob.update"]({
+        params: { blobID: input["blobID"] },
+        payload: { name: input["name"], metadata: input["metadata"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalBlobRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalBlobRemoveInput) =>
+    preserveEffect<ExperimentalBlobRemoveOutput>()(
+      raw["blob.remove"]({ params: { blobID: input["blobID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointExperimentalBrowserTunnel = (raw: RawClient["server.experimental"]) => () =>
   preserveEffect<ExperimentalBrowserTunnelOutput>()(raw["browser.tunnel"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -1781,40 +1815,6 @@ const EndpointExperimentalArtifactsDelete =
         params: { artifactID: input["artifactID"] },
         query: { location: input["location"] },
       }).pipe(Effect.mapError(mapClientError)),
-    )
-
-const EndpointExperimentalBlobList = (raw: RawClient["server.experimental"]) => (input?: ExperimentalBlobListInput) =>
-  preserveEffect<ExperimentalBlobListOutput>()(
-    raw["blob.list"]({ query: { sessionID: input?.["sessionID"] } }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
-  )
-
-const EndpointExperimentalBlobGet = (raw: RawClient["server.experimental"]) => (input: ExperimentalBlobGetInput) =>
-  preserveEffect<ExperimentalBlobGetOutput>()(
-    raw["blob.get"]({ params: { blobID: input["blobID"] } }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
-  )
-
-const EndpointExperimentalBlobUpdate =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalBlobUpdateInput) =>
-    preserveEffect<ExperimentalBlobUpdateOutput>()(
-      raw["blob.update"]({
-        params: { blobID: input["blobID"] },
-        payload: { name: input["name"], metadata: input["metadata"] },
-      }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalBlobRemove =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalBlobRemoveInput) =>
-    preserveEffect<ExperimentalBlobRemoveOutput>()(
-      raw["blob.remove"]({ params: { blobID: input["blobID"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
 const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (input?: ExperimentalJobListInput) =>
@@ -1995,6 +1995,12 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  blob: {
+    list: EndpointExperimentalBlobList(raw),
+    get: EndpointExperimentalBlobGet(raw),
+    update: EndpointExperimentalBlobUpdate(raw),
+    remove: EndpointExperimentalBlobRemove(raw),
+  },
   browser: { tunnel: EndpointExperimentalBrowserTunnel(raw) },
   automation: {
     create: EndpointExperimentalAutomationCreate(raw),
@@ -2011,12 +2017,6 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     get: EndpointExperimentalArtifactsGet(raw),
     update: EndpointExperimentalArtifactsUpdate(raw),
     delete: EndpointExperimentalArtifactsDelete(raw),
-  },
-  blob: {
-    list: EndpointExperimentalBlobList(raw),
-    get: EndpointExperimentalBlobGet(raw),
-    update: EndpointExperimentalBlobUpdate(raw),
-    remove: EndpointExperimentalBlobRemove(raw),
   },
   job: { list: EndpointExperimentalJobList(raw), cancel: EndpointExperimentalJobCancel(raw) },
   machine: {

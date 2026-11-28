@@ -1560,6 +1560,63 @@ pub fn experimental_media_get(input: &ExperimentalMediaGetInput) -> Call<bytes::
     call
 }
 
+/// `GET /api/experimental/blob` (`blob.list`)
+pub fn experimental_blob_list(input: &ExperimentalBlobListInput) -> Call<ExperimentalBlobListOutput> {
+    let mut call = Call::new("GET", "/api/experimental/blob".to_owned(), Reply::Data, 200, &[400, 401, 403]);
+    if let Some(value) = &input.session_id {
+        call.query("sessionID", value);
+    }
+    call
+}
+
+/// `POST /api/experimental/blob` (`blob.create`)
+pub fn experimental_blob_create(input: &ExperimentalBlobCreateInput) -> Call<ExperimentalBlobCreateOutput> {
+    let mut call = Call::new("POST", "/api/experimental/blob".to_owned(), Reply::Data, 200, &[400, 401, 403, 503]);
+    if let Some(value) = &input.name {
+        call.query("name", value);
+    }
+    if let Some(value) = &input.session_id {
+        call.query("sessionID", value);
+    }
+    call.bytes(input.payload.clone());
+    call
+}
+
+/// `GET /api/experimental/blob/:blobID` (`blob.get`)
+pub fn experimental_blob_get(input: &ExperimentalBlobGetInput) -> Call<ExperimentalBlobGetOutput> {
+    let mut call = Call::new("GET", String::new(), Reply::Data, 200, &[400, 401, 404]);
+    call.path = format!("/api/experimental/blob/{}", call.param(&input.blob_id));
+    call
+}
+
+/// `GET /api/experimental/blob/:blobID/content` (`blob.content`)
+pub fn experimental_blob_content(input: &ExperimentalBlobContentInput) -> Call<bytes::Bytes> {
+    let mut call = Call::new("GET", String::new(), Reply::Binary, 200, &[400, 401, 404]);
+    call.path = format!("/api/experimental/blob/{}/content", call.param(&input.blob_id));
+    call
+}
+
+/// `PATCH /api/experimental/blob/:blobID` (`blob.update`)
+pub fn experimental_blob_update(input: &ExperimentalBlobUpdateInput) -> Call<ExperimentalBlobUpdateOutput> {
+    let mut call = Call::new("PATCH", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
+    call.path = format!("/api/experimental/blob/{}", call.param(&input.blob_id));
+    call.object();
+    if let Some(value) = &input.name {
+        call.field("name", value);
+    }
+    if let Some(value) = &input.metadata {
+        call.field("metadata", value);
+    }
+    call
+}
+
+/// `DELETE /api/experimental/blob/:blobID` (`blob.remove`)
+pub fn experimental_blob_remove(input: &ExperimentalBlobRemoveInput) -> Call<()> {
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403, 404]);
+    call.path = format!("/api/experimental/blob/{}", call.param(&input.blob_id));
+    call
+}
+
 /// `GET /api/experimental/browser/tunnel` (`browser.tunnel`)
 pub fn experimental_browser_tunnel() -> Call<ExperimentalBrowserTunnelOutput> {
     Call::new("GET", "/api/experimental/browser/tunnel".to_owned(), Reply::Json, 200, &[400, 401, 403])
@@ -1739,63 +1796,6 @@ pub fn experimental_artifacts_view(input: &ExperimentalArtifactsViewInput) -> Ca
     if let Some(value) = &input.location {
         call.query("location", value);
     }
-    call
-}
-
-/// `GET /api/experimental/blob` (`blob.list`)
-pub fn experimental_blob_list(input: &ExperimentalBlobListInput) -> Call<ExperimentalBlobListOutput> {
-    let mut call = Call::new("GET", "/api/experimental/blob".to_owned(), Reply::Data, 200, &[400, 401, 403]);
-    if let Some(value) = &input.session_id {
-        call.query("sessionID", value);
-    }
-    call
-}
-
-/// `POST /api/experimental/blob` (`blob.create`)
-pub fn experimental_blob_create(input: &ExperimentalBlobCreateInput) -> Call<ExperimentalBlobCreateOutput> {
-    let mut call = Call::new("POST", "/api/experimental/blob".to_owned(), Reply::Data, 200, &[400, 401, 403, 503]);
-    if let Some(value) = &input.name {
-        call.query("name", value);
-    }
-    if let Some(value) = &input.session_id {
-        call.query("sessionID", value);
-    }
-    call.bytes(input.payload.clone());
-    call
-}
-
-/// `GET /api/experimental/blob/:blobID` (`blob.get`)
-pub fn experimental_blob_get(input: &ExperimentalBlobGetInput) -> Call<ExperimentalBlobGetOutput> {
-    let mut call = Call::new("GET", String::new(), Reply::Data, 200, &[400, 401, 404]);
-    call.path = format!("/api/experimental/blob/{}", call.param(&input.blob_id));
-    call
-}
-
-/// `GET /api/experimental/blob/:blobID/content` (`blob.content`)
-pub fn experimental_blob_content(input: &ExperimentalBlobContentInput) -> Call<bytes::Bytes> {
-    let mut call = Call::new("GET", String::new(), Reply::Binary, 200, &[400, 401, 404]);
-    call.path = format!("/api/experimental/blob/{}/content", call.param(&input.blob_id));
-    call
-}
-
-/// `PATCH /api/experimental/blob/:blobID` (`blob.update`)
-pub fn experimental_blob_update(input: &ExperimentalBlobUpdateInput) -> Call<ExperimentalBlobUpdateOutput> {
-    let mut call = Call::new("PATCH", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
-    call.path = format!("/api/experimental/blob/{}", call.param(&input.blob_id));
-    call.object();
-    if let Some(value) = &input.name {
-        call.field("name", value);
-    }
-    if let Some(value) = &input.metadata {
-        call.field("metadata", value);
-    }
-    call
-}
-
-/// `DELETE /api/experimental/blob/:blobID` (`blob.remove`)
-pub fn experimental_blob_remove(input: &ExperimentalBlobRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403, 404]);
-    call.path = format!("/api/experimental/blob/{}", call.param(&input.blob_id));
     call
 }
 
@@ -3085,6 +3085,27 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         "experimental.media.get" => {
             Some((|| Ok(experimental_media_get(&ExperimentalMediaGetInput { hash: field(input, "hash")? }).cast()))())
         }
+        "experimental.blob.list" => Some((|| {
+            Ok(experimental_blob_list(&ExperimentalBlobListInput { session_id: field(input, "sessionID")? }).cast())
+        })()),
+        "experimental.blob.create" => Some(Err("a byte body".to_owned())),
+        "experimental.blob.get" => {
+            Some((|| Ok(experimental_blob_get(&ExperimentalBlobGetInput { blob_id: field(input, "blobID")? }).cast()))())
+        }
+        "experimental.blob.content" => Some((|| {
+            Ok(experimental_blob_content(&ExperimentalBlobContentInput { blob_id: field(input, "blobID")? }).cast())
+        })()),
+        "experimental.blob.update" => Some((|| {
+            Ok(experimental_blob_update(&ExperimentalBlobUpdateInput {
+                blob_id: field(input, "blobID")?,
+                name: field(input, "name")?,
+                metadata: field(input, "metadata")?,
+            })
+            .cast())
+        })()),
+        "experimental.blob.remove" => Some((|| {
+            Ok(experimental_blob_remove(&ExperimentalBlobRemoveInput { blob_id: field(input, "blobID")? }).cast())
+        })()),
         "experimental.browser.tunnel" => Some((|| Ok(experimental_browser_tunnel().cast()))()),
         "experimental.automation.create" => Some((|| {
             Ok(experimental_automation_create(&ExperimentalAutomationCreateInput {
@@ -3185,27 +3206,6 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
                 path: field(input, "path")?,
             })
             .cast())
-        })()),
-        "experimental.blob.list" => Some((|| {
-            Ok(experimental_blob_list(&ExperimentalBlobListInput { session_id: field(input, "sessionID")? }).cast())
-        })()),
-        "experimental.blob.create" => Some(Err("a byte body".to_owned())),
-        "experimental.blob.get" => {
-            Some((|| Ok(experimental_blob_get(&ExperimentalBlobGetInput { blob_id: field(input, "blobID")? }).cast()))())
-        }
-        "experimental.blob.content" => Some((|| {
-            Ok(experimental_blob_content(&ExperimentalBlobContentInput { blob_id: field(input, "blobID")? }).cast())
-        })()),
-        "experimental.blob.update" => Some((|| {
-            Ok(experimental_blob_update(&ExperimentalBlobUpdateInput {
-                blob_id: field(input, "blobID")?,
-                name: field(input, "name")?,
-                metadata: field(input, "metadata")?,
-            })
-            .cast())
-        })()),
-        "experimental.blob.remove" => Some((|| {
-            Ok(experimental_blob_remove(&ExperimentalBlobRemoveInput { blob_id: field(input, "blobID")? }).cast())
         })()),
         "experimental.job.list" => Some((|| {
             Ok(experimental_job_list(&ExperimentalJobListInput {

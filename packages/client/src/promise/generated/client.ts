@@ -249,6 +249,18 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
+  ExperimentalBlobListInput,
+  ExperimentalBlobListOutput,
+  ExperimentalBlobCreateInput,
+  ExperimentalBlobCreateOutput,
+  ExperimentalBlobGetInput,
+  ExperimentalBlobGetOutput,
+  ExperimentalBlobContentInput,
+  ExperimentalBlobContentOutput,
+  ExperimentalBlobUpdateInput,
+  ExperimentalBlobUpdateOutput,
+  ExperimentalBlobRemoveInput,
+  ExperimentalBlobRemoveOutput,
   ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
@@ -276,18 +288,6 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalArtifactsViewInput,
   ExperimentalArtifactsViewOutput,
-  ExperimentalBlobListInput,
-  ExperimentalBlobListOutput,
-  ExperimentalBlobCreateInput,
-  ExperimentalBlobCreateOutput,
-  ExperimentalBlobGetInput,
-  ExperimentalBlobGetOutput,
-  ExperimentalBlobContentInput,
-  ExperimentalBlobContentOutput,
-  ExperimentalBlobUpdateInput,
-  ExperimentalBlobUpdateOutput,
-  ExperimentalBlobRemoveInput,
-  ExperimentalBlobRemoveOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
@@ -1609,6 +1609,80 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      blob: {
+        list: (input?: ExperimentalBlobListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBlobListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob`,
+              query: { sessionID: input?.["sessionID"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        create: (input: ExperimentalBlobCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBlobCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/blob`,
+              query: { name: input["name"], sessionID: input["sessionID"] },
+              body: input["payload"],
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 503],
+              empty: false,
+              binaryBody: true,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBlobGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        content: (input: ExperimentalBlobContentInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalBlobContentOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}/content`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+        update: (input: ExperimentalBlobUpdateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalBlobUpdateOutput }>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}`,
+              body: { name: input["name"], metadata: input["metadata"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        remove: (input: ExperimentalBlobRemoveInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalBlobRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
       browser: {
         tunnel: (requestOptions?: RequestOptions) =>
           request<ExperimentalBrowserTunnelOutput>(
@@ -1795,80 +1869,6 @@ export function make(options: ClientOptions) {
               declaredStatuses: [400, 401, 403, 404, 503],
               empty: false,
               binary: true,
-            },
-            requestOptions,
-          ),
-      },
-      blob: {
-        list: (input?: ExperimentalBlobListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalBlobListOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/blob`,
-              query: { sessionID: input?.["sessionID"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        create: (input: ExperimentalBlobCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalBlobCreateOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/blob`,
-              query: { name: input["name"], sessionID: input["sessionID"] },
-              body: input["payload"],
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 503],
-              empty: false,
-              binaryBody: true,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalBlobGetOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        content: (input: ExperimentalBlobContentInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalBlobContentOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}/content`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-              binary: true,
-            },
-            requestOptions,
-          ),
-        update: (input: ExperimentalBlobUpdateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalBlobUpdateOutput }>(
-            {
-              method: "PATCH",
-              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}`,
-              body: { name: input["name"], metadata: input["metadata"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        remove: (input: ExperimentalBlobRemoveInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalBlobRemoveOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/blob/${encodeURIComponent(input.blobID)}`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: true,
             },
             requestOptions,
           ),

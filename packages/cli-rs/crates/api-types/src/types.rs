@@ -10802,6 +10802,58 @@ pub struct ExperimentalMediaGetInput {
     pub hash: MediaHash,
 }
 
+/// Input of `Client::experimental_blob_list`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobListInput {
+    pub session_id: Option<SessionID>,
+}
+
+/// Output of `Client::experimental_blob_list`.
+pub type ExperimentalBlobListOutput = Vec<BlobInfo>;
+
+/// Input of `Client::experimental_blob_create`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobCreateInput {
+    pub name: Option<String>,
+    pub session_id: Option<SessionID>,
+    pub payload: bytes::Bytes,
+}
+
+/// Output of `Client::experimental_blob_create`.
+pub type ExperimentalBlobCreateOutput = BlobInfo;
+
+/// Input of `Client::experimental_blob_get`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobGetInput {
+    pub blob_id: BlobID,
+}
+
+/// Output of `Client::experimental_blob_get`.
+pub type ExperimentalBlobGetOutput = BlobInfo;
+
+/// Input of `Client::experimental_blob_content`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobContentInput {
+    pub blob_id: BlobID,
+}
+
+/// Input of `Client::experimental_blob_update`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobUpdateInput {
+    pub blob_id: BlobID,
+    pub name: Option<String>,
+    pub metadata: Option<BlobMetadata>,
+}
+
+/// Output of `Client::experimental_blob_update`.
+pub type ExperimentalBlobUpdateOutput = BlobInfo;
+
+/// Input of `Client::experimental_blob_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalBlobRemoveInput {
+    pub blob_id: BlobID,
+}
+
 /// Output of `Client::experimental_browser_tunnel`.
 pub type ExperimentalBrowserTunnelOutput = bool;
 
@@ -11308,58 +11360,6 @@ pub struct ExperimentalArtifactsViewInput {
     pub artifact_id: ArtifactID,
     pub location: Option<LocationQueryInput>,
     pub path: String,
-}
-
-/// Input of `Client::experimental_blob_list`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalBlobListInput {
-    pub session_id: Option<SessionID>,
-}
-
-/// Output of `Client::experimental_blob_list`.
-pub type ExperimentalBlobListOutput = Vec<BlobInfo>;
-
-/// Input of `Client::experimental_blob_create`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalBlobCreateInput {
-    pub name: Option<String>,
-    pub session_id: Option<SessionID>,
-    pub payload: bytes::Bytes,
-}
-
-/// Output of `Client::experimental_blob_create`.
-pub type ExperimentalBlobCreateOutput = BlobInfo;
-
-/// Input of `Client::experimental_blob_get`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalBlobGetInput {
-    pub blob_id: BlobID,
-}
-
-/// Output of `Client::experimental_blob_get`.
-pub type ExperimentalBlobGetOutput = BlobInfo;
-
-/// Input of `Client::experimental_blob_content`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalBlobContentInput {
-    pub blob_id: BlobID,
-}
-
-/// Input of `Client::experimental_blob_update`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalBlobUpdateInput {
-    pub blob_id: BlobID,
-    pub name: Option<String>,
-    pub metadata: Option<BlobMetadata>,
-}
-
-/// Output of `Client::experimental_blob_update`.
-pub type ExperimentalBlobUpdateOutput = BlobInfo;
-
-/// Input of `Client::experimental_blob_remove`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalBlobRemoveInput {
-    pub blob_id: BlobID,
 }
 
 literal_enum! {
@@ -13916,6 +13916,19 @@ impl crate::TaggedError for PtyFeatureUnsupportedError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct BlobNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    #[serde(rename = "blobID")]
+    pub blob_id: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for BlobNotFoundError {
+    const TAG: &'static str = "BlobNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -13939,19 +13952,6 @@ pub struct ArtifactNotFoundError {
 
 impl crate::TaggedError for ArtifactNotFoundError {
     const TAG: &'static str = "ArtifactNotFoundError";
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct BlobNotFoundError {
-    #[serde(rename = "_tag")]
-    pub tag: String,
-    #[serde(rename = "blobID")]
-    pub blob_id: String,
-    pub message: String,
-}
-
-impl crate::TaggedError for BlobNotFoundError {
-    const TAG: &'static str = "BlobNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

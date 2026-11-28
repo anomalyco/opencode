@@ -12,10 +12,10 @@ import { PushEndpoints } from "./push.js"
 /** `server.experimental`: routes under /api/experimental, without compatibility guarantees. */
 export const ExperimentalGroup = PersistentPtyGroup.add(
   MediaGetEndpoint,
+  ...BlobEndpoints,
   BrowserTunnelEndpoint,
   ...AutomationEndpoints,
   ...ArtifactEndpoints,
-  ...BlobEndpoints,
   ...JobEndpoints,
   ...MachineEndpoints,
   ...PushEndpoints,

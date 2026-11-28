@@ -12535,6 +12535,465 @@
         "summary": "Read media blob"
       }
     },
+    "/api/experimental/blob": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                }
+              ]
+            },
+            "required": false,
+            "description": "Only blobs made in this session."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Blob.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List stored blobs, newest first: one session's, or every blob. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
+        "summary": "List blobs"
+      },
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.create",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "required": false,
+            "description": "A display name, such as the file name."
+          },
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                }
+              ]
+            },
+            "required": false,
+            "description": "The session the blob belongs with. A label only: deleting the session keeps the blob."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Blob.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Store the raw request body as a new blob. Its type is read from its first bytes, falling back to the request's content-type; an image's or video's size and a video's length are read from its headers. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
+        "summary": "Create blob",
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/blob/{blobID}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.get",
+        "parameters": [
+          {
+            "name": "blobID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Blob.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Blob.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "BlobNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a stored blob's info. Its bytes are at /content. Experimental: may change without compatibility guarantees.",
+        "summary": "Get blob"
+      },
+      "patch": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.update",
+        "parameters": [
+          {
+            "name": "blobID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Blob.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Blob.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "BlobNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Change a blob's name or metadata. Its bytes, and what was read from them, never change. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
+        "summary": "Update blob",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Blob.UpdatePayload"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.remove",
+        "parameters": [
+          {
+            "name": "blobID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Blob.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "BlobNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a blob and its bytes. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
+        "summary": "Delete blob"
+      }
+    },
+    "/api/experimental/blob/{blobID}/content": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.blob.content",
+        "parameters": [
+          {
+            "name": "blobID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Blob.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "BlobNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Experimental: may change without compatibility guarantees.",
+        "summary": "Read blob content"
+      }
+    },
     "/api/experimental/browser/tunnel": {
       "get": {
         "tags": ["experimental"],
@@ -13893,465 +14352,6 @@
         },
         "description": "Serve HTML and static files from the local provider. Experimental: needs experimental.artifacts in the Location's config and may change without notice.",
         "summary": "View local artifact"
-      }
-    },
-    "/api/experimental/blob": {
-      "get": {
-        "tags": ["experimental"],
-        "operationId": "experimental.blob.list",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/Session.ID"
-                }
-              ]
-            },
-            "required": false,
-            "description": "Only blobs made in this session."
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Blob.Info"
-                      }
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "List stored blobs, newest first: one session's, or every blob. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
-        "summary": "List blobs"
-      },
-      "post": {
-        "tags": ["experimental"],
-        "operationId": "experimental.blob.create",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                }
-              ]
-            },
-            "required": false,
-            "description": "A display name, such as the file name."
-          },
-          {
-            "name": "sessionID",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/Session.ID"
-                }
-              ]
-            },
-            "required": false,
-            "description": "The session the blob belongs with. A label only: deleting the session keeps the blob."
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Blob.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "ServiceUnavailableError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Store the raw request body as a new blob. Its type is read from its first bytes, falling back to the request's content-type; an image's or video's size and a video's length are read from its headers. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
-        "summary": "Create blob",
-        "requestBody": {
-          "content": {
-            "application/octet-stream": {
-              "schema": {
-                "type": "string",
-                "format": "binary"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/experimental/blob/{blobID}": {
-      "get": {
-        "tags": ["experimental"],
-        "operationId": "experimental.blob.get",
-        "parameters": [
-          {
-            "name": "blobID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Blob.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Blob.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "BlobNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Read a stored blob's info. Its bytes are at /content. Experimental: may change without compatibility guarantees.",
-        "summary": "Get blob"
-      },
-      "patch": {
-        "tags": ["experimental"],
-        "operationId": "experimental.blob.update",
-        "parameters": [
-          {
-            "name": "blobID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Blob.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Blob.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "BlobNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Change a blob's name or metadata. Its bytes, and what was read from them, never change. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
-        "summary": "Update blob",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Blob.UpdatePayload"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "delete": {
-        "tags": ["experimental"],
-        "operationId": "experimental.blob.remove",
-        "parameters": [
-          {
-            "name": "blobID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Blob.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "BlobNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Delete a blob and its bytes. Needs experimental.blob_catalog in the server's base config. Experimental: may change without compatibility guarantees.",
-        "summary": "Delete blob"
-      }
-    },
-    "/api/experimental/blob/{blobID}/content": {
-      "get": {
-        "tags": ["experimental"],
-        "operationId": "experimental.blob.content",
-        "parameters": [
-          {
-            "name": "blobID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Blob.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "BlobNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlobNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Experimental: may change without compatibility guarantees.",
-        "summary": "Read blob content"
       }
     },
     "/api/experimental/job": {
