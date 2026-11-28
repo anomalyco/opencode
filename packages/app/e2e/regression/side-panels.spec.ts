@@ -590,3 +590,61 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
   await find.press("Escape")
   await expect(find).toHaveCount(0)
 })
+
+test("dragging a docked tab from the bottom pane back to the side pane removes its bottom placement", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/BottomDragBack"
+  const key = `local\u0000${base64Encode(directory)}/ses_bottomdragback`
+
+  await openSession(page, {
+    name: "BottomDragBack",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_bottomdragback: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            [key]: {
+              all: ["file://a.md"],
+              active: "file://a.md",
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const bottom = page.locator('[data-pane-content="bottom"]')
+  const chat = page.locator('[data-slot="session-chat-panel"]')
+
+  // Drag a.md from the side strip into the bottom drop zone of the chat panel.
+  const sideTab = side.getByRole("tab", { name: "a.md", exact: true })
+  await expect(sideTab).toHaveAttribute("aria-selected", "true")
+  const from = (await sideTab.boundingBox())!
+  const chatBox = (await chat.boundingBox())!
+
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(chatBox.x + chatBox.width / 2, chatBox.y + chatBox.height - 20, { steps: 8 })
+  await page.mouse.up()
+
+  await expect(bottom.getByRole("tab", { name: "a.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(side.getByRole("tab")).toHaveCount(0)
+
+  // Drag a.md back to the upper half of the side pane.
+  const bottomTab = bottom.getByRole("tab", { name: "a.md", exact: true })
+  const bFrom = (await bottomTab.boundingBox())!
+  const sideBox = (await side.boundingBox())!
+
+  await page.mouse.move(bFrom.x + bFrom.width / 2, bFrom.y + bFrom.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sideBox.x + sideBox.width / 2, sideBox.y + sideBox.height / 4, { steps: 8 })
+  await page.mouse.up()
+
+  await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(bottom).toHaveCount(0)
+})
