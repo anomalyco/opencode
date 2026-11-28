@@ -150,8 +150,10 @@ export const read = Effect.fn("ReadTool.read")(function* (
     const count = lines.at(-1) === "" ? lines.length - 1 : lines.length
     if (count <= MAX_READ_LINES) {
       const content = lines.join("\n")
-      if (Buffer.byteLength(content) <= MAX_READ_BYTES)
-        return { type: "text" as const, content, offset: 1, lineCount: count }
+      if (Buffer.byteLength(content) <= MAX_READ_BYTES) {
+        const result: TextPage = { type: "text", content, offset: 1, lineCount: count }
+        return result
+      }
     }
   }
 
@@ -342,9 +344,9 @@ const textPage = Effect.fnUntraced(function* (
   }
 
   if (firstNul < consumed) return yield* new BinaryFileError({ resource })
-  if (skipped && entries.length === 0)
-    return {
-      type: "text" as const,
+  if (skipped && entries.length === 0) {
+    const result: TextPage = {
+      type: "text",
       content: "",
       note:
         `Line ${skipped.line} is ${formatSize(skipped.bytes)}, more than the ${MAX_READ_BYTES / 1024} KB one read returns, so it isn't shown.` +
@@ -353,13 +355,16 @@ const textPage = Effect.fnUntraced(function* (
       lineCount: 0,
       ...(next === undefined ? {} : { next }),
     }
-  return {
-    type: "text" as const,
+    return result
+  }
+  const result: TextPage = {
+    type: "text",
     content: entries.join("\n"),
     offset: from,
     lineCount: entries.length,
     ...(next === undefined ? {} : { next }),
   }
+  return result
 })
 
 const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep = path.sep): DirectoryContent => {
