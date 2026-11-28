@@ -31,7 +31,6 @@ export const dict = {
   "legal.englishOnly": "Dette dokument findes kun på engelsk.",
   "notFound.title": "Siden blev ikke fundet | OpenCode",
   "notFound.heading": "404 – Siden blev ikke fundet",
-  "notFound.home": "Hjem",
   "notFound.docs": "Dokumentation",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
@@ -48,7 +47,6 @@ export const dict = {
   "home.title": "OpenCode | Open source-kodningsagenten til alle modeller",
   "temp.title": "opencode | Kodningsagent bygget til terminalen",
   "temp.hero.title": "Kodningsagenten til terminalen",
-  "temp.zen": "OpenCode Models",
   "temp.feature.models.beforeLink": "Understøtter 200+ LLM-udbydere gennem",
   "home.banner.badge": "Ny",
   "home.promo.title": "Nye faner i Desktop",
@@ -202,7 +200,6 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "konto",
   "go.faq.a4.p3": "Opsig når som helst.",
   "go.faq.q5": "Hvad med data og privatliv?",
-  "go.faq.a5.model": "Model",
   "go.faq.a5.training": "Modeltræning",
   "go.faq.a5.retention": "Dataopbevaring",
   "go.faq.a5.retention30": "30 dage",
@@ -225,7 +222,6 @@ export const dict = {
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
     "De gratis modeller omfatter Big Pickle og de kampagnemodeller, der er tilgængelige lige nu. Go tilbyder udvalgte modeller med højere anmodningskvoter i rullende perioder: 20 % af månedskvoten pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Kvoterne kan variere fra model til model. Det faktiske antal anmodninger afhænger af model og forbrug.",
-  "workspace.nav.zen": "OpenCode Models",
   "workspace.newUser.feature.lockin.body":
     "Brug OpenCode Models med din foretrukne kodningsagent, og brug stadig andre udbydere i OpenCode, når du vil.",
   "download.title": "OpenCode | Download til macOS, Windows, Linux og mobil",
@@ -518,7 +514,7 @@ export const dict = {
     "OpenCode er en open source-agent, der hjælper dig med at skrive og køre kode med enhver AI-model. Den findes som desktopapp, terminalbrugerflade, mobilapp og SDK.",
   "home.faq.a5.body":
     "Nej. OpenCode findes også som [desktopapp](desktop) og [mobilapp](mobile), og med [SDK'et](sdk) kan du styre det fra din egen kode.",
-  "brand.ui.downloadLabel": "Download {{label}}",
+  "brand.ui.downloadLabel": "Hent {{label}}",
   "brand.ui.downloadItem": "Download {{label}} til {{detail}}",
   "brand.ui.moreFormats": "Flere formater af {{detail}}",
   "brand.ui.badgeSize": "Badgestørrelse",
@@ -718,7 +714,7 @@ export const dict = {
   "enterprise.form.inferenceSpend.label": "Hvad bruger din virksomhed på inferens om måneden (USD)?",
   "enterprise.form.inferenceSpend.placeholder": "Vælg et interval (valgfrit)",
   "enterprise.form.inferenceSpend.none": "Intet forbrug endnu",
-  "enterprise.form.inferenceSpend.under1k": "Under $1K",
+  "enterprise.form.inferenceSpend.under1k": "Under 1.000 USD",
   "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
   "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
   "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
@@ -728,5 +724,4 @@ export const dict = {
   "home.openSource.avatarProfile": "{{login}} på GitHub",
   "home.install.or": "eller",
   "brand.ui.actionOf": "{{label}} af {{detail}}",
-  "nav.subscription": "Abonnement",
 } satisfies Dict
