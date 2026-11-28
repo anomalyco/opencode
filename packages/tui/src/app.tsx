@@ -229,7 +229,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const api = OpenCode.make(options)
   const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
     Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get({ location: { directory: process.cwd() } }))),
   )
   const directory = location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
