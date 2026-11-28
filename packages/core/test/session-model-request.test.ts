@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { boundImages, latestMaxImages, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -192,7 +192,7 @@ describe("SessionModelRequest.boundImages", () => {
     const result = boundImages(messages)
 
     expect(result[0]).toBeInstanceOf(UserMessage)
-    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("was removed"))])
     expect(result[1]).toBe(text)
     expect(result[2]).not.toBe(messages[2])
     expect(result[2]?.content[0]).toMatchObject({ type: "text" })
@@ -212,6 +212,76 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, image("9.png")]))).toBe(4)
     expect(removed(boundImages([...history, image("9.png"), image("10.png"), image("11.png")]))).toBe(4)
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
+  })
+
+  test("caps the image count when a max is given, dropping the oldest first", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = [image("1.png"), image("2.png"), image("3.png"), image("4.png")]
+    const result = boundImages(messages, 2)
+
+    // The third image triggers a batch of two removals; the fourth fills the cap without moving the cut.
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining('"1.png" was removed'))])
+    expect(result[1]?.content).toEqual([Message.text(expect.stringContaining('"2.png" was removed'))])
+    expect(result[2]).toBe(messages[2])
+    expect(result[3]).toBe(messages[3])
+  })
+
+  test("small images stay untouched without a count cap even when numerous", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = Array.from({ length: 40 }, (_, i) => image(`${i}.png`))
+    expect(boundImages(messages)).toBe(messages)
+  })
+
+  test("the tighter of the byte and count cuts wins", () => {
+    const image = "a".repeat(9 * 1024 * 1024)
+    const messages = Array.from({ length: 8 }, (_, i) =>
+      Message.user({ type: "media", media: Media.base64(image, "image/png"), filename: `${i}.png` }),
+    )
+    const removed = (result: ReturnType<typeof boundImages>) =>
+      result.filter((message) => message.content[0]?.type === "text").length
+    // The byte budget alone drops six of the eight.
+    expect(removed(boundImages(messages))).toBe(6)
+    // A count cap of 1 is tighter and drops seven.
+    expect(removed(boundImages(messages, 1))).toBe(7)
+  })
+
+  test.each([
+    { cap: 1, cuts: [0, 0, 1, 2, 3, 4, 5] },
+    { cap: 2, cuts: [0, 0, 0, 2, 2, 4, 4, 6] },
+    { cap: 3, cuts: [0, 0, 0, 0, 2, 2, 4, 4, 6] },
+    { cap: 4, cuts: [0, 0, 0, 0, 0, 3, 3, 3, 6, 6, 6, 9] },
+    { cap: 30, cuts: [...Array<number>(31).fill(0), ...Array<number>(11).fill(11), 22] },
+  ])("keeps the prefix stable between count cuts with cap $cap", ({ cap, cuts }) => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = Array.from({ length: cuts.length - 1 }, (_, i) => image(`${i + 1}.png`))
+    // Recompute from the original history on every request, not the already-pruned output.
+    const results = cuts.map((_, count) => boundImages(messages.slice(0, count), cap))
+    results.forEach((result, count) => {
+      expect(result.filter((message) => message.content[0]?.type === "text")).toHaveLength(cuts[count]!)
+      expect(result.filter((message) => message.content[0]?.type === "media").length).toBeLessThanOrEqual(cap)
+      expect(result.slice(cuts[count])).toEqual(messages.slice(cuts[count], count))
+      expect(boundImages(messages.slice(0, count), cap)).toEqual(result)
+      if (count > 0 && cuts[count] === cuts[count - 1]) {
+        expect(result.slice(0, count - 1)).toEqual(results[count - 1]!.slice())
+      }
+    })
+    expect(messages.every((message) => message.content[0]?.type === "media")).toBe(true)
+  })
+
+  test("the newest document that sets max_images wins, regardless of other media fields", () => {
+    const entries = [
+      { type: "document", info: { media: { image: { max_images: 4 } } } },
+      { type: "directory" },
+      { type: "document", info: { media: { image: { max_width: 800 } } } },
+      { type: "document", info: { media: { image: { max_images: 6 } } } },
+    ]
+    expect(latestMaxImages(entries)).toBe(6)
+    // A later document without the field must not reset it to undefined.
+    const shadowed = [...entries.slice(0, 2), { type: "document", info: { media: { image: { max_width: 100 } } } }]
+    expect(latestMaxImages(shadowed)).toBe(4)
   })
 
   test("replaces images nested in tool results", () => {

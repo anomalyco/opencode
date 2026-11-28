@@ -34,6 +34,7 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { Config } from "../config.js"
 import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
@@ -46,11 +47,16 @@ import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
+import { Option } from "effect"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
+const imageRemoved = (name?: string) =>
+  name === undefined
+    ? IMAGE_REMOVED
+    : `[The image "${name}" was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]`
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
@@ -214,13 +220,30 @@ const replaceMedia = (
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])
 
+type ConfigEntries = ReadonlyArray<{
+  readonly type: string
+  readonly info?: { readonly media?: { readonly image?: { readonly max_images?: number } } }
+}>
+
+// Field-level last-wins across config documents: a project config that only sets `media.image.max_width`
+// must not shadow a global `max_images` (Config.latest selects whole documents, not fields).
+export const latestMaxImages = (entries: ConfigEntries) => {
+  let value: number | undefined
+  for (const entry of entries) {
+    if (entry.type !== "document") continue
+    const configured = entry.info?.media?.image?.max_images
+    if (configured !== undefined) value = configured
+  }
+  return value
+}
+
 export const unsupportedParts = (
   messages: LLMRequest["messages"],
   capabilities: Model.Capabilities,
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
+export const boundImages = (messages: LLMRequest["messages"], maxImages?: number) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const sizes = messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -241,12 +264,20 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
     if (kept <= IMAGE_BYTES_TRIGGER) continue
     while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
   }
+  // Replaying the count drops (cap + 1 - target) images each time it crosses the cap.
+  // Round up to whole batches so stateless recomputation keeps the prefix stable between crossings.
+  if (maxImages !== undefined && sizes.length > maxImages) {
+    const slack = Math.min(10, Math.floor(maxImages / 2))
+    const target = Math.max(1, maxImages - slack)
+    const batch = maxImages + 1 - target
+    cut = Math.max(cut, Math.ceil((sizes.length - maxImages) / batch) * batch)
+  }
   if (cut === 0) return messages
 
   let index = 0
   return replaceMedia(messages, (media) => {
     if (!isImage(media.mime)) return
-    return index++ < cut ? IMAGE_REMOVED : undefined
+    return index++ < cut ? imageRemoved(media.name) : undefined
   })
 }
 
@@ -273,6 +304,12 @@ export const layer = Layer.effect(
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
       const session = input.session
       const model = input.model
+      // `media.image.max_images` is location-scoped, like the blob setting, so read it on every
+      // prepare: config files reload in place and the newest document that sets the field wins.
+      const config = yield* Effect.serviceOption(Config.Service)
+      const maxImages = Option.isSome(config)
+        ? latestMaxImages(yield* config.value.entries())
+        : undefined
       const scope = { sessionID: session.id, agent: input.agent, model: model.ref, kind }
       const tools = input.tools ?? {
         definitions: [],
@@ -344,6 +381,7 @@ export const layer = Layer.effect(
             model.capabilities,
             model.model.provider,
           ),
+          maxImages,
         ),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
