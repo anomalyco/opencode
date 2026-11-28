@@ -36,7 +36,15 @@ export type SessionDeepLinkResolution =
   | { readonly status: "not-found" }
   | { readonly status: "unknown-server" }
 
-export type SessionDeepLinkOutcome = "opened" | "not-found" | "unknown-server"
+export type SessionDeepLinkOutcome =
+  | {
+      readonly status: "opened"
+      readonly server: ServerConnection.Key
+      readonly session: DeepLinkSessionInfo | undefined
+    }
+  | { readonly status: "not-found" }
+  | { readonly status: "unknown-server" }
+  | { readonly status: "cancelled" }
 
 /** Matches a `?server=` URL against already-configured servers only; never accepts unknown origins. */
 export function matchConfiguredServer(
@@ -67,58 +75,51 @@ export function matchConfiguredServer(
 /**
  * Resolves which configured server should open a session deep link.
  * Explicit `?server=` matches only configured servers and rejects confirmed not-found sessions.
- * Without `?server=`, checks cached and connected servers (preferring the active server) and returns `not-found`
- * when no server owns the session.
+ * Without `?server=`, checks cached and configured servers (resolving as soon as any server finds the session)
+ * and returns `not-found` when no server owns it.
  */
 export async function resolveSessionDeepLink(
   link: SessionDeepLink,
   lookup: SessionDeepLinkLookup,
+  signal?: AbortSignal,
 ): Promise<SessionDeepLinkResolution> {
-  if (link.server) {
-    const server = matchConfiguredServer(link.server, lookup.servers)
+  return withTimeoutSignal(signal, async (timeoutSignal) => {
+    if (link.server) {
+      const server = matchConfiguredServer(link.server, lookup.servers)
 
-    if (!server) return { status: "unknown-server" }
+      if (!server) return { status: "unknown-server" }
 
-    const cached = lookup.cached(server, link.sessionID)
+      const cached = lookup.cached(server, link.sessionID)
 
-    if (cached) return { status: "found", server, session: cached }
+      if (cached) return { status: "found", server, session: cached }
 
-    const fetched = await fetchWithTimeout(lookup, server, link.sessionID)
+      const fetched = await fetchOrAbort(lookup, server, link.sessionID, timeoutSignal)
 
-    if (fetched.status === "found") return { status: "found", server, session: fetched.session }
+      if (fetched.status === "found") return { status: "found", server, session: fetched.session }
 
-    if (fetched.status === "not-found") return { status: "not-found" }
+      if (fetched.status === "not-found") return { status: "not-found" }
 
-    return { status: "unavailable", server }
-  }
+      return { status: "unavailable", server }
+    }
 
-  if (lookup.servers.length === 0) return { status: "not-found" }
+    if (lookup.servers.length === 0) return { status: "not-found" }
 
-  const configuredKeys = lookup.servers.map(ServerConnection.key)
+    const configuredKeys = lookup.servers.map(ServerConnection.key)
 
-  const fallback =
-    (lookup.activeServer && configuredKeys.includes(lookup.activeServer) ? lookup.activeServer : undefined) ??
-    ServerConnection.key(lookup.servers.find(ServerConnection.builtin) ?? lookup.servers[0])
+    const fallback =
+      (lookup.activeServer && configuredKeys.includes(lookup.activeServer) ? lookup.activeServer : undefined) ??
+      ServerConnection.key(lookup.servers.find(ServerConnection.builtin) ?? lookup.servers[0])
 
-  const ordered = [fallback, ...configuredKeys.filter((key) => key !== fallback)]
+    const ordered = [fallback, ...configuredKeys.filter((key) => key !== fallback)]
 
-  for (const server of ordered) {
-    const session = lookup.cached(server, link.sessionID)
+    for (const server of ordered) {
+      const session = lookup.cached(server, link.sessionID)
 
-    if (session) return { status: "found", server, session }
-  }
+      if (session) return { status: "found", server, session }
+    }
 
-  const probed = await Promise.all(
-    ordered.map((server) => fetchWithTimeout(lookup, server, link.sessionID).then((result) => ({ server, result }))),
-  )
-
-  const match = probed.find((entry) => entry.result.status === "found")
-
-  if (match && match.result.status === "found") {
-    return { status: "found", server: match.server, session: match.result.session }
-  }
-
-  return { status: "not-found" }
+    return probeFirstFound(ordered, lookup, link.sessionID, timeoutSignal)
+  })
 }
 
 /** Opens and selects the session tab for a resolved session deep link, nesting subagent sessions under their root tab. */
@@ -126,56 +127,129 @@ export async function openSessionDeepLink(
   link: SessionDeepLink,
   lookup: SessionDeepLinkLookup,
   tabs: SessionDeepLinkTabs,
+  signal?: AbortSignal,
 ): Promise<SessionDeepLinkOutcome> {
-  const resolved = await resolveSessionDeepLink(link, lookup)
+  return withTimeoutSignal(signal, async (timeoutSignal) => {
+    const resolved = await resolveSessionDeepLink(link, lookup, timeoutSignal)
 
-  if (resolved.status === "unknown-server") return "unknown-server"
+    if (signal?.aborted) return { status: "cancelled" }
 
-  if (resolved.status === "not-found") return "not-found"
+    if (resolved.status === "unknown-server") return { status: "unknown-server" }
 
-  const session = resolved.status === "found" ? resolved.session : undefined
-  const rootID = await resolveRootSessionID(resolved.server, link.sessionID, session, lookup)
-  const isChild = rootID !== link.sessionID
-  const routeSessionId = isChild ? link.sessionID : undefined
-  const routeParentId = isChild ? session?.parentID : undefined
+    if (resolved.status === "not-found") return { status: "not-found" }
 
-  const tabInput: Omit<SessionTab, "type"> = isChild
-    ? { server: resolved.server, sessionId: rootID, routeSessionId, routeParentId }
-    : { server: resolved.server, sessionId: rootID }
+    const session = resolved.status === "found" ? resolved.session : undefined
+    const rootID = await resolveRootSessionID(resolved.server, link.sessionID, session, lookup, timeoutSignal)
 
-  const tab = tabs.addSessionTab(tabInput)
+    if (signal?.aborted) return { status: "cancelled" }
 
-  if (tab.type !== "session") return "not-found"
+    if (!rootID) return { status: "not-found" }
 
-  tabs.rememberSessionRoute(tab, link.sessionID, routeParentId)
-  tabs.select({ ...tab, routeSessionId, routeParentId })
+    const isChild = rootID !== link.sessionID
+    const routeSessionId = isChild ? link.sessionID : undefined
+    const routeParentId = isChild ? session?.parentID : undefined
 
-  return "opened"
+    const tabInput: Omit<SessionTab, "type"> = isChild
+      ? { server: resolved.server, sessionId: rootID, routeSessionId, routeParentId }
+      : { server: resolved.server, sessionId: rootID }
+
+    const tab = tabs.addSessionTab(tabInput)
+
+    if (tab.type !== "session") return { status: "not-found" }
+
+    tabs.rememberSessionRoute(tab, link.sessionID, routeParentId)
+    tabs.select({ ...tab, routeSessionId, routeParentId })
+
+    return { status: "opened", server: resolved.server, session }
+  })
 }
 
-function fetchWithTimeout(
+async function withTimeoutSignal<T>(
+  outer: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController()
+  const onOuterAbort = () => controller.abort()
+
+  if (outer?.aborted) controller.abort()
+  else outer?.addEventListener("abort", onOuterAbort, { once: true })
+
+  const timer = setTimeout(() => controller.abort(), RESOLVE_TIMEOUT_MS)
+
+  try {
+    return await run(controller.signal)
+  } finally {
+    clearTimeout(timer)
+    outer?.removeEventListener("abort", onOuterAbort)
+  }
+}
+
+function fetchOrAbort(
   lookup: SessionDeepLinkLookup,
   server: ServerConnection.Key,
   sessionID: string,
+  signal: AbortSignal,
 ): Promise<SessionFetchResult> {
-  const controller = new AbortController()
+  if (signal.aborted) return Promise.resolve({ status: "unavailable" })
 
   return new Promise<SessionFetchResult>((resolve) => {
-    const timer = setTimeout(() => {
-      controller.abort()
-      resolve({ status: "unavailable" })
-    }, RESOLVE_TIMEOUT_MS)
+    const onAbort = () => resolve({ status: "unavailable" })
+    signal.addEventListener("abort", onAbort, { once: true })
 
-    void lookup.fetch(server, sessionID, controller.signal).then(
+    void lookup.fetch(server, sessionID, signal).then(
       (result) => {
-        clearTimeout(timer)
+        signal.removeEventListener("abort", onAbort)
         resolve(result)
       },
       () => {
-        clearTimeout(timer)
+        signal.removeEventListener("abort", onAbort)
         resolve({ status: "unavailable" })
       },
     )
+  })
+}
+
+function probeFirstFound(
+  servers: readonly ServerConnection.Key[],
+  lookup: SessionDeepLinkLookup,
+  sessionID: string,
+  outerSignal: AbortSignal,
+): Promise<SessionDeepLinkResolution> {
+  if (outerSignal.aborted) return Promise.resolve({ status: "not-found" })
+
+  const probe = new AbortController()
+
+  return new Promise<SessionDeepLinkResolution>((resolve) => {
+    let remaining = servers.length
+    let settled = false
+
+    const finish = (result: SessionDeepLinkResolution) => {
+      if (settled) return
+      settled = true
+      outerSignal.removeEventListener("abort", onOuterAbort)
+      probe.abort()
+      resolve(result)
+    }
+
+    const onOuterAbort = () => finish({ status: "not-found" })
+    outerSignal.addEventListener("abort", onOuterAbort, { once: true })
+
+    for (const server of servers) {
+      void lookup.fetch(server, sessionID, probe.signal).then(
+        (result) => {
+          if (result.status === "found") return finish({ status: "found", server, session: result.session })
+
+          remaining -= 1
+
+          if (remaining === 0) finish({ status: "not-found" })
+        },
+        () => {
+          remaining -= 1
+
+          if (remaining === 0) finish({ status: "not-found" })
+        },
+      )
+    }
   })
 }
 
@@ -184,6 +258,7 @@ async function resolveRootSessionID(
   sessionID: string,
   session: DeepLinkSessionInfo | undefined,
   lookup: SessionDeepLinkLookup,
+  signal: AbortSignal,
 ) {
   if (!session?.parentID) return sessionID
 
@@ -193,7 +268,7 @@ async function resolveRootSessionID(
 
       if (cached) return cached
 
-      const fetched = await fetchWithTimeout(lookup, server, id)
+      const fetched = await fetchOrAbort(lookup, server, id, signal)
 
       if (fetched.status !== "found") throw new Error(`Session not found: ${id}`)
 
@@ -202,6 +277,6 @@ async function resolveRootSessionID(
 
     return root.id
   } catch {
-    return sessionID
+    return
   }
 }

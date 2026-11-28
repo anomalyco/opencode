@@ -27,12 +27,14 @@ export function createDeepLinksDriver(input: {
   readonly directoryReady: Accessor<boolean>
   readonly sessionsReady: Accessor<boolean>
   readonly ask: (effect: Extract<DeepLinkEffect, { type: "ask" }>, dispatch: (event: DeepLinkEvent) => void) => void
-  readonly openDirectory: (link: DirectoryDeepLink) => Promise<void>
-  readonly openSession: (link: SessionDeepLink) => Promise<void>
+  readonly openDirectory: (link: DirectoryDeepLink, signal: AbortSignal) => Promise<void>
+  readonly openSession: (link: SessionDeepLink, signal: AbortSignal) => Promise<void>
 }) {
   const machine = { state: INITIAL_DEEP_LINK_STATE }
+  const lifecycle = new AbortController()
 
   const dispatch = (event: DeepLinkEvent) => {
+    if (lifecycle.signal.aborted) return
     const next = transitionDeepLinks(machine.state, event)
     machine.state = next.state
     next.effects.forEach(run)
@@ -41,8 +43,12 @@ export function createDeepLinksDriver(input: {
   // Each link opens after the one before it, so the tabs open in the order the links came and the last one is in front.
   const opening = { last: Promise.resolve() }
 
-  const enqueue = (task: () => Promise<void>) => {
-    opening.last = opening.last.then(task)
+  const enqueue = (task: (signal: AbortSignal) => Promise<void>) => {
+    opening.last = opening.last.then(() => {
+      if (lifecycle.signal.aborted) return
+
+      return task(lifecycle.signal)
+    })
     // A tab that failed to open must not stop the links after it.
     opening.last = opening.last.catch(() => undefined)
   }
@@ -53,11 +59,11 @@ export function createDeepLinksDriver(input: {
     if (effect.link.type === "session") {
       const link = effect.link
 
-      return enqueue(() => input.openSession(link))
+      return enqueue((signal) => input.openSession(link, signal))
     }
 
     const link = effect.link
-    enqueue(() => input.openDirectory(link))
+    enqueue((signal) => input.openDirectory(link, signal))
   }
 
   createEffect(() => {
@@ -72,11 +78,10 @@ export function createDeepLinksDriver(input: {
 
   const stop = input.onDeepLinks?.((urls) => dispatch({ type: "links.received", urls }))
 
-  if (stop) onCleanup(stop)
-
-  return {
-    pending: () => opening.last,
-  }
+  onCleanup(() => {
+    lifecycle.abort()
+    stop?.()
+  })
 }
 
 /** Opens the `opencode://` links the desktop app receives, for as long as the shell lives. */
@@ -99,14 +104,9 @@ export function useDeepLinks() {
     return !!ctx && ctx.sdk.connection.status() === "connected" && ctx.sync.project.ready()
   })
 
-  // Session links wait for persisted servers to hydrate and at least one configured server to connect so
-  // explicit `?server=` matches stored servers and implicit links can probe connected servers.
+  // Session links wait for persisted servers to hydrate and at least one configured server to have an HTTP endpoint.
   const sessionsReady = createMemo(
-    () =>
-      servers.hydrated() &&
-      servers.list.some(
-        (conn) => global.serverCtx(ServerConnection.key(conn))?.sdk.connection.status() === "connected",
-      ),
+    () => servers.hydrated() && servers.list.some((conn) => !!ServerConnection.http(conn)),
   )
 
   const activeServer = (): ServerConnection.Key | undefined => {
@@ -141,7 +141,7 @@ export function useDeepLinks() {
       )
     },
     // A project that can't be added shows the server's error (`projects.add`); one that can opens in a new session.
-    openDirectory: async (link) => {
+    openDirectory: async (link, signal) => {
       const conn = untrack(own)
 
       if (!conn) return
@@ -151,24 +151,25 @@ export function useDeepLinks() {
       if (!ctx) return
       const project = await ctx.projects.add(link.directory)
 
-      if (!project) return
+      if (!project || signal.aborted) return
       const prompt = link.type === "new-session" ? link.prompt : undefined
 
       await tabs.newDraft({ server, directory: project.worktree }, prompt)
     },
-    openSession: async (link) => {
+    openSession: async (link, signal) => {
       const outcome = await openSessionDeepLink(
         link,
         {
           servers: untrack(() => servers.list),
           activeServer: activeServer(),
           cached: (server, sessionID) => untrack(() => global.serverCtx(server)?.data.session.get(sessionID)),
-          fetch: async (server, sessionID, signal) => {
+          fetch: async (server, sessionID, fetchSignal) => {
+            const conn = untrack(() => servers.list.find((item) => ServerConnection.key(item) === server))
             const ctx = untrack(() => global.serverCtx(server))
 
-            if (!ctx || untrack(() => ctx.sdk.connection.status()) !== "connected") return { status: "unavailable" }
+            if (!conn || !ServerConnection.http(conn) || !ctx) return { status: "unavailable" }
 
-            return ctx.sdk.api.session.get({ sessionID }, { signal }).then(
+            return ctx.sdk.api.session.get({ sessionID }, { signal: fetchSignal }).then(
               (session) => {
                 ctx.data.session.remember(session)
 
@@ -182,9 +183,21 @@ export function useDeepLinks() {
           },
         },
         tabs,
+        signal,
       )
 
-      if (outcome === "not-found") showToast({ title: language.t("session.error.notFound") })
+      if (signal.aborted || outcome.status === "cancelled") return
+
+      if (outcome.status === "opened") {
+        const ctx = untrack(() => global.serverCtx(outcome.server))
+        const info = outcome.session ? ctx?.data.session.get(outcome.session.id) : undefined
+
+        if (ctx && info) ctx.projects.touch(ctx.projects.forSession(info)?.worktree ?? info.location.directory)
+
+        return
+      }
+
+      showToast({ title: language.t("session.error.notFound") })
     },
   })
 }

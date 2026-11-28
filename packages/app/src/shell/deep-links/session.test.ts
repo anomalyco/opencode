@@ -84,6 +84,28 @@ function foundOrNotFound(session: DeepLinkSessionInfo | undefined): SessionFetch
   return session ? { status: "found", session } : { status: "not-found" }
 }
 
+function createWaiter() {
+  const waiters: Array<() => void> = []
+
+  return {
+    notify() {
+      waiters.splice(0).forEach((resolve) => resolve())
+    },
+    until(predicate: () => boolean) {
+      if (predicate()) return Promise.resolve()
+
+      return new Promise<void>((resolve) => {
+        const check = () => {
+          if (predicate()) return resolve()
+          waiters.push(check)
+        }
+
+        waiters.push(check)
+      })
+    },
+  }
+}
+
 describe("session deep link server resolution", () => {
   const servers: ServerConnection.Any[] = [sidecar, remote, pluginReady, pluginStopped]
 
@@ -121,7 +143,7 @@ describe("session deep link server resolution", () => {
       recorder.tabs,
     )
 
-    expect(outcome).toBe("unknown-server")
+    expect(outcome).toEqual({ status: "unknown-server" })
     expect(fetched).toBe(0)
     expect(recorder.store).toEqual([])
     expect(recorder.selected).toEqual([])
@@ -141,7 +163,7 @@ describe("session deep link server resolution", () => {
       notFoundRecorder.tabs,
     )
 
-    expect(notFound).toBe("not-found")
+    expect(notFound).toEqual({ status: "not-found" })
     expect(notFoundRecorder.store).toEqual([])
     expect(notFoundRecorder.selected).toEqual([])
 
@@ -158,7 +180,7 @@ describe("session deep link server resolution", () => {
       unavailableRecorder.tabs,
     )
 
-    expect(unavailable).toBe("opened")
+    expect(unavailable).toEqual({ status: "opened", server: remoteKey, session: undefined })
     expect(unavailableRecorder.selected).toEqual([
       {
         type: "session",
@@ -170,7 +192,7 @@ describe("session deep link server resolution", () => {
     ])
   })
 
-  test("resolves omitted ?server= by checking connected servers and does not open a tab when none own it", async () => {
+  test("resolves omitted ?server= by checking configured servers and does not open a tab when none own it", async () => {
     const sessions = new Map<string, DeepLinkSessionInfo>([[`${remoteKey}:ses_remote`, { id: "ses_remote" }]])
 
     const resolvedRemote = await resolveSessionDeepLink(
@@ -198,17 +220,17 @@ describe("session deep link server resolution", () => {
       recorder.tabs,
     )
 
-    expect(missing).toBe("not-found")
+    expect(missing).toEqual({ status: "not-found" })
     expect(recorder.store).toEqual([])
     expect(recorder.selected).toEqual([])
   })
 
-  test("aborts a hanging server lookup on timeout so another server's match still opens", async () => {
+  test("resolves immediately when one server finds the session without waiting for another hanging server", async () => {
     jest.useFakeTimers()
     const recorder = createTabsRecorder()
     let hangingSignal: AbortSignal | undefined
 
-    const pending = openSessionDeepLink(
+    const outcome = await openSessionDeepLink(
       { type: "session", sessionID: "ses_fast", server: undefined },
       {
         servers: [sidecar, remote],
@@ -227,13 +249,9 @@ describe("session deep link server resolution", () => {
       recorder.tabs,
     )
 
-    expect(hangingSignal?.aborted).toBe(false)
-    jest.advanceTimersToNextTimer()
-
-    const outcome = await pending
-
+    // Resolved without advancing fake timers, and aborted the hanging server's probe immediately.
     expect(hangingSignal?.aborted).toBe(true)
-    expect(outcome).toBe("opened")
+    expect(outcome).toEqual({ status: "opened", server: remoteKey, session: { id: "ses_fast" } })
     expect(recorder.selected).toEqual([
       {
         type: "session",
@@ -243,6 +261,36 @@ describe("session deep link server resolution", () => {
         routeParentId: undefined,
       },
     ])
+  })
+
+  test("aborts all hanging server lookups when the timeout expires", async () => {
+    jest.useFakeTimers()
+    const recorder = createTabsRecorder()
+    const signals: AbortSignal[] = []
+
+    const pending = openSessionDeepLink(
+      { type: "session", sessionID: "ses_hung", server: undefined },
+      {
+        servers: [sidecar, remote],
+        activeServer: sidecarKey,
+        cached: () => undefined,
+        fetch: (_server, _sessionID, signal) => {
+          signals.push(signal)
+
+          return new Promise(() => {})
+        },
+      },
+      recorder.tabs,
+    )
+
+    expect(signals.every((signal) => !signal.aborted)).toBe(true)
+    jest.advanceTimersToNextTimer()
+
+    const outcome = await pending
+
+    expect(signals.every((signal) => signal.aborted)).toBe(true)
+    expect(outcome).toEqual({ status: "not-found" })
+    expect(recorder.selected).toEqual([])
   })
 
   test("opens a subagent session nested under its root session tab", async () => {
@@ -265,7 +313,11 @@ describe("session deep link server resolution", () => {
       recorder.tabs,
     )
 
-    expect(outcome).toBe("opened")
+    expect(outcome).toEqual({
+      status: "opened",
+      server: remoteKey,
+      session: { id: "ses_child", parentID: "ses_parent" },
+    })
     expect(recorder.store).toEqual([
       {
         type: "session",
@@ -284,6 +336,28 @@ describe("session deep link server resolution", () => {
         routeParentId: "ses_parent",
       },
     ])
+  })
+
+  test("does not open a standalone root tab for a subagent session when its ancestor lookup fails", async () => {
+    const recorder = createTabsRecorder()
+
+    const outcome = await openSessionDeepLink(
+      { type: "session", sessionID: "ses_orphan_child", server: "http://100.73.96.98:4097" },
+      {
+        servers: [sidecar, remote],
+        activeServer: sidecarKey,
+        cached: () => undefined,
+        fetch: async (_server, sessionID) =>
+          sessionID === "ses_orphan_child"
+            ? { status: "found", session: { id: "ses_orphan_child", parentID: "ses_missing_parent" } }
+            : { status: "not-found" },
+      },
+      recorder.tabs,
+    )
+
+    expect(outcome).toEqual({ status: "not-found" })
+    expect(recorder.store).toEqual([])
+    expect(recorder.selected).toEqual([])
   })
 
   test("opening a root session clears a previously remembered child route on that tab", async () => {
@@ -308,7 +382,7 @@ describe("session deep link server resolution", () => {
       recorder.tabs,
     )
 
-    expect(outcome).toBe("opened")
+    expect(outcome).toEqual({ status: "opened", server: sidecarKey, session: { id: "ses_root" } })
     expect(recorder.store).toEqual([
       {
         type: "session",
@@ -331,7 +405,7 @@ describe("session deep link server resolution", () => {
 })
 
 describe("deep link driver integration", () => {
-  test("drains queued links on mount, handles live links, and unsubscribes on cleanup", async () => {
+  test("drains queued links on cold launch, handles live links, and aborts in-flight work on dispose", async () => {
     const pending = ["opencode://session/ses_queued?server=http%3A%2F%2F100.73.96.98%3A4097%2F"]
     const listeners = new Set<(urls: string[]) => void>()
 
@@ -347,25 +421,37 @@ describe("deep link driver integration", () => {
     }
 
     const recorder = createTabsRecorder()
-    const [sessionsReady, setSessionsReady] = createSignal(false)
-
-    let wait!: () => Promise<void>
+    const [hydrated, setHydrated] = createSignal(false)
+    const waiter = createWaiter()
+    const handled: string[] = []
+    let inFlightSignal: AbortSignal | undefined
+    let resolveInFlight: ((result: SessionFetchResult) => void) | undefined
 
     const dispose = createRoot((dispose) => {
-      const driver = createDeepLinksDriver({
+      createDeepLinksDriver({
         onDeepLinks,
         directoryReady: () => false,
-        sessionsReady,
+        // Cold launch: HTTP endpoint is configured even if SSE is still connecting.
+        sessionsReady: () => hydrated() && [sidecar, remote].some((conn) => !!ServerConnection.http(conn)),
         ask: () => {},
         openDirectory: async () => {},
-        openSession: async (link) => {
+        openSession: async (link, signal) => {
           await openSessionDeepLink(
             link,
             {
               servers: [sidecar, remote],
               activeServer: sidecarKey,
               cached: () => undefined,
-              fetch: async (server, sessionID) => {
+              fetch: async (server, sessionID, fetchSignal) => {
+                if (sessionID === "ses_inflight") {
+                  inFlightSignal = fetchSignal
+                  waiter.notify()
+
+                  return new Promise<SessionFetchResult>((resolve) => {
+                    resolveInFlight = resolve
+                  })
+                }
+
                 if (server === remoteKey && sessionID === "ses_queued")
                   return { status: "found", session: { id: "ses_queued" } }
 
@@ -376,21 +462,22 @@ describe("deep link driver integration", () => {
               },
             },
             recorder.tabs,
+            signal,
           )
+          handled.push(link.sessionID)
+          waiter.notify()
         },
       })
-
-      wait = driver.pending
 
       return dispose
     })
 
-    // Queued link was drained from pending immediately on mount, and waits for servers to become ready.
+    // Queued link was drained from pending immediately on mount, and waits for servers to hydrate.
     expect(pending).toEqual([])
     expect(recorder.selected).toEqual([])
 
-    setSessionsReady(true)
-    await wait()
+    setHydrated(true)
+    await waiter.until(() => handled.includes("ses_queued"))
 
     expect(recorder.selected).toEqual([
       {
@@ -402,7 +489,7 @@ describe("deep link driver integration", () => {
       },
     ])
 
-    // Live link opens immediately while mounted; non-session and unknown-server links are ignored.
+    // Live link opens immediately while mounted; non-session, unknown-server, and missing links are ignored.
     listeners.forEach((listener) =>
       listener([
         "opencode://console/authorized?window=a",
@@ -411,7 +498,7 @@ describe("deep link driver integration", () => {
         "opencode://session/ses_live",
       ]),
     )
-    await wait()
+    await waiter.until(() => handled.includes("ses_live"))
 
     expect(recorder.selected).toEqual([
       {
@@ -430,11 +517,19 @@ describe("deep link driver integration", () => {
       },
     ])
 
-    // Cleanup unsubscribes so subsequent links are not handled by the disposed driver.
+    // Start an in-flight lookup, then dispose before it settles: signal aborts and no tab is opened.
+    listeners.forEach((listener) =>
+      listener(["opencode://session/ses_inflight?server=http%3A%2F%2F100.73.96.98%3A4097"]),
+    )
+    await waiter.until(() => inFlightSignal !== undefined)
+    expect(inFlightSignal?.aborted).toBe(false)
+
     dispose()
     expect(listeners.size).toBe(0)
-    listeners.forEach((listener) => listener(["opencode://session/ses_after_dispose"]))
-    await wait()
+    expect(inFlightSignal?.aborted).toBe(true)
+
+    resolveInFlight?.({ status: "found", session: { id: "ses_inflight" } })
+    await waiter.until(() => handled.includes("ses_inflight"))
     expect(recorder.selected).toHaveLength(2)
   })
 })

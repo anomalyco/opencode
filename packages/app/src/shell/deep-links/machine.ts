@@ -9,6 +9,8 @@ const CONTROL_OR_BIDI = /[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u20
 
 const MAX_SESSION_ID_LENGTH = 256
 
+const SESSION_ID_PATTERN = /^ses[A-Za-z0-9._-]+$/
+
 export type DirectoryDeepLink =
   | { readonly type: "open-project"; readonly directory: string }
   | { readonly type: "new-session"; readonly directory: string; readonly prompt: string | undefined }
@@ -144,12 +146,14 @@ export function transitionDeepLinks(state: DeepLinkState, event: DeepLinkEvent):
 }
 
 export function parseDeepLink(value: string): DeepLink | undefined {
-  if (!URL.canParse(value)) return
-  const url = new URL(value)
+  const trimmed = value.trim()
+
+  if (!URL.canParse(trimmed)) return
+  const url = new URL(trimmed)
 
   if (url.protocol !== "opencode:") return
 
-  if (url.hostname === "session") return parseSessionDeepLink(value, url)
+  if (url.hostname === "session") return parseSessionDeepLink(trimmed, url)
 
   const directory = url.searchParams.get("directory")
 
@@ -181,6 +185,8 @@ export function normalizeDeepLinkServerUrl(value: string | null | undefined) {
 // Reads `opencode://session/<sessionID>[?server=<url>]` from the raw input path before URL dot-segment
 // normalization so traversal segments like `../` are rejected rather than collapsed.
 function parseSessionDeepLink(value: string, url: URL): SessionDeepLink | undefined {
+  if (url.username || url.password || url.port || url.hash) return
+
   const afterScheme = value.slice(url.protocol.length + 2)
   const authorityAndPath = afterScheme.split(/[?#]/, 1)[0] ?? ""
   const slash = authorityAndPath.indexOf("/")
@@ -213,13 +219,7 @@ function decodeSegment(segment: string) {
 }
 
 function isValidSessionID(sessionID: string) {
-  if (sessionID.length === 0 || sessionID.length > MAX_SESSION_ID_LENGTH) return false
-
-  if (sessionID === "." || sessionID === ".." || sessionID.includes("..")) return false
-
-  if (CONTROL_OR_BIDI.test(sessionID) || /[\s/\\]/.test(sessionID)) return false
-
-  return true
+  return sessionID.length <= MAX_SESSION_ID_LENGTH && !sessionID.includes("..") && SESSION_ID_PATTERN.test(sessionID)
 }
 
 // Asks about the first of `links`, or goes idle when there are none.
