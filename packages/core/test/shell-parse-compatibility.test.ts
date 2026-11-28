@@ -123,7 +123,12 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       { CDPATH: "/outside" },
       { commands: [{ resource: "pwd", save: "pwd *" }], directories: ["child"] },
     ],
-    ["bash", "cd /workspace > output", {}, { commands: [], directories: ["/workspace"] }],
+    [
+      "bash",
+      "cd /workspace > output",
+      {},
+      { commands: [{ resource: "cd /workspace > output", save: "cd *" }], directories: ["/workspace"] },
+    ],
     [
       "bash",
       "export X=value; unset X; git status",

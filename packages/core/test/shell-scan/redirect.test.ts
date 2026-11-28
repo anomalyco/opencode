@@ -160,9 +160,15 @@ describe("Bash redirect resource oracle", () => {
     ])
   })
 
-  test("redirect before cd operand retains the target directory", async () => {
+  test("redirect before cd operand retains the target directory and shell resource", async () => {
     const source = "pwd && cd >out /outside"
     const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    expect(parsed).toEqual({ commands: [{ resource: "pwd", save: "pwd *" }], directories: ["/outside"] })
+    expect(parsed).toEqual({
+      commands: [
+        { resource: "pwd", save: "pwd *" },
+        { resource: "cd >out /outside", save: "cd *" },
+      ],
+      directories: ["/outside"],
+    })
   })
 })

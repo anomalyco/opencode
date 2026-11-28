@@ -227,6 +227,45 @@ describe("ShellParse", () => {
     })
   })
 
+  test("retains redirected directory commands as permission resources while extracting their directories", async () => {
+    const bash = await Effect.runPromise(
+      ShellParse.scan(
+        "cd . > /tmp/out; pushd . >> /tmp/out; cd . 2> /tmp/err; cd > /tmp/out /outside; FOO=1 cd . > /tmp/out; > /tmp/out cd .; cd .",
+        "/bin/bash",
+        "/workspace",
+      ),
+    )
+    expect(bash).toEqual({
+      commands: [
+        { resource: "cd . > /tmp/out", save: "cd *" },
+        { resource: "pushd . >> /tmp/out", save: "pushd *" },
+        { resource: "cd . 2> /tmp/err", save: "cd *" },
+        { resource: "cd > /tmp/out /outside", save: "cd *" },
+        { resource: "FOO=1 cd . > /tmp/out", save: "cd *" },
+        { resource: "> /tmp/out cd .", save: "cd *" },
+      ],
+      directories: [".", ".", ".", "/outside", ".", ".", "."],
+    })
+
+    const pwsh = await Effect.runPromise(
+      ShellParse.scan(
+        "Set-Location . > out.txt; cd . > out.txt; Push-Location . >> out.txt; Set-Location . 2> err.txt; Set-Location . 2>&1; Set-Location .",
+        "pwsh",
+        "C:\\workspace",
+      ),
+    )
+    expect(pwsh).toEqual({
+      commands: [
+        { resource: "Set-Location . > out.txt", save: "Set-Location *" },
+        { resource: "cd . > out.txt", save: "cd *" },
+        { resource: "Push-Location . >> out.txt", save: "Push-Location *" },
+        { resource: "Set-Location . 2> err.txt", save: "Set-Location *" },
+        { resource: "Set-Location . 2>&1", save: "Set-Location *" },
+      ],
+      directories: [".", ".", ".", ".", ".", "."],
+    })
+  })
+
   test("extracts PowerShell directory parameters", async () => {
     const result = await Effect.runPromise(
       ShellParse.scan("Set-Location -LiteralPath '..\\outside'; Get-ChildItem", "pwsh", "C:\\workspace"),
