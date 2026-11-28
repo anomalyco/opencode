@@ -259,6 +259,37 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(0)
   })
 
+  test.each([{ native: true }, { native: false }])(
+    "caller aborts still reach the response after its headers arrive (native composition: $native)",
+    async (item) => {
+      const original = Object.getOwnPropertyDescriptor(AbortSignal, "any")
+
+      // Disable native composition without adding a test-only input to the queue.
+      if (!item.native) Object.defineProperty(AbortSignal, "any", { value: undefined, configurable: true })
+
+      try {
+        const input = setup({ limit: 1 })
+        const controller = new AbortController()
+        const response = input.queue.fetch("http://server/api/slow-body", { signal: controller.signal })
+        input.pending[0]!.resolve()
+        await response
+        expect(input.queue.inflight()).toBe(0)
+
+        const reason = new DOMException("Cancelled response body", "AbortError")
+        controller.abort(reason)
+        expect(input.pending[0]!.signal.aborted).toBe(true)
+        expect(input.pending[0]!.signal.reason).toBe(reason)
+      } finally {
+        if (!item.native) {
+          // oxlint-disable-next-line no-restricted-globals -- restore the exact own/inherited API shape after simulation
+          Reflect.deleteProperty(AbortSignal, "any")
+
+          if (original) Object.defineProperty(AbortSignal, "any", original)
+        }
+      }
+    },
+  )
+
   test("a burst that drains promptly is not thrashing", async () => {
     const input = setup({ stallMs: 5 })
     const responses = Array.from({ length: 12 }, (_, index) => input.queue.fetch(`http://server/api/${index}`))
