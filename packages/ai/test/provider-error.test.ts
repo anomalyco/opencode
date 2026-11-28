@@ -64,6 +64,22 @@ describe("provider error classification", () => {
     )
   })
 
+  test("classifies Copilot's 408 user_request_timeout as payload too large", () => {
+    const message = "Timed out reading request body. Try again, or use a smaller request size."
+    const body = JSON.stringify({ error: { message, code: "user_request_timeout" } })
+
+    expect(classifyProviderFailure({ message, status: 408, rawBody: body })).toMatchObject({
+      _tag: "InvalidRequest",
+      classification: "payload-too-large",
+    })
+    expect(classifyProviderFailure({ message: "Provider request failed", status: 408, rawBody: body })).toMatchObject({
+      _tag: "InvalidRequest",
+      classification: "payload-too-large",
+    })
+    // A plain request timeout is still a retryable provider failure.
+    expect(classifyProviderFailure({ message: "Request timeout", status: 408 })._tag).toBe("ProviderInternal")
+  })
+
   test("does not classify rate limits as context overflow", () => {
     const messages = [
       "Throttling error: Too many tokens, please wait before trying again.",
