@@ -375,4 +375,4 @@ export const dict = {
   "share.calendar.previous": "前の月",
   "share.calendar.next": "次の月",
   "share.calendar.wholeRange": "全期間",
-} satisfies Record<Key, string>
+} satisfies Partial<Record<Key, string>>
