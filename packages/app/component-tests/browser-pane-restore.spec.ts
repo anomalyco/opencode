@@ -593,6 +593,22 @@ story("reloads the browser tab with ⌘R inside the pane and leaves it to the wi
   await expect(reloads).toHaveText("1")
 })
 
+story("site information opened from the keyboard keeps the keyboard, so Tab reaches its rows", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // The host's side panel follows focus with a signal, as in the app; the panel taking focus must not hand it back.
+  await root.getByRole("button", { name: "Site information", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  const site = page.locator('[data-component="browser-site"]')
+  await expect(site).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(site.getByRole("button", { name: "Site settings", exact: true })).toBeFocused()
+})
+
 story("keeps blank browser tabs when adding tabs and selecting another panel", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))

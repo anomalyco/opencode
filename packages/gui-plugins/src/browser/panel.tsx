@@ -1561,10 +1561,13 @@ function SiteInformation(props: {
           }}
           data-browser-popup
           // The panel takes focus itself rather than its close button, so a pointer opening shows no focus ring there.
+          // Kobalte calls this inside its focus scope's effect: untracked, so a focus listener's signal read cannot rerun
+          // that effect, whose cleanup would hand the keyboard back to the trigger.
           onOpenAutoFocus={(event: Event) => {
             event.preventDefault()
+            const panel = event.currentTarget
 
-            if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus()
+            if (panel instanceof HTMLElement) untrack(() => panel.focus())
           }}
           // Focus returns to the trigger on close, which Chromium rings after Escape; a pointer opening keeps it unringed.
           onCloseAutoFocus={(event: Event) => {
