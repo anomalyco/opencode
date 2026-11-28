@@ -214,6 +214,43 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  if (process.platform !== "win32") {
+    cliIt.live(
+      "--format json preserves signal termination output and continues",
+      ({ llm, opencode }) =>
+        Effect.gen(function* () {
+          yield* llm.push(
+            reply().tool("bash", {
+              command: "printf 'before-signal\\n'; kill -TERM $$",
+              description: "Terminate the tool shell with SIGTERM",
+              timeout: 10_000,
+            }),
+          )
+          yield* llm.text("continued after signal")
+
+          const result = yield* opencode.run("exercise signal termination", {
+            format: "json",
+            permission: { bash: "allow" },
+          })
+
+          opencode.expectExit(result, 0)
+          const events = opencode.parseJsonEvents(result.stdout)
+          expect(events.find((event) => event.type === "tool_use")?.part).toMatchObject({
+            tool: "bash",
+            state: {
+              status: "completed",
+              output: expect.stringMatching(/before-signal[\s\S]*SIGTERM/),
+              metadata: { exit: null, output: expect.stringContaining("SIGTERM") },
+            },
+          })
+          expect(result.stdout).toContain("continued after signal")
+          expect(result.stdout).not.toContain("ChildProcess.kill")
+          expect(result.stdout).not.toContain("exceeding timeout")
+        }),
+      60_000,
+    )
+  }
+
   cliIt.concurrent(
     "--format json records an unknown stream finish and continuation",
     ({ llm, opencode }) =>

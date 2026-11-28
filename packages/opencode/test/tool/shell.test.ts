@@ -1092,6 +1092,34 @@ describe("tool.shell abort", () => {
     )
   }
 
+  if (process.platform !== "win32") {
+    for (const signal of ["TERM", "SEGV", "KILL"]) {
+      it.live(`reports SIG${signal} without waiting for the command timeout`, () =>
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const result = yield* run({
+              command: `ulimit -c 0; printf 'before-stdout\\n'; printf 'before-stderr\\n' >&2; kill -${signal} $$`,
+              timeout: 10_000,
+            }).pipe(
+              Effect.timeoutOrElse({
+                duration: "3 seconds",
+                orElse: () => Effect.die(new Error("Signal termination was not reported promptly")),
+              }),
+            )
+            expect(result.output).toContain("before-stdout")
+            expect(result.output).toContain("before-stderr")
+            expect(result.output).toContain(`SIG${signal}`)
+            expect(result.metadata.output).toBe(result.output)
+            expect(result.output).not.toContain("exceeding timeout")
+            expect(result.output).not.toContain("User aborted")
+            expect(result.metadata.exit).toBeNull()
+          }),
+        ),
+      )
+    }
+  }
+
   it.live("returns non-zero exit code", () =>
     runIn(
       projectRoot,
