@@ -190,11 +190,18 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
 
     const rejected = yield* request("/api/pair", { method: "POST" })
     expect(rejected.status).toBe(401)
-    expect(rejected.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+    // A bare fetch carries `Accept: */*`, byte-identical to a browser's fetch on insecure origins, so it must not
+    // get a Basic challenge: the native prompt would stall the app's own sign-in screen.
+    expect(rejected.headers.get("www-authenticate")).toBeNull()
     // A Basic challenge on fetch makes browsers show a native prompt instead of the app's sign-in screen.
     const fetched = yield* request("/api/info", { headers: { "sec-fetch-mode": "cors" } })
     expect(fetched.status).toBe(401)
     expect(fetched.headers.get("www-authenticate")).toBeNull()
+    const navigation = yield* request("/api/info", {
+      headers: { "upgrade-insecure-requests": "1", accept: "text/html" },
+    })
+    expect(navigation.status).toBe(401)
+    expect(navigation.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
 
     const browser = yield* pair
     expect(browser.expires_in).toBe(300)

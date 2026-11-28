@@ -45,9 +45,23 @@ const UNAUTHORIZED_MESSAGE = "Authentication required"
 
 // Browsers show a native credentials prompt for a Basic challenge even on fetch, which would stall the web app
 // before it can show its own sign-in screen. Only non-browser clients and page navigations get the challenge.
+// Secure contexts send Fetch Metadata on every request; on insecure origins (plain HTTP LAN) and behind metadata
+// strippers there is none, so fall back to what only navigations carry: `upgrade-insecure-requests` and an HTML
+// Accept. Browser fetch, XHR and EventSource send `*/*` or an event-stream Accept and stay unchallenged; a request
+// with no Accept at all is a CLI-style client and keeps the challenge.
 function challengeRequest(request: HttpServerRequest.HttpServerRequest) {
   const mode = request.headers["sec-fetch-mode"]
-  return mode === undefined || mode === "navigate"
+  if (mode !== undefined) return mode === "navigate"
+
+  const dest = request.headers["sec-fetch-dest"]
+  if (dest !== undefined) return dest === "document"
+
+  if (request.headers["upgrade-insecure-requests"] === "1") return true
+
+  const accept = request.headers.accept
+  if (accept !== undefined) return accept.includes("text/html")
+
+  return true
 }
 
 // Matches what the Authorization middleware encodes, for requests rejected before the HttpApi runs.
