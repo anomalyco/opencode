@@ -238,6 +238,36 @@ img[data-slot="artifact-media"] {
   padding-inline-start: 20px;
 }
 
+[data-slot="artifact-table-footer"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  font-size: 12px;
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="artifact-table-more"] {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--v2-text-text-base);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
+  }
+}
+
 [data-slot="artifact-document-stage"][data-kind="markdown"],
 [data-slot="artifact-document-stage"][data-kind="font"] {
   padding-block-end: 20px;

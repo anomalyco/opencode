@@ -13,8 +13,15 @@ import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { createPathHelpers } from "./path"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { usePlatform } from "@/runtime/platform/platform"
-import { fileStreamUrl } from "@/runtime/server/api"
-import { fileContentFromBytes, headStreamedFile, streamedFileContent, streamedKinds } from "./artifact"
+import { fileReadHeaders, fileReadUrl, fileStreamUrl } from "@/runtime/server/api"
+import {
+  boundedKinds,
+  fileContentFromBytes,
+  headStreamedFile,
+  readBoundedFile,
+  streamedFileContent,
+  streamedKinds,
+} from "./artifact"
 import { approxBytes, createFileContentCache } from "./content-cache"
 import {
   createFileContentState,
@@ -223,22 +230,39 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const viewCache = createFileViewCache(serverSDK.scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
-    // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. A failed HEAD has no
-    // body; the full read that follows reports the server's error. The API's request queue bounds the download's wait
-    // for a response, and its body may take as long as it needs.
+    // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. Oversized tables fetch
+    // only a leading byte range so multi-megabyte CSVs stay responsive. A failed HEAD has no body; the full read that
+    // follows reports the server's error. The API's request queue bounds the download's wait for a response, and its
+    // body may take as long as it needs.
     const read = (file: string, request: { path: string; location: { directory: string } }, signal: AbortSignal) => {
       const download = () =>
         serverSDK.api.file.read(request, { signal }).then((data) => fileContentFromBytes(file, data))
 
-      const url = streamedKinds.has(artifactKind(file))
-        ? fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
-        : undefined
+      const kind = artifactKind(file)
 
-      if (!url) return download()
+      if (streamedKinds.has(kind)) {
+        const url = fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
 
-      return headStreamedFile(platform.fetch ?? fetch, url, signal).then((response) =>
-        response.ok ? streamedFileContent(file, url, response) : download(),
-      )
+        if (!url) return download()
+
+        return headStreamedFile(platform.fetch ?? fetch, url, signal).then((response) =>
+          response.ok ? streamedFileContent(file, url, response) : download(),
+        )
+      }
+
+      if (boundedKinds.has(kind)) {
+        const url = fileReadUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
+
+        return readBoundedFile(
+          platform.fetch ?? fetch,
+          file,
+          url,
+          signal,
+          fileReadHeaders(serverSDK.http),
+        ).then((content) => content ?? download())
+      }
+
+      return download()
     }
 
     // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths.

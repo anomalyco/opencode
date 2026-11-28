@@ -2345,6 +2345,90 @@ for (const direction of ["ltr", "rtl"] as const) {
   })
 }
 
+// Oversized CSV previews used to download the whole file and render every row with its own copy button, freezing the
+// renderer, and the watcher's rereads froze it again.
+test("a large CSV previews from a bounded byte range, finds past its first rows, and keeps them across a reread", async ({
+  page,
+}) => {
+  const file = "huge.csv"
+  const totalBytes = 72_351_744
+  const previewBytes = 1024 * 1024
+  const header = Array.from({ length: 22 }, (_, i) => `col_${i}`).join(",")
+  const row = Array.from({ length: 21 }, (_, i) => `v${i + 1}`).join(",")
+
+  const slice = (cell: string) =>
+    Buffer.from(
+      `${header}\n${Array.from({ length: previewBytes / row.length }, (_, n) => `${cell}-${n},${row}\n`).join("")}`,
+    ).subarray(0, previewBytes)
+
+  const requests: Array<{ method: string; range: string | null }> = []
+
+  const workspace = await openSession(page, {
+    name: "ReviewLargeCsv",
+    fileList: (path) => (path ? [] : [fileNode("C:/OpenCode/ReviewLargeCsv", file)]),
+    seed: { panes: { ses_reviewlargecsv: { review: true } } },
+  })
+
+  await page.route(/\/api\/fs\/read\/huge\.csv\?/, async (route) => {
+    const method = route.request().method()
+    const headers = { "access-control-allow-origin": "*", "accept-ranges": "bytes", "content-type": "text/csv" }
+    const range = await route.request().headerValue("range")
+    requests.push({ method, range })
+
+    if (method === "HEAD") return route.fulfill({ headers: { ...headers, "content-length": String(totalBytes) } })
+
+    return route.fulfill({
+      status: 206,
+      headers: { ...headers, "content-range": `bytes 0-${previewBytes - 1}/${totalBytes}` },
+      // The reread finds the file the agent changed.
+      body: slice(requests.length > 2 ? "after" : "before"),
+    })
+  })
+
+  const panel = page.locator("#review-panel")
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]')
+  const rows = panel.locator('[data-slot="artifact-table"] tbody tr')
+
+  const read = [
+    { method: "HEAD", range: null },
+    { method: "GET", range: `bytes=0-${previewBytes - 1}` },
+  ]
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: file }).click()
+  await expect(rows).toHaveCount(100)
+  expect(requests).toEqual(read)
+
+  // Find searches the rendered rows: a query renders rows up to the match after the active one, so a broad query
+  // stays on the rows shown, a narrow one reaches its match further down, and they stay once find closes.
+  await page.keyboard.press("ControlOrMeta+f")
+  const find = page.getByPlaceholder("Find", { exact: true })
+  await find.fill("before")
+  await expect(page.getByText("1/100", { exact: true })).toBeVisible()
+  await find.press("Enter")
+  await expect(page.getByText("2/100", { exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(100)
+  await find.fill("before-250")
+  await expect(page.getByText("1/1", { exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(251)
+  await expect(panel.getByText("before-250", { exact: true })).toBeInViewport()
+  await page.keyboard.press("Escape")
+  await panel.getByRole("button", { name: "Show more rows", exact: true }).click()
+  await expect(rows).toHaveCount(451)
+
+  // A truncated preview never copies or saves its prefix as the whole file.
+  await expect(toolbar.getByRole("button", { name: "Copy content", exact: true })).toHaveCount(0)
+  await toolbar.getByRole("button", { name: "File actions", exact: true }).click()
+  await expect(page.getByRole("menuitem", { name: "Copy path", exact: true })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
+  await page.keyboard.press("Escape")
+
+  await workspace.push([filesystemEvent(workspace.directory, file, "change")])
+  await expect(rows.first()).toContainText("after")
+  expect(requests).toEqual([...read, ...read])
+  await expect(rows).toHaveCount(451)
+})
+
 async function statusInset(status: Locator, side: "left" | "right") {
   return status.evaluate((element, side) => {
     const root = element.getRootNode()

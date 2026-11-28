@@ -16,75 +16,143 @@ export function contentBytes(content: FileContent) {
   return new TextEncoder().encode(content.content).length
 }
 
+export type ParsedDelimited = {
+  rows: string[][]
+  columns: number
+  /** Rows exist past `rows`, or the text itself is a prefix of the file. */
+  truncated: boolean
+  /** Every non-blank row in the file, when the whole file was read and counted. */
+  total?: number
+}
+
+const QUOTE = 34
+
+const CR = 13
+
+const LF = 10
+
+// Rows past the limit are still counted in text up to this length, so a whole small file shows its row count. Longer
+// text stops at the limit: counting it would parse the whole file.
+const COUNT_LIMIT = 4 * 1024 * 1024
+
 /**
- * Parse RFC 4180 style delimited text. Quoted fields may contain the delimiter, newlines, and
- * doubled quotes. Rows beyond `limit` are counted but not returned.
+ * Parse RFC 4180 style delimited text up to `limit` non-blank rows. Quoted fields may contain the
+ * delimiter, newlines, and doubled quotes. Past `limit`, rows are only counted, in text up to `COUNT_LIMIT`; longer
+ * text stops at the first row past `limit`.
  */
-export function parseDelimited(text: string, delimiter: string, limit = 1000) {
+export function parseDelimited(
+  text: string,
+  delimiter: string,
+  limit = 1000,
+  options?: { truncated?: boolean },
+): ParsedDelimited {
+  const delim = delimiter.charCodeAt(0)
+  const len = text.length
   const rows: string[][] = []
   let row: string[] = []
   let field = ""
   let quoted = false
+  let truncated = Boolean(options?.truncated)
+  const count = !truncated && len <= COUNT_LIMIT
   let total = 0
+  let stopped = false
+  let index = 0
 
-  const endRow = () => {
+  const finishRow = () => {
     row.push(field)
     field = ""
     const blank = row.length === 1 && row[0] === ""
+    const completed = row
+    row = []
 
-    if (!blank) {
-      total++
+    if (blank) return false
+    total++
 
-      if (rows.length < limit) rows.push(row)
+    if (rows.length < limit) {
+      rows.push(completed)
+
+      return false
     }
 
-    row = []
+    truncated = true
+
+    return !count
   }
 
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index]!
-
+  while (index < len) {
     if (quoted) {
-      if (char !== '"') {
-        field += char
+      const next = text.indexOf('"', index)
+
+      if (next === -1) {
+        field += text.slice(index)
+        index = len
+        break
+      }
+
+      if (next + 1 < len && text.charCodeAt(next + 1) === QUOTE) {
+        field += text.slice(index, next + 1)
+        index = next + 2
         continue
       }
 
-      if (text[index + 1] === '"') {
-        field += '"'
-        index++
-        continue
-      }
-
+      field += text.slice(index, next)
+      index = next + 1
       quoted = false
       continue
     }
 
-    if (char === '"' && field === "") {
+    const code = text.charCodeAt(index)
+
+    if (code === QUOTE && field === "") {
       quoted = true
+      index++
       continue
     }
 
-    if (char === delimiter) {
+    if (code === delim) {
       row.push(field)
       field = ""
+      index++
       continue
     }
 
-    if (char === "\r") continue
-
-    if (char === "\n") {
-      endRow()
+    if (code === CR) {
+      index++
       continue
     }
 
-    field += char
+    if (code === LF) {
+      index++
+
+      if (!finishRow()) continue
+      stopped = true
+      break
+    }
+
+    // Scan a plain run until the next delimiter or line ending, then slice once.
+    const start = index
+    index++
+
+    while (index < len) {
+      const next = text.charCodeAt(index)
+
+      if (next === delim || next === CR || next === LF) break
+      index++
+    }
+
+    field = field === "" ? text.slice(start, index) : field + text.slice(start, index)
   }
 
-  if (field !== "" || row.length > 0) endRow()
+  // A byte-truncated preview may cut off mid-row or mid-quote; drop that partial trailing row when complete rows exist.
+  const partialEof = Boolean(options?.truncated) && (quoted || rows.length > 0)
+
+  if (!partialEof && (field !== "" || row.length > 0)) {
+    finishRow()
+  }
+
   const columns = rows.reduce((max, current) => Math.max(max, current.length), 0)
 
-  return { rows, total, columns }
+  return { rows, columns, truncated, total: stopped || options?.truncated ? undefined : total }
 }
 
 /** The raw bytes of loaded content. */

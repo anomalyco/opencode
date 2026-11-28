@@ -556,6 +556,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
               content={value()}
               cacheKey={cacheKey()}
               source={codeView()}
+              find={previewFind.state()}
             />
           )}
         </Match>

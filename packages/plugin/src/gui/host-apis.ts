@@ -104,8 +104,10 @@ export type FileContent = {
   encoding?: "base64"
   /** The file's MIME type, when the server knows it. */
   mimeType?: string
-  /** On-disk size when the bytes themselves are not retained. */
+  /** On-disk size in bytes, set when known so viewers need not re-encode the content. */
   size?: number
+  /** True when only a leading prefix of a large file was loaded into `content`; `size` still holds the full on-disk byte size. */
+  truncated?: boolean
   /** A URL the server streams the file from with range requests, set instead of `bytes` for images, audio and video. */
   url?: string
 }
