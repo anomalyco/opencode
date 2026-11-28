@@ -81,6 +81,9 @@ export namespace FSUtil {
 
       const resolve = Effect.fnUntraced(function* (input: string) {
         const resolved = path.resolve(windowsPath(input))
+        // A filesystem root is never a link. Windows realpath of a drive root can fail
+        // (EINVAL) or drop the separator ("C:", the drive's current directory).
+        if (path.parse(resolved).root === resolved) return resolved
         // Sandboxes deny reads outside granted paths; canonicalize what we can see.
         return yield* fs.realPath(resolved).pipe(
           Effect.map((real) =>

@@ -40,6 +40,16 @@ describe("FSUtil", () => {
     )
   }
 
+  // Some Windows environments fail realpath on a drive root with EINVAL (#62551). A root is never a
+  // link, so resolving it must not depend on realPath.
+  it.effect("returns a filesystem root without calling realPath", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const root = path.parse(path.resolve("/")).root
+      expect(yield* fs.resolve(root)).toBe(root)
+    }).pipe(Effect.provide(denied("Unknown", "EINVAL"))),
+  )
+
   it.effect("keeps other realPath failures fatal", () =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
