@@ -8,13 +8,19 @@ import { ClientTls } from "#client-tls"
 import { WebSocketConstructor } from "./websocket-constructor.js"
 
 // Bun's fetch ends a request after five quiet minutes, before provider routes' own header and chunk timeouts.
-const withoutBunTimeout = Layer.effect(
+// `transformResponse` wraps the transport closer than the caller can, so providing the timeout outright would
+// replace options the caller already set — a hook's `redirect` among them. Read what is there and add to it.
+export const withoutBunTimeout = Layer.effect(
   HttpClient.HttpClient,
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient
-    return HttpClient.transformResponse(
-      client,
-      Effect.provideService(FetchHttpClient.RequestInit, { timeout: false } as BunFetchRequestInit),
+    return HttpClient.transformResponse(client, (effect) =>
+      Effect.flatMap(Effect.serviceOption(FetchHttpClient.RequestInit), (init) =>
+        Effect.provideService(effect, FetchHttpClient.RequestInit, {
+          ...(Option.isSome(init) ? init.value : undefined),
+          timeout: false,
+        } as BunFetchRequestInit),
+      ),
     )
   }),
 )
