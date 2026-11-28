@@ -153,9 +153,9 @@ broader `deny`, after which the agent's own rules decide.
 
 ## Integrations
 
-An integration is anything you connect in `/connect`: the OpenCode Console
-(`opencode`), a provider such as `anthropic`, a web search service such as `exa`,
-or a well-known config origin such as `https://ai.acme.com`. Signing in to an MCP
+An integration is anything you connect in `/connect`: OpenCode (`opencode`),
+which signs in to a Console workspace, a provider such as `anthropic`, a web search
+service such as `exa`, or a well-known config origin such as `https://ai.acme.com`. Signing in to an MCP
 server is not affected by integration policies; use `mcp.use` to control MCP
 servers.
 
@@ -184,8 +184,8 @@ This MDM policy requires one Console workspace and nothing else. See [Enterprise
 }
 ```
 
-`/connect` offers only the Console so members can sign in. The free tier, personal
-Console accounts, other organizations, environment API keys, and providers from
+`/connect` offers only OpenCode so members can sign in to the workspace. The free
+tier, personal Console accounts, other organizations, environment API keys, and providers from
 `opencode.json` are all unavailable. The workspace's providers, MCP servers, and
 web search work, and changing them in the Console needs no new MDM profile.
 
