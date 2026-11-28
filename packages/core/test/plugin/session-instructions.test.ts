@@ -55,7 +55,7 @@ it.live("Effect plugins can put, list, and remove session instruction entries se
       expect.objectContaining({
         type: "system",
         text: [
-          'The context under "deploy-target" changed and supersedes the previous value:',
+          'Context "deploy-target" has changed. Previous value replaced with:',
           '<context key="deploy-target">',
           "{",
           '  "region": "us-east-1"',
