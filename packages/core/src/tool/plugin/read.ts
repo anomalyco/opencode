@@ -34,13 +34,11 @@ const description = (codemode: boolean) =>
         "Read a file or directory: text, images, and PDFs.",
         "An image or PDF is attached to the execute result even if the program doesn't return it.",
         `A call returns one page, at most ${ReadToolFileSystem.MAX_READ_LINES} lines or ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB, and \`next\` is where the following page starts.`,
-        `Lines come back whole; a line over ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB gets a note instead of its content.`,
       ].join(" ")
     : [
         "Read the contents of a file or directory. Supports text files, images, and PDFs.",
         "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
         "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-        `Lines come back whole; a line over ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB gets a note instead of its content.`,
       ].join(" ")
 
 export const Plugin = {
