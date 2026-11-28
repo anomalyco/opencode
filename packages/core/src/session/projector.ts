@@ -72,6 +72,18 @@ function setSession(
   return db.update(SessionTable).set(values).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
 }
 
+function hasMessage(db: DatabaseService, sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
+  return db
+    .select({ id: SessionMessageTable.id })
+    .from(SessionMessageTable)
+    .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.id, messageID)))
+    .get()
+    .pipe(
+      Effect.orDie,
+      Effect.map((row) => row !== undefined),
+    )
+}
+
 function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage, timeUpdated?: number) {
   return setSession(db, sessionID, {
     cost: sql`${SessionTable.cost} + ${value.cost}`,
@@ -1142,7 +1154,13 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
-      setSession(db, event.data.sessionID, { revert: event.data.revert, time_updated: event.created }),
+      Effect.gen(function* () {
+        // A stage still snapshotting when a commit ran publishes after the commit deleted its boundary.
+        // Writing it back would leave the revert pointing at a missing message, which every later
+        // commit, and therefore every send, rejects.
+        if (!(yield* hasMessage(db, event.data.sessionID, event.data.revert.messageID))) return
+        yield* setSession(db, event.data.sessionID, { revert: event.data.revert, time_updated: event.created })
+      }),
     )
     yield* bus.project(SessionEvent.RevertEvent.Cleared, (event) =>
       setSession(db, event.data.sessionID, { revert: null, time_updated: event.created }),
@@ -1157,7 +1175,12 @@ const layer = Layer.effectDiscard(
           )
           .get()
           .pipe(Effect.orDie)
-        if (!boundary) return yield* Effect.die(new Error(`Revert boundary message not found: ${event.data.to}`))
+        // The boundary is already gone, either because this commit replayed after its rows were removed or
+        // because an older build left the pointer behind. Clear it so the session is not blocked forever.
+        if (!boundary) {
+          yield* setSession(db, event.data.sessionID, { revert: null, time_updated: event.created })
+          return
+        }
         yield* db
           .delete(SessionMessageTable)
           .where(
