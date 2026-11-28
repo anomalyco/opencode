@@ -674,6 +674,15 @@
   color: var(--v2-text-text-muted);
   line-height: var(--line-height-normal);
 
+  /* An open block keeps its header reachable while its text scrolls, like edit and patch cards. */
+  > [data-component="collapsible"].tool-collapsible
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    z-index: 20;
+    background-color: var(--v2-background-bg-base);
+  }
+
   [data-component="markdown"] {
     margin-top: 0;
     font-style: normal;
