@@ -68,6 +68,8 @@ const messages = [
     model: { providerID: "demo", id: "model" },
     time,
     content: [
+      // A text part before the one naming the videos, so their tiles must land under the right part.
+      { type: "text", text: "Rendering the clips." },
       { type: "text", text: `Rendered ${named.map((file) => `\`${file}\``).join(" and ")}.` },
       {
         type: "tool",

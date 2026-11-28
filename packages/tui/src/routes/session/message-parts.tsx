@@ -218,11 +218,6 @@ export function TextPart(props: {
     partID: props.partID,
     text: props.part.text.trim(),
   }))
-  // The ids of the videos this text names, numbered by text part as in the row's `text:<n>` part id.
-  const media = createMemo(
-    () =>
-      `${props.message.id}:text:${props.message.content.filter((part) => part.type === "text").indexOf(props.part)}:`,
-  )
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
@@ -242,7 +237,8 @@ export function TextPart(props: {
           bg={theme.background.base}
         />
       </box>
-      <SessionMedia match={(item) => item.id.startsWith(media())} />
+      {/* The videos this text names; the gallery numbers them by its `text:<n>` part id. */}
+      <SessionMedia match={(item) => item.id.startsWith(`${props.message.id}:${props.partID}:`)} />
     </Show>
   )
 }
