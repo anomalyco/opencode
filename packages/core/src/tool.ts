@@ -254,13 +254,15 @@ const layer = Layer.effect(
           if (!found) return yield* new Tool.Error({ message: `No tool named "${name}" is available to this call.` })
           const id = Tool.CallID.make(`call_${Identifier.ascending()}`)
           yield* permission.nested(id, parent.id)
+          // The call the transcript shows, which tools such as shell record their work under, as in Code Mode.
+          const outer = (yield* CodeModeTool.Parent) ?? parent.id
           return yield* run(tools, found.registration, found.id, input, {
             ...parent,
             id,
             // Progress belongs to the outer call, and a stop is its to handle.
             progress: () => Effect.void,
             cancel: undefined,
-          })
+          }).pipe(Effect.provideService(CodeModeTool.Parent, outer))
         }).pipe(Effect.scoped),
     })
 

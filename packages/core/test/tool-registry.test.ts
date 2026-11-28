@@ -9,6 +9,7 @@ import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { State } from "@opencode/core/state"
 import { CodeModeJob } from "@opencode/core/codemode/job"
+import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -1293,6 +1294,28 @@ describe("Tool", () => {
         { text: "path" },
         'No tool named "secret" is available to this call.',
       ])
+    }),
+  )
+
+  it.effect("runs nested calls under the call the transcript shows", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const parentOf = (name: string, next?: string): Info => ({
+        name,
+        description: name,
+        input: Schema.Struct({}),
+        output: Schema.Unknown,
+        execute: (_, context) =>
+          next === undefined
+            ? Effect.map(CodeModeTool.Parent, (parent) => ({ output: parent ?? null }))
+            : context.tool.call(next, {}).pipe(Effect.map((result) => ({ output: result.output }))),
+      })
+      yield* transform(
+        service,
+        { outer: parentOf("outer", "middle"), middle: parentOf("middle", "probe"), probe: parentOf("probe") },
+        { codemode: false },
+      )
+      expect(yield* executeTool(service, call("outer", "call-outer"))).toMatchObject({ output: "call-outer" })
     }),
   )
 
