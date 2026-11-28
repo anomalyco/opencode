@@ -335,6 +335,39 @@ effect: (ctx) =>
   }),
 ```
 
+#### Credentials from a secret manager
+
+A provider transform is the place to fill credentials that are fetched from somewhere else, such as a secret manager
+or a KMS. Resolve the value before the callback — transforms are synchronous — and reload on the lease so a rotation
+reaches the next request.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const apply = Effect.gen(function* () {
+      const apiKey = yield* Effect.tryPromise(() => fetchKeyFromSecretManager())
+      yield* ctx.provider.transform((editor) => {
+        editor.update("anthropic", (provider) => {
+          provider.settings = { ...provider.settings, apiKey }
+        })
+      })
+      yield* ctx.provider.reload()
+    })
+    yield* apply
+    yield* Effect.repeat(apply, { schedule: Schedule.spaced("40 seconds") }).pipe(Effect.forkScoped)
+  }),
+```
+
+Two provider behaviours to check before choosing the field:
+
+- A provider that already has a credential ignores `settings.apiKey` (the resolver drops it), so sign the provider out
+  or use its connection when you need to supply the key yourself.
+- Some catalog entries (the OpenCode console provider is one) read a dedicated environment variable rather than
+  provider settings; for those, set the variable the provider documents instead of `settings.apiKey`.
+
+For a credential that a tool needs rather than the model client, keep it out of the prompt: expose a tool that injects
+the value into a single process and returns redacted output.
+
 Replace a source inventory with `models.set`, then reload after its captured definitions change.
 
 ```ts
