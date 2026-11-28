@@ -49,6 +49,16 @@ export interface Context {
    * running, so a tool must finish its work within the call.
    */
   readonly automation?: { readonly id: Automation.ID }
+  /** Calls other tools from inside this one. */
+  readonly tool: Calls
+}
+
+export interface Calls {
+  /**
+   * Calls another registered tool as part of this call: the same input checks, `execute` hooks and permission rules as
+   * a call the model makes, with permission requests shown on this call. Fails with the tool's error.
+   */
+  readonly call: (name: string, input: unknown) => Effect.Effect<Result, Error>
 }
 
 export interface Namespace {

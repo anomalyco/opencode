@@ -1,10 +1,11 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
-export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
+export type { Calls, Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
+import { Identifier } from "@opencode/schema/identifier"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -96,10 +97,13 @@ export interface CheckInput {
   readonly policy: PermissionPolicy.Policy
   readonly limits: CodeMode.ExecutionLimits
   readonly services?: Context.Context<CodeModeTool.Services>
-  readonly context: Omit<Tool.Context, "id">
+  readonly context: Omit<Tool.Context, "id" | "tool">
 }
 
 /** A local execution result after hooks and content normalization. */
+/** A call's context before `tool.call` is bound to it. */
+type Call = Omit<Tool.Context, "tool">
+
 export interface NormalizedResult extends Tool.Result {
   readonly content: ReadonlyArray<Tool.Content>
 }
@@ -160,7 +164,7 @@ const layer = Layer.effect(
       ]
     })
 
-    const beforeExecute = (name: string, info: Tool.Info | undefined, input: unknown, context: Tool.Context) =>
+    const beforeExecute = (name: string, info: Tool.Info | undefined, input: unknown, context: Call) =>
       hooks.trigger("tool", "execute.before", {
         tool: name,
         ...(info === undefined ? {} : { info }),
@@ -176,7 +180,8 @@ const layer = Layer.effect(
       tool: Tool.Info,
       name: string,
       input: unknown,
-      context: Tool.Context,
+      context: Call,
+      reachable: ReadonlyMap<string, Tool.Info>,
     ) {
       yield* Effect.annotateCurrentSpan({
         "gen_ai.tool.name": name,
@@ -184,7 +189,7 @@ const layer = Layer.effect(
         "session.id": context.sessionID,
         "gen_ai.agent.name": context.agent,
       })
-      const execution = yield* execute(tool, input, context).pipe(
+      const execution = yield* execute(tool, input, { ...context, tool: calls(reachable, context) }).pipe(
         Effect.map((value) => ({ value })),
         Effect.catchTag("Tool.Error", (failure) => Effect.succeed({ failure })),
       )
@@ -231,12 +236,34 @@ const layer = Layer.effect(
       tool: Tool.Info,
       name: string,
       input: unknown,
-      context: Tool.Context,
+      context: Call,
+      reachable: ReadonlyMap<string, Tool.Info> = tools,
     ) {
       const event = yield* beforeExecute(name, tool, input, context)
       const selected = event.tool === name ? tool : tools.get(event.tool)
       if (!selected) return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-      return yield* executeTool(selected, event.tool, event.input, context)
+      return yield* executeTool(selected, event.tool, event.input, context, reachable)
+    })
+
+    // `tool.call` for a call: runs another of the tools it may reach as a nested call, whose permission requests show
+    // on the call the model made.
+    const calls = (tools: ReadonlyMap<string, Tool.Info>, parent: Call): Tool.Calls => ({
+      call: (name, input) =>
+        Effect.gen(function* () {
+          const found = CodeModeTool.find({ tools }, name)
+          if (!found) return yield* new Tool.Error({ message: `No tool named "${name}" is available to this call.` })
+          const id = Tool.CallID.make(`call_${Identifier.ascending()}`)
+          yield* permission.nested(id, parent.id)
+          // The call the transcript shows, which tools such as shell record their work under, as in Code Mode.
+          const outer = (yield* CodeModeTool.Parent) ?? parent.id
+          return yield* run(tools, found.registration, found.id, input, {
+            ...parent,
+            id,
+            // Progress belongs to the outer call, and a stop is its to handle.
+            progress: () => Effect.void,
+            cancel: undefined,
+          }).pipe(Effect.provideService(CodeModeTool.Parent, outer))
+        }).pipe(Effect.scoped),
     })
 
     type CachedCatalog = {
@@ -338,6 +365,8 @@ const layer = Layer.effect(
             }
             direct.set(name, tool)
           }
+          // Every tool this request offers, directly or inside Code Mode, which a call's `tool.call` may reach.
+          const reachable = new Map([...direct, ...codemodeEntries])
           const codemode = !codeModeEnabled
             ? undefined
             : (() => {
@@ -357,7 +386,7 @@ const layer = Layer.effect(
                 }
                 const tool = CodeModeTool.create(
                   inventory,
-                  (name, item, input, context) => run(inventory.tools, item, name, input, context),
+                  (name, item, input, context) => run(inventory.tools, item, name, input, context, reachable),
                   permission,
                   full ? options.services : undefined,
                   options?.api,
@@ -386,7 +415,7 @@ const layer = Layer.effect(
               ...(codemode ? [codemode.definition] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
-              const context: Tool.Context = {
+              const call: Call = {
                 sessionID: input.sessionID,
                 agent: input.agent,
                 messageID: input.messageID,
@@ -394,6 +423,7 @@ const layer = Layer.effect(
                 progress: input.progress ?? (() => Effect.void),
                 cancel: input.cancel,
               }
+              const context: Tool.Context = { ...call, tool: calls(reachable, call) }
               const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
               const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
               const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
@@ -415,15 +445,15 @@ const layer = Layer.effect(
                 // Like an execute program, it moves to the background when it runs long.
                 const run = (ctx: Tool.Context) =>
                   found
-                    ? executeTool(found.registration, found.id, event.input, { ...ctx, codemode: true })
-                    : executeTool(codemode.tool, name, event.input, ctx)
+                    ? executeTool(found.registration, found.id, event.input, { ...ctx, codemode: true }, reachable)
+                    : executeTool(codemode.tool, name, event.input, ctx, reachable)
                 const background = yield* CodeModeJob.Current
                 return yield* background
                   ? background(context, run, full && !found ? executeOptions(event.input) : undefined)
                   : run(context)
               }
               const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
+              if (tool) return yield* executeTool(tool, name, event.input, context, reachable)
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })
@@ -451,14 +481,17 @@ const layer = Layer.effect(
           { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
-            context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
+            context: (() => {
+              const call = { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) }
+              return { ...call, tool: calls(tools, call) }
+            })(),
             permission,
             services: full ? input.services : undefined,
           },
           (name, tool, toolInput) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
-              const context: Tool.Context = {
+              const context: Call = {
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
                 codemode: true,

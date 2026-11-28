@@ -18,6 +18,7 @@ import { Agent } from "@opencode/core/agent"
 import { advance } from "../lib/clock"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
+import { noToolCalls } from "../lib/tool"
 import { PluginTestLayer } from "./fixture"
 
 const withFlags = (overrides: string) => testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
@@ -298,6 +299,7 @@ const context = (sessionID: Session.ID): Tool.Context => ({
   messageID: SessionMessage.ID.create(),
   id: Tool.CallID.make("call_1"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 })
 
 describe("OpencodePlugin event watches", () => {

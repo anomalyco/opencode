@@ -643,6 +643,22 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("shows a call nested two deep on the outermost call's row", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const source = { type: "tool" as const, messageID: "msg_test", id: "call_grandchild" }
+      yield* service
+        .nested(Tool.CallID.make("call_child"), Tool.CallID.make("call_parent"))
+        .pipe(
+          Effect.andThen(service.nested(Tool.CallID.make("call_grandchild"), Tool.CallID.make("call_child"))),
+          Effect.andThen(service.ask(assertion({ id: Permission.ID.create("per_deep"), source }))),
+          Effect.scoped,
+        )
+      expect((yield* service.get(Permission.ID.create("per_deep")))?.source).toEqual({ ...source, id: "call_parent" })
+    }),
+  )
+
   it.effect("drops undefined metadata values so pending requests encode as JSON", () =>
     Effect.gen(function* () {
       yield* setup()
