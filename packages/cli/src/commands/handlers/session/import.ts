@@ -23,9 +23,15 @@ export default Runtime.handler(
         new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
     })
     // The server validates the transcript, including exports written by earlier releases.
-    const data = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
-      text,
-    )
+    const data = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(text)
+    if (Option.isNone(data)) {
+      process.stderr.write(
+        "Expected a JSON session export. Run opencode session export <session-id> or select JSON in the TUI's /export dialog." +
+          EOL,
+      )
+      process.exitCode = 1
+      return
+    }
     const server = yield* ServerConnection.resolve()
     const client = OpenCode.make({
       baseUrl: server.endpoint.url,
@@ -41,7 +47,7 @@ export default Runtime.handler(
         method: "POST",
         headers: { ...Service.headers(server.endpoint), "content-type": "application/json" },
         body: JSON.stringify({
-          ...data,
+          ...data.value,
           location: { directory: location.directory },
         }),
       }),
