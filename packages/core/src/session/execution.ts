@@ -104,20 +104,16 @@ export const layer = Layer.effect(
     let interruption: (sessionID: SessionSchema.ID) => InterruptReason | undefined = () => undefined
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
-      force: boolean,
-      continuation?: SessionRunner.Continuation,
-      promotable: SessionInbox.Promotable = "input",
-      stepped = false,
+      at: SessionRunner.Position,
+      promotable: SessionInbox.Promotable,
     ): Effect.fn.Return<void, SessionRunner.RunError> {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({
           sessionID,
-          force,
-          continuation,
+          at,
           promotable,
-          stepped,
           interruption: () => interruption(sessionID),
         }),
       ).pipe(
@@ -131,8 +127,8 @@ export const layer = Layer.effect(
       )
       return yield* SessionRunner.DrainResult.$match(result, {
         Complete: () => Effect.void,
-        Moved: (result) => drain(sessionID, false, result.continuation, promotable, result.stepped),
-        Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
+        Moved: (result) => drain(sessionID, result.at, promotable),
+        Reloaded: (result) => drain(sessionID, result.at, promotable),
       })
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -151,7 +147,7 @@ export const layer = Layer.effect(
             })
           }),
         ),
-      drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
+      drain: (sessionID, force, promotable) => drain(sessionID, { _tag: "Fresh", forced: force }, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
@@ -194,10 +190,8 @@ export const layer = Layer.effect(
           // Reading the inbox concurrently with the dying drain is safe: delivery consumes
           // rows inside uninterruptible publications, so a steer row is either still
           // promotable here or was fully delivered and needs no resumption.
-          const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
-          if (next === undefined) return interrupted
-          if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")
-            yield* coordinator.wake(sessionID, "steer")
+          const next = yield* SessionInbox.boundary(db, sessionID, "control")
+          if (next._tag === "Control" || next._tag === "Promote") yield* coordinator.wake(sessionID, "steer")
           return interrupted
         }),
       resume: coordinator.run,

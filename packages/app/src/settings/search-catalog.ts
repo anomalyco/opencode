@@ -153,13 +153,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     description: "settings.experimental.row.newTimeline.description",
     keywords: "new timeline redesign activity explored edited ran grouping status",
   },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.automations.title",
-    target: "settings-automations",
-    description: "settings.experimental.row.automations.description",
-    keywords: "automations schedules timers cron watches events",
-  },
   // Matches questionComposerAvailable in settings/model.tsx; that module is too heavy to import here.
   ...(import.meta.env.VITE_OPENCODE_CHANNEL === "local" || import.meta.env.VITE_OPENCODE_CHANNEL === "dev"
     ? [

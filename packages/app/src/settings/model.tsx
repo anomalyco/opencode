@@ -136,8 +136,6 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
-  // The Automations view in the sidebar and Home, off in releases until it ships.
-  automations: Persistence.optional(Schema.Boolean),
   // One side panel open state for every session tab, instead of one per tab.
   sharedSidePanel: Persistence.optional(Schema.Boolean),
   // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
@@ -476,13 +474,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setTabGroups(value: boolean) {
           setStore("general", "tabGroups", value)
-        },
-        automations: withFallback(
-          () => store.general?.automations,
-          import.meta.env.DEV && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
-        ),
-        setAutomations(value: boolean) {
-          setStore("general", "automations", value)
         },
         sharedSidePanel: withFallback(() => store.general?.sharedSidePanel, false),
         setSharedSidePanel(value: boolean) {

@@ -53,6 +53,10 @@ describe("sitemap", () => {
     expect(files).toEqual(sitemapFiles.map((file) => `${config.baseUrl}${file}`))
     expect(files).toContain(`${config.baseUrl}/sitemap-pages.xml`)
     expect(files).toContain(`${config.baseUrl}/docs/sitemap.xml`)
+    expect(files).toContain(`${config.baseUrl}/console/sitemap.xml`)
+    for (const locale of LOCALES.filter((locale) => locale !== "en"))
+      expect(files).toContain(`${config.baseUrl}/${locale}/console/sitemap.xml`)
+    expect(files).not.toContain(`${config.baseUrl}/en/console/sitemap.xml`)
     expect(files.some((file) => file === `${config.baseUrl}/sitemap.xml`)).toBe(false)
   })
 

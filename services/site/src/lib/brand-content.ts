@@ -1,4 +1,5 @@
 import type { Translate } from "~/i18n"
+import { sentenceGap } from "~/i18n/rich"
 import { pressEmail } from "~/lib/contact"
 import { absoluteUrl, blocks, link, type MarkdownContext } from "~/lib/markdown"
 import { brandAssets, mediaUrl } from "~/lib/media"
@@ -505,7 +506,7 @@ export function brandMarkdown(context: MarkdownContext) {
     `## ${content.integrations.title}`,
     content.integrations.body,
     content.integrations.badges.body,
-    `${content.integrations.badges.sizes} ${content.integrations.badges.mono}`,
+    `${content.integrations.badges.sizes}${sentenceGap(content.integrations.badges.sizes)}${content.integrations.badges.mono}`,
     ...content.integrations.badges.groups.map((group) =>
       blocks(
         `### ${group.title}`,
@@ -531,7 +532,7 @@ export function brandMarkdown(context: MarkdownContext) {
     content.integrations.naming.body,
     content.integrations.naming.rule,
     `## ${content.trademarks.title}`,
-    `${content.trademarks.body} ${content.trademarks.contact.before}${link(content.trademarks.contact.email, `mailto:${content.trademarks.contact.email}`)}${content.trademarks.contact.after}`,
+    `${content.trademarks.body}${sentenceGap(content.trademarks.body)}${content.trademarks.contact.before}${link(content.trademarks.contact.email, `mailto:${content.trademarks.contact.email}`)}${content.trademarks.contact.after}`,
     brandAgentStyle,
   )
 }

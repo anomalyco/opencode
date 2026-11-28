@@ -71,20 +71,6 @@ export const SettingsExperimental: Component = () => {
                 </Switch>
               </div>
             </SettingsRow>
-            <SettingsRow
-              title={language.t("settings.experimental.row.automations.title")}
-              description={language.t("settings.experimental.row.automations.description")}
-            >
-              <div data-action="settings-automations">
-                <Switch
-                  checked={settings.general.automations()}
-                  onChange={(checked) => settings.general.setAutomations(checked)}
-                  hideLabel
-                >
-                  {language.t("settings.experimental.row.automations.title")}
-                </Switch>
-              </div>
-            </SettingsRow>
             <Show when={settings.general.questionComposerAvailable}>
               <SettingsRow
                 title={language.t("settings.experimental.row.questionComposer.title")}

@@ -1,6 +1,7 @@
 import { useArea } from "~/i18n/content"
 import { announcementsSource } from "~/i18n/content/areas/announcements"
 import { useI18n } from "~/context/i18n"
+import { sentenceGap } from "~/i18n/rich"
 import "./site-banner.css"
 import { onCleanup, onMount, Show } from "solid-js"
 import { useLanguage } from "~/context/language"
@@ -30,7 +31,7 @@ export function SiteBanner() {
     if (index < 0) return { text: message(), link: "" }
     return announcementText()[index]
   }
-  const shown = () => [parts().text, parts().link].filter(Boolean).join(" ")
+  const shown = () => [parts().text, parts().link].filter(Boolean).join(sentenceGap(parts().text))
   let banner: HTMLDivElement | undefined
 
   const dismiss = () => {
@@ -106,7 +107,10 @@ export function SiteBanner() {
           <span data-slot="message">
             {parts().text}
             <Show when={parts().link}>
-              <span data-slot="link-text"> {parts().link}</span>
+              <span data-slot="link-text">
+                {sentenceGap(parts().text)}
+                {parts().link}
+              </span>
             </Show>
           </span>
           <ChevronRight />

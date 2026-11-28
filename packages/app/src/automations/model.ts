@@ -1,3 +1,4 @@
+import { getFilename } from "@opencode/util/path"
 import { displayName } from "@opencode/ui/project-avatar"
 import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, startTransition } from "solid-js"
@@ -41,13 +42,14 @@ export function createAutomationsController() {
         const name = (id: string) => {
           const session = item.ctx.data.session.get(id)
 
-          return session ? sessionLabel(session) : id
+          return session ? sessionLabel(session) : undefined
         }
 
         return {
           ...item,
           project,
-          projectName: project ? displayName(project) : row.projectID,
+          // An unknown project's ID is a hash; its folder name reads better.
+          projectName: project ? displayName(project) : getFilename(row.directory) || row.directory,
           creator: row.sessionID && name(row.sessionID),
           recipient: row.action.type === "prompt" && row.action.to.session ? name(row.action.to.session) : undefined,
           trigger: triggerLabel(row, language),
@@ -59,7 +61,7 @@ export function createAutomationsController() {
   const filtered = createMemo(() => {
     const needle = state.query.trim().toLowerCase()
 
-    return entries().filter(({ row, trigger, projectName, creator, recipient, serverLabel }) =>
+    return entries().filter(({ row, trigger, projectName, creator, recipient }) =>
       [
         row.name,
         row.id,
@@ -68,7 +70,6 @@ export function createAutomationsController() {
         row.directory,
         creator,
         recipient,
-        serverLabel,
         row.trigger.type === "event" && row.trigger.server,
         row.action.type === "prompt" && row.action.prompt,
         row.action.type === "code" && row.action.code,
@@ -145,11 +146,8 @@ export function createAutomationsController() {
     toggleDone: () => set("showDone", (value) => !value),
     setQuery: (query: string) => set("query", query),
     select: (key: string) => set("key", key),
-    // Server and project names only tell rows apart when they differ.
-    context: (entry: { serverLabel: string; projectName: string }) => [
-      ...(source.multiServer() ? [entry.serverLabel] : []),
-      ...(multiProject() ? [entry.projectName] : []),
-    ],
+    // Project names only tell rows apart when they differ.
+    context: (entry: { projectName: string }) => (multiProject() ? [entry.projectName] : []),
     busy: () => change.isPending,
     update: (entry: AutomationEntry, operation: "pause" | "resume" | "delete") => {
       if (!change.isPending) change.mutate({ entry, operation })

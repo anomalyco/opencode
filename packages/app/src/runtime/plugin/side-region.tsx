@@ -29,6 +29,7 @@ import { createSessionPanelMenuEntries, type SessionPanelMenuEntry } from "./pan
 import { RegionContent, type Region, type RegionPane } from "./panels"
 import { PluginSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
+import { createTabStripWidths } from "./tab-strip-widths"
 import { closedTabsModifier, type ClosedSideTab } from "./closed-tabs"
 import { ClosedTabsSection, createDeferredMenu, NewTabButton } from "./closed-tabs-view"
 import { selectDeferredMenuOpen } from "./deferred-menu-machine"
@@ -310,6 +311,7 @@ export function PaneTabs(props: {
               capture: true,
             })
             onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
+            onCleanup(createTabStripWidths(el))
           }}
           onContextMenu={(event: MouseEvent) => {
             const key =

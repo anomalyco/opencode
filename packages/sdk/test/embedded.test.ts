@@ -11,6 +11,7 @@ import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Plugin } from "@opencode/plugin/effect"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { AbsolutePath, Identity, Location } from "../src/effect"
+import { EffectSdk } from "../src/internal/effect"
 import { OpenCodeWorkerd } from "../src/effect/workerd"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
@@ -54,7 +55,7 @@ for (const selection of ["explicit", "default"] as const) {
         const llm = yield* TestLLM.Test.pipe(
           Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
         )
-        const opencode = yield* fixture.sdk.OpenCode.create(
+        const opencode = yield* EffectSdk.create(
           {
             config: {
               directory: fixture.directory,
@@ -133,7 +134,7 @@ it.live("seeds host plugins from CreateOptions and loads delayed model plugins w
             })
           }).pipe(Effect.orDie),
       })
-      const opencode = yield* fixture.sdk.OpenCode.create(
+      const opencode = yield* EffectSdk.create(
         {
           config: {
             directory: fixture.directory,
@@ -539,7 +540,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
     })
     const configDirectory = path.join(fixture.directory, "config")
     yield* Effect.promise(() => fs.mkdir(configDirectory))
-    const opencode = yield* fixture.sdk.OpenCode.create(
+    const opencode = yield* EffectSdk.create(
       {
         config: { directory: configDirectory, project: false, content: "{}" },
         workspaceProviders: { fake: driver },
@@ -641,7 +642,7 @@ it.live(
         })
         const configDirectory = path.join(fixture.directory, "config")
         yield* Effect.promise(() => fs.mkdir(configDirectory))
-        const opencode = yield* fixture.sdk.OpenCode.create(
+        const opencode = yield* EffectSdk.create(
           {
             config: { directory: configDirectory, project: false, content: "{}" },
             workspaceProviders: { fake: driver },

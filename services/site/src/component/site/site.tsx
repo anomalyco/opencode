@@ -395,7 +395,7 @@ export function Site(props: {
   }
 
   // Follows the locale, so a client-side language switch relabels the nav and footer.
-  const links = createMemo(() => siteLinks(i18n.t, language.route))
+  const links = createMemo(() => siteLinks(i18n.t, language.route, language.consoleRoute))
   // Every known item renders, in the saved list's order (Design mode shows the hidden ones, dimmed);
   // the shown ones are numbered and take the number keys. The items stay the same objects while the
   // list changes, so a reorder moves them in place.

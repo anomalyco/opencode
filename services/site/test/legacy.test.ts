@@ -40,8 +40,13 @@ describe("legacy redirects", () => {
     expect(get("/go", { method: "POST" })).toBeUndefined()
   })
 
-  test("localized go, zen and enterprise follow to the Console; other localized moves don't", () => {
-    expect(get("/enterprise", { locale: "de" })?.headers.get("Location")).toBe("/console/enterprise")
+  test("localized go, zen and enterprise follow to the Console in their language; other localized moves don't", () => {
+    expect(get("/go", { locale: "de" })?.headers.get("Location")).toBe("/de/console/go")
+    expect(get("/zen", { locale: "de" })?.headers.get("Location")).toBe("/de/console/models")
+    expect(get("/zen", { locale: "de", search: "?ref=app" })?.headers.get("Location")).toBe(
+      "/de/console/models?ref=app",
+    )
+    expect(get("/enterprise", { locale: "de" })?.headers.get("Location")).toBe("/de/console/enterprise")
     expect(get("/pricing", { locale: "de" })).toBeUndefined()
   })
 
