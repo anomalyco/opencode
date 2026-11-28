@@ -1157,6 +1157,18 @@ test("pastes plain text without markup and keeps native undo", async ({ page }) 
   }
 })
 
+// The first letter used to undo on its own: it removed the placeholder and swapped the send button, and a node leaving
+// the page ends the browser's open undo step.
+test("undoes everything typed into an empty composer in one step", async ({ page }) => {
+  const input = await draft(page)
+  await page.keyboard.type("alpha beta")
+  await expect(input).toHaveText("alpha beta")
+  await page.keyboard.press("ControlOrMeta+Z")
+  await expect(input).toBeEmpty()
+  await page.keyboard.press("ControlOrMeta+Shift+Z")
+  await expect(input).toHaveText("alpha beta")
+})
+
 test("replaces only the selected text and leaves the caret after the paste", async ({ page }) => {
   const input = await draft(page)
   await page.evaluate(() => navigator.clipboard.writeText("one\ntwo"))

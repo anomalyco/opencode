@@ -444,19 +444,21 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 props.controller.dispatch({ type: "focus.editor" })
               }}
             />
-            <Show when={!props.controller.value()}>
-              <div
-                dir={mode() === "normal" ? "auto" : "ltr"}
-                class="pointer-events-none absolute inset-x-0 top-0 ps-4 pe-[var(--composer-scroll-end)] pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-                classList={{ "font-mono! tracking-[-0.04px]": mode() === "shell" }}
-                style={{ "unicode-bidi": mode() === "normal" ? "plaintext" : undefined, "text-align": "start" }}
-              >
-                {view.placeholder?.() ??
+            {/* Stays mounted and only loses its text once the composer has some: removing a node from the page
+                while the user types ends the browser's open undo step, so the first letter would undo on its own. */}
+            <div
+              dir={mode() === "normal" ? "auto" : "ltr"}
+              class="pointer-events-none absolute inset-x-0 top-0 ps-4 pe-[var(--composer-scroll-end)] pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+              classList={{ "font-mono! tracking-[-0.04px]": mode() === "shell" }}
+              style={{ "unicode-bidi": mode() === "normal" ? "plaintext" : undefined, "text-align": "start" }}
+            >
+              {props.controller.value()
+                ? ""
+                : (view.placeholder?.() ??
                   (mode() === "shell"
                     ? i18n.t("ui.promptInput.placeholder.shell")
-                    : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
-              </div>
-            </Show>
+                    : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" })))}
+            </div>
           </div>
         </div>
 
@@ -1556,9 +1558,11 @@ function ComposerEditorSubmitButton(props: {
   onStop: () => void
 }) {
   return (
+    // Disabled rather than inactive while there is nothing to send: an inactive tooltip renders the button without its
+    // wrapper, so the first letter would swap the button out, and a node leaving the page ends the open undo step.
     <Tooltip
       placement="top"
-      inactive={!props.stopping && props.disabled}
+      disabled={!props.stopping && props.disabled}
       value={props.stopping ? props.stopLabel : props.sendLabel}
     >
       <IconButton
