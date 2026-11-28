@@ -1461,11 +1461,15 @@ const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
   return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
 })
 
-// Prefix `error.type` so overloads, rate limits, and quota errors are visible
-// even when the provider message is generic or empty.
+// Keep the error type visible even when the provider message is generic or empty.
+// Use a readable label for server errors without dropping provider detail.
 const providerErrorMessage = (event: AnthropicEvent): string => {
   const type = event.error?.type
   const message = event.error?.message
+  if (type === "server_error") {
+    const detail = message?.trim()
+    return detail && detail !== type ? `Server error: ${detail}` : "Server error"
+  }
   if (type && message) return `${type}: ${message}`
   return message || type || "Anthropic Messages stream error"
 }
