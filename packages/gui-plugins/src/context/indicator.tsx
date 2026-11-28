@@ -46,7 +46,7 @@ export function SessionContextUsage(props: {
 
   // Same step as the TUI: after the last completed compaction and before an undo boundary.
   const context = createMemo(() => {
-    const message = lastAssistantWithUsage(messages(), info()?.revert?.messageID)
+    const message = lastAssistantWithUsage(messages(), info()?.revert)
 
     if (!message) return
     const model = catalogModel(props.session, message.model)?.model

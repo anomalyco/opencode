@@ -62,6 +62,11 @@ export type Item = typeof Item.Type
 
 const Enqueued = {
   id: SessionMessage.ID,
+  /**
+   * The transcript position the item was enqueued at. Committing a revert drops the items enqueued at or after its
+   * boundary's `seq`. Absent from servers that predate it.
+   */
+  enqueuedSeq: Schema.Int.pipe(optional),
   sessionID: SessionID,
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }

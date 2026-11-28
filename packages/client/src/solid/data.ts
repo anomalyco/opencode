@@ -940,6 +940,7 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "agent-switched",
           agent: event.data.agent,
           previous,
@@ -954,6 +955,7 @@ export function createData(config: CreateDataInput) {
         if (!store.session.message[event.data.sessionID]) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "model-switched",
           model: event.data.model,
           previous,
@@ -1015,6 +1017,7 @@ export function createData(config: CreateDataInput) {
           setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
           message.insert(event.data.sessionID, {
             id: SessionMessage.ID.fromEvent(event.id),
+            seq: event.durable.seq,
             type: "location-switched",
             location: event.data.location,
             projectID: event.data.projectID,
@@ -1055,6 +1058,7 @@ export function createData(config: CreateDataInput) {
           if (position === undefined) return
           const existing = draft[position]
           if (!existing || !admitted) return
+          existing.seq = event.durable.seq
           existing.time.created = event.created
           draft.splice(position, 1)
           draft.push(existing)
@@ -1075,6 +1079,7 @@ export function createData(config: CreateDataInput) {
         outbox.delete(event.data.inboxID)
         const item = {
           id: event.data.inboxID,
+          enqueuedSeq: event.durable.seq,
           sessionID: event.data.sessionID,
           time: { created: event.created },
           ...event.data.item,
@@ -1096,6 +1101,7 @@ export function createData(config: CreateDataInput) {
         if (updateText === undefined) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "system",
           text: updateText,
           description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
@@ -1106,6 +1112,7 @@ export function createData(config: CreateDataInput) {
       case "session.synthetic":
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "synthetic",
           text: event.data.text,
           description: event.data.description,
@@ -1116,6 +1123,7 @@ export function createData(config: CreateDataInput) {
       case "session.shell.started":
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "shell",
           shellID: event.data.shell.id,
           command: event.data.shell.command,
@@ -1163,6 +1171,7 @@ export function createData(config: CreateDataInput) {
           }
           message.append(draft, index, {
             id: event.data.assistantMessageID,
+            seq: event.durable.seq,
             type: "assistant",
             agent: event.data.agent,
             model: event.data.model,
@@ -1331,6 +1340,7 @@ export function createData(config: CreateDataInput) {
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
         message.insert(event.data.sessionID, {
           id: event.data.inputID ?? SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "compaction",
           status: "running",
           reason: event.data.reason,
@@ -1351,6 +1361,7 @@ export function createData(config: CreateDataInput) {
         // Mirror the projected idle marker so turn boundaries match before the next message read.
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
+          seq: event.durable.seq,
           type: "idle",
           outcome:
             event.type === "session.execution.succeeded"
@@ -1384,31 +1395,71 @@ export function createData(config: CreateDataInput) {
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
         return
-      case "session.revert.staged":
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "revert", event.data.revert)
+      case "session.revert.staged": {
+        const sessionID = event.data.sessionID
+        if (!store.session.info[sessionID]) return
+        // The event leaves out the boundary's `seq`, which readers hide by. A boundary that isn't loaded has it only
+        // in the session's read.
+        const position = messageIndex.get(sessionID)?.get(event.data.revert.messageID)
+        const seq = position === undefined ? undefined : store.session.message[sessionID]?.[position]?.seq
+        setStore("session", "info", sessionID, "revert", { ...event.data.revert, seq })
+        if (position !== undefined) return
+        result.session.invalidate(sessionID)
+        refresh(() => result.session.sync(sessionID))
         return
+      }
       case "session.revert.cleared":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
-      case "session.revert.committed":
-        if (store.session.info[event.data.sessionID]) {
-          setStore("session", "info", event.data.sessionID, "revert", undefined)
-        }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
-        setStore(
-          "session",
-          "pending",
-          event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
+      case "session.revert.committed": {
+        const sessionID = event.data.sessionID
+        const revert = store.session.info[sessionID]?.revert
+        const position = messageIndex.get(sessionID)?.get(event.data.to)
+        const seq =
+          (revert?.messageID === event.data.to ? revert.seq : undefined) ??
+          (position === undefined ? undefined : store.session.message[sessionID]?.[position]?.seq)
+        const pending = store.session.pending[sessionID] ?? []
+        // The projector also deletes the inbox items enqueued at or after the boundary, without cancel events.
+        const dropped = new Set(
+          pending.flatMap((item) =>
+            seq !== undefined && item.enqueuedSeq !== undefined && item.enqueuedSeq >= seq ? [item.id] : [],
+          ),
         )
-        message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
-          for (const item of draft.splice(position)) index.delete(item.id)
+        batch(() => {
+          if (store.session.info[sessionID]) setStore("session", "info", sessionID, "revert", undefined)
+          if (dropped.size > 0)
+            setStore(
+              "session",
+              "pending",
+              sessionID,
+              pending.filter((item) => !dropped.has(item.id)),
+            )
+          message.update(sessionID, (draft, index) => {
+            // Inputs still in the inbox have no `seq` and sit at the end, so they go only with their inbox item.
+            // Without the boundary's `seq`, loaded messages are the newest part of the transcript: an unloaded
+            // boundary is older than all of them.
+            const kept = draft.filter((item, at) => {
+              if (seq === undefined) return position !== undefined && at < position
+              return item.seq === undefined ? !dropped.has(item.id) : item.seq < seq
+            })
+            if (kept.length === draft.length) return
+            draft.splice(0, draft.length, ...kept)
+            index.clear()
+            message.reindex(draft, index, 0)
+          })
         })
+        // What can't be placed by `seq` is read again: the inbox items the server kept, and an unloaded transcript.
+        if (seq === undefined || pending.some((item) => item.enqueuedSeq === undefined)) {
+          result.session.pending.invalidate(sessionID)
+          refresh(() => result.session.pending.sync(sessionID))
+        }
+        if (seq === undefined && position === undefined) {
+          sync.invalidate(`session.message:${sessionID}`)
+          refresh(() => result.session.message.sync(sessionID))
+        }
         return
+      }
       case "session.compaction.delta":
         if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
@@ -1434,6 +1485,7 @@ export function createData(config: CreateDataInput) {
           }
           message.append(draft, index, {
             id: SessionMessage.ID.fromEvent(event.id),
+            seq: event.durable.seq,
             type: "compaction",
             status: "completed",
             reason: event.data.reason,
@@ -1453,6 +1505,7 @@ export function createData(config: CreateDataInput) {
           const current = draft[position]
           const failed: Extract<SessionMessageInfo, { type: "compaction"; status: "failed" }> = {
             id: current?.id ?? event.data.inputID ?? SessionMessage.ID.fromEvent(event.id),
+            seq: current?.type === "compaction" ? current.seq : event.durable.seq,
             type: "compaction",
             status: "failed",
             reason: event.data.reason,

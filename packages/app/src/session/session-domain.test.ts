@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
-import { selectSessionUserMessages, selectUnansweredPrompt, selectVisibleSessionUserMessages } from "./session-domain"
+import { selectSessionUserMessages, selectUnansweredPrompt, selectVisibleSessionMessages } from "./session-domain"
 
 const user = (id: string): SessionMessageUser => ({
   id,
@@ -20,14 +20,49 @@ const assistant: SessionMessageAssistant = {
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
 }
 
-test("selects user history strictly before the revert boundary", () => {
+test("selects the transcript strictly before the revert boundary", () => {
   const messages: SessionMessageInfo[] = [user("msg_a"), assistant, user("msg_b"), user("msg_c")]
-  const users = selectSessionUserMessages(messages)
 
-  expect(users.map((message) => message.id)).toEqual(["msg_a", "msg_b", "msg_c"])
-  expect(selectVisibleSessionUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_a"])
-  expect(selectVisibleSessionUserMessages(users.slice(2), "msg_b")).toEqual([])
-  expect(selectVisibleSessionUserMessages(users)).toBe(users)
+  expect(selectSessionUserMessages(messages).map((message) => message.id)).toEqual(["msg_a", "msg_b", "msg_c"])
+  expect(selectVisibleSessionMessages(messages, { messageID: "msg_b" }).map((message) => message.id)).toEqual([
+    "msg_a",
+    "msg_2",
+  ])
+  // The boundary can be a reply, not just a prompt.
+  expect(selectVisibleSessionMessages(messages, { messageID: "msg_2" }).map((message) => message.id)).toEqual(["msg_a"])
+  expect(selectVisibleSessionMessages(messages)).toBe(messages)
+})
+
+test("the revert hides by transcript position, not by message ID", () => {
+  // Automation prompt IDs sort after every other message ID, and a steered prompt keeps its send-time ID.
+  const messages = [user("msg_1"), user("msg_aut_1"), user("msg_3"), user("msg_2"), user("msg_4")]
+
+  expect(selectVisibleSessionMessages(messages, { messageID: "msg_2" }).map((message) => message.id)).toEqual([
+    "msg_1",
+    "msg_aut_1",
+    "msg_3",
+  ])
+})
+
+test.each([
+  ["an automation prompt", "msg_aut_1"],
+  ["a forked copy", "msg_fork_10"],
+])("an unloaded boundary on %s hides by its seq", (_name, messageID) => {
+  // Forked copies end in an unpadded seq, so `_10` sorts before `_9`; neither ID says where they sit.
+  const loaded = [
+    { ...user("msg_fork_9"), seq: 9 },
+    { ...user("msg_aut_2"), seq: 11 },
+    { ...user("msg_0newer"), seq: 12 },
+  ]
+
+  expect(selectVisibleSessionMessages(loaded, { messageID, seq: 10 }).map((message) => message.id)).toEqual([
+    "msg_fork_9",
+  ])
+})
+
+test("without any seq, an unloaded boundary is older than every loaded message", () => {
+  // Loaded messages are always the newest part of the transcript, so nothing loaded survives, whatever the IDs say.
+  expect(selectVisibleSessionMessages([user("msg_1"), user("msg_aut_2")], { messageID: "msg_aut_1" })).toEqual([])
 })
 
 test.each([

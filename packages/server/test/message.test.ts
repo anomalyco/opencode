@@ -75,14 +75,16 @@ it.live("filters message types before paginating in either direction through the
         const end = await fixture.api.message.list({ ...input, cursor: second.cursor.next })
         expect(end).toEqual({ data: [], cursor: { previous: null, next: null } })
       }
+      // An import numbers its transcript from 1.
+      const imported = messages.map((message, index) => ({ ...message, seq: index + 1 }))
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "compaction" })).data).toEqual([
-        messages[4],
+        imported[4],
       ])
       expect(
         (await fixture.api.message.list({ sessionID: fixture.sessionID, type: "assistant", limit: 1 })).data,
-      ).toEqual([messages[1]])
+      ).toEqual([imported[1]])
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "idle" })).data).toEqual([
-        messages[8],
+        imported[8],
       ])
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "shell" })).data).toEqual([])
     })

@@ -99,6 +99,24 @@ describe("visibleTimelineMessages", () => {
     })
   })
 
+  test("hides the revert boundary and what follows it by position, not by message ID", () => {
+    const reply = (id: string) => ({ ...work, id }) satisfies SessionMessageInfo
+    // A steered prompt keeps the ID it was sent with, older than the replies it joined after.
+    const steered = [messages[0], reply("msg_5"), messages[2], reply("msg_6")]
+    expect(visibleTimelineMessages(steered, [], { messageID: "msg_3" }).map((message) => message.id)).toEqual([
+      "msg_1",
+      "msg_5",
+    ])
+
+    // Automation prompt IDs sort after every other message ID.
+    const automation = { ...messages[0], id: "msg_aut_1" } satisfies SessionMessageInfo
+    const scheduled = [automation, messages[1], messages[3], reply("msg_5")]
+    expect(visibleTimelineMessages(scheduled, [], { messageID: "msg_4" }).map((message) => message.id)).toEqual([
+      "msg_aut_1",
+      "msg_2",
+    ])
+  })
+
   test("moves a queued input after existing work when changed to steer", () => {
     const source = [...messages.slice(0, 3), work]
     expect(visibleTimelineMessages(source, [{ ...steer, delivery: "queue" }]).map((message) => message.id)).toEqual([
@@ -150,7 +168,7 @@ describe("visibleTimelineMessages", () => {
 
     // The order the server delivers in: active work, then steers and notices by admission.
     expect(pendingOrder.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3", "msg_4", "msg_4a"])
-    expect(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
+    expect(visibleTimelineMessages(source, pending, { messageID: "msg_4" }).map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",
       "msg_3",
@@ -173,12 +191,12 @@ describe("visibleTimelineMessages", () => {
   })
 
   test("hides the staged revert boundary and later messages", () => {
-    expect(visibleTimelineMessages(messages, [], "msg_4").map((message) => message.id)).toEqual([
+    expect(visibleTimelineMessages(messages, [], { messageID: "msg_4" }).map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",
       "msg_3",
     ])
-    expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+    expect(visibleTimelineMessages(messages, [], { messageID: "msg_0" })).toEqual([])
   })
 
   test("keeps a pre-promotion failed idle marker after the pending input that triggered it", () => {

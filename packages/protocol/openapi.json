@@ -25641,6 +25641,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "enqueuedSeq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
           },
@@ -25772,6 +25777,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "enqueuedSeq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
           },
@@ -25837,6 +25847,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "enqueuedSeq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
           },
@@ -25885,6 +25900,11 @@
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "enqueuedSeq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
@@ -26023,7 +26043,7 @@
             "$ref": "#/components/schemas/Permission.Ruleset"
           },
           "revert": {
-            "$ref": "#/components/schemas/Session.Revert"
+            "$ref": "#/components/schemas/Session.RevertInfo"
           },
           "location": {
             "$ref": "#/components/schemas/Location.PublicRef"
@@ -26037,6 +26057,11 @@
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "metadata": {
             "type": "object"
@@ -26070,6 +26095,11 @@
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "metadata": {
             "type": "object"
@@ -26319,6 +26349,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26369,6 +26404,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26413,6 +26453,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26450,6 +26495,11 @@
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "metadata": {
             "type": "object"
@@ -26522,6 +26572,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26581,6 +26636,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26616,6 +26676,11 @@
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "metadata": {
             "type": "object"
@@ -26691,6 +26756,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26727,6 +26797,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26759,6 +26834,11 @@
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           },
           "metadata": {
             "type": "object"
@@ -26885,6 +26965,11 @@
           "id": {
             "$ref": "#/components/schemas/Session.Message.ID"
           },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "metadata": {
             "type": "object"
           },
@@ -26947,6 +27032,33 @@
             "items": {
               "$ref": "#/components/schemas/FileDiff.Info"
             }
+          }
+        },
+        "required": ["messageID"],
+        "additionalProperties": false
+      },
+      "Session.RevertInfo": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "partID": {
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/Snapshot.ID"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileDiff.Info"
+            }
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": ["messageID"],

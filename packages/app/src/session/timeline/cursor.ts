@@ -1,4 +1,4 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createSignal, on, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import {
@@ -22,11 +22,11 @@ export function createTimelineCursor(input: {
   /** The session's messages are ready and its timeline is mounted and on screen. */
   viewReady: Accessor<boolean>
   following: Accessor<boolean>
+  /** The loaded transcript, including what the revert hides. */
+  messages: Accessor<SessionMessageInfo[]>
   visibleUserMessages: Accessor<SessionMessageUser[]>
   /** The transcript's first sync is still under way. */
   syncing: Accessor<boolean>
-  revertMessageID: Accessor<string | undefined>
-  oldestMessageID: Accessor<string | undefined>
   historyStatus: Accessor<HistorySeekStatus>
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
@@ -157,14 +157,14 @@ export function createTimelineCursor(input: {
     const id = pendingCursorMessageID(cursorState())
 
     if (!id) return
+    const loaded = input.visibleUserMessages().some((message) => message.id === id)
     dispatch({
       type: "target.synced",
       messageID: id,
-      loaded: input.visibleUserMessages().some((message) => message.id === id),
+      loaded,
       viewReady: input.viewReady(),
       syncing: input.syncing(),
-      revertMessageID: input.revertMessageID(),
-      oldestMessageID: input.oldestMessageID(),
+      reverted: !loaded && input.messages().some((message) => message.id === id),
       history: input.historyStatus(),
       hash: untrack(() => location.hash.slice(1)),
     })
@@ -174,7 +174,14 @@ export function createTimelineCursor(input: {
     on(
       () => input.visibleUserMessages().at(-1)?.id,
       (lastID, previousID) => {
-        if (lastID && previousID && lastID > previousID) dispatch(LATEST_ADVANCED_EVENT)
+        // IDs don't follow the transcript, so the latest advanced when the previous one is still shown before it.
+        if (
+          lastID &&
+          previousID &&
+          lastID !== previousID &&
+          untrack(input.visibleUserMessages).some((message) => message.id === previousID)
+        )
+          dispatch(LATEST_ADVANCED_EVENT)
       },
     ),
   )

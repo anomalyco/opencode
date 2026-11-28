@@ -89,6 +89,7 @@ function matches<Type extends Item["type"]>(
 const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
   const base = {
     id: row.id,
+    enqueuedSeq: row.enqueued_seq,
     sessionID: row.session_id,
     time: { created: DateTime.makeUnsafe(row.time_created) },
   }
@@ -219,6 +220,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         Effect.map((event) =>
           Info.make({
             id: request.id,
+            enqueuedSeq: event.durable.seq,
             sessionID: request.sessionID,
             time: { created: DateTime.makeUnsafe(event.created) },
             ...request.item,
@@ -474,6 +476,7 @@ export const listWithRefs = Effect.fn("SessionInbox.listWithRefs")(function* (
     const payload = decodeMediaUser(row.payload)
     return MediaUser.make({
       id: row.id,
+      enqueuedSeq: row.enqueued_seq,
       sessionID: row.session_id,
       time: { created: DateTime.makeUnsafe(row.time_created) },
       type: "user",

@@ -667,6 +667,7 @@ test("updates session location when moved", async () => {
     expect(data.session.get("ses_test")?.subpath).toBe("packages/cli")
     expect(data.session.message.list("ses_test")).toContainEqual({
       id: "msg_moved_1",
+      seq: 0,
       type: "location-switched",
       location: { directory: destination },
       projectID: "project-moved",
@@ -1235,7 +1236,7 @@ test("removes committed revert messages from local state", async () => {
   ))
 
   try {
-    for (const [seq, inboxID] of ["msg_001", "msg_002", "msg_003"].entries()) {
+    const enqueue = (inboxID: string, seq: number) =>
       emitEvent(events, {
         id: Event.ID.create(),
         created: seq,
@@ -1243,25 +1244,42 @@ test("removes committed revert messages from local state", async () => {
         durable: durable(sessionID, seq),
         data: { sessionID, inboxID, item: { type: "user", payload: { text: inboxID }, delivery: "steer" } },
       })
-    }
-    await wait(() => data.session.message.list(sessionID).length === 3)
+    const deliver = (inboxID: string, seq: number) =>
+      emitEvent(events, {
+        id: Event.ID.create(),
+        created: seq,
+        type: "session.inbox.delivered",
+        durable: durable(sessionID, seq),
+        data: { sessionID, inboxID },
+      })
+    enqueue("msg_001", 0)
+    enqueue("msg_002", 1)
+    enqueue("msg_003", 2)
+    deliver("msg_001", 3)
+    deliver("msg_002", 4)
+    enqueue("msg_004", 5)
+    await wait(
+      () => data.session.message.list(sessionID).length === 4 && data.session.pending.list(sessionID).length === 2,
+    )
 
     emitEvent(events, {
       id: Event.ID.create(),
-      created: 3,
+      created: 6,
       type: "session.revert.committed",
-      durable: durable(sessionID, 3),
+      durable: durable(sessionID, 6),
       data: { sessionID, to: "msg_002" },
     })
 
-    await wait(() => data.session.message.list(sessionID).length === 1)
-    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
+    await wait(() => data.session.message.list(sessionID).length === 2)
+    // The boundary and what came after it go. Inbox items go only if enqueued at or after it, without a cancel event:
+    // msg_003 waited in the inbox from before the boundary, so it stays.
+    // Delivery moves a prompt to the end, so the one still waiting sits before it.
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_003", "msg_001"])
     expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
-    expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
-    // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
-    expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
-    expect(data.session.input.has(sessionID, "msg_002")).toBe(false)
+    expect(data.session.message.get(sessionID, "msg_004")).toBeUndefined()
+    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_003"])
+    expect(data.session.input.list(sessionID)).toEqual(["msg_003"])
+    expect(data.session.input.has(sessionID, "msg_004")).toBe(false)
   } finally {
     app.renderer.destroy()
   }
@@ -3052,6 +3070,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
         id: messageID,
+        enqueuedSeq: 0,
         sessionID,
         time: { created: 0 },
         type: "user",
@@ -3406,6 +3425,7 @@ test("admits prompts optimistically and reconciles with the durable echo", async
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
         id: messageID,
+        enqueuedSeq: 0,
         sessionID,
         time: { created: 5 },
         type: "user",

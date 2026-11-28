@@ -115,11 +115,7 @@ export function createTimelineController(input: {
   )
 
   const visibleMessages = createMemo(() =>
-    visibleTimelineMessages(
-      input.session.history.messages(),
-      pendingList(),
-      input.session.data.info()?.revert?.messageID,
-    ),
+    visibleTimelineMessages(input.session.history.messages(), pendingList(), input.session.data.info()?.revert),
   )
 
   // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.

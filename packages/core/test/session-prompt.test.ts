@@ -250,6 +250,10 @@ const mediaMessages = (prefix: string, toolUri = `data:image/png;base64,${pngBas
     },
   ].map((message) => Schema.decodeUnknownSync(SessionMessage.Info)(message))
 
+/** {@link mediaMessages} as an imported session reads them back: an import numbers its transcript from 1. */
+const importedMessages = (prefix: string) =>
+  mediaMessages(prefix).map((message, index) => ({ ...message, seq: index + 1 }))
+
 /** Forks a parent in `directory` holding one inline user image and returns the child's copied row. */
 const forkInlineParent = Effect.fnUntraced(function* (id: string, directory: string) {
   const { db } = yield* Database.Service
@@ -661,7 +665,7 @@ describe("Session.prompt", () => {
 
       expect(child.data).toMatchObject({ files: [{ data: pngBase64, mime: "image/png" }] })
       expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toEqual(
-        mediaMessages("ses_import_broken"),
+        importedMessages("ses_import_broken"),
       )
       expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
     }),
@@ -729,7 +733,9 @@ describe("Session.prompt", () => {
         .pipe(Effect.orDie)
       expect(inboxRow?.payload).toMatchObject({ files: [{ uri: SessionStored.ref(hash), mime: "image/png" }] })
       expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
-      expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toEqual(mediaMessages("ses_import_dev"))
+      expect(yield* session.messages({ sessionID: imported.id, order: "asc" })).toEqual(
+        importedMessages("ses_import_dev"),
+      )
     }),
   )
 
@@ -776,8 +782,12 @@ describe("Session.prompt", () => {
           .all()
           .pipe(Effect.orDie),
       ).toEqual(mediaRows.map((row) => ({ session: media.id, message: row.id, seq: row.seq })))
-      expect(yield* session.messages({ sessionID: media.id, order: "asc" })).toEqual(messages("ses_import_media"))
-      expect(yield* session.messages({ sessionID: plain.id, order: "asc" })).toEqual(messages("ses_import_plain"))
+      expect(yield* session.messages({ sessionID: media.id, order: "asc" })).toEqual(
+        importedMessages("ses_import_media"),
+      )
+      expect(yield* session.messages({ sessionID: plain.id, order: "asc" })).toEqual(
+        importedMessages("ses_import_plain"),
+      )
     }),
   )
 

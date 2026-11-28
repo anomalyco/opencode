@@ -1,4 +1,10 @@
-import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
+import type {
+  SessionInboxEnqueued,
+  SessionInboxInfo,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+} from "@opencode/client"
+import { messagesBeforeRevert, type RevertBoundary } from "@opencode/client/solid"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
@@ -53,7 +59,7 @@ export function createSessionRows(
   const client = useClient()
   const config = useConfig()
   const [rows, setRows] = createStore<(SessionRow & { key?: string })[]>([])
-  const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
+  const revertBoundary = () => data.session.get(sessionID())?.revert
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
   const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
 
@@ -61,13 +67,8 @@ export function createSessionRows(
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
     const pending = data.session.pending.list(sessionID())
-    const queued = new Set(
-      pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
-    )
-    const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
-    const boundary = revertBoundary()
     const rows = reduceSessionRows(
-      boundary ? visible.filter((message) => message.id < boundary) : visible,
+      visibleSessionMessages(messages, pending, revertBoundary()),
       inputs,
       turnTokens(),
       verbosity(),
@@ -342,6 +343,19 @@ function rowKey(row: SessionRow) {
     default:
       return row satisfies never
   }
+}
+
+/** The transcript the rows show: without queued prompts, and without the revert boundary and what follows it. */
+export function visibleSessionMessages(
+  messages: SessionMessageInfo[],
+  pending: readonly SessionInboxInfo[],
+  revert: RevertBoundary | undefined,
+) {
+  const queued = new Set(
+    pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
+  )
+  const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
+  return revert ? messagesBeforeRevert(visible, revert) : visible
 }
 
 export function reduceSessionRows(

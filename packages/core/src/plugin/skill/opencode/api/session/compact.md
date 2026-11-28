@@ -12,4 +12,4 @@ Returns: `{ data: Session.Inbox.Compaction }`
 
 ## Types
 
-- `Session.Inbox.Compaction`: `{ id: string; sessionID: string; time: { created }; type: "compaction"; payload: unknown; delivery: "steer" | "queue" }`
+- `Session.Inbox.Compaction`: `{ id: string; enqueuedSeq?: number; sessionID: string; time: { created }; type: "compaction"; payload: unknown; delivery: "steer" | "queue" }`

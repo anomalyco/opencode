@@ -8,6 +8,7 @@ import {
   messageBoundaryIDs,
   reduceSessionRows as reduceRows,
   sessionRowID,
+  visibleSessionMessages,
   type SessionRow,
 } from "../../../src/routes/session/rows"
 
@@ -470,6 +471,28 @@ test("renders synthetic messages with descriptions", () => {
       children: [partChild("assistant-2", "grep-1")],
     },
   ])
+})
+
+test("the revert hides its boundary and what follows it by position, not by message ID", () => {
+  const user = (id: string): SessionMessageInfo => ({ type: "user", id, text: id, time: { created: 1 } })
+  const ids = (messages: SessionMessageInfo[]) => messages.map((message) => message.id)
+  // Automation prompt IDs sort after every other message ID.
+  const scheduled = [user("msg_aut_1"), assistant("msg_1", []), user("msg_2"), assistant("msg_3", [])]
+  expect(ids(visibleSessionMessages(scheduled, [], { messageID: "msg_2" }))).toEqual(["msg_aut_1", "msg_1"])
+
+  // A steered prompt keeps the ID it was sent with, older than the replies it joined after.
+  const steered = [user("msg_1"), assistant("msg_3", []), user("msg_2"), assistant("msg_4", [])]
+  expect(ids(visibleSessionMessages(steered, [], { messageID: "msg_2" }))).toEqual(["msg_1", "msg_3"])
+
+  // A boundary older than the loaded page is placed by its seq. Forked copies end in an unpadded seq, so `_10`
+  // sorts before `_9`.
+  const forked = [
+    { ...user("msg_evt_9"), seq: 9 },
+    { ...user("msg_aut_2"), seq: 11 },
+    { ...user("msg_evt_10"), seq: 12 },
+  ]
+  for (const messageID of ["msg_aut_1", "msg_evt_fork_10"])
+    expect(ids(visibleSessionMessages(forked, [], { messageID, seq: 10 }))).toEqual(["msg_evt_9"])
 })
 
 function partChild(messageID: string, partID: string) {

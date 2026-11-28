@@ -1,4 +1,5 @@
 import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import { messagesBeforeRevert, type RevertBoundary } from "@opencode/client/solid"
 
 export function selectSessionUserMessages(messages: SessionMessageInfo[]) {
   return messages.filter((message): message is SessionMessageUser => message.type === "user")
@@ -26,8 +27,9 @@ export function selectUnansweredPrompt(messages: SessionMessageInfo[]) {
   return answered ? undefined : message
 }
 
-export function selectVisibleSessionUserMessages(messages: SessionMessageUser[], revertMessageID?: string) {
-  if (!revertMessageID) return messages
+/** The transcript the revert leaves visible. Cut it before filtering, since the boundary can be any message type. */
+export function selectVisibleSessionMessages(messages: SessionMessageInfo[], revert?: RevertBoundary) {
+  if (!revert) return messages
 
-  return messages.filter((message) => message.id < revertMessageID)
+  return messagesBeforeRevert(messages, revert)
 }

@@ -13,6 +13,17 @@ export const Revert = Schema.Struct({
   files: Schema.Array(FileDiff.Info).pipe(optional),
 }).annotate({ identifier: "Session.Revert" })
 
+/** {@link Revert} as a Session read holds it, with its boundary's transcript position. */
+export interface RevertInfo extends Schema.Schema.Type<typeof RevertInfo> {}
+export const RevertInfo = Schema.Struct({
+  ...Revert.fields,
+  /**
+   * The boundary message's `seq`: the revert hides messages at or after it. Absent from servers that predate it, and
+   * from reverts staged before it was recorded.
+   */
+  seq: Schema.Int.pipe(optional),
+}).annotate({ identifier: "Session.RevertInfo" })
+
 const FileDiffV1 = Schema.Struct({
   path: Schema.String,
   status: Schema.Literals(["added", "modified", "deleted"]),
@@ -30,11 +41,11 @@ export const RevertV1 = Schema.Struct({
   files: Schema.Array(FileDiffV1).pipe(optional),
 }).annotate({ identifier: "Session.RevertV1" })
 
-const PersistedCurrent = Revert.pipe(
+const PersistedCurrent = RevertInfo.pipe(
   Schema.decodeTo(
-    Schema.Struct({ source: Schema.tag("current"), revert: Schema.toType(Revert) }),
+    Schema.Struct({ source: Schema.tag("current"), revert: Schema.toType(RevertInfo) }),
     SchemaTransformation.transform({
-      decode: (revert): { readonly source: "current"; readonly revert: Revert } => ({
+      decode: (revert): { readonly source: "current"; readonly revert: RevertInfo } => ({
         source: "current",
         revert,
       }),
@@ -59,9 +70,9 @@ const PersistedLegacy = RevertV1.pipe(
 export const PersistedRevert = Schema.Union([PersistedCurrent, PersistedLegacy]).pipe(
   Schema.toTaggedUnion("source"),
   Schema.decodeTo(
-    Schema.toType(Revert),
+    Schema.toType(RevertInfo),
     SchemaTransformation.transform({
-      decode: (persisted): Revert => {
+      decode: (persisted): RevertInfo => {
         if (persisted.source === "current") return persisted.revert
         return Revert.make({
           messageID: persisted.revert.messageID,
@@ -76,7 +87,7 @@ export const PersistedRevert = Schema.Union([PersistedCurrent, PersistedLegacy])
           })),
         })
       },
-      encode: (revert): { readonly source: "current"; readonly revert: Revert } => ({
+      encode: (revert): { readonly source: "current"; readonly revert: RevertInfo } => ({
         source: "current",
         revert,
       }),

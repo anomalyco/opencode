@@ -495,7 +495,13 @@ test("restores dropped tool files from the server once they are shown again", as
 test("restoring dropped tool files keeps live progress made while the server read was in flight", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
-  const tool = (id: string, state: object) => ({ type: "tool", id, name: "execute", time: { created: 1, ran: 1 }, state })
+  const tool = (id: string, state: object) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state,
+  })
   const running = { status: "running", input: {}, metadata: {} }
   const assistant = (content: object[]) => ({
     id: "msg_assistant",
@@ -554,7 +560,11 @@ test("restoring dropped tool files keeps live progress made while the server rea
     read.resolve(
       Response.json({
         data: assistant([
-          tool("call_shot", { status: "completed", input: {}, content: [{ type: "file", uri: screenshot, mime: "image/png" }] }),
+          tool("call_shot", {
+            status: "completed",
+            input: {},
+            content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+          }),
           tool("call_work", running),
         ]),
       }),
@@ -1930,6 +1940,7 @@ test.each([
     if (type === "session.execution.failed") {
       expect(setup.data.session.message.list("ses_refresh").at(-1)).toEqual({
         id: "msg_activity",
+        seq: 2,
         type: "idle",
         outcome: "failed",
         error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
@@ -2063,6 +2074,109 @@ function activityFixture(read: () => Response | Promise<Response>, sessions: Ses
   }))
 }
 
+test("a committed revert removes its boundary and what follows it in transcript order", async () => {
+  // Automation prompt IDs sort after every other message ID, even when the prompt came first.
+  const setup = transcript([...notes(1, 1), { ...notes(2, 2)[0], id: "msg_aut_002" }, ...notes(3, 4)])
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.emit({
+      id: "evt_committed",
+      created: 5,
+      type: "session.revert.committed",
+      durable: { aggregateID: "ses_refresh", seq: 5, version: 1 },
+      data: { sessionID: "ses_refresh", to: "msg_004" },
+    })
+
+    expect(setup.ids()).toEqual(["msg_001", "msg_aut_002", "msg_003"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a committed revert drops by seq the messages and inbox items at or after its boundary", async () => {
+  // As read from the server: each message at its transcript position, an automation prompt among them.
+  const positioned = [...notes(1, 1), { ...notes(2, 2)[0], id: "msg_aut_002" }, ...notes(3, 4)].map(
+    (message, index) => ({
+      ...message,
+      seq: (index + 1) * 10,
+    }),
+  )
+  const setup = transcript(positioned)
+  const durable = (seq: number) => ({ aggregateID: "ses_refresh", seq, version: 1 }) as const
+  const enqueue = (inboxID: string, seq: number) =>
+    setup.emit({
+      id: `evt_${inboxID}`,
+      created: seq,
+      type: "session.inbox.enqueued",
+      durable: durable(seq),
+      data: {
+        sessionID: "ses_refresh",
+        inboxID,
+        item: { type: "user", payload: { text: inboxID }, delivery: "queue" },
+      },
+    })
+  try {
+    await setup.data.session.sync("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    // A queued prompt enqueued before the boundary survives the commit; one enqueued after it goes with it.
+    enqueue("msg_queued_kept", 25)
+    enqueue("msg_queued_dropped", 45)
+    setup.emit({
+      id: "evt_staged",
+      created: 50,
+      type: "session.revert.staged",
+      durable: durable(50),
+      data: { sessionID: "ses_refresh", revert: { messageID: "msg_003" } },
+    })
+    expect(setup.data.session.get("ses_refresh")?.revert).toEqual({ messageID: "msg_003", seq: 30 })
+    setup.emit({
+      id: "evt_committed",
+      created: 51,
+      type: "session.revert.committed",
+      durable: durable(51),
+      data: { sessionID: "ses_refresh", to: "msg_003" },
+    })
+
+    expect(setup.ids()).toEqual(["msg_001", "msg_aut_002", "msg_queued_kept"])
+    expect(setup.data.session.pending.list("ses_refresh").map((item) => item.id)).toEqual(["msg_queued_kept"])
+    expect(setup.data.session.get("ses_refresh")?.revert).toBeUndefined()
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each([
+  ["an automation prompt", "msg_aut_x"],
+  ["a forked copy", "msg_evt_fork_10"],
+])("a revert whose boundary on %s isn't loaded reads its seq, then commits by it", async (_name, boundary) => {
+  const setup = transcript(notes(21, 25).map((message, index) => ({ ...message, seq: 21 + index })))
+  try {
+    await setup.data.session.sync("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    setup.server.revert = { messageID: boundary, seq: 23 }
+    setup.emit({
+      id: "evt_staged",
+      created: 30,
+      type: "session.revert.staged",
+      durable: { aggregateID: "ses_refresh", seq: 30, version: 1 },
+      data: { sessionID: "ses_refresh", revert: { messageID: boundary } },
+    })
+    // The event leaves out the boundary's seq, so the session is read again for it.
+    await wait(() => setup.data.session.get("ses_refresh")?.revert?.seq === 23)
+    setup.emit({
+      id: "evt_committed",
+      created: 31,
+      type: "session.revert.committed",
+      durable: { aggregateID: "ses_refresh", seq: 31, version: 1 },
+      data: { sessionID: "ses_refresh", to: boundary },
+    })
+
+    expect(setup.ids()).toEqual(["msg_021", "msg_022"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 function notes(first: number, last: number): SessionMessageInfo[] {
   return Array.from({ length: last - first + 1 }, (_, index) => ({
     id: `msg_${String(first + index).padStart(3, "0")}`,
@@ -2079,6 +2193,7 @@ function transcript(messages: SessionMessageInfo[]) {
     messages: SessionMessageInfo[]
     requests: string[]
     hold?: (request: string) => Promise<void> | undefined
+    revert?: SessionInfo["revert"]
   } = { messages, requests: [] }
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({
@@ -2086,7 +2201,7 @@ function transcript(messages: SessionMessageInfo[]) {
     fetch: async (input, init) => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
       const path = url.pathname.replace(/^\/api\/session(\/ses_refresh)?\/?/, "")
-      if (path === "") return Response.json({ data: session(0) })
+      if (path === "") return Response.json({ data: { ...session(0), revert: server.revert } })
       if (path === "inbox") return Response.json({ data: [] })
       const request = path + decodeURIComponent(url.search)
       server.requests.push(request)

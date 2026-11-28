@@ -30,6 +30,11 @@ export type ID = typeof ID.Type
 
 const Base = {
   id: ID,
+  /**
+   * The message's position in the session's transcript, set on reads. Order and revert by this, never by `id`:
+   * IDs don't follow the transcript. Not contiguous, and absent from servers that predate it.
+   */
+  seq: Schema.Int.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }

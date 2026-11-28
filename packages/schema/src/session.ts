@@ -13,7 +13,7 @@ import { SessionMetadata } from "./session-metadata.js"
 import { Money } from "./money.js"
 import { Permission } from "./permission.js"
 import { TokenUsage } from "./token-usage.js"
-import { Revert } from "./session-revert.js"
+import { Revert, RevertInfo } from "./session-revert.js"
 import { SessionFork } from "./session-fork.js"
 
 export const ID = SessionID
@@ -24,7 +24,7 @@ export type Metadata = SessionMetadata
 
 export const Event = SessionEvent
 
-export { Revert }
+export { Revert, RevertInfo }
 export const ForkBoundary = SessionFork.Boundary
 export type ForkBoundary = SessionFork.Boundary
 
@@ -59,7 +59,7 @@ export const Info = Schema.Struct({
   metadata: Metadata.pipe(optional),
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
-  revert: Revert.pipe(optional),
+  revert: RevertInfo.pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 
 export const ListAnchor = Schema.Struct({

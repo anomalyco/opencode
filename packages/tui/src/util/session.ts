@@ -1,5 +1,5 @@
 import type { JobInfo, ModelInfo, SessionMessageInfo } from "@opencode/client"
-import { lastAssistantWithUsage } from "@opencode/client/solid"
+import { lastAssistantWithUsage, type RevertBoundary } from "@opencode/client/solid"
 import { Locale } from "./locale"
 
 type SessionNode = {
@@ -46,9 +46,9 @@ export function sessionFamily<T extends SessionNode>(sessions: readonly T[], ses
 export function contextUsage(
   messages: ReadonlyArray<SessionMessageInfo>,
   models: ReadonlyArray<ModelInfo> | undefined,
-  boundary?: string,
+  revert?: RevertBoundary,
 ) {
-  const last = lastAssistantWithUsage(messages, boundary)
+  const last = lastAssistantWithUsage(messages, revert)
   if (!last) return
   const tokens =
     last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write

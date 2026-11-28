@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import {
   selectJumpHistory,
   selectJumpOpening,
+  selectJumpPrompts,
   selectJumpStatus,
   startJumpToMessage,
   transitionJumpToMessage,
@@ -120,4 +121,24 @@ test("disposing cancels the work, and nothing after it changes or jumps", () => 
   expect(opened?.state).toBe(disposed!.state)
   expect(opened?.effects).toEqual([])
   expect(again?.effects).toEqual([])
+})
+
+test("the listed prompts leave out what the revert hides, by seq, whatever their IDs", () => {
+  const row = (id: string, seq: number) => ({ id, text: id, created: seq, seq })
+  // Newest first, as the history loads. The automation prompt came first though its ID sorts last.
+  const older = [row("msg_0later", 30), row("msg_0boundary", 20), row("msg_aut_first", 10)]
+  const visible = [row("msg_aut_first", 10)]
+
+  const ids = (revert?: { messageID: string; seq?: number }) =>
+    selectJumpPrompts({ history: older, visible, pending: new Set(), revert }).map((prompt) => prompt.id)
+
+  expect(ids({ messageID: "msg_0boundary", seq: 20 })).toEqual(["msg_aut_first"])
+  // A revert staged on a reply isn't in the prompt history at all.
+  expect(ids({ messageID: "msg_0reply", seq: 25 })).toEqual(["msg_0boundary", "msg_aut_first"])
+  expect(ids()).toEqual(["msg_0later", "msg_0boundary", "msg_aut_first"])
+  expect(
+    selectJumpPrompts({ history: older, visible, pending: new Set(["msg_0later"]), revert: undefined }).map(
+      (prompt) => prompt.id,
+    ),
+  ).toEqual(["msg_0boundary", "msg_aut_first"])
 })

@@ -330,8 +330,10 @@ test("creation failure rejects gated prompt, compaction, and following preparati
 
 const sessionID = "ses_compact"
 const event = { id: "evt_compact", created: 10, durable: { aggregateID: sessionID, seq: 1, version: 1 } }
+// Admitted at `event`'s seq, as both the echo and a server read report it.
 const item = (id: string, timeCreated = 10): SessionInboxCompaction => ({
   id,
+  enqueuedSeq: 1,
   sessionID,
   time: { created: timeCreated },
   type: "compaction",

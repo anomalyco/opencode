@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import {
   createSessionRevertState,
   selectCursorAfterRevert,
@@ -27,9 +27,11 @@ const draft = (text: string): RevertDraftSnapshot => ({
   context: [],
 })
 
+const boundary = (messageID?: string) => (messageID ? { messageID } : undefined)
+
 const undo = (revertMessageID?: string, inboxIDs = new Set<string>()): SessionRevertEvent => ({
   type: "undo.requested",
-  revertMessageID,
+  revert: boundary(revertMessageID),
   messages,
   inboxIDs,
 })
@@ -37,7 +39,7 @@ const undo = (revertMessageID?: string, inboxIDs = new Set<string>()): SessionRe
 const rewindTo = (messageID: string, revertMessageID?: string, inboxIDs = new Set<string>()): SessionRevertEvent => ({
   type: "rewind.to",
   messageID,
-  revertMessageID,
+  revert: boundary(revertMessageID),
   messages,
   inboxIDs,
 })
@@ -67,7 +69,7 @@ const last = (events: SessionRevertEvent[], from?: SessionRevertState) => {
 }
 
 const view = (state: SessionRevertState, revertMessageID?: string) =>
-  viewSessionRevert(state, { messages, revertMessageID })
+  viewSessionRevert(state, { messages, revert: boundary(revertMessageID) })
 
 describe("transitionSessionRevert", () => {
   test("refuses every request while an operation runs, so two pipelines never share a Session", () => {
@@ -78,7 +80,7 @@ describe("transitionSessionRevert", () => {
     for (const event of [
       undo(),
       rewindTo("msg_2"),
-      { type: "redo.requested", revertMessageID: "msg_3" } as const,
+      { type: "redo.requested", revert: { messageID: "msg_3" } } as const,
       { type: "toast.undo", attempt: running.attempt } as const,
     ]) {
       const next = transitionSessionRevert(running, event)
@@ -120,7 +122,7 @@ describe("transitionSessionRevert", () => {
 
     expect(view(restored, undefined).canRedo).toBe(true)
 
-    const redo = transitionSessionRevert(restored, { type: "redo.requested", revertMessageID: undefined })
+    const redo = transitionSessionRevert(restored, { type: "redo.requested", revert: undefined })
 
     expect(redo.effects).toEqual([
       { type: "toast.dismiss" },
@@ -184,7 +186,7 @@ describe("transitionSessionRevert", () => {
     const steps = replay([
       undo(),
       rewound(1, ""),
-      { type: "redo.requested", revertMessageID: undefined },
+      { type: "redo.requested", revert: undefined },
       { type: "redo.succeeded", attempt: 2, ...delivered },
       { type: "revert.staged", messageID: "msg_3" },
       { type: "revert.cleared" },
@@ -267,19 +269,14 @@ describe("transitionSessionRevert", () => {
       status: "running",
       attempt: 5,
       echoes: [],
-      operation: { type: "withdraw", message: m3 },
+      // The cancel removes the prompt from the transcript, so the cursor before it is found now.
+      operation: { type: "withdraw", message: m3, cursor: "msg_2" },
       known: { boundary: undefined },
     })
 
     const prompt = draft("pinned").prompt
 
-    const done = transitionSessionRevert(start.state, {
-      type: "withdraw.succeeded",
-      attempt: 5,
-      prompt,
-      messages,
-      inboxIDs: queued,
-    })
+    const done = transitionSessionRevert(start.state, { type: "withdraw.succeeded", attempt: 5, prompt })
 
     expect(done.state).toEqual({ ...known, attempt: 5 })
     expect(done.effects).toEqual([
@@ -351,15 +348,83 @@ describe("transitionSessionRevert", () => {
 
     expect(transitionSessionRevert(idle, undo("msg_1")).state).toBe(idle)
     expect(transitionSessionRevert(idle, rewindTo("msg_missing")).state).toBe(idle)
-    expect(transitionSessionRevert(idle, { type: "redo.requested", revertMessageID: undefined }).state).toBe(idle)
+    expect(transitionSessionRevert(idle, { type: "redo.requested", revert: undefined }).state).toBe(idle)
     expect(transitionSessionRevert(idle, { type: "toast.undo", attempt: 0 }).state).toBe(idle)
+  })
+})
+
+describe("message IDs out of transcript order", () => {
+  // Automation prompt IDs sort after every other message ID, so only their position says they came first.
+  const automation = user("msg_aut_1")
+  const history = [user("msg_1"), automation, m2]
+  const idle = createSessionRevertState()
+
+  const reply: SessionMessageInfo = {
+    id: "msg_9",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content: [],
+    time: { created: 1 },
+  }
+
+  test("an earlier automation prompt can still be undone after a later prompt is reverted", () => {
+    expect(viewSessionRevert(idle, { messages: [automation, m2], revert: { messageID: "msg_2" } }).canUndo).toBe(true)
+  })
+
+  test("undo rewinds the last prompt before the boundary by position", () => {
+    const event: SessionRevertEvent = {
+      type: "undo.requested",
+      revert: { messageID: "msg_2" },
+      messages: history,
+      inboxIDs: new Set(),
+    }
+
+    expect(transitionSessionRevert(idle, event).state).toMatchObject({
+      status: "running",
+      operation: { type: "rewind", message: automation, prior: "msg_2" },
+    })
+    expect(selectCursorAfterRevert({ messages: history, inboxIDs: new Set() }, { messageID: "msg_2" })).toBe(
+      "msg_aut_1",
+    )
+  })
+
+  test("a revert staged on a reply hides the prompts after it, though they are the only messages loaded", () => {
+    // The server stages a revert on any message type, so the transcript is cut before the prompts are taken.
+    const messages: SessionMessageInfo[] = [
+      { ...m2, seq: 1 },
+      { ...reply, seq: 2 },
+      { ...m3, seq: 3 },
+    ]
+
+    expect(selectCursorAfterRevert({ messages, inboxIDs: new Set() }, { messageID: "msg_9" })).toBe("msg_2")
+    expect(
+      viewSessionRevert(idle, { messages: messages.slice(2), revert: { messageID: "msg_9", seq: 2 } }).canUndo,
+    ).toBe(false)
+  })
+
+  test("an unloaded boundary hides by its seq, whatever its ID or the loaded prompts' IDs", () => {
+    // A forked copy's ID ends in an unpadded seq, so `_10` sorts before `_9`.
+    const loaded = [
+      { ...user("msg_fork_9"), seq: 9 },
+      { ...user("msg_aut_2"), seq: 11 },
+      { ...user("msg_fork_10"), seq: 12 },
+    ]
+
+    for (const revert of [
+      { messageID: "msg_aut_1", seq: 10 },
+      { messageID: "msg_fork_10", seq: 10 },
+    ])
+      expect(
+        transitionSessionRevert(idle, { type: "undo.requested", revert, messages: loaded, inboxIDs: new Set() }).state,
+      ).toMatchObject({ operation: { type: "rewind", message: loaded[0], prior: revert.messageID } })
   })
 })
 
 describe("selectCursorAfterRevert", () => {
   test("selects the prompt before the boundary, or the latest delivered prompt without one", () => {
-    expect(selectCursorAfterRevert(delivered, "msg_3")).toBe("msg_2")
-    expect(selectCursorAfterRevert(delivered, "msg_1")).toBeUndefined()
+    expect(selectCursorAfterRevert(delivered, { messageID: "msg_3" })).toBe("msg_2")
+    expect(selectCursorAfterRevert(delivered, { messageID: "msg_1" })).toBeUndefined()
     expect(selectCursorAfterRevert({ messages, inboxIDs: new Set(["msg_3"]) }, undefined)).toBe("msg_2")
   })
 })

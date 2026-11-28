@@ -59,6 +59,9 @@ const assistant: SessionMessageInfo = {
   time: { created: 110, completed: 120 },
 }
 
+/** The imported messages as reads report them, each at its transcript position. */
+const read = [user, assistant].map((message, index) => ({ ...message, seq: index + 1 }))
+
 const serve = (database: string, mediaBlob: boolean) =>
   ServerFetch.make({
     app: { version: "test" },
@@ -102,12 +105,12 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         await plain.experimental.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
 
         // Without the capability, reads stay byte-for-byte what was imported.
-        expect((await plain.message.list({ sessionID, order: "asc" })).data).toEqual([user, assistant])
+        expect((await plain.message.list({ sessionID, order: "asc" })).data).toEqual(read)
 
         const refs: unknown = (await opted.message.list({ sessionID, order: "asc" })).data
         expect(refs).toEqual([
           {
-            ...user,
+            ...read[0],
             files: [
               {
                 uri: media(png),
@@ -140,7 +143,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
             ],
           },
           {
-            ...assistant,
+            ...read[1],
             content: [
               {
                 type: "tool",
@@ -159,8 +162,8 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         ])
         const single: unknown = await opted.session.message.get({ sessionID, messageID: "msg_media_user" })
         expect(single).toMatchObject({ files: [{ uri: media(png) }, { uri: media(text) }, {}, {}] })
-        expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
-        expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
+        expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(read[0])
+        expect((await opted.experimental.session.export({ sessionID })).messages).toEqual(read)
 
         // The route serves raw bytes as downloads, with immutable caching and a 304; image types stay usable by <img>.
         const image = await handler(new Request(route(png)))
@@ -273,7 +276,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         expect((await disabled(new Request(route(png)))).status).toBe(200)
         expect(
           (await client(disabled, "experimental-media-uri").message.list({ sessionID, order: "asc" })).data.slice(0, 2),
-        ).toEqual([user, assistant])
+        ).toEqual(read)
         expect((await handler(new Request(route(png)))).status).toBe(200)
       })
     })

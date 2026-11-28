@@ -1,4 +1,5 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import { messagesBeforeRevert, type RevertBoundary } from "@opencode/client/solid"
 import type { ContextItem, Prompt } from "@/composer/state"
 
 // A hung wait, media pin or revert request fails, so undo and redo cannot stay disabled forever.
@@ -22,7 +23,12 @@ export type RevertEcho = string | undefined
 
 export type SessionRevertOperation =
   /** An undelivered prompt has no history to rewind, so it is withdrawn from the inbox instead. */
-  | { readonly type: "withdraw"; readonly message: SessionMessageUser }
+  | {
+      readonly type: "withdraw"
+      readonly message: SessionMessageUser
+      /** The prompt before it, found while it is still in the transcript. */
+      readonly cursor: string | undefined
+    }
   | { readonly type: "rewind"; readonly message: SessionMessageUser; readonly prior: string | undefined }
   | { readonly type: "redo" }
   /** The Rewound toast's Undo: restage the earlier boundary and put the draft from before the rewind back. */
@@ -56,7 +62,8 @@ export type SessionRevertState =
 
 /** The Session's user messages when a request or result is dispatched. */
 type RevertMessages = {
-  readonly messages: readonly SessionMessageUser[]
+  /** The whole transcript: the boundary can be any message type, so it's cut before taking the prompts. */
+  readonly messages: readonly SessionMessageInfo[]
   /** Messages still waiting in the inbox. */
   readonly inboxIDs: ReadonlySet<string>
 }
@@ -65,12 +72,12 @@ export type SessionRevertEvent =
   | ({
       readonly type: "rewind.to"
       readonly messageID: string
-      readonly revertMessageID: string | undefined
+      readonly revert: RevertBoundary | undefined
     } & RevertMessages)
-  | ({ readonly type: "undo.requested"; readonly revertMessageID: string | undefined } & RevertMessages)
-  | { readonly type: "redo.requested"; readonly revertMessageID: string | undefined }
+  | ({ readonly type: "undo.requested"; readonly revert: RevertBoundary | undefined } & RevertMessages)
+  | { readonly type: "redo.requested"; readonly revert: RevertBoundary | undefined }
   | { readonly type: "toast.undo"; readonly attempt: number }
-  | ({ readonly type: "withdraw.succeeded"; readonly attempt: number; readonly prompt: Prompt } & RevertMessages)
+  | { readonly type: "withdraw.succeeded"; readonly attempt: number; readonly prompt: Prompt }
   | ({
       readonly type: "rewind.succeeded"
       readonly attempt: number
@@ -108,28 +115,25 @@ export function createSessionRevertState(): SessionRevertState {
 export function transitionSessionRevert(state: SessionRevertState, event: SessionRevertEvent): SessionRevertTransition {
   if (event.type === "rewind.to") {
     if (state.status === "running") return unchanged(state)
-    const message = event.messages.find((item) => item.id === event.messageID)
+    const message = prompts(event.messages).find((item) => item.id === event.messageID)
 
     if (!message) return unchanged(state)
 
-    return start(
-      state,
-      rewindOrWithdraw(message, event.inboxIDs, effectiveRevertMessageID(state, event.revertMessageID)),
-    )
+    return start(state, rewindOrWithdraw(message, event, effectiveRevert(state, event.revert)?.messageID))
   }
 
   if (event.type === "undo.requested") {
     if (state.status === "running") return unchanged(state)
-    const boundary = effectiveRevertMessageID(state, event.revertMessageID)
-    const message = event.messages.filter((item) => !boundary || item.id < boundary).at(-1)
+    const boundary = effectiveRevert(state, event.revert)
+    const message = prompts(event.messages, boundary).at(-1)
 
     if (!message) return unchanged(state)
 
-    return start(state, rewindOrWithdraw(message, event.inboxIDs, boundary))
+    return start(state, rewindOrWithdraw(message, event, boundary?.messageID))
   }
 
   if (event.type === "redo.requested") {
-    if (state.status === "running" || !effectiveRevertMessageID(state, event.revertMessageID)) return unchanged(state)
+    if (state.status === "running" || !effectiveRevert(state, event.revert)) return unchanged(state)
 
     return start(state, { type: "redo" })
   }
@@ -143,11 +147,10 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   if (event.type === "withdraw.succeeded") {
     if (state.status !== "running" || state.attempt !== event.attempt || state.operation.type !== "withdraw")
       return unchanged(state)
-    const message = state.operation.message
 
     return changed(idle(state.attempt, state.echoes, state.known), [
-      { type: "draft.restoreMessage", message, prompt: event.prompt },
-      { type: "cursor.select", messageID: selectCursorAfterRevert(event, message.id) },
+      { type: "draft.restoreMessage", message: state.operation.message, prompt: event.prompt },
+      { type: "cursor.select", messageID: state.operation.cursor },
     ])
   }
 
@@ -167,7 +170,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
       },
       [
         { type: "draft.restoreMessage", message },
-        { type: "cursor.select", messageID: selectCursorAfterRevert(event, message.id) },
+        { type: "cursor.select", messageID: selectCursorAfterRevert(event, { messageID: message.id }) },
         { type: "toast.showRewound", attempt: state.attempt },
       ],
     )
@@ -189,7 +192,10 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
 
     return changed(idle(state.attempt, state.echoes, { boundary: operation.prior }), [
       { type: "draft.restoreSnapshot", draft: operation.draft },
-      { type: "cursor.select", messageID: selectCursorAfterRevert(event, operation.prior) },
+      {
+        type: "cursor.select",
+        messageID: selectCursorAfterRevert(event, operation.prior ? { messageID: operation.prior } : undefined),
+      },
     ])
   }
 
@@ -252,41 +258,57 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   return changed(forget(state, echoes))
 }
 
-/** The revert boundary the Session has, counting requests that settled before the event stream reported them. */
-export function effectiveRevertMessageID(state: SessionRevertState, serverRevertMessageID: string | undefined) {
-  if (state.status === "restored") return state.boundary
+/**
+ * The revert boundary the Session has, counting requests that settled before the event stream reported them. Only
+ * the server's own boundary carries its `seq`; another one is found in the loaded transcript.
+ */
+export function effectiveRevert(state: SessionRevertState, server: RevertBoundary | undefined) {
+  const messageID =
+    state.status === "restored" ? state.boundary : state.known ? state.known.boundary : server?.messageID
 
-  return state.known ? state.known.boundary : serverRevertMessageID
+  if (!messageID) return undefined
+
+  return messageID === server?.messageID ? server : { messageID }
 }
 
 /** The prompt before the boundary, or the latest delivered prompt when nothing is reverted. */
-export function selectCursorAfterRevert(input: RevertMessages, boundary: string | undefined) {
-  if (boundary) return input.messages.filter((item) => item.id < boundary).at(-1)?.id
+export function selectCursorAfterRevert(input: RevertMessages, boundary: RevertBoundary | undefined) {
+  if (boundary) return prompts(input.messages, boundary).at(-1)?.id
 
-  return input.messages.filter((item) => !input.inboxIDs.has(item.id)).at(-1)?.id
+  return prompts(input.messages)
+    .filter((item) => !input.inboxIDs.has(item.id))
+    .at(-1)?.id
 }
 
 export function viewSessionRevert(
   state: SessionRevertState,
-  context: { readonly messages: readonly SessionMessageUser[]; readonly revertMessageID: string | undefined },
+  context: { readonly messages: readonly SessionMessageInfo[]; readonly revert: RevertBoundary | undefined },
 ) {
   const busy = state.status === "running"
-  const revertMessageID = effectiveRevertMessageID(state, context.revertMessageID)
+  const revert = effectiveRevert(state, context.revert)
 
   return {
     busy,
-    revertMessageID,
-    canUndo: !busy && context.messages.some((item) => !revertMessageID || item.id < revertMessageID),
-    canRedo: !busy && !!revertMessageID,
+    revertMessageID: revert?.messageID,
+    canUndo: !busy && prompts(context.messages, revert).length > 0,
+    canRedo: !busy && !!revert,
   }
+}
+
+/** The prompts before the boundary, cut first because the boundary can be any message type. */
+function prompts(messages: readonly SessionMessageInfo[], boundary?: RevertBoundary) {
+  return (boundary ? messagesBeforeRevert(messages, boundary) : messages).filter(
+    (item): item is SessionMessageUser => item.type === "user",
+  )
 }
 
 function rewindOrWithdraw(
   message: SessionMessageUser,
-  inboxIDs: ReadonlySet<string>,
+  input: RevertMessages,
   prior: string | undefined,
 ): SessionRevertOperation {
-  if (inboxIDs.has(message.id)) return { type: "withdraw", message }
+  if (input.inboxIDs.has(message.id))
+    return { type: "withdraw", message, cursor: selectCursorAfterRevert(input, { messageID: message.id }) }
 
   return { type: "rewind", message, prior }
 }

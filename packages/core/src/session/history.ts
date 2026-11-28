@@ -127,6 +127,7 @@ export const withParts = Effect.fnUntraced(function* (
 const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
   ...SessionLegacy.message(row.type, row.data),
   id: row.id,
+  seq: row.seq,
   type: row.type,
 })
 

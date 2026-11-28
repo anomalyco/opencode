@@ -49,8 +49,8 @@ export function createSessionRevert(input: {
     const sessionID = input.session.identity.params.id
 
     return viewSessionRevert((sessionID && sessions()[sessionID]) || IDLE, {
-      messages: input.session.history.userMessages(),
-      revertMessageID: input.session.data.revertMessageID(),
+      messages: input.session.history.messages(),
+      revert: input.session.data.revert(),
     })
   })
 
@@ -91,11 +91,15 @@ export function createSessionRevert(input: {
   }
 
   const snapshot = (sessionID: string) => {
-    const messages = selectSessionUserMessages(data.session.message.list(sessionID))
+    const messages = data.session.message.list(sessionID)
 
     return {
       messages,
-      inboxIDs: new Set(messages.flatMap((item) => (data.session.input.has(sessionID, item.id) ? [item.id] : []))),
+      inboxIDs: new Set(
+        selectSessionUserMessages(messages).flatMap((item) =>
+          data.session.input.has(sessionID, item.id) ? [item.id] : [],
+        ),
+      ),
     }
   }
 
@@ -239,7 +243,7 @@ export function createSessionRevert(input: {
       signal.throwIfAborted()
       await server.api.session.inbox.cancel({ sessionID, inboxID: operation.message.id }, { signal })
 
-      return { type: "withdraw.succeeded", attempt, prompt: restored, ...snapshot(sessionID) }
+      return { type: "withdraw.succeeded", attempt, prompt: restored }
     }
 
     if (operation.type === "rewind") {
@@ -283,7 +287,7 @@ export function createSessionRevert(input: {
       request(sessionID, (id) => ({
         type: "rewind.to",
         messageID,
-        revertMessageID: data.session.get(id)?.revert?.messageID,
+        revert: data.session.get(id)?.revert,
         ...snapshot(id),
       })),
     /**
@@ -299,24 +303,25 @@ export function createSessionRevert(input: {
       if (!message) return
       // The commit releases the prompt's blob refs, so the draft takes local copies of its media first.
       const restored = await pinPromptMedia(messageDraft(message, target.directory))
+      // The commit deletes the prompt, so the cursor before it is found first.
+      const cursor = selectCursorAfterRevert(snapshot(sessionID), { messageID: message.id })
       // The model called no tool, so any file that changed meanwhile is the user's own edit.
       await server.api.session.revert.stage({ sessionID, messageID: message.id, files: false })
       await server.api.session.revert.commit({ sessionID })
       restore(target, message, restored)
 
-      if (input.session.identity.params.id === sessionID)
-        input.setActiveMessage(selectCursorAfterRevert(snapshot(sessionID), message.id))
+      if (input.session.identity.params.id === sessionID) input.setActiveMessage(cursor)
     },
     undo: () =>
       request(input.session.identity.params.id, (id) => ({
         type: "undo.requested",
-        revertMessageID: data.session.get(id)?.revert?.messageID,
+        revert: data.session.get(id)?.revert,
         ...snapshot(id),
       })),
     redo: () =>
       request(input.session.identity.params.id, (id) => ({
         type: "redo.requested",
-        revertMessageID: data.session.get(id)?.revert?.messageID,
+        revert: data.session.get(id)?.revert,
       })),
     /** Puts a sent prompt back in the composer without rewinding the Session. */
     recall: (message: SessionMessageUser) =>

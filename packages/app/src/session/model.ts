@@ -7,7 +7,7 @@ import { same } from "@/runtime/persistence/equality"
 import { containsDirectory } from "@opencode/util/path"
 import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { projectForSession } from "@/shell/layout/helpers"
-import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
+import { selectSessionUserMessages, selectVisibleSessionMessages } from "./session-domain"
 import { useSessionLayout } from "./session-layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
@@ -68,10 +68,10 @@ export function useSessionModel() {
   })
 
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })
-  const revertMessageID = createMemo(() => info()?.revert?.messageID)
+  const revert = createMemo(() => info()?.revert)
 
   const visibleUserMessages = createMemo(
-    () => selectVisibleSessionUserMessages(userMessages(), revertMessageID()),
+    () => selectSessionUserMessages(selectVisibleSessionMessages(messages(), revert())),
     emptyUserMessages,
     { equals: same },
   )
@@ -103,7 +103,7 @@ export function useSessionModel() {
 
         return id ? data.session.status(id) === "running" : false
       }),
-      revertMessageID,
+      revert,
     },
     history: {
       messages,

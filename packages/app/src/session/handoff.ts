@@ -80,7 +80,7 @@ export function createSessionMessageHandoffs(input: {
       if (item.data.delivery === "queue") cleared(item)
     }),
     input.sdk.event.on("session.revert.staged", (item) =>
-      dispatch({ type: "session.reverted", sessionID: item.data.sessionID, boundary: item.data.revert.messageID }),
+      dispatch({ type: "session.reverted", sessionID: item.data.sessionID }),
     ),
     input.sdk.event.on("session.deleted", (item) =>
       dispatch({ type: "session.deleted", sessionID: item.data.sessionID }),
