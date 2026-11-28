@@ -17,6 +17,7 @@ import {
   textPart,
   userID,
   userMessage,
+  userText,
   validateTimelineMessages,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
@@ -895,6 +896,158 @@ test.describe("timeline history", () => {
     await expect.poll(hash).toBe("")
     expect(older).toEqual(loaded)
   })
+
+  for (const newTimeline of [false, true]) {
+    test(`a row that stays mounted is not taken out of the page while an older page lands (${newTimeline ? "New" : "current"} timeline)`, async ({
+      page,
+    }) => {
+      // The page boundary falls just before a shell's report. The older page puts rows above that row, and a turn gap
+      // below it, now that the turn under it is no longer the first. Solid's placement of the list replaced the row
+      // with a new one and inserted it again, and a row that leaves the document loses focus.
+      const older = Promise.withResolvers<void>()
+      const requests: { before?: string; phase: "start" | "end" }[] = []
+      const report = "msg_1002_shell_finished"
+      const later = "msg_1008_later_user"
+
+      const messages: SessionMessageInfo[] = [
+        ...historyMessages(20),
+        userMessage(),
+        assistantMessage([textPart("prt_rows_started", "Started the server.")]),
+        {
+          id: report,
+          type: "synthetic",
+          text: '<shell id="shell_rows" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+          description: "bun serve.ts",
+          metadata: { source: "shell", shellID: "shell_rows", state: "completed" },
+          time: { created: 1700000003000 },
+        },
+        userMessage(undefined, { id: later, created: 1700000008000 }),
+        assistantMessage(
+          [
+            {
+              id: "prt_rows_later",
+              type: "text",
+              text: Array.from({ length: 60 }, (_, index) => `Later line ${index + 1}.`).join("\n\n"),
+            },
+          ],
+          { id: "msg_1009_later_assistant", parentID: later, created: 1700000009000 },
+        ),
+      ]
+
+      const first = messages.findIndex((message) => message.id === report)
+      await setupTimeline(page, {
+        sessionMessages: messages,
+        settings: { newTimeline },
+        pageMessages: (_, __, before) =>
+          before ? { items: messages.slice(0, first) } : { items: messages.slice(first), cursor: messages[first]!.id },
+        beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+        onMessages: (request) => requests.push(request),
+      })
+      const scroller = timelineScroller(page)
+      const row = scroller.locator(`[data-timeline-key$="${report}"]`)
+      const control = row.getByRole("button")
+      await expect(page.getByText("Later line 60.", { exact: true })).toBeInViewport()
+      await scroller.hover()
+      await page.mouse.wheel(0, -100_000)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+      // At the top the timeline asks for the older page.
+      await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+
+      await control.focus()
+      const takenOut = await watchRows(page)
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+      older.resolve()
+      await expect.poll(() => requests.some((request) => request.before && request.phase === "end")).toBe(true)
+      // The older page has landed above the row.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+      await expect(row).toHaveCount(1)
+      expect({
+        takenOut: await takenOut(),
+        focused: await control.evaluate((element) => document.activeElement === element),
+      }).toEqual({ takenOut: 0, focused: true })
+    })
+
+    test(`a row that stays mounted is not taken out of the page by a page up through history (${newTimeline ? "New" : "current"} timeline)`, async ({
+      page,
+    }) => {
+      // A page up mounts rows above the ones that stay, and rows below leave. When the new rows are at least as many
+      // as the rows that stay, Solid's placement of the list replaced each row that stays with a new one and
+      // inserted it again. A row that leaves the document loses a text selection and the offset of what was scrolled
+      // inside it, and is laid out again.
+      const turns = (count: number, label: string, digit: number) =>
+        Array.from({ length: count }, (_, index) => {
+          const value = String(index).padStart(3, "0")
+          const user = `msg_${digit}${value}_${label}_a_user`
+
+          return [
+            userMessage(
+              [userText(`Question ${index} of the ${label} turns`, { id: `prt_${digit}${value}_${label}_prompt` })],
+              { id: user, created: 1690000000000 + digit * 10_000_000_000 + index * 10_000 },
+            ),
+            assistantMessage(
+              [
+                {
+                  id: `prt_${digit}${value}_${label}_text`,
+                  type: "text",
+                  text: `Reply ${index} of the ${label} turns.`,
+                },
+              ],
+              {
+                id: `msg_${digit}${value}_${label}_b_assistant`,
+                parentID: user,
+                created: 1690000001000 + digit * 10_000_000_000 + index * 10_000,
+              },
+            ),
+          ]
+        }).flat()
+
+      // Short turns above the shell: a page up mounts many rows and keeps few. Two short turns below it: at the end
+      // of the session the shell is at the top of the view, and those turns leave when the reader pages up.
+      await setupTimeline(page, {
+        messages: [
+          ...turns(8, "earlier", 0),
+          userMessage(),
+          assistantMessage([
+            shell(
+              "prt_rows_shell",
+              "completed",
+              Array.from({ length: 200 }, (_, index) => `output line ${index + 1}`).join("\n"),
+            ),
+            textPart("prt_rows_text", "Done with the shell."),
+          ]),
+          ...turns(2, "later", 2),
+        ],
+        settings: { newTimeline, shellToolPartsExpanded: true },
+      })
+      const scroller = timelineScroller(page)
+      const row = scroller.locator('[data-timeline-key$="prt_rows_shell"]')
+      const output = row.locator('[data-slot="bash-scroll"]')
+      await expect(page.getByText("Reply 1 of the later turns.", { exact: true })).toBeInViewport()
+      await expect(output).toBeInViewport()
+
+      // The reader scrolls the output and selects a line of it. The timeline has focus, as after a click in it.
+      await output.hover()
+      await page.mouse.wheel(0, 300)
+      await expect.poll(() => output.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await output.click({ clickCount: 3 })
+      await scroller.focus()
+
+      const state = async () => ({
+        takenOut: await takenOut(),
+        selected: await page.evaluate(() => getSelection()?.toString()),
+        scrolled: await output.evaluate((element) => element.scrollTop),
+      })
+
+      const takenOut = await watchRows(page)
+      const before = await state()
+      expect(before.selected).not.toBe("")
+      await page.keyboard.press("PageUp")
+      // The page has brought in rows that were not mounted.
+      await expect(page.getByText("Reply 6 of the earlier turns.", { exact: true })).toBeInViewport()
+      await expect(row).toHaveCount(1)
+      expect(await state()).toEqual(before)
+    })
+  }
 })
 
 declare global {
@@ -914,6 +1067,25 @@ async function openStressTarget(page: Page, input: Parameters<typeof mockStressT
 
 function timelineScroller(page: Page) {
   return page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+}
+
+// Watches the timeline's rows from now on. Returns a count of the rows that are still mounted and were taken out of
+// the document on the way.
+async function watchRows(page: Page) {
+  const taken = await page.evaluateHandle(() => {
+    const rows = new Set<Node>()
+
+    new MutationObserver((records) =>
+      records
+        .flatMap((record) => Array.from(record.removedNodes))
+        .filter((node) => node instanceof HTMLElement && node.hasAttribute("data-timeline-key"))
+        .forEach((node) => rows.add(node)),
+    ).observe(document, { subtree: true, childList: true })
+
+    return rows
+  })
+
+  return () => taken.evaluate((rows) => [...rows].filter((row) => row.isConnected).length)
 }
 
 function visibleTimeline(page: Page) {
