@@ -247,6 +247,61 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("converts callable Effect Standard Schemas without a JSON schema converter", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* service.transform((editor) =>
+        editor.add({
+          name: "increment",
+          description: "Increment a number",
+          input: Schema.toStandardSchemaV1(Schema.Struct({ value: Schema.NumberFromString }), {
+            parseOptions: { onExcessProperty: "error" },
+          }),
+          output: Schema.toStandardSchemaV1(Schema.NumberFromString),
+          options: { codemode: false },
+          execute: ({ value }) => Effect.succeed({ output: value + 1 }),
+        }),
+      )
+
+      const snapshot = yield* service.snapshot()
+      const definition = snapshot.definitions.find((tool) => tool.name === "increment")
+      expect(definition?.inputSchema).toMatchObject({
+        type: "object",
+        properties: { value: { type: "string" } },
+        required: ["value"],
+        additionalProperties: false,
+      })
+      expect(definition?.outputSchema).toMatchObject({ type: "string" })
+
+      const invocation = call("increment")
+      expect(
+        (yield* snapshot.execute({ ...invocation, call: { ...invocation.call, input: { value: "2" } } })).output,
+      ).toBe("3")
+      const error = yield* snapshot
+        .execute({ ...invocation, call: { ...invocation.call, input: { value: "2", unexpected: true } } })
+        .pipe(Effect.flip)
+      expect(error.message).toContain("unexpected: Expected no excess property")
+    }),
+  )
+
+  it.effect("advertises empty callable Effect Standard Schema input as an object", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(
+        service,
+        { ready: { ...constant("ready"), input: Schema.toStandardSchemaV1(Schema.Struct({})) } },
+        { codemode: false },
+      )
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.find((tool) => tool.name === "ready")?.inputSchema).toEqual({
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      })
+    }),
+  )
+
   it.effect("skips invalid updates without dropping the existing definition", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
