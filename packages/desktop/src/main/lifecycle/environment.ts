@@ -5,9 +5,11 @@ import { app, shell } from "electron"
 import { Effect, Path } from "effect"
 import { APP_USER_MODEL_ID } from "../constants"
 import { isCollidingDevShortcut } from "../identity"
+import { openExternalURL } from "../files"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
+import { linkMenuItems } from "../native/link-menu"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
 import { nativeT } from "../native/translations"
@@ -16,6 +18,7 @@ import { nativeT } from "../native/translations"
 // window is up instead of holding up startup with its dependency tree.
 export const installContextMenu = Effect.gen(function* () {
   const { default: contextMenu } = yield* Effect.promise(() => import("electron-context-menu"))
+  const runFork = Effect.runForkWith(yield* Effect.context())
   contextMenu({
     showSaveImageAs: true,
     showLookUpSelection: false,
@@ -35,6 +38,7 @@ export const installContextMenu = Effect.gen(function* () {
         return nativeT("desktop.menu.selectAll")
       },
     },
+    prepend: (_actions, params) => linkMenuItems(params.linkURL, (url) => runFork(openExternalURL(url))),
     append: (_actions, params) => (params.isEditable ? spellcheckMenuItems() : []),
   })
 })

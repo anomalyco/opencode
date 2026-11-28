@@ -316,6 +316,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.picker.error.notSelected": "File was not selected by the picker",
   "desktop.picker.error.sizeLimit": "Selected attachments exceed the {{limit}} MB limit",
 
+  "desktop.contextMenu.openLink": "Open Link in External Browser",
   "desktop.contextMenu.spellcheck": "Spellcheck",
   "desktop.contextMenu.spellcheckLanguages": "Spellcheck Languages",
 
