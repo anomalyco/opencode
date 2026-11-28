@@ -125,28 +125,25 @@ export const DelegateBetweenTools = {
   ),
 }
 
-const consecutiveSubagent = (
-  id: string,
-  agent: string,
-  description: string,
-  status: "running" | "completed",
-  sessionID: string,
-) =>
+const consecutiveSubagent = (id: string, agent: string, description: string, sessionID: string, running = false) =>
   storyTool(
     id,
     "subagent",
-    status,
+    "completed",
     { agent, description, prompt: description },
-    status === "completed" ? { output: `${description}: done.`, metadata: { sessionID } } : { metadata: { sessionID } },
+    {
+      output: running ? "The subagent is working in the background." : `${description}: done.`,
+      metadata: running ? { sessionID, status: "running" } : { sessionID },
+    },
   )
 
 const consecutiveSubagentsDocument = storyDocument([
   storyTool("tool_consecutive_glob", "glob", "completed", { pattern: "src/timeline/**/*.ts" }),
   storyTool("tool_consecutive_read", "read", "completed", { path: "src/timeline/projection.ts" }),
-  consecutiveSubagent("tool_consecutive_date", "general", "audit b-date", "running", "session_child_tests"),
-  consecutiveSubagent("tool_consecutive_n_date", "general", "audit n-date", "running", "session_child_tests"),
-  consecutiveSubagent("tool_consecutive_perf", "explore", "audit b-perf", "completed", "session_child_review"),
-  consecutiveSubagent("tool_consecutive_timers", "review", "audit b-timers", "completed", "session_child_review"),
+  consecutiveSubagent("tool_consecutive_date", "general", "audit b-date", "session_child_tests", true),
+  consecutiveSubagent("tool_consecutive_n_date", "general", "audit n-date", "session_child_n_date"),
+  consecutiveSubagent("tool_consecutive_perf", "explore", "audit b-perf", "session_child_perf"),
+  consecutiveSubagent("tool_consecutive_timers", "review", "audit b-timers", "session_child_timers"),
   {
     type: "text",
     text: "Each subagent keeps its own card, spaced as any two blocks are.",
@@ -154,14 +151,14 @@ const consecutiveSubagentsDocument = storyDocument([
 ])
 
 export const ConsecutiveSubagents = {
-  args: { full_codemode: false },
-  argTypes: { full_codemode: { control: { type: "boolean" } } },
-  render: (args: { full_codemode: boolean }) => (
+  args: { subagents: "separate" },
+  argTypes: { subagents: { control: { type: "inline-radio" }, options: ["separate", "grouped", "hidden"] } },
+  render: (args: { subagents: TimelinePlacement }) => (
     <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
-      <CurrentSessionProviders document={consecutiveSubagentsDocument} flags={{ full_codemode: args.full_codemode }}>
+      <CurrentSessionProviders document={consecutiveSubagentsDocument}>
         <SessionTimeline
           document={consecutiveSubagentsDocument}
-          timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: "separate" } }}
+          timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: args.subagents } }}
         />
       </CurrentSessionProviders>
     </section>
