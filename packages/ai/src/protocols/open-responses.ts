@@ -550,10 +550,17 @@ const lowerToolCall = (
   part: ToolCallPart,
   providerMetadataKey: string,
   custom: OpenAIFreeform.Custom | undefined,
+  declared: ReadonlySet<string>,
 ): OpenResponsesInputItem => {
   const id = OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
     ? itemID(part.providerMetadata, providerMetadataKey)
     : undefined
+  // Responses routes keep native namespaces, so this lowering never sees flattenRequest: apply the same replay
+  // rule here, or a made-up name goes to the provider at full length and the session dies (#65822). A custom tool
+  // is called under its own name by definition, and a declared tool keeps its name and namespace.
+  const flat = part.namespace === undefined ? part.name : `${part.namespace}_${part.name}`
+  const replayed = custom !== undefined ? part.name : ProviderShared.replayToolName(flat, declared)
+  const renamed = replayed !== flat
   if (custom)
     return {
       type: "custom_tool_call",
@@ -566,8 +573,8 @@ const lowerToolCall = (
     type: "function_call",
     ...(id === undefined ? {} : { id }),
     call_id: part.id,
-    name: part.name,
-    namespace: part.namespace,
+    name: renamed ? replayed : part.name,
+    namespace: renamed ? undefined : part.namespace,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   }
 }
@@ -666,6 +673,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
   const pendingCommentaryRejected = rejectsPendingCommentary(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
+  const declared = new Set(ProviderShared.flattenTools(request.tools).map((tool) => tool.name))
 
   for (const message of request.messages) {
     const rawMetadata =
@@ -769,7 +777,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
+          input.push(lowerToolCall(part, providerMetadataKey, customTool(part), declared))
           calledTool = true
           continue
         }
