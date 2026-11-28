@@ -218,6 +218,44 @@ for (const direction of ["ltr", "rtl"] as const) {
   })
 }
 
+test("the desktop tab menu excludes the header drag region from its pointer targets", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const workspace = await mockWorkspace(page, {
+    name: "Menu",
+    sessions: [{ id: "ses_menu", title: "Menu session" }],
+  })
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({
+      server: workspace.server,
+      path: sessionHref("ses_menu", "sidecar"),
+      os: "macos",
+    })}`,
+  )
+  const area = page.locator('[data-slot="session-header-drag"]')
+  const tab = tabs(page).filter({ hasText: "Menu session" })
+  const menu = page.getByRole("menu")
+  await expectSessionTitle(page, "Menu session")
+  await expect(area).toHaveCSS("app-region", "drag")
+  await tab.click({ button: "right" })
+  await expect(menu.getByRole("menuitem", { name: "Rename", exact: true })).toBeVisible()
+  await expect
+    .poll(async () => {
+      const [drag, popup] = await Promise.all([area.boundingBox(), menu.boundingBox()])
+
+      return (
+        !!drag &&
+        !!popup &&
+        popup.x < drag.x + drag.width &&
+        popup.x + popup.width > drag.x &&
+        popup.y < drag.y + drag.height &&
+        popup.y + popup.height > drag.y
+      )
+    })
+    .toBe(true)
+  // Chromium's synthetic clicks bypass native window hit-testing, so assert the exclusion Electron consumes.
+  await expect(menu).toHaveCSS("app-region", "no-drag")
+})
+
 test("the web session header leaves window dragging to the browser", async ({ page }) => {
   await mockStressTimeline(page)
   await seed(page, { tabs: [fixture.targetID] })
