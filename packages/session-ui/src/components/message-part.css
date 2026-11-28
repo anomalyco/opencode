@@ -2174,9 +2174,10 @@
 
 /* In the current timeline, as in the New timeline, a block is as tall as its text, so the gaps between blocks are the
    gaps that show and every pair of blocks stands the same 16px apart. A row's 28px click area stays: 6px of padding
-   above and below, taken back by margins of the same size. An open row keeps its header's room above its content. */
+   above and below, taken back by margins of the same size. An open row keeps its header's room above its content.
+   A subagent's card is a block as tall as its own surface, so it keeps its height. */
 [data-timeline-row="AssistantPart"]:not([data-timeline="next"]) {
-  [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"]:not(:has([data-component="task-tool-card"])) {
     box-sizing: border-box;
     height: calc(var(--line-height-compact) + 12px);
     padding-block: 6px;
