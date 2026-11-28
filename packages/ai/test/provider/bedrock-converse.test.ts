@@ -1176,6 +1176,39 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("does not emit complete tool calls when the content filter stops the reply", () =>
+    Effect.gen(function* () {
+      for (const stopReason of ["content_filtered", "guardrail_intervened"] as const) {
+        const body = eventStreamBody(
+          ["messageStart", { role: "assistant" }],
+          ["contentBlockStart", { contentBlockIndex: 0, start: { toolUse: { toolUseId: "tool_1", name: "shell" } } }],
+          // The filter cuts the arguments off, but Bedrock still closes them as valid JSON.
+          [
+            "contentBlockDelta",
+            { contentBlockIndex: 0, delta: { toolUse: { input: '{"command":"rm -rf some/di"}' } } },
+          ],
+          ["contentBlockStop", { contentBlockIndex: 0 }],
+          ["messageStop", { stopReason }],
+        )
+        const response = yield* LLMClient.generate({
+          ...baseRequest,
+          tools: [ToolDefinition.make({ name: "shell", description: "Shell", inputSchema: { type: "object" } })],
+        }).pipe(Effect.provide(fixedBytes(body)))
+
+        expect(response.toolCalls).toEqual([])
+        expect(response.events.map((event) => event.type)).toEqual([
+          "step-start",
+          "tool-input-start",
+          "tool-input-delta",
+          "tool-input-end",
+          "step-finish",
+          "finish",
+        ])
+        expect(response.finishReason).toEqual({ normalized: "content-filter", raw: stopReason })
+      }
+    }),
+  )
+
   it.effect("decodes reasoning deltas", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(

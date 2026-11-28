@@ -15,6 +15,7 @@ import {
   type ProviderMetadata,
   type ProviderOptions,
   type ReasoningPart,
+  type ToolCall,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
@@ -698,6 +699,10 @@ interface ParserState {
   readonly finishReason: FinishReasonDetails | undefined
   readonly usage: Usage | undefined
   readonly hasToolCalls: boolean
+  // A content filter can cut tool arguments off while Bedrock still closes them as
+  // valid JSON, so completed calls wait for `messageStop` and are dropped when the
+  // reply was filtered, as OpenAI Chat does.
+  readonly heldToolCalls: ReadonlyArray<ToolCall>
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignatures: Readonly<Record<number, string>>
   readonly reasoningRedactedContent: Readonly<Record<number, Uint8Array[]>>
@@ -836,13 +841,14 @@ const step = (state: ParserState, event: BedrockEvent) =>
           metadata,
         )
       })()
-      events.push(...resultEvents)
+      events.push(...resultEvents.filter((event) => !LLMEvent.is.toolCall(event)))
       return [
         {
           ...state,
           hasToolCalls:
             resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
             state.hasToolCalls,
+          heldToolCalls: [...state.heldToolCalls, ...resultEvents.filter(LLMEvent.is.toolCall)],
           lifecycle,
           tools: result.tools,
           reasoningSignatures: Object.fromEntries(
@@ -866,15 +872,14 @@ const step = (state: ParserState, event: BedrockEvent) =>
           `Bedrock Converse stopped with ${event.messageStop.stopReason}`,
           ProviderShared.encodeJson(event),
         )
+      const normalized = mapFinishReason(event.messageStop.stopReason)
       return [
         {
           ...state,
-          finishReason: {
-            normalized: mapFinishReason(event.messageStop.stopReason),
-            raw: event.messageStop.stopReason,
-          },
+          finishReason: { normalized, raw: event.messageStop.stopReason },
+          heldToolCalls: [],
         },
-        [],
+        normalized === "content-filter" ? [] : state.heldToolCalls,
       ] as const
     }
 
@@ -957,6 +962,7 @@ export const protocol = Protocol.make({
       finishReason: undefined,
       usage: undefined,
       hasToolCalls: false,
+      heldToolCalls: [],
       lifecycle: Lifecycle.initial(),
       reasoningSignatures: {},
       reasoningRedactedContent: {},
