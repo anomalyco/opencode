@@ -2,7 +2,7 @@
 # of the OpenMono build, whose Regular, Bold and Italic OpenCode Desktop bundles too) it reads
 # woff2/OpenMonoNerd-<Style>-text.woff2 and LICENSE from there and also writes them to
 # src/docs/assets/fonts (as OpenMono-<Style>.woff2) and src/asset/fonts/OpenMono-OFL.txt; without one it
-# rebuilds from those copies. The copies are OpenMono 1.000.
+# rebuilds from those copies. The copies are OpenMono 1.001.
 #
 # Each style is three files, split by unicode-range like Inter: "latin" (Latin, punctuation, arrows,
 # shapes, box drawing and a few keys and common symbols: what the site sets in mono), "cyrillic" (the
@@ -57,6 +57,8 @@ symbols = {
     *(0x22EF, 0xFFFD),
     # ⁰ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹, ₀ ₁ and σ: the numbers on /font (¹ ² ³ are in Latin-1). Σ too: the page sets its σ in capitals
     *(0x2070, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079, 0x2080, 0x2081, 0x03C3, 0x03A3),
+    # The OpenCode logo (since OpenMono 1.001), which is set in running text
+    0x10C0DE,
 }
 cyrillic = [(0x0400, 0x052F), (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 # The stress marks, which the Cyrillic file has too: a stressed letter such as у́ has no code point of
@@ -91,7 +93,7 @@ sparse = [
     (0x1DF00, 0x1DFFF),
     (0x1FB00, 0x1FBFF),
 ]
-notice = """The openmono-*.woff2 files in this folder are subsets of OpenMono 1.000, made by
+notice = """The openmono-*.woff2 files in this folder are subsets of OpenMono 1.001, made by
 services/site/script/openmono.py from the app build (no ligatures, every
 character one cell wide). OpenMono is Anomaly's typeface, built on Iosevka by
 Renzhi Li (Belleve Invis). The font declares no Reserved Font Name.
