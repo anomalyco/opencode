@@ -3,6 +3,7 @@ import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@open
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { draftHref, expectPath, holdRoute, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { captureConsoleWarnings } from "../utils/command-palette"
 import {
   newSessionBaseBranch,
   newSessionLocation,
@@ -332,8 +333,10 @@ for (const row of [
     const path = page.locator('[data-slot="new-session-location-path"]')
     await expect(path).toHaveText(row.pattern)
     await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    const warnings = captureConsoleWarnings(page)
     await path.hover()
     await expect(page.getByRole("tooltip")).toHaveText(row.directory)
+    expect(warnings.filter((warning) => warning.includes("computations created outside"))).toEqual([])
 
     if (row.name !== "POSIX") return
     await expect(path).toHaveCSS("user-select", "text")
