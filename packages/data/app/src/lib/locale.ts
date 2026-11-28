@@ -1,75 +1,20 @@
-export const LOCALES = [
-  "en",
-  "zh",
-  "zht",
-  "ko",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "da",
-  "ja",
-  "pl",
-  "ru",
-  "uk",
-  "ar",
-  "no",
-  "br",
-  "th",
-  "tr",
-] as const
+import { fix, fromPathname, LOCALE_HEADER, parseLocale, strip, type Locale } from "@opencode/locale"
 
-export type Locale = (typeof LOCALES)[number]
+export {
+  LOCALES,
+  LOCALE_COOKIE,
+  LOCALE_HEADER,
+  clearCookie,
+  cookie,
+  dir,
+  fromPathname,
+  label,
+  parseLocale,
+  strip,
+  tag,
+} from "@opencode/locale"
 
-export const LOCALE_COOKIE = "oc_locale" as const
-export const LOCALE_HEADER = "x-opencode-locale" as const
-
-function fix(pathname: string) {
-  if (pathname.startsWith("/")) return pathname
-  return `/${pathname}`
-}
-
-const LABEL = {
-  en: "English",
-  zh: "简体中文",
-  zht: "繁體中文",
-  ko: "한국어",
-  de: "Deutsch",
-  es: "Español",
-  fr: "Français",
-  it: "Italiano",
-  da: "Dansk",
-  ja: "日本語",
-  pl: "Polski",
-  ru: "Русский",
-  uk: "Українська",
-  ar: "العربية",
-  no: "Norsk",
-  br: "Português (Brasil)",
-  th: "ไทย",
-  tr: "Türkçe",
-} satisfies Record<Locale, string>
-
-const TAG = {
-  en: "en",
-  zh: "zh-Hans",
-  zht: "zh-Hant",
-  ko: "ko",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  uk: "uk",
-  ar: "ar",
-  no: "no",
-  br: "pt-BR",
-  th: "th",
-  tr: "tr",
-} satisfies Record<Locale, string>
+export type { Locale } from "@opencode/locale"
 
 const DOCS = {
   en: "root",
@@ -176,16 +121,6 @@ function docs(locale: Locale, pathname: string) {
   return `/docs/${value}${next.path.slice("/docs".length)}${next.suffix}`
 }
 
-export function parseLocale(value: unknown): Locale | null {
-  if (typeof value !== "string") return null
-  if ((LOCALES as readonly string[]).includes(value)) return value as Locale
-  return null
-}
-
-export function fromPathname(pathname: string) {
-  return parseLocale(fix(pathname).split("/")[1])
-}
-
 function fromDocsPathname(pathname: string) {
   const next = fix(pathname)
   const value = next.split("/")[2]?.toLowerCase()
@@ -193,16 +128,6 @@ function fromDocsPathname(pathname: string) {
   if (!next.startsWith("/docs/")) return null
   if (!(value in DOCS_LOCALE)) return null
   return DOCS_LOCALE[value as keyof typeof DOCS_LOCALE]
-}
-
-export function strip(pathname: string) {
-  const locale = fromPathname(pathname)
-  if (!locale) return fix(pathname)
-
-  const next = fix(pathname).slice(locale.length + 1)
-  if (!next) return "/"
-  if (next.startsWith("/")) return next
-  return `/${next}`
 }
 
 export function route(locale: Locale, pathname: string) {
@@ -217,19 +142,6 @@ export function route(locale: Locale, pathname: string) {
   return `/${locale}${next}`
 }
 
-export function label(locale: Locale) {
-  return LABEL[locale]
-}
-
-export function tag(locale: Locale) {
-  return TAG[locale]
-}
-
-export function dir(locale: Locale) {
-  if (locale === "ar") return "rtl"
-  return "ltr"
-}
-
 export function localeFromRequest(request: Request) {
   const fromHeader = parseLocale(request.headers.get(LOCALE_HEADER))
   if (fromHeader) return fromHeader
@@ -242,12 +154,4 @@ export function localeFromRequest(request: Request) {
 
   // Unprefixed pages are English, like the rest of the site.
   return "en" satisfies Locale
-}
-
-export function cookie(locale: Locale) {
-  return `${LOCALE_COOKIE}=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
-}
-
-export function clearCookie() {
-  return `${LOCALE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
 }
