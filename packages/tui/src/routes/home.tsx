@@ -146,7 +146,8 @@ function UpdateNotification(props: { width: number }) {
               flexShrink={0}
               flexDirection="row"
               justifyContent="center"
-              width={props.width}
+              // The logo can be hidden by config, leaving no width to match.
+              width={props.width > 0 ? props.width : undefined}
               maxWidth="100%"
               gap={1}
               backgroundColor={hovered() ? theme.background.action.primary.hovered : undefined}

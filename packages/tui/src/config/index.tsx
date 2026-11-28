@@ -252,6 +252,10 @@ export const Info = Schema.Struct({
     description: "Experimental features that may change or be removed at any time",
   }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
+  logo: Schema.optional(Schema.Union([Schema.Literal(false), Schema.Array(Schema.String)])).annotate({
+    description:
+      "Logo on the home screen and /stats: false hides it, or lines of plain text that replace it. Hidden when wider than the terminal",
+  }),
   highlights: Schema.optional(Schema.Boolean).annotate({
     description: "Show the release highlights once after OpenCode updates",
   }),
