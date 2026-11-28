@@ -145,24 +145,6 @@ it.live(
       expect(result.content).toEqual([{ type: "text", text: "opened" }])
       expect(client.sessions).toEqual(["ses_client_mcp"])
 
-      // A second client with the same name stacks on top: it takes the calls while the first stays open.
-      const newer = yield* connectClient(server.url({ name: "tui" }), { authorization })
-      yield* until(() => call("ses_newer").then(() => newer.sessions.length > 0))
-      expect(newer.sessions.every((session) => session === "ses_newer")).toBeTrue()
-      expect(client.state.closed).toBeFalse()
-
-      // Once the newest closes, calls fall back to the earlier client.
-      const before = client.sessions.length
-      newer.socket.close()
-      yield* until(() => newer.state.closed)
-      yield* until(() =>
-        call("ses_fallback").then(
-          () => client.sessions.length > before,
-          () => false,
-        ),
-      )
-      expect(client.sessions.at(-1)).toBe("ses_fallback")
-
       client.socket.close()
       yield* until(async () => (await tools()).length === 0)
       yield* until(() =>

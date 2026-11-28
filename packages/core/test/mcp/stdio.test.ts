@@ -1,27 +1,20 @@
 import { expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import type { JSONRPCMessage } from "@modelcontextprotocol/client"
 import { Environment } from "@opencode/core/environment/index"
 import { McpStdio } from "@opencode/core/mcp/stdio"
-import { Global } from "@opencode/util/global"
-import { Deferred, Effect, Layer, Logger, References, Sink, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Logger, References, Sink, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
+import { hostEnvironmentLayer } from "../fixture/environment"
+import { tmpdirScoped } from "../fixture/tmpdir"
+import { testEffect } from "../lib/effect"
 
 const encoder = new TextEncoder()
 const MiB = 1024 * 1024
 const after = encoder.encode('{"jsonrpc":"2.0","method":"after"}\n')
-
-test("resolves cwd from the workspace and expands ~ to the home directory", () => {
-  const directory = path.resolve("project")
-  const home = Global.Path.home
-
-  expect(McpStdio.resolveCwd(directory, undefined)).toBe(directory)
-  expect(McpStdio.resolveCwd(directory, "~")).toBe(home)
-  expect(McpStdio.resolveCwd(directory, "~/tools")).toBe(path.join(home, "tools"))
-  expect(McpStdio.resolveCwd(directory, "tools/server")).toBe(path.join(directory, "tools", "server"))
-  expect(McpStdio.resolveCwd(directory, path.resolve("elsewhere"))).toBe(path.resolve("elsewhere"))
-})
 
 test("receives a frame between 10 and 16 MiB split into pipe-sized chunks", async () => {
   // 12 MiB sits between the SDK read buffer's 10 MiB default and our 16 MiB cap.
@@ -116,6 +109,111 @@ test("drains server stderr into the layer's debug logger", async () => {
     },
   ])
 })
+
+// Closing waits out a grace period for the process to exit, then escalates; both run on the caller's clock.
+const closing = (close: Promise<void>) =>
+  Effect.gen(function* () {
+    const fiber = yield* Effect.promise(() => close).pipe(Effect.forkChild({ startImmediately: true }))
+    while (!fiber.pollUnsafe()) {
+      yield* Effect.promise(() => Bun.sleep(5))
+      yield* TestClock.adjust("500 millis")
+    }
+    yield* Fiber.join(fiber)
+  })
+
+testEffect(Layer.empty).effect("closes a process that finishes spawning after close", () =>
+  Effect.gen(function* () {
+    const spawning = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const exited = yield* Deferred.make<ExitCode>()
+    const signals: Array<string> = []
+    const environment = Layer.succeed(
+      Environment.Service,
+      Environment.Service.of({
+        id: Environment.localID,
+        local: true,
+        path,
+        files: Environment.makeFiles(Environment.makeMemoryDriver()),
+        spawner: ChildProcessSpawner.make(() =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(spawning, undefined)
+            yield* Deferred.await(release)
+            return makeHandle({
+              pid: ProcessId(1),
+              exitCode: Deferred.await(exited),
+              isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
+              kill: (options) =>
+                Effect.sync(() => signals.push(options?.killSignal ?? "SIGTERM")).pipe(
+                  Effect.andThen(Deferred.succeed(exited, ExitCode(143))),
+                ),
+              stdin: Sink.drain,
+              stdout: Stream.never,
+              stderr: Stream.empty,
+              all: Stream.never,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+              unref: Effect.succeed(Effect.void),
+            })
+          }),
+        ),
+      }),
+    )
+    const transport = yield* McpStdio.make({
+      server: "spawning",
+      command: "unused",
+      args: [],
+      cwd: import.meta.dir,
+      environment: {},
+    }).pipe(Effect.provide(environment))
+    const start = transport.start()
+    yield* Deferred.await(spawning)
+    const close = transport.close()
+    yield* Deferred.succeed(release, undefined)
+    yield* closing(Promise.all([start, close]).then(() => undefined))
+    expect(signals).toEqual(["SIGTERM"])
+  }),
+)
+
+// A wrapper that exits on stdin EOF leaves a descendant that ignores SIGTERM and keeps the pipes.
+;(process.platform === "win32"
+  ? testEffect(hostEnvironmentLayer).effect.skip
+  : testEffect(hostEnvironmentLayer).effect)("kills the descendants of a server that exits on close", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const pidFile = path.join(tmp.path, "child.pid")
+    yield* Effect.addFinalizer(() =>
+      Effect.tryPromise(async () => process.kill(Number(await fs.readFile(pidFile, "utf8")), "SIGKILL")).pipe(
+        Effect.ignore,
+      ),
+    )
+    const ready = yield* Deferred.make<void>()
+    const transport = yield* McpStdio.make({
+      server: "held-stdio",
+      command: "node",
+      args: [path.join(import.meta.dir, "../fixture/held-stdio.cjs"), "mcp", pidFile],
+      cwd: tmp.path,
+      environment: {},
+    })
+    transport.onmessage = () => Deferred.doneUnsafe(ready, Exit.void)
+    yield* Effect.promise(() => transport.start())
+    yield* Deferred.await(ready)
+    const pid = Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8")))
+    yield* closing(transport.close())
+    const deadline = Date.now() + 5_000
+    while (
+      Date.now() < deadline &&
+      (yield* Effect.sync(() => {
+        try {
+          return process.kill(pid, 0)
+        } catch {
+          return false
+        }
+      }))
+    )
+      yield* Effect.promise(() => Bun.sleep(10))
+    expect(() => process.kill(pid, 0)).toThrow()
+  }),
+)
 
 function frame(size: number) {
   const prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"'

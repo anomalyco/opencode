@@ -10,9 +10,9 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { it } from "./lib/effect"
-import { readInitial, readUpdate } from "./lib/instructions"
-import { toolNodeReplacements } from "./lib/tool"
+import { it } from "../lib/effect"
+import { readInitial, readUpdate } from "../lib/instructions"
+import { toolNodeReplacements } from "../lib/tool"
 
 const instructions = (server: string, text: string) =>
   ({ server: Mcp.ServerName.make(server), instructions: text }) satisfies Mcp.ServerInstructions
