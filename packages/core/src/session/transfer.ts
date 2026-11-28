@@ -41,7 +41,7 @@ export interface Interface {
   readonly import: (input: {
     data: Data
     location: Location.Ref
-  }) => Effect.Effect<Session.Info, ImportConflictError | Session.NotFoundError>
+  }) => Effect.Effect<Session.Info, ImportConflictError | Session.NotFoundError | Session.MessageNotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTransfer") {}
@@ -75,12 +75,6 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
         if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
-        const project = yield* projects.resolve(input.location.directory)
-        yield* upsertProject(db, project).pipe(Effect.orDie)
-        const importedAt = yield* Clock.currentTimeMillis
-        const subpath = RelativePath.make(
-          path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
-        )
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
@@ -93,6 +87,15 @@ const layer = Layer.effect(
             data,
           }
         })
+        const revert = input.data.info.revert
+        if (revert && !messages.some((message) => message.id === revert.messageID))
+          return yield* new Session.MessageNotFoundError({ sessionID, messageID: revert.messageID })
+        const project = yield* projects.resolve(input.location.directory)
+        yield* upsertProject(db, project).pipe(Effect.orDie)
+        const importedAt = yield* Clock.currentTimeMillis
+        const subpath = RelativePath.make(
+          path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
+        )
         // Only inline media the import carries becomes blobs, and only its blobs get refs: refs it carried in
         // could otherwise keep or expose blobs it never held. The destination's config is loaded only when needed.
         const split = messages.map((message) => SessionBlob.split(message.data))
@@ -148,6 +151,8 @@ const layer = Layer.effect(
                   yield* db
                     .update(SessionTable)
                     .set({
+                      // Undo retains its messages, but file snapshots belong to the source workspace.
+                      revert: revert ? { messageID: revert.messageID } : null,
                       cost: input.data.info.cost,
                       tokens_input: input.data.info.tokens.input,
                       tokens_output: input.data.info.tokens.output,
