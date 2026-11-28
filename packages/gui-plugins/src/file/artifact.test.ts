@@ -27,6 +27,18 @@ describe("parseDelimited", () => {
     expect(parsed.columns).toBe(2)
   })
 
+  test.each([",", "\t"])("recognizes CR record endings and keeps quoted CRs with delimiter %j", (delimiter) => {
+    const text = `name${delimiter}note\rAda${delimiter}"one\rtwo"\r`
+    expect(parseDelimited(text, delimiter)).toEqual({
+      rows: [
+        ["name", "note"],
+        ["Ada", "one\rtwo"],
+      ],
+      total: 2,
+      columns: 2,
+    })
+  })
+
   test("counts rows past the limit without keeping them", () => {
     const parsed = parseDelimited("a\tb\n1\t2\n3\t4\n5\t6", "\t", 2)
     expect(parsed.rows).toHaveLength(2)
