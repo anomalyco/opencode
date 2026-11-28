@@ -138,6 +138,14 @@ Delete a session and its child sessions.
 $ opencode session delete ses_9c1b08
 ```
 
+Move a session to another directory.
+
+```bash
+$ opencode session move ses_9c1b08 ~/code/project
+```
+
+The destination must exist and be a directory. Relative paths resolve from the current directory.
+
 Export session data as JSON.
 
 ```bash

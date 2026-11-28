@@ -493,6 +493,15 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             sessionID: Argument.String("sessionID").pipe(Argument.withDescription("Session ID to delete")),
           },
         }),
+        Spec.make("move", {
+          description: "Move a session to another directory",
+          params: {
+            sessionID: Argument.String("sessionID").pipe(Argument.withDescription("Session ID to move")),
+            directory: Argument.String("directory").pipe(
+              Argument.withDescription("Destination directory (relative paths resolve from the current directory)"),
+            ),
+          },
+        }),
         Spec.make("export", {
           description: "Export session data as JSON",
           params: {
