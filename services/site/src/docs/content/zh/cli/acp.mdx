@@ -1,0 +1,339 @@
+---
+title: "ACP"
+description: "通过 Agent Client Protocol 客户端使用 OpenCode。"
+---
+
+`opencode acp` 会将 OpenCode 作为 [Agent Client Protocol](https://agentclientprotocol.com) agent 运行，这样你就可以在 Zed 等 ACP 客户端中使用它。以下示例将 OpenCode 添加到 Zed：
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+其他 ACP 客户端使用相同的命令和 `acp` 参数，但配置文件和字段名称可能不同。如果图形界面客户端找不到 `opencode`，请将 `command` 设置为 `which opencode` 输出的绝对路径。
+
+## 认证
+
+OpenCode 会使用已有的提供商凭据。启动 ACP 客户端之前，请先在终端中登录：
+
+```bash
+opencode auth login
+```
+
+OpenCode 只提供一种认证方式：`opencode-login`。默认情况下，它是 agent 认证方式（agent auth method）。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要认证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
+
+如果客户端将 `clientCapabilities.auth.terminal` 设置为 `true`，该认证方式就是终端认证方式（terminal auth method）：
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+客户端不得将此方式发送给 `authenticate`，而应在启动 OpenCode 的命令中加上 `--login`（例如 `opencode acp --login`），并在终端中运行。OpenCode 会执行 `opencode auth login` 登录流程，然后退出。退出状态为 0 表示登录成功，之后客户端重新连接并再次发送 `initialize`。
+
+如果客户端将 `clientCapabilities._meta["terminal-auth"]` 设置为 `true`，认证方式中会包含登录命令：
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## 故障排除
+
+`opencode acp` 会在 stdin 上等待 ACP 消息，所以直接在终端中运行时看起来像是卡住了。请改为从 ACP 客户端启动它。
+
+如果客户端报告进程已退出或输出了无效的协议内容，请在客户端参数中的 `acp` 之前加上 `--print-logs`。这样 OpenCode 会将 ACP 日志和私有服务器日志写入 stderr，而 stdout 只输出 ACP 消息。
+
+```bash
+opencode --print-logs acp
+```
+
+## 协议参考
+
+本节面向 ACP 客户端开发者，列出了 OpenCode 支持的 ACP 功能以及 OpenCode 新增的 `_meta` 键。不认识这些键的客户端可以忽略它们。消息定义请参阅 [ACP 文档](https://agentclientprotocol.com)。
+
+### 传输
+
+客户端将 `opencode acp` 作为子进程启动，双方通过 stdin 和 stdout 交换以换行分隔的 JSON-RPC 消息，使用 ACP 协议版本 1。
+
+`opencode acp` 会启动一个供自己使用的私有 OpenCode 服务器。它不会连接共享的后台服务，也不会为 ACP 开放网络端口。一个进程可以服务多个 ACP 会话。客户端关闭 stdin 时，进程退出。
+
+### 能力
+
+OpenCode 的 `initialize` 响应包含以下 agent 能力：
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode 会读取以下客户端能力：
+
+| 能力 | 效果 |
+| --- | --- |
+| `auth.terminal` 设置为 `true` | 认证方式为[终端认证方式](#authentication)。 |
+| `elicitation.form` | OpenCode 以表单形式提出[问题](#questions)。 |
+| `session.compaction` | OpenCode 通过 ACP 的更新报告[上下文压缩](#compaction)。 |
+| `_meta["terminal-auth"]` 设置为 `true` | 认证方式包含[登录命令](#authentication)。 |
+
+### 会话
+
+客户端在创建会话时设置工作目录。OpenCode 会使用该目录的配置，包括其中的模型、agent、命令、技能、指令、插件和 MCP 服务器。
+
+- `cwd` 必须是绝对路径；OpenCode 会拒绝相对路径的 `cwd`，并返回 invalid params 错误。
+- `session/load` 会重放已保存的消息，`session/resume` 和 `session/fork` 则不会。
+- 加载、恢复或分叉会话时，客户端必须将该会话的目录作为 `cwd` 传入，也可以传入同一项目的另一个目录，例如会话迁入 worktree 后，该项目的主检出目录。对于其他任何 `cwd`，OpenCode 都会返回 invalid params 错误，其 `data.directory` 为该会话的目录。
+- `session/list` 每页最多返回 100 个会话，支持 `cwd` 过滤条件和 `cursor`。每个 subagent 会话都带有 `_meta["opencode/child-session"]`，其中包含其 `id`、`parentID` 和 `title`。
+- OpenCode 重命名会话时（例如生成标题后），会发送带有新 `title` 的 `session_info_update`。
+- `session/close` 会中断进行中的工作，并将会话与 ACP 进程分离。OpenCode 会保留已保存的会话。
+- `session/delete` 会像 `session/cancel` 一样结束进行中的提示词，然后删除会话。删除不存在的会话也会成功。
+- 一个会话同一时间只运行一个提示词。如果第一个提示词仍在进行中，OpenCode 会对第二个 `session/prompt` 返回错误。
+- 提示词失败时，错误的 `data` 中会包含失败原因的 `errorName`。如果提供商提供了 `status` 和 `retryAfterMs`，也会一并包含。
+
+### 取消
+
+`session/cancel` 会以 `stopReason: "cancelled"` 结束进行中的提示词。针对该提示词请求发送 `$/cancel_request` 效果相同。OpenCode 会拒绝待处理的权限请求，并将取消后仍未完成的工具调用报告为 `failed`。
+
+### 附加目录
+
+客户端可以在 `session/new`、`session/load`、`session/resume` 和 `session/fork` 中传入 `additionalDirectories`：
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- 每一项都必须是绝对路径，且不能包含 `*` 或 `?`。
+- OpenCode 会为每个根目录放行外部目录访问。读取、编辑和 shell 权限规则仍然适用。
+- 按照 [additional directories RFD](https://agentclientprotocol.com/rfds/additional-directories) 的规定，每次请求中的列表都会替换会话之前的列表。
+- OpenCode 将这些授权保存在会话中，因此其他 OpenCode 客户端使用该会话时同样生效。OpenCode 创建子会话时，子会话会复制这些授权。
+
+`session/list` 会在 `additionalDirectories` 中返回每个会话存储的列表。
+
+### 配置选项
+
+新会话使用该目录的默认模型和主 agent。`session/new`、`session/load`、`session/resume` 和 `session/fork` 的响应包含以下配置选项：
+
+| ID | 类别 | 取值 |
+| --- | --- | --- |
+| `model` | `model` | 已启用的模型，格式为 `provider/model`。加上 `/variant` 后缀还会同时设置推理强度。 |
+| `effort` | `thought_level` | 模型的变体以及 `default`。仅当模型有变体时才会出现。 |
+| `mode` | `mode` | 可见的主 agent。 |
+
+每个 `model` 选项都以提供商的显示名称和模型名称命名，例如 `Anthropic / Claude Sonnet 5.5`。`session/set_config_option` 接受字符串值：
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
+```
+
+`session/set_mode` 也会设置 agent。当可用的模型或 agent 发生变化时，OpenCode 会发送 `config_option_update`；其他客户端更改了会话的模型或 agent 时，也会发送。
+
+### 提示词内容
+
+提示词可以包含文本、图片、嵌入资源和资源链接。OpenCode 会忽略音频块，其他块的处理方式如下：
+
+| 块 | OpenCode 的处理方式 |
+| --- | --- |
+| `text` | 发送给模型。 |
+| 受众仅为 `assistant` 的 `text` | 作为独立上下文发送给模型，不放在用户消息中。 |
+| 受众仅为 `user` 的 `text` | 不纳入模型输入。 |
+| 带有 `data` 的 `image` | 作为附件添加到提示词。 |
+| 只有 `uri` 的 `image` | 按资源链接处理。 |
+| 带有 `text` 的 `resource` | 将文本内联在资源路径或 URI 之后。 |
+| 带有 `blob` 的 `resource` | 作为附件添加。没有 `mimeType` 时，根据 URI 的文件名推断。 |
+| 指向 `file:` URI 的 `resource_link` | 附加该文件。如果文件不存在或无法读取，则改为发送 Markdown 链接。 |
+| 指向带 `path` 查询参数的 `zed://` URI 的 `resource_link` | 附加 `path` 处的文件。 |
+| 指向其他 URI 的 `resource_link` | 发送 Markdown 链接，例如 `[spec](https://example.com/spec.md)`。 |
+
+受众来自块的 `annotations`。如果 `image` 块既没有 `data` 也没有 `uri`，OpenCode 会拒绝它。下面这个块仅作为模型的上下文：
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### 命令
+
+在 `session/new`、`session/load`、`session/resume` 或 `session/fork` 之后，OpenCode 会发送 `available_commands_update`，其中包含该目录的命令、内置的 `compact` 命令以及该目录的技能。命令或技能发生变化时，OpenCode 会再次发送更新。
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+如果提示词以 `/` 加某个可用命令的名称开头，OpenCode 会运行该命令，并将其余文本作为参数。如果以 `/` 加某个技能的 ID 开头，OpenCode 会附加该技能后发送提示词。以 `/` 开头的其他文本会作为普通提示词发送。`/compact` 会执行[上下文压缩](/compaction)。ID 与某个命令相同的技能不会列出。
+
+如果命令失败，提示词会带着该命令自己的消息（例如用法说明）一起失败，`data.service` 为 `command`。
+
+### MCP 服务器
+
+客户端可以在 `session/new`、`session/load`、`session/resume` 和 `session/fork` 中传入 stdio 和 HTTP MCP 服务器。OpenCode 会在 `opencode acp` 进程的生命周期内将它们添加到会话所在的目录，因此该目录中的其他会话也能使用它们。如果 OpenCode 卸载了空闲目录，它会在该会话的下一个提示词之前再次添加这些服务器。OpenCode 会透传 HTTP 请求头，并且对这些服务器不使用 OAuth。OpenCode 不会声明支持基于 SSE 的 MCP，也不支持基于 ACP 的 MCP。
+
+| 情况 | 行为 |
+| -------------------------------- | ------------------------------------------------------------------ |
+| 与已配置服务器同名 | 客户端的服务器会替换该目录中已配置的服务器。 |
+| [策略](/policies)            | `integration.use` 规则仍然适用。                               |
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### 权限
+
+权限请求提供三个选项：
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+当请求会修改文件时，如果 OpenCode 能够生成变更预览，就会附带 `diff` 内容。
+
+### 问题
+
+如果客户端声明支持 `elicitation.form`，OpenCode 会以表单模式通过 `elicitation/create` 提问。如果 OpenCode 已将对应的工具调用作为此会话的 `session/update` 发送过，请求中会包含 `toolCallId`。
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode 绝不会发送可能收集密钥的表单。即使某个选择题的措辞看起来像在收集密钥（例如“应该使用哪个 API token？”），OpenCode 仍会发送，但不会包含用户输入的答案。
+- 如果某个字段除了选项之外还接受手动输入的答案，schema 会额外添加一个可选的 `<key>_custom` 字符串属性。对于单选，非空的自定义答案会替换所选选项；对于多选，OpenCode 会将其添加到所选选项中。
+- 如果用户拒绝或取消表单，OpenCode 会取消该问题。
+
+如果 OpenCode 无法显示问题，它会取消该问题，并告诉模型在没有答案的情况下继续。
+
+### 上下文压缩
+
+如果客户端声明支持 `session.compaction`，OpenCode 会使用 ACP [session compaction](https://agentclientprotocol.com/rfds/session-compaction) RFD（目前处于预览阶段）中的 `compaction_update` 和 `compaction_summary_chunk` 更新来报告上下文压缩。客户端加载会话时，OpenCode 会将每次已完成或失败的压缩作为一条更新重放。
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+其他客户端则会收到[压缩标记](#compaction-marker)。子会话的压缩同样如此。
+
+### 用量
+
+提示词响应中包含 [end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD（目前为草案）中定义的 `usage`。`usage` 汇总了该提示词在此会话中的所有模型调用，不包括子会话。
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+在发送响应之前，OpenCode 会发送 [session usage](https://agentclientprotocol.com/rfds/session-usage) RFD 中定义的 `usage_update`。只有当提示词消耗了 token 且 OpenCode 知道模型的上下文大小时，才会发送。`cost` 是会话及其子会话的总费用，单位为美元。
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### 子会话
+
+提示词运行期间，OpenCode 会将其子会话的更新作为该提示词所在会话的 `session/update` 通知发送。每条更新都带有 `_meta["opencode/child-session"]`。OpenCode 会给工具调用 ID 加上 `<childSessionId>:` 前缀；如果子会话有标题，还会给工具调用标题加上子会话标题作为前缀。
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | `string` | 子会话的 ID。 |
+| `parentID` | `string` | 子会话的父会话 ID。 |
+| `depth` | `number` | 提示词所在会话的子会话为 1，该子会话的子会话为 2，依此类推。 |
+| `title` | `string` | 子会话的标题。子会话没有标题时，OpenCode 会省略该字段。 |
+
+来自子会话的权限请求会在 `toolCall._meta` 上携带相同的键。提示词结束后，OpenCode 不再发送子会话更新，但子会话的权限请求和问题仍会发送到客户端。
+
+### 重试状态
+
+当模型调用失败且 OpenCode 安排了重试时，它会发送带有 `_meta["opencode/retry"]` 的 `session_info_update`。重试开始时，OpenCode 会发送 `"opencode/retry": null`。收到提示词响应时，请清除所有重试状态。
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `attempt` | `number` | 当前是第几次重试。 |
+| `nextRetryAt` | `string` | 下一次尝试的时间，采用 ISO 8601 格式。 |
+| `error` | `object` | 包含 `type` 和 `message`。如果提供商返回了 `status` 和 `response.body`，也会包含这两项。 |
+
+### 压缩标记
+
+如果客户端未声明支持 `session.compaction`，OpenCode 会通过带有 `_meta["opencode/compaction"]` 的 `session_info_update` 报告压缩进度。对于子会话的压缩，OpenCode 始终使用该标记。
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `status` | `string` | `started`、`completed` 或 `failed`。已取消的压缩为 `failed`。 |
+| `messageId` | `string` | 用于将一次压缩的开始与结束对应起来。请将其视为不透明的键。 |
+| `reason` | `string` | `auto` 或 `manual`。 |
+| `error` | `object` | 当 `status` 为 `failed` 时出现，结构与[重试](#retry-status)的 `error` 相同。 |
+
+标记中不包含摘要。自动压缩可能在没有 `started` 标记的情况下失败。客户端加载会话时，OpenCode 会将每次已完成或失败的压缩作为一条标记重放。

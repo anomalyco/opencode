@@ -341,7 +341,8 @@ export const dict = {
   "docs.nav.plugins": "الإضافات",
   "docs.nav.client": "العميل",
   "docs.nav.workspace": "مساحة العمل",
-  "docs.lockup.sectionDocs": "وثائق {{section}}",
+
+  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "وثائق {{section}}",
   "docs.lockup.switchLabel": "{{name}}، تبديل الوثائق",
   "docs.lockup.home": "الصفحة الرئيسية لـ {{name}}",
   "docs.lockup.switch": "تبديل الوثائق",

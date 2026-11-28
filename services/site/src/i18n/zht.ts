@@ -346,7 +346,8 @@ export const dict = {
   "docs.nav.plugins": "外掛",
   "docs.nav.client": "用戶端",
   "docs.nav.workspace": "工作區",
-  "docs.lockup.sectionDocs": "{{section}}文件",
+
+  "docs.nav.console": "Console",  "docs.lockup.sectionDocs": "{{section}}文件",
   "docs.lockup.switchLabel": "{{name}}，切換文件",
   "docs.lockup.home": "{{name}}首頁",
   "docs.lockup.switch": "切換文件",

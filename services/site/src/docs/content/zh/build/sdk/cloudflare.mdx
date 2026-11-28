@@ -1,0 +1,96 @@
+---
+title: "Cloudflare"
+description: "用 @opencode/sdk/workerd 在 Cloudflare Durable Object 中运行 OpenCode，由该对象的 SQLite 存储提供支持。"
+---
+
+在 Cloudflare Durable Object 中使用 `@opencode/sdk/workerd`。该运行配置使用 Durable Object 自带的 SQLite 存储，持久化保存事件以便在实例被驱逐后恢复，并替换掉运行环境中不可用的本地文件系统和进程服务。
+
+```sh
+bun add @opencode/sdk
+```
+
+在 Durable Object 实例的整个生命周期中持有同一个宿主，不要为每个请求单独创建。
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` 会在宿主就绪之前阻止所有 Durable Object 事件进入；如果初始化失败，它会重置该对象。保留的 Promise 让请求处理函数在启动后可以直接访问同一个宿主。
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler 会通过 `workerd` 包条件（package condition）选择 OpenCode 中适用于 Workerd 的实现。Cloudflare 可能会在不执行清理的情况下驱逐 Durable Object，因此程序的正确性并不依赖于是否调用了 `close()`。
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## 路由出站请求
+
+传入 `fetch`，即可通过自定义处理程序（例如 Service Binding）路由 OpenCode 的出站 HTTP 请求（OpenCode 控制台配置、模型请求、网页抓取和搜索、well-known 配置，以及远程 MCP 服务器）。Code Mode 中的 agent 代码仍使用 `globalThis.fetch`。
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## 自定义
+
+通过注册与 Worker 一起打包的插件来自定义你的 OpenCode 实例。将插件传给 `OpenCodeWorkerd.create()`，即可自定义 agent、模型、工具及其他行为：
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+插件钩子、转换、工具以及完整的插件上下文，请参阅[插件的完整文档](/build/plugins/server)。

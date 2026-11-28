@@ -1,0 +1,94 @@
+---
+title: "简介"
+description: "把开源编程 agent OpenCode 安装为 CLI、桌面应用、Web 应用或 Docker 镜像，然后连接模型提供商。"
+---
+
+OpenCode 是一个开源的编程 agent。它可以作为终端界面、桌面应用或 Web 应用使用。
+
+
+## CLI
+
+<CodeTabs
+  id="install"
+  label="Install method"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+    { label: "mise", code: "mise use -g opencode" },
+  ]}
+/>
+
+npm 包使用 postinstall 脚本为你的平台选择原生 `opencode` 二进制文件。Bun 和 pnpm 命令显式允许所需的脚本；Vite+ 不需要额外参数。mise 命令需要 mise 2026.10.9 或更高版本；更旧的版本会安装 OpenCode 1。
+
+不支持 Windows 包管理器。
+
+
+下载适用于你平台的独立 CLI 二进制文件。
+
+- **macOS：** [Apple 芯片](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel（baseline）](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
+- **Windows：** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64（baseline）](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
+- **Linux（glibc）：** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz) · [x64（baseline）](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz)
+- **Linux（musl）：** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz) · [x64（baseline）](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline-musl.tar.gz)
+
+## 桌面应用
+
+下载适用于你平台的最新 OpenCode Desktop 版本。
+
+- **macOS：** [Apple 芯片](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg)
+- **Windows：** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe)
+- **Linux（.deb）：** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
+- **Linux（.rpm）：** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
+- **Linux（AppImage）：** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+
+## Web
+
+使用 `opencode pair` 命令访问 OpenCode Web 界面。
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+```
+
+## Docker
+
+Docker 镜像使用带版本号的标签，例如 `ghcr.io/anomalyco/opencode:2.0.0`。要在容器中运行服务器，请参阅 [Docker](/cli/web#docker)。
+
+---
+
+## 连接提供商
+
+OpenCode 内置支持许多 LLM 提供商。你可以在 TUI 中用 `/connect` [直接连接它们](/cli/providers)。
+
+参见[提供商](/providers)配置自定义提供商。
+
+如果你想轻松使用最好的 coding 模型，可以试试
+[OpenCode 控制台](/console)。
+
+你也可以试试 [OpenCode Go](/console/go)，这是一个每月 $10 的订阅
+方案，让你可以使用最好的 coding 模型。
+
+---
+
+## 自定义
+
+通过编辑 [OpenCode 配置](/config)、[加载插件](/plugins)、[连接 MCP
+服务器](/mcp-servers)或[创建命令](/commands)，让 OpenCode 成为你自己的工具。终端界面主题和快捷键请参见 [CLI
+设置](/cli/config)。
+
+---
+
+## 学习
+
+如果你对 OpenCode 的深度课程感兴趣，Boot.dev 与我们的团队协商后制作了一门出色的
+[AI Coding with
+OpenCode](https://www.boot.dev/courses/learn-ai-coding) 课程。课程中的所有信息都可以免费阅读和观看，不过部分互动功能可能需要付费。

@@ -12,10 +12,11 @@ export const docsVersions = [
 
 export type DocsVersion = (typeof docsVersions)[number]["id"]
 
-/** A docs section's name in the page's language: "Docs" and "Build" translate, the product names don't. */
+/** A docs section's name in the page's language: "Docs", "Build" and "Console" translate, the other product names don't. */
 export function docsSectionName(i18n: I18n, section: string) {
   if (section === "Docs") return i18n.t("nav.docs")
   if (section === "Build") return i18n.t("docs.section.build")
+  if (section === "Console") return i18n.t("docs.nav.console")
   return section
 }
 

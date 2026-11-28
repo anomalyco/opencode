@@ -358,6 +358,7 @@ export const dict = {
   "docs.nav.plugins": "Udvidelser",
   "docs.nav.client": "Klient",
   "docs.nav.workspace": "Arbejdsområde",
+  "docs.nav.console": "Console",
   "docs.lockup.sectionDocs": "Dokumentation til {{section}}",
   "docs.lockup.switchLabel": "{{name}}, skift dokumentation",
   "docs.lockup.home": "{{name}}-forside",

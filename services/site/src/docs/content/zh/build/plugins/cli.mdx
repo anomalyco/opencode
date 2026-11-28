@@ -1,0 +1,645 @@
+---
+title: "构建 TUI 插件"
+description: "为终端界面构建 OpenCode 插件的 TUI 部分，使用 @opencode/plugin/tui。"
+---
+
+TUI 插件可以通过命令、路由、插槽、Markdown 渲染器、通知和本地状态来扩展终端界面。TUI 插件是[插件包](/build/plugins)的 `./tui` 部分，通常与[服务器部分](/build/plugins/server)放在一起。
+
+```ts title="src/tui.tsx"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
+  },
+})
+```
+
+直接导入 `@opencode/plugin/tui` 即可。OpenCode 会在运行时解析这个导入，因此本地 TUI 插件不需要使用指向 OpenCode 源码检出目录的绝对路径。
+
+## 上下文
+
+`setup` 接收的上下文包括配置、应用元数据、当前 Location、OpenCode 客户端、缓存数据、主题 token、OpenTUI 渲染器，以及下文介绍的各类 UI API。
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+返回一个清理函数，用于释放插件自身持有的资源。
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## 客户端
+
+`context.client` 是生成的 OpenCode 客户端，可以调用当前连接的服务器，包括远程服务器。
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## 事件
+
+使用 `data.on` 监听某一种带类型的事件，或使用 `data.listen` 监听所有服务器事件。两者都会返回一个取消订阅函数。
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## 会话
+
+会话数据支持列出、查找、层级关系、费用、状态、同步和失效操作。
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+待处理的收件箱条目和消息提供列出、查找、同步和失效 API。
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+可以读取和刷新某个会话的权限请求。
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+表单可以在某个 Location 上列出、刷新、回复或取消。
+
+```ts
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## 项目与 shell
+
+项目和已保存的权限支持列出、查找、同步和失效操作。
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+shell 数据支持按 Location 限定的列出、查找、同步和失效操作。
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Location 数据
+
+Location 状态提供默认 Location 以及刷新控制。
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+版本控制状态提供某个 Location 上的仓库信息。
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+agent、命令、集成、模型、提供商、引用、技能和 MCP 数据都提供相同的 `list`、`sync` 和 `invalidate` 方法。
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## 提醒
+
+提醒请求可以根据终端是否处于焦点，显示系统通知、播放已配置的声音，或两者同时进行。
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## 主题与渲染器
+
+在 OpenTUI 元素中使用语义化的主题 token，并将 `context.renderer` 传给依赖渲染器的辅助函数。
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+渲染器绘制的 OpenTUI 资源需要将 `context.renderer.nativeScene` 作为其所有者。例如，`<markdown>` 和 `<code>` 需要一个 `SyntaxStyle`。请在渲染器空闲时，也就是绘制它的最后一帧之后，销毁该资源。
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+要读取可渲染元素的布局样式，请调用与 Yoga Node getter 同名的方法，例如 `box.getPadding(Yoga.Edge.Bottom)` 或 `box.getMaxWidth()`。宿主可渲染元素不属于插件 API，其结构和样式可能在任何版本中变化。
+
+### 为 OpenTUI 0.5 构建的插件
+
+OpenCode 使用自带的 OpenTUI 运行插件。从 OpenTUI 0.6 起：
+
+- `SyntaxStyle.create()`、`SyntaxStyle.fromStyles()`、`SyntaxStyle.fromTheme()`、`TextBuffer.create()` 和 `EditBuffer.create()` 的最后一个参数是所有者。`OptimizedBuffer.create()` 通过 `owner` 选项接收所有者。请传入 `context.renderer.nativeScene`。OpenTUI 0.5 会忽略这个额外参数，因此插件仍可在较旧的 OpenCode 版本上运行。
+- `@opencode/theme/tui` 的 `generateSyntax()` 将所有者作为第二个参数：`generateSyntax(context.theme, context.renderer.nativeScene)`。较旧的 `@opencode/theme` 版本会在没有所有者的情况下构建样式，因此请一并更新该包。
+- `getLayoutNode()` 已被移除。在 OpenTUI 0.6.5 或更高版本上，请改用同名的可渲染元素方法来替换 `getLayoutNode().getMaxWidth()` 及其他样式 getter。用 `getLayout()` 替换 `getComputedLayout()` 及其他计算位置和大小的 getter，用 `invalidateIntrinsicSize()` 替换 `markDirty()`。计算出的 padding、margin 和 border 没有替代方法，`getPadding(edge)` 只读取为该边设置的 padding。要在 OpenTUI 0.6.6 或更高版本上恢复 getter 报告为未设置（`Unit.Undefined`）的样式，请为该属性赋 `undefined`。
+
+[OpenTUI 0.6.0 发布说明](https://opentui.com/docs/releases/0.6.0)列出了所有变更。
+
+## Solid 组件
+
+在路由、对话框或插槽渲染的 JSX 中，使用 `usePlugin` 获取当前上下文。
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+按语言注册围栏代码块渲染器，返回的函数用于取消注册。
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## 命令与按键映射
+
+在响应式的按键映射层（keymap layer）中注册命令面板、斜杠和键盘命令。
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+可以在 `setup` 中调用 `layer`（包括在 `await` 之后），也可以在组件中调用。出现以下任一情况时，该层即被移除：
+
+- 插件被禁用、重新加载，或 setup 失败。
+- 创建该层的组件或响应式计算（例如插槽、路由或对话框）被销毁。
+
+层工厂函数必须是纯函数。OpenCode 会先在不追踪依赖的情况下执行一次，以校验初始命令的结构，之后再以响应式方式执行。初始命令结构错误（例如缺少 ID 的命令面板命令）会直接从 `layer()` 抛出。按键绑定的解析错误由 OpenTUI 处理。后续响应式更新中出现的错误遵循 Solid 的错误处理机制。
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+一个层可以只作用于某个 OpenTUI 可渲染对象；命令返回 `false` 时，键盘事件会继续向后分发。
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+你可以分发命令、查看快捷键和命令状态，或者推入一个临时输入模式。
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## 存储
+
+持久化存储以 JSON 形式保存数据，重启后依然保留，并会在多个 TUI 实例之间同步。
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+内存存储在插件重新加载后仍然保留，但会在 TUI 退出时丢弃。
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## 对话框与 Toast
+
+基于 Promise 的对话框可用于警告、确认、文本输入和选择。
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### 选择框搜索
+
+传入 `search` 可以自行控制匹配逻辑和结果顺序。每次查询（包括空查询）都会调用它，且只会传入已启用的选项。结果按返回的顺序列出，每个分类以内联方式显示。
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### 选择框操作
+
+操作显示在底栏中，可以通过对应的快捷键、点击，或用 Tab 聚焦后按 Enter 触发。默认情况下，操作会接收当前选中的值，没有选中项时不可用。对于不需要选中项的操作，请设置 `selection: "none"`。
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- 触发操作不会关闭对话框，也不会让 Promise 完成。
+- 按 Enter 或点击某个选项时，Promise 解析为选中的值。
+- 按 Escape、调用 `clear()` 或显示另一个对话框时，Promise 解析为 `undefined`。
+- 不要绑定 `ctrl+n` 或 `ctrl+p`。对话框将它们保留用于导航，且对话框自身的绑定优先。
+
+自定义 JSX 对话框可以设置尺寸，也可以自行关闭。请在 `show` 之后调用 `set`：每次显示对话框时，尺寸都会重置为 `medium`，同时取消居中。`medium`、`large` 和 `xlarge` 的宽度分别为 60、88 和 116 列。
+
+```tsx
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.clear()
+```
+
+Toast 支持标题、消息内容、样式变体和显示时长。
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## 路由与标签页
+
+注册 JSX 路由、查看当前路由，以及导航到首页、某个会话或插件页面。
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+启用会话标签页后，可以列出、打开、聚焦、移动和关闭标签页。`open` 不会改变焦点；`focus` 会在需要时先打开标签页。
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## 模型
+
+读取输入框当前选中的模型并切换其变体。在 Solid 计算中读取时，`current()` 和 `variant.list()` 是响应式的。`variant` 为 `undefined` 表示使用模型默认值。
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+如果没有选中模型，或模型没有对应的变体，`variant.set` 会返回 `false`。你可以将它绑定到命令上，替换内置的变体切换逻辑，例如跳过模型默认值：
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## 插槽
+
+插槽可以在 `app`、`home.footer`、`home.footer.status`、`prompt.footer`、`prompt.footer.status`、`prompt.footer.file`、`session.composer.top`、`sidebar.content` 或 `sidebar.footer` 处插入或替换 JSX。
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+使用 `prepend`、`append`、`before`、`after` 或 `replace` 指定放置方式。
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+使用 `home.footer.status` 可以在内置底栏行中添加内容，而无需替换整个底栏。添加的状态内容显示在 OpenCode 健康状态指示器之后、版本号之前。
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### 会话面板
+
+向 `session.panel` 注册一个贡献项，然后通过命令打开面板。宿主负责尺寸、焦点和全屏展示；插件负责面板内容。选中的名称会作为 `panel.name` 传给每个贡献项，由各贡献项自行决定是否渲染。
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- 在会话之外打开面板会返回 `false`。
+- 它就是一个普通插槽：五种放置方式以及现有的替换顺序规则同样适用。
+- 对于可以独立选择的贡献项，请使用 `append`，这样它们可以共存。`replace` 仍然会接管整个插槽。
+- 名称只是共享的选择值，并不会被注册占用。请使用带插件前缀的名称（例如 `acme.review`）来避免冲突。如果打开的名称没有匹配的渲染器，插槽会保持为空。
+- 切换展示方式时，已挂载的贡献项会保留。关闭面板会销毁它们；禁用插件时，其贡献项会通过常规的插槽清理流程移除。
+- 只有当面板占有输入时，其中的键盘层和输入模式才会生效。
+
+插槽会接收响应式的 `name`、`sessionID`、`width`、`presentation` 和 `focused` 属性，以及 `focus`、`close` 和 `toggleFullscreen` 操作。在较窄的终端中，宿主始终保持全屏；在空间足以容纳侧边面板之前，`toggleFullscreen` 不起作用。
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+你可以在打开时直接请求全屏展示、查看自己当前打开的面板，或者关闭它，且不会影响其他插件的面板。
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## 格式化
+
+格式化文件系统路径以便显示，包括将主目录缩写。
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## 发布与加载
+
+通过 `./tui` 导出 TUI 插件；如果插件会渲染 JSX，还需要添加 OpenTUI 相关的 peer 依赖。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+在[服务器部分](/build/plugins/server)或 [GUI 部分](/build/plugins/gui)旁边导出 `./tui`，即可自动加载。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+对于仅包含 TUI 插件的包，请在 [`cli.json`](/cli/plugins) 中配置，这样连接远程服务器时它也会保持启用。
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

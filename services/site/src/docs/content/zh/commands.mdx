@@ -1,0 +1,251 @@
+---
+title: 命令
+description: "用 Markdown 或 JSON 把提示词变成可复用的斜杠命令，并支持参数、shell 输出和附件。"
+---
+
+创建 `.opencode/commands/review.md`，即可把一段提示词变成 `/review` 命令：
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+在 TUI 中带上目标运行它：
+
+```text
+/review src/auth.ts
+```
+
+OpenCode 会把 `Review src/auth.ts for bugs and missing tests.` 作为用户提示词提交。
+
+## Markdown
+
+全局命令放在 `~/.config/opencode/commands/`，项目命令放在 `.opencode/commands/`。
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+只有 `.md` 文件会被发现。嵌套路径会变成以 `/` 分隔的命令名：
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+使用 `/team/review src/auth.ts` 运行这个嵌套命令。旧版的单数目录 `command/` 也会被发现，但新文件请放在 `commands/` 中。
+
+如果命令需要元数据，请添加 YAML frontmatter。去除首尾空白后的 Markdown 正文始终是提示词模板。
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+在任意 OpenCode JSON 或 JSONC [配置文件](/config)的 `commands` 下定义命令。每个命令都需要一个 `template`。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## 字段
+
+Markdown frontmatter 和 JSON 条目支持相同的字段，只是 Markdown 的 `template` 来自文件正文。
+
+| 字段 | 必填 | 行为 |
+| --- | --- | --- |
+| `template` | 仅 JSON | 提示词模板。 |
+| `description` | 否 | 显示在命令列表和发现结果中的文本。 |
+| `agent` | 否 | 运行命令时选用的 agent。 |
+| `model` | 否 | 覆盖所用模型，格式为 `provider/model` 或 `provider/model#variant`。 |
+| `subagent` | 否 | `true` 表示在后台子会话中运行；`false` 表示强制在当前会话中运行。 |
+| `subtask` | 否 | `subagent` 的已弃用别名。 |
+
+例如，下面这个 JSON 命令设置了目前所有的可选字段：
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+不要在 Markdown frontmatter 中写 `template`，它由正文提供。
+
+## 参数
+
+`$ARGUMENTS` 表示完整的参数字符串，与输入的内容完全一致。
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+对于 `/component Account Settings`，占位符会替换为 `Account Settings`。
+
+## 位置参数
+
+使用 `$1`、`$2` 及更大的数字表示解析后的位置参数。单引号或双引号可以把多个词组合成一个参数，引号本身会被去掉。
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+对于 `/check src/auth.ts "error handling"`，`$1` 为 `src/auth.ts`，`$2` 为 `error handling`。
+
+编号最大的占位符会接收对应的参数及其后的所有内容。缺失的位置参数会替换为空字符串。
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+对于 `/compare api stable branch`，OpenCode 提交的是 `Compare api with stable branch.`
+
+## 回退
+
+如果模板中没有 `$ARGUMENTS` 或位置占位符，OpenCode 会在一个空行之后追加非空的参数。
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+对于 `/explain src/cache.ts`，提示词会变成：
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+用 `!` 加反引号包裹一条 shell 命令，即可在提交提示词之前插入它的输出。
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode 会在当前项目位置使用配置的 shell 运行每个代码块，并插入它们的合并输出。参数占位符会先被展开：
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+对于 `/history 5`，shell 收到的是 `git log --oneline -5`。不要把不受信任的参数放进 shell 代码块。
+
+<Callout type="warning">
+  Shell 代码块会在 OpenCode 处理命令时运行，不经过 agent 的工具权限流程。只使用来自可信来源的命令。
+</Callout>
+
+## 附件
+
+已保存的模板不会展开 `@path`，它只会作为普通的提示词文本保留。
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+如需附加文件，请在调用命令时通过输入框添加。OpenCode 提交展开后的提示词时，会保留这些从输入框添加的附件。
+
+## 执行
+
+命令会先展开参数和 shell 代码块，再提交一条持久化的用户提示词。默认情况下，命令在当前会话中运行。
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+运行 `/plan migration` 时，会先把当前会话切换到 `plan`，再提交提示词。
+
+模型的选择遵循以下规则：
+
+1. 命令的 `model` 优先于其他所有模型。
+2. 否则，命令所选 agent 配置的模型会覆盖调用时正在使用的模型。
+3. 否则，继续使用当前会话的模型。
+
+例如，下面这个命令同时指定了 agent 和一个显式模型：
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## 后台运行
+
+设置 `subagent: true`，即可在后台子会话中运行命令。
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+父会话仍然可用，并保持原有的 agent 和模型。子会话结束后，OpenCode 会把它的结果或失败信息发回父会话。
+
+| 值 | 行为 |
+| --- | --- |
+| `true` | 始终使用子会话，即使所选 agent 设置了 `mode: primary`。 |
+| `false` | 始终使用当前会话，即使所选 agent 设置了 `mode: subagent`。 |
+| 省略 | 仅当所选 agent 设置了 `mode: subagent` 时才使用子会话。 |
+
+子会话依次使用命令的模型、所选 agent 的模型、父会话的模型。旧的 `subtask` 字段仍然可用；如果两个字段同时存在，以 `subagent` 为准。
+
+```yaml
+subagent: false
+subtask: true
+```
+
+这个示例会在当前会话中运行，因为 `subagent` 优先。
+
+## 加载
+
+Markdown 命令和 JSON 命令共用同一个注册表。后加载的来源会替换先前同名的命令。
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+项目来源优先于全局来源，离当前目录更近的项目来源优先于上级目录中的来源。自定义定义也可以替换先前的内置命令。OpenCode 会自动重新加载命令文件和配置变更。
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+保存这个文件后，`/review` 会立即更新，无需重启 OpenCode。

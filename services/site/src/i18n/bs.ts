@@ -76,6 +76,7 @@ export const dict = {
   "docs.nav.plugins": "Dodaci",
   "docs.nav.client": "Klijent",
   "docs.nav.workspace": "Radni prostor",
+  "docs.nav.console": "Console",
   "docs.v1.markdownNote":
     "Ovo je dokumentacija za OpenCode V1. Najnovija dokumentacija, za OpenCode V2, nalazi se na https://opencode.ai/docs/llms.txt.",
   "site.search.label": "Pretraga",

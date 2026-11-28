@@ -20,6 +20,7 @@ export type DocsNavLabel =
   | "docs.nav.plugins"
   | "docs.nav.client"
   | "docs.nav.workspace"
+  | "docs.nav.console"
 
 export interface DocsNavGroup {
   title?: string
@@ -158,6 +159,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "console",
     title: "Console",
+    titleKey: "docs.nav.console",
     landingSlug: "console",
     groups: [
       {

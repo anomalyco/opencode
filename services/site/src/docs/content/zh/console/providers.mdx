@@ -1,0 +1,188 @@
+---
+title: "控制台提供商"
+description: "将你自己的模型提供商账号接入 OpenCode 控制台工作区，并选择成员可以使用哪些模型。"
+---
+
+你可以接入已在付费使用的提供商账号，例如 Anthropic、OpenAI 或 AWS Bedrock，并与工作区中的所有人共享它们的模型。控制台保存凭据，并通过自己的网关提供各个提供商的服务，因此成员可以直接使用模型，而永远看不到提供商的密钥。你自己的工具也可以通过 [Providers API](/console/api/providers) 使用同一个网关。
+
+所有者和管理员在 **Providers** 标签页中管理提供商。成员在 OpenCode 中运行 `/connect` 后，即可使用已启用的模型。
+
+## 接入提供商
+
+1. 打开 **Providers**，点击 **Connect Provider**。
+2. 从目录中选择一个提供商，并输入它的 API 密钥。
+3. （可选）点击 **Test connection**，然后点击 **Save**。
+
+目录中包括 Anthropic、OpenAI、Google、xAI、DeepSeek、Mistral、Groq、OpenRouter 等众多提供商。目录中的提供商都已预先配置好模型。
+
+### 云提供商
+
+云提供商需要填写一些额外信息。
+
+| 提供商                | 所需信息                              |
+| --------------------- | ------------------------------------- |
+| Azure                 | 资源名称和 API 密钥                   |
+| AWS Bedrock           | 区域和 API 密钥                       |
+| Google Vertex AI      | 区域和服务账号 JSON                   |
+| Cloudflare AI Gateway | 账号 ID、Gateway ID 和 API 令牌       |
+| Databricks            | 工作区 URL 和令牌                     |
+
+### 自定义提供商
+
+点击 **Add Custom Provider** 可以接入任何其他端点，然后通过 **Add Model** 添加它的模型。
+
+| 字段       | 说明                                                                            |
+| ---------- | ------------------------------------------------------------------------------- |
+| 基础 URL   | 控制台转发请求的目标地址，例如 `https://api.deepseek.com/v1`。                |
+| 格式       | Chat Completions、Responses API、Anthropic Compatible 或 Google Generative AI。 |
+| 认证方式   | Bearer、API 密钥请求头或自定义请求头。                                       |
+| 凭据       | 控制台发送给提供商的密钥。                                                    |
+
+## 选择模型
+
+打开一个提供商即可查看它的模型。只有已启用的模型才对成员可用。
+
+- 使用 **Enabled** 开关启用或停用某个模型。
+- 开启 **New models**，可以自动启用提供商以后新增的模型。
+
+## 编辑模型
+
+点击某个模型即可编辑。关闭面板时会自动保存更改。
+
+| 分区          | 可修改的内容                                                    |
+| ------------- | --------------------------------------------------------------- |
+| 常规          | 显示名称、API ID、工具支持、输入和输出类型                      |
+| 变体          | 各自带有独立请求头或请求体的变体                                |
+| 配置          | 默认变体、请求头和请求体、token 上限                            |
+| 价格层级      | 每 1M token 的输入、输出、缓存读取和缓存写入价格                |
+
+### 自定义价格
+
+目录中的模型默认使用提供商的标价。如果你有协议价格，例如 OpenAI 合同中的折扣，可以在 **Cost Tiers** 中改写价格，让用量报告和[预算](/console/budgets)与实际支付的金额一致。
+
+| 字段             | 标价       | 你的价格   |
+| ---------------- | ---------- | ---------- |
+| 输入价格         | $2.50      | $2.00      |
+| 输出价格         | $15.00     | $12.00     |
+| 缓存读取价格     | $0.25      | $0.20      |
+
+修改过的价格会在提供商页面上高亮显示。要恢复为标价，可以在字段上使用 **Restore default value**，或在模型上使用 **⋯ › Restore...**。
+
+如果某个模型在超过一定上下文大小后收费更高，例如提示词超过 200K token 时，可以添加一个 **Context** 价格档位。
+
+### 自定义模型
+
+点击 **Add Model** 可以添加目录中没有的模型，需要填写 **Display name** 和 **Model ID**。也可以在现有模型上使用 **⋯ › Duplicate...**，以它的设置为基础修改。
+
+## OpenCode 模型
+
+**Models** 标签页用于管理控制台提供的[模型](/console/models)，这些模型由工作区额度支付。它的用法和提供商页面一样：
+
+- 单独启用或停用某个模型。
+- 关闭 **Free models**，可以在工作区中禁用免费模型。
+- 开启 **New models**，可以自动启用新的控制台模型。
+
+如果只想使用你自己的提供商，可以通过 **⋯ › Disable** 停用整个提供商。
+
+## 在 OpenCode 中使用
+
+成员运行 `/connect` 并选择工作区。每个已启用的提供商都会显示为“工作区名称 / 提供商名称”，`/models` 会列出它已启用的模型。
+
+```text
+Acme Inc. / Anthropic
+```
+
+在 **Settings › General** 中开启 **Managed providers only** 后，所有人的 OpenCode 都只能使用工作区的提供商。
+
+## 发送身份
+
+如果提供商是你自己运行的网关，请在其页面上开启 **Send identity**。控制台随后会在发往该网关的每个模型请求中添加一个 `x-opencode-actor` 请求头。该请求头指明请求背后的成员或服务账号，因此你的网关可以按发送者记录日志或限制请求。
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- 默认关闭，更改基础 URL 也会将其关闭。
+- 仍指向厂商自身 API 的提供商（例如 `https://api.openai.com/v1`）不会显示该设置，因为厂商会忽略这个请求头。
+- 控制台会移除客户端发送的任何 `x-opencode-*` 请求头，因此你的网关收到的唯一 `x-opencode-actor` 就是控制台签名的那一个。
+- **Test connection** 和模型列表只带凭据调用 `GET <base URL>/models`，不会发送该请求头，因此不要在这条路由上强制要求该请求头。
+
+### 令牌
+
+该请求头是控制台为每个请求签名的 JWT。
+
+| 字段        | 值                                            |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | 提供商的基础 URL，去掉末尾斜杠 |
+| `iat`、`exp` | `exp` 为 `iat` 之后 120 秒                 |
+
+| 声明                | 值                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | 成员为 `user_id`，否则为 `service_account_id`                 |
+| `workspace_id`       | 请求所在的工作区                                       |
+| `user_id`、`email`   | 发送请求的成员                             |
+| `service_account_id` | 发送请求的服务账号（包括 agent）  |
+| `session_id`         | 客户端随请求发送的会话 ID（若提供）                              |
+| `request_id`         | 客户端在 `x-opencode-log-id` 响应头中收到的 ID |
+
+成员请求携带的 payload 如下：
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### 验证令牌
+
+控制台在 `https://opencode.ai/inference/.well-known/jwks.json` 公布公钥，并通过 `Cache-Control: public, max-age=300` 提供。请检查签名、签发者、受众、类型和有效期，再检查工作区。以下示例使用 [jose](https://github.com/panva/jose)。
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+将 `audience` 设为控制台中保存的提供商基础 URL（去掉末尾斜杠），并将 `org_...` 替换为控制台 URL 中的工作区 ID。控制台会在使用新签名密钥签名之前先公布它，因此像 `createRemoteJWKSet` 这样按 `kid` 查找密钥的验证方可以在密钥轮换期间继续工作。
+
+## 停用或移除
+
+打开提供商的 **⋯** 菜单：
+
+- **Disable**：对成员隐藏该提供商及其模型，但保留其设置。
+- **Remove...**：删除该提供商及其模型。对话框会显示最近有谁使用过它，并提供 **Disable instead** 选项。
+
+如需轮换密钥，请在提供商页面上点击凭据，然后输入新的密钥。
+
+## 计费
+
+token 费用由提供商直接向你收取，控制台不会为此扣除额度。不过，控制台仍会记录每个请求，并按模型价格计算其成本，因此用量报告和[预算](/console/budgets)中会包含这些请求。
+
+如果要在自己的工具（而不是 OpenCode）中调用提供商，请使用 [Providers API](/console/api/providers)。

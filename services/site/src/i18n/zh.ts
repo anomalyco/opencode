@@ -339,6 +339,7 @@ export const dict = {
   "docs.nav.plugins": "插件",
   "docs.nav.client": "客户端",
   "docs.nav.workspace": "工作区",
+  "docs.nav.console": "控制台",
   "docs.lockup.sectionDocs": "{{section}}文档",
   "docs.lockup.switchLabel": "{{name}}，切换文档",
   "docs.lockup.home": "{{name}}首页",

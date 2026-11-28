@@ -1,0 +1,106 @@
+---
+title: "构建插件"
+description: "构建 OpenCode 插件：一个包可以包含服务器部分、TUI 部分、GUI 部分，或它们的任意组合。"
+---
+
+插件可以修改 OpenCode 的行为并添加新功能。插件是一个包，包含服务器部分、TUI 部分、GUI 部分，或它们的任意组合。
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+要迁移现有的 OpenCode 1 插件，请参阅 [V1 插件迁移指南](/build/plugins/migrate-v1)。
+
+## 组成部分
+
+每个部分都是该包的一个导出。所有部分的 SDK 都来自同一个 `@opencode/plugin` 依赖。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **服务器**（`.` 或 `./server`）使用 `@opencode/plugin` 在 OpenCode 服务器中运行，添加工具、钩子、集成、命令和 agent。请参阅[服务器](/build/plugins/server)，Effect API 请参阅 [Effect 插件](/build/plugins/effect)。
+- **TUI**（`./tui`）使用 `@opencode/plugin/tui` 在终端界面中运行。请参阅 [TUI](/build/plugins/cli)。
+- **GUI**（`./gui-experimental`）使用 `@opencode/plugin/gui`，在每个 OpenCode Desktop 窗口中运行其 `setup`，并在桌面应用的主进程中运行其 `main`。请参阅 [GUI](/build/plugins/gui)。
+- **RPC**（`./rpc`）是一份带类型的契约，由服务器部分实现，供其他部分和客户端调用。请参阅 [RPC](/build/plugins/rpc)。
+
+插件的 `id` 来自其服务器部分的 `Plugin.define`。只有 GUI 部分而没有服务器部分的包，会用包名（或本地目录名）作为 `id`。TUI 部分声明自己的 `id`；GUI 部分不声明，而是沿用插件的 `id`。
+
+## 加载
+
+`.opencode/plugins/` 下的插件会自动加载，就像上面的本地示例。要从其他位置加载已发布的包或插件目录，请将它们加入 `opencode.json(c)` 的 `plugins`：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- 一个条目会加载所有部分。TUI 会加载其服务器所加载插件的 TUI 部分，OpenCode Desktop 则会加载全局 `opencode.json(c)` 中插件的 GUI 部分。
+- 只有 TUI 部分的包应放在 [`cli.json`](/cli/plugins) 中。
+- 本地插件目录如果在 `package.json` 中声明了 `name` 和 `exports`，就会通过这些字段加载各个部分，与已发布的包相同。没有这些字段时，使用其根目录下的文件名：`server`（否则为 `index`）、`tui` 和 `rpc`，扩展名为 `.ts`、`.tsx` 或 `.js`，以及 `gui-experimental.cjs`（或 `.js`）。
+- 更多加载和配置选项请参阅[配置插件](/plugins)。
+
+## 发布
+
+已发布的插件就是一个包含上述 `package.json` 的 npm 包。各部分使用与本地插件相同的默认导出。
+
+```bash
+npm publish
+```
+
+- 如果希望其他插件和客户端在导入你的 [RPC 契约](/build/plugins/rpc)时不加载你的实现，请导出 `./rpc`。
+- 发布前先构建 GUI bundle，并通过 `files` 包含它。请参阅[构建 bundle](/build/plugins/gui#build-the-bundle)。
+- 使用与你目标 OpenCode 版本兼容的版本，并测试安装后的包，而不只是工作区中链接的副本。采用更新的 API 契约时，请发布兼容的插件更新。
+
+<CardGroup cols={2}>
+  <Card title="服务器" href="/build/plugins/server">
+    在 OpenCode 服务器中添加工具、钩子、集成、命令和 agent。
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    为终端界面添加命令、路由、插槽和 Markdown 渲染器。
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    为 OpenCode Desktop 添加面板、命令、设置页面和原生集成。
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    向其他部分和客户端提供服务器部分中带类型的方法和事件。
+  </Card>
+</CardGroup>
