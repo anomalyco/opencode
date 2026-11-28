@@ -47,6 +47,23 @@ test("tracks transitive imports through the Solid runtime transform", async () =
   expect(after.module).toMatchObject({ default: "after" })
 })
 
+test("ignores a project browserslist config when transforming a TUI plugin", async () => {
+  await using sources = await fixture()
+  const config = new URL(".browserslistrc", sources.url)
+  await Bun.write(config, "not-a-real-browser\n")
+  const entry = new URL("tui.tsx", sources.url)
+  await Bun.write(entry, "export default () => <text>browserslist</text>")
+  // Point browserslist at this config. If the transform reads it, the unknown query fails the load.
+  const previous = process.env.BROWSERSLIST_CONFIG
+  process.env.BROWSERSLIST_CONFIG = fileURLToPath(config)
+  try {
+    expect((await sources.read(entry.href)).module).toMatchObject({ default: expect.any(Function) })
+  } finally {
+    if (previous === undefined) delete process.env.BROWSERSLIST_CONFIG
+    else process.env.BROWSERSLIST_CONFIG = previous
+  }
+})
+
 test("an explicit local entrypoint inside node_modules still reloads", async () => {
   await using sources = await fixture()
   const entry = new URL("node_modules/local-plugin/index.ts", sources.url)

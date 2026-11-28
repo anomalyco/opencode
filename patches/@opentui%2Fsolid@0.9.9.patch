@@ -1,0 +1,12 @@
+diff --git a/scripts/solid-transform.js b/scripts/solid-transform.js
+index e48f7e810517ee66281d00c3a84cda21a3a2e1b7..eeeb8967295ef4481a3a93b36878721a543dfefd 100644
+--- a/scripts/solid-transform.js
++++ b/scripts/solid-transform.js
+@@ -83,6 +83,7 @@ export async function transformSolidSource(code, options) {
+         filename,
+         configFile: false,
+         babelrc: false,
++        browserslistConfigFile: false,
+         plugins,
+         presets,
+     });
