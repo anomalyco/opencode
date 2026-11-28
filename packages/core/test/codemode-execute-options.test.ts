@@ -97,7 +97,19 @@ describe("execute timeout and background", () => {
       })
       expect(() => Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 0 })).toThrow()
       expect(() => Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 1.5 })).toThrow()
-      expect(tool(true).description).toContain("do not poll")
+      expect(tool(true).description.split("\n").at(-1)).toBe(
+        "Scripts still running after their timeout move to the background and keep running, and you will be notified when they complete. Meanwhile, keep working on anything that doesn't depend on them, or end your response and you will be resumed. Don't poll or sleep to wait for them.",
+      )
+      expect(Schema.toJsonSchemaDocument(CodeModeTool.FullInput).schema.properties).toMatchObject({
+        timeout: {
+          description:
+            "Optional time in milliseconds to wait for the script before moving it to the background (default 120000). Set it longer when you need the result before you can continue. The script keeps running in the background after that; it is never stopped. With `background: true` the call returns immediately instead.",
+        },
+        background: {
+          description:
+            "Run the script in the background and return immediately with its job ID, for work that can run while you do something else. You will be notified when it completes. DO NOT poll for completion.",
+        },
+      })
     }),
   )
 

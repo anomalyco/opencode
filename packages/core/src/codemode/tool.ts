@@ -149,7 +149,7 @@ const description = (full: boolean) =>
     "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
     ...(full
       ? [
-          "Scripts still running after their timeout move to the background and keep running. Background scripts return a job ID immediately, and you will be notified when they complete; do not poll for them.",
+          "Scripts still running after their timeout move to the background and keep running, and you will be notified when they complete. Meanwhile, keep working on anything that doesn't depend on them, or end your response and you will be resumed. Don't poll or sleep to wait for them.",
         ]
       : []),
   ].join("\n")
@@ -158,11 +158,11 @@ const description = (full: boolean) =>
 export const FullInput = Schema.Struct({
   ...CodeMode.Input.fields,
   timeout: Schema.optionalKey(PositiveInt).annotate({
-    description: `Optional time in milliseconds to wait for the script before moving it to the background (default ${2 * 60 * 1_000}). The script keeps running in the background after that; it is never stopped. With \`background: true\` the call returns immediately instead.`,
+    description: `Optional time in milliseconds to wait for the script before moving it to the background (default ${2 * 60 * 1_000}). Set it longer when you need the result before you can continue. The script keeps running in the background after that; it is never stopped. With \`background: true\` the call returns immediately instead.`,
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
-      "Run the script in the background and return immediately with its job ID (useful for long-running work). You will be notified when it completes. DO NOT poll for completion.",
+      "Run the script in the background and return immediately with its job ID, for work that can run while you do something else. You will be notified when it completes. DO NOT poll for completion.",
   }),
 })
 
