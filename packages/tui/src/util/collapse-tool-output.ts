@@ -23,6 +23,17 @@ export function collapseToolOutput(output: string, maxLines: number, maxChars: n
   return { output: preview, overflow: true }
 }
 
+/** Lines of a patch without its file and hunk headers, which is what a unified diff view renders. */
+export function patchBodyLines(patch: string) {
+  const start = patch.search(/^@@ /m)
+  if (start === -1) return 0
+  return patch
+    .slice(start)
+    .trimEnd()
+    .split("\n")
+    .filter((line) => !line.startsWith("@@") && !line.startsWith("\\")).length
+}
+
 export function collapseShellOutput(input: string, output: string, maxLines: number, maxChars: number) {
   if (!input) {
     const collapsed = collapseToolOutput(output, maxLines, maxChars)
