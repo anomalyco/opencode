@@ -6,6 +6,7 @@ export type EnsureTiming = {
   readonly promiseTimeout: number
   readonly stopPollInterval: number
   readonly stopPollAttempts: number
+  readonly signal?: (pid: number, name: NodeJS.Signals) => void
 }
 
 const timings = new WeakMap<object, EnsureTiming>()

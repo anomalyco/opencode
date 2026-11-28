@@ -5,6 +5,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { processStopped } from "../service-process.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -127,24 +128,19 @@ async function registered(file?: string, timeout?: number) {
   return { info, ...(await probeResult(info, timeout)) }
 }
 
-function signal(pid: number, name: NodeJS.Signals) {
+function signal(pid: number, name: NodeJS.Signals, timing: EnsureTiming) {
   try {
+    if (timing.signal) {
+      timing.signal(pid, name)
+      return
+    }
     process.kill(pid, name)
   } catch {}
 }
 
-function stopped(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return false
-  } catch {
-    return true
-  }
-}
-
 async function waitUntilStopped(pid: number, timing: EnsureTiming) {
   for (let attempt = 0; attempt <= timing.stopPollAttempts; attempt++) {
-    if (stopped(pid)) return true
+    if (await processStopped(pid)) return true
     if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
   }
   return false
@@ -153,11 +149,11 @@ async function waitUntilStopped(pid: number, timing: EnsureTiming) {
 async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
-  signal(info.pid, "SIGTERM")
+  signal(info.pid, "SIGTERM", timing)
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (!(await waitUntilStopped(info.pid, timing))) {
-    signal(info.pid, "SIGKILL")
+    signal(info.pid, "SIGKILL", timing)
     if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
   }
   const latest = await read(options.file)
