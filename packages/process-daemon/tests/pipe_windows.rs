@@ -13,6 +13,7 @@ use std::env;
 use std::fs;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
+use std::ptr::null_mut;
 use std::time::{Duration, Instant};
 
 use opencode_pty::service::{
@@ -20,8 +21,10 @@ use opencode_pty::service::{
     ProcessSignal, TerminalId, TerminalLifecycle, TerminalService,
 };
 use windows_sys::Win32::Foundation::{ERROR_PRIVILEGE_NOT_HELD, WAIT_OBJECT_0};
+use windows_sys::Win32::System::JobObjects::IsProcessInJob;
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    TerminateProcess, WaitForSingleObject,
 };
 
 /// A unique temporary path, removed when dropped even if a test fails.
@@ -578,51 +581,255 @@ fn signal_reaches_a_grandchild_in_the_job() {
     service.terminate(info.id).unwrap();
 }
 
-#[test]
-fn signal_reaches_a_grandchild_of_store_powershell() {
-    // Only where PowerShell 7 is installed from the Microsoft Store.
-    let Some(alias) = env::var_os("LOCALAPPDATA")
+/// Store PowerShell 7's app execution alias, where it is installed from the
+/// Microsoft Store.
+fn store_powershell() -> Option<PathBuf> {
+    env::var_os("LOCALAPPDATA")
         .map(|dir| Path::new(&dir).join(r"Microsoft\WindowsApps\pwsh.exe"))
         .filter(|alias| alias.exists())
-    else {
+}
+
+/// A script for Store PowerShell that starts `ping` and writes its own PID
+/// and the ping's.
+struct StoreScript {
+    script: TempPath,
+    pids: TempPath,
+}
+
+impl StoreScript {
+    fn new(name: &str) -> Self {
+        let pids = TempPath::new(&format!("{name}-pids"));
+        let script = TempPath::script(name, "ps1");
+        fs::write(
+            &script.0,
+            format!(
+                r#"
+                $child = [System.Diagnostics.Process]::Start('ping.exe', '-n 60 127.0.0.1')
+                [System.IO.File]::WriteAllText('{}', "$PID $($child.Id)")
+                Start-Sleep -Seconds 60
+                "#,
+                ps_path(&pids.0)
+            ),
+        )
+        .unwrap();
+        Self { script, pids }
+    }
+
+    /// The arguments that run the script.
+    fn args(&self) -> Vec<String> {
+        [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ]
+        .into_iter()
+        .map(String::from)
+        .chain([self.script.0.display().to_string()])
+        .collect()
+    }
+
+    /// The Store PowerShell running the script and its `ping`, killed when
+    /// dropped.
+    fn processes(&self) -> (KillOnDrop, KillOnDrop) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Ok(text) = fs::read_to_string(&self.pids.0)
+                && let Some((powershell, ping)) = text.trim().split_once(' ')
+            {
+                return (
+                    KillOnDrop(powershell.parse().unwrap()),
+                    KillOnDrop(ping.parse().unwrap()),
+                );
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the script did not write its PIDs"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+/// A batch file that runs `program` with `args`, so the program is started
+/// by `cmd.exe` rather than by the daemon.
+fn batch_running(name: &str, program: &Path, args: &[String]) -> TempPath {
+    let args = args
+        .iter()
+        .map(|arg| format!("\"{arg}\""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    batch(
+        name,
+        &[
+            "@echo off".to_string(),
+            format!("\"{}\" {args}", program.display()),
+        ],
+    )
+}
+
+/// For a command that starts a Store app through the Windows shell, as
+/// `start` and PowerShell's `&` do: the shell writes its caches under
+/// %SystemDrive%, so without it they land in the working directory.
+fn shell_env() -> HashMap<String, String> {
+    let mut env = base_env();
+    env.extend(env::var("SystemDrive").map(|drive| ("SystemDrive".to_string(), drive)));
+    env
+}
+
+fn in_a_job(pid: u32) -> bool {
+    // SAFETY: a successful handle is adopted immediately; it is only queried.
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    assert!(!handle.is_null(), "process {pid} is gone");
+    // SAFETY: OpenProcess returned a new, uniquely owned handle.
+    let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+    let mut result = 0;
+    // SAFETY: the handle stays valid through the call.
+    unsafe { IsProcessInJob(handle.as_raw_handle(), null_mut(), &mut result) };
+    result != 0
+}
+
+fn kill_and_wait(service: &TerminalService, id: TerminalId) {
+    service.signal(id, ProcessSignal::Kill).unwrap();
+    let exit = service.wait(id).unwrap().recv().unwrap();
+    assert_eq!(exit.signal.as_deref(), Some("SIGKILL"));
+}
+
+#[test]
+fn signal_reaches_a_grandchild_of_store_powershell() {
+    let Some(alias) = store_powershell() else {
         return;
     };
     let service = TerminalService::default();
-    let pid_file = TempPath::new("store-grandchild-pid");
-    let script = TempPath::script("store-grandchild", "ps1");
-    fs::write(
-        &script.0,
-        format!(
-            r#"
-            $child = [System.Diagnostics.Process]::Start('ping.exe', '-n 60 127.0.0.1')
-            [System.IO.File]::WriteAllText('{}', "$($child.Id)")
-            Start-Sleep -Seconds 60
-            "#,
-            ps_path(&pid_file.0)
-        ),
-    )
-    .unwrap();
+    let script = StoreScript::new("store-grandchild");
+    let (info, _file) = start(&service, |file| {
+        pipe(alias.to_str().unwrap(), script.args(), file, base_env())
+    });
+    let (_, grandchild) = script.processes();
+    assert!(alive(grandchild.0));
+    kill_and_wait(&service, info.id);
+    wait_dead(grandchild.0);
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
+fn signal_reaches_a_store_app_started_by_another_program() {
+    let Some(alias) = store_powershell() else {
+        return;
+    };
+    let service = TerminalService::default();
+    let script = StoreScript::new("store-nested");
+    let outer = batch_running("store-nested-outer", &alias, &script.args());
+    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
+    // Store PowerShell left the job for its package's job, and its ping left
+    // every job.
+    let (powershell, ping) = script.processes();
+    kill_and_wait(&service, info.id);
+    wait_dead(powershell.0);
+    wait_dead(ping.0);
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
+fn signal_reaches_the_children_of_store_powershell_started_by_store_powershell() {
+    let Some(alias) = store_powershell() else {
+        return;
+    };
+    let service = TerminalService::default();
+    let script = StoreScript::new("store-in-store");
+    // PowerShell does not wait for an app execution alias it starts.
+    let command = format!(
+        "& '{}' {}; Start-Sleep -Seconds 60",
+        ps_path(&alias),
+        script
+            .args()
+            .iter()
+            .map(|arg| format!("'{}'", arg.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
     let (info, _file) = start(&service, |file| {
         pipe(
             alias.to_str().unwrap(),
             vec![
                 "-NoProfile".into(),
                 "-NonInteractive".into(),
-                "-ExecutionPolicy".into(),
-                "Bypass".into(),
-                "-File".into(),
-                script.0.display().to_string(),
+                "-Command".into(),
+                command,
             ],
             file,
-            base_env(),
+            shell_env(),
         )
     });
-    let grandchild = KillOnDrop(read_pid(&pid_file.0));
-    assert!(alive(grandchild.0));
-    service.signal(info.id, ProcessSignal::Kill).unwrap();
-    let exit = service.wait(info.id).unwrap().recv().unwrap();
-    assert_eq!(exit.signal.as_deref(), Some("SIGKILL"));
-    wait_dead(grandchild.0);
+    // The inner PowerShell stays in the job, but nothing gave it the
+    // desktop-app policy, so its ping left every job.
+    let (powershell, ping) = script.processes();
+    kill_and_wait(&service, info.id);
+    wait_dead(powershell.0);
+    wait_dead(ping.0);
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
+fn processes_that_leave_the_job_are_put_back_in_one() {
+    let Some(alias) = store_powershell() else {
+        return;
+    };
+    let service = TerminalService::default();
+    let script = StoreScript::new("store-adopted");
+    let outer = batch_running("store-adopted-outer", &alias, &script.args());
+    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
+    let (_powershell, ping) = script.processes();
+    // In a job again, a daemon crash takes it down too.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !in_a_job(ping.0) {
+        assert!(
+            Instant::now() < deadline,
+            "the ping was not put back in a job"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    service.terminate(info.id).unwrap();
+    wait_dead(ping.0);
+}
+
+#[test]
+fn a_failed_exit_terminates_a_store_app_it_started() {
+    let Some(alias) = store_powershell() else {
+        return;
+    };
+    let service = TerminalService::default();
+    let script = StoreScript::new("store-failed");
+    let args = script
+        .args()
+        .iter()
+        .map(|arg| format!("\"{arg}\""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let outer = batch(
+        "store-failed-outer",
+        &[
+            "@echo off".to_string(),
+            format!("start /b \"\" \"{}\" {args}", alias.display()),
+            ":wait".to_string(),
+            format!("if exist \"{}\" exit /b 1", script.pids.0.display()),
+            "ping -n 2 127.0.0.1 >nul".to_string(),
+            "goto wait".to_string(),
+        ],
+    );
+    let (info, file) = start(&service, |file| {
+        pipe(
+            "cmd.exe",
+            vec!["/d".into(), "/c".into(), outer.0.display().to_string()],
+            file,
+            shell_env(),
+        )
+    });
+    let (powershell, ping) = script.processes();
+    assert_eq!(run(&service, info.id, &file).exit.exit_code, Some(1));
+    wait_dead(powershell.0);
+    wait_dead(ping.0);
     service.terminate(info.id).unwrap();
 }
 

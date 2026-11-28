@@ -147,9 +147,15 @@ starts a pipe process: any command without a terminal. Both return
   mask across exec). On Windows it is created with `CREATE_NO_WINDOW` (no
   console) inside a kill-on-close job. When the program is a Store app (such
   as Store PowerShell 7), the processes it starts stay inside its package, and
-  so in the job, instead of breaking away. A Store app started by another
-  process in the job, such as `cmd.exe`, still breaks away with everything it
-  starts. For a bare executable name,
+  so in the job, instead of breaking away. Windows still lets two kinds of
+  process leave the job: a Store app started further down the tree (Store
+  PowerShell, `wsl.exe` or `winget.exe` run by `cmd.exe`, say) moves to its
+  package's own job, and the children of such a Store app break away from
+  every job. About once a second the daemon finds them by their parent and
+  puts them back: one in no job joins the command's job, and a Store app gets
+  a kill-on-close job of its own inside its package's job. A signal or a
+  failed exit reaches them even before that; only one that left less than a
+  second before the daemon dies can survive it. For a bare executable name,
   `CreateProcessW` searches the directory containing the daemon executable,
   the daemon's current directory, the 32-bit and then 16-bit Windows system
   directories, the Windows directory, and finally the directories in the
@@ -189,8 +195,9 @@ starts a pipe process: any command without a terminal. Both return
   On Unix a non-zero exit code sends SIGTERM to the process group before the
   waiter reaps the leader, then SIGKILL after three seconds if the group
   survives. A signal death has no numeric exit code and does not trigger this
-  cleanup. On Windows a non-zero exit terminates the job immediately. The
-  waiter clears kill-on-close and releases the job and process handles at exit.
+  cleanup. On Windows a non-zero exit terminates the job, and the jobs of
+  Store apps that left it, immediately. The waiter clears kill-on-close on
+  every job and releases the jobs and process handles at exit.
 - The finished record (including exit status, output path and metadata) stays
   listed until `terminate`. Its PID is historical metadata. `terminate` kills
   a running tree and removes its record; after exit it only removes the record.

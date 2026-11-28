@@ -18,12 +18,13 @@ use opencode_pty::protocol::{
     AttachmentRole, Envelope, Request, Response, SubscriptionEvent, read_frame,
     read_subscription_event, write_frame,
 };
-use opencode_pty::service::{CreatePty, ProcessInfo, ProcessMode, TerminalLifecycle};
+use opencode_pty::service::{CreatePty, PipeMetadata, ProcessInfo, ProcessMode, TerminalLifecycle};
 use terminal_fixture::{Command as FixtureCommand, Deadline, Fixture, TempDir};
 use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
+use windows_sys::Win32::System::JobObjects::IsProcessInJob;
 use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-    WaitForSingleObject,
+    PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
 };
 
 struct Daemon {
@@ -700,4 +701,136 @@ fn observer_disconnect_and_control_input_preserve_independent_terminals() {
     assert!(matches!(daemon.request(Request::Shutdown), Response::Ok));
     drop(owner);
     daemon.wait();
+}
+
+/// A directory removed when dropped.
+struct TempFiles(PathBuf);
+
+impl Drop for TempFiles {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Kills a test process even when an assertion fails first.
+struct Killed(OwnedHandle);
+
+impl Killed {
+    fn open(pid: u32) -> Self {
+        // SAFETY: a successful handle is adopted immediately.
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
+                0,
+                pid,
+            )
+        };
+        assert!(!handle.is_null(), "process {pid} is gone");
+        // SAFETY: OpenProcess returned a new, uniquely owned handle.
+        Self(unsafe { OwnedHandle::from_raw_handle(handle) })
+    }
+
+    fn in_a_job(&self) -> bool {
+        let mut result = 0;
+        // SAFETY: the handle stays open through the call.
+        unsafe { IsProcessInJob(self.0.as_raw_handle(), std::ptr::null_mut(), &mut result) };
+        result != 0
+    }
+
+    fn dies(&self) -> bool {
+        // SAFETY: the handle stays open through the wait.
+        unsafe { WaitForSingleObject(self.0.as_raw_handle(), 10_000) == WAIT_OBJECT_0 }
+    }
+}
+
+impl Drop for Killed {
+    fn drop(&mut self) {
+        // SAFETY: the handle has PROCESS_TERMINATE access and is still open.
+        unsafe { TerminateProcess(self.0.as_raw_handle(), 1) };
+    }
+}
+
+#[test]
+fn a_daemon_crash_kills_store_processes_that_left_the_job() {
+    // Only where PowerShell 7 is installed from the Microsoft Store.
+    let Some(alias) = std::env::var_os("LOCALAPPDATA")
+        .map(|dir| Path::new(&dir).join(r"Microsoft\WindowsApps\pwsh.exe"))
+        .filter(|alias| alias.exists())
+    else {
+        return;
+    };
+    let _deadline = Deadline::new();
+    let mut daemon = Daemon::start();
+    let (_owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    // cmd.exe reads a batch file in the console code page, so these paths stay
+    // ASCII rather than living in the fixture's Unicode directory.
+    let root = TempFiles(std::env::temp_dir().join(format!(
+        "opencode-pty-store-crash-{:016x}",
+        rand::random::<u64>()
+    )));
+    std::fs::create_dir(&root.0).unwrap();
+    let root = &root.0;
+    let pids = root.join("store-pids");
+    let script = root.join("store.ps1");
+    std::fs::write(
+        &script,
+        format!(
+            "$child = [System.Diagnostics.Process]::Start('ping.exe', '-n 60 127.0.0.1')\n[System.IO.File]::WriteAllText('{}', \"$PID $($child.Id)\")\nStart-Sleep -Seconds 60\n",
+            pids.display().to_string().replace('\'', "''")
+        ),
+    )
+    .unwrap();
+    // Started by cmd.exe, Store PowerShell leaves the job for its package's
+    // job, and its ping leaves every job.
+    let outer = root.join("outer.cmd");
+    std::fs::write(
+        &outer,
+        format!(
+            "@echo off\r\n\"{}\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"\r\n",
+            alias.display(),
+            script.display()
+        ),
+    )
+    .unwrap();
+    let response = daemon.request(Request::CreatePipe {
+        program: "cmd.exe".into(),
+        args: vec!["/d".into(), "/c".into(), outer.display().to_string()],
+        cwd: root.clone(),
+        env: ["PATH", "SystemRoot", "TEMP"]
+            .into_iter()
+            .filter_map(|name| Some((name.to_string(), std::env::var(name).ok()?)))
+            .collect(),
+        group_id: "store".into(),
+        output_path: root.join("out"),
+        metadata: PipeMetadata::new(),
+    });
+    assert!(matches!(response, Response::Created { .. }), "{response:?}");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let (powershell, ping) = loop {
+        if let Ok(text) = std::fs::read_to_string(&pids)
+            && let Some((powershell, ping)) = text.trim().split_once(' ')
+        {
+            break (
+                Killed::open(powershell.parse().unwrap()),
+                Killed::open(ping.parse().unwrap()),
+            );
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the script did not write its PIDs"
+        );
+        thread::sleep(Duration::from_millis(20));
+    };
+    while !ping.in_a_job() {
+        assert!(
+            Instant::now() < deadline,
+            "the ping was not put back in a job"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    daemon.child.kill().unwrap();
+    daemon.child.wait().unwrap();
+    assert!(powershell.dies(), "Store PowerShell survived the daemon");
+    assert!(ping.dies(), "its ping survived the daemon");
 }
