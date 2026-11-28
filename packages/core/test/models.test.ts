@@ -1,10 +1,14 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { Money } from "@opencode/schema/money"
 import { Effect, Exit, Fiber, Layer, Ref, Scope, Stream, Tracer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
@@ -12,6 +16,7 @@ import { Model } from "@opencode/core/model"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Global } from "@opencode/util/global"
 import { SessionUsage } from "@opencode/core/session/usage"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
@@ -202,13 +207,33 @@ const makeMockKV = (cache: MockCache) =>
     remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
   })
 
-const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { fetch: false }) =>
+// One scratch directory for every layer that does not need its own cache, removed after the file's tests.
+const scratchCache = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-"))
+const temporaryCaches: string[] = []
+const temporaryCache = () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-"))
+  temporaryCaches.push(directory)
+  return directory
+}
+afterAll(() => {
+  rmSync(scratchCache, { recursive: true, force: true })
+  for (const directory of temporaryCaches) rmSync(directory, { recursive: true, force: true })
+})
+
+const buildLayer = (
+  state: Ref.Ref<MockState>,
+  cache: MockCache,
+  options: ModelsDev.Options = { fetch: false },
+  cacheDirectory = scratchCache,
+) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(
-    AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node]), [
+    AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node, Global.node, App.node]), [
       ModelsDev.node.replace(ModelsDev.configured(options)),
+      Global.node.replace(Global.layerWith({ cache: cacheDirectory })),
+      App.node.replace(App.layer({ version: "test" })),
       LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
       KV.node.replace(makeMockKV(cache)),
     ]),
@@ -1014,8 +1039,10 @@ describe("ModelsDev Service", () => {
         }),
       )
       const layer = Layer.fresh(
-        AppNodeBuilder.build(ModelsDev.node, [
+        AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Global.node, App.node]), [
           ModelsDev.node.replace(ModelsDev.configured({ url: "https://mirror.example", fetch: true, snapshot: false })),
+          Global.node.replace(Global.layerWith({ cache: scratchCache })),
+          App.node.replace(App.layer({ version: "test" })),
           LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, client)),
           KV.node.replace(makeMockKV(makeCache())),
         ]),
@@ -1054,8 +1081,50 @@ describe("ModelsDev Service", () => {
       expect(result.length).toBeGreaterThan(0)
       const anthropic = result.find((snapshot) => snapshot.info.id === "anthropic")
       expect(anthropic?.environment).toContain("ANTHROPIC_API_KEY")
+      // The normalized catalog is on disk for the next process.
+      expect(JSON.parse(readFileSync(path.join(scratchCache, "models-dev-normalized-default.json"), "utf8")).version).toBe(1)
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
+    }),
+  )
+
+  it.live("get() reuses the normalized cache for a catalog from KV", () =>
+    Effect.gen(function* () {
+      const cacheDirectory = temporaryCache()
+      const state = yield* Ref.make(initialState)
+      const cache = makeCache()
+      writeCache(cache, fixture)
+      const cold = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false }, cacheDirectory)),
+      )
+      expect(cold).toEqual(fixtureSnapshot)
+      const file = path.join(cacheDirectory, "models-dev-normalized-default.json")
+      const entry = JSON.parse(readFileSync(file, "utf8"))
+      expect(entry.version).toBe(1)
+      expect(entry.day).toBe(new Date().toISOString().slice(0, 10))
+      expect(entry.snapshot).toEqual(JSON.parse(JSON.stringify(cold)))
+      entry.snapshot[0].info.name = "Cached"
+      writeFileSync(file, JSON.stringify(entry))
+      const warm = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false }, cacheDirectory)),
+      )
+      expect(warm[0]?.info.name).toBe("Cached")
+    }),
+  )
+
+  it.live("get() ignores a corrupt normalized cache entry", () =>
+    Effect.gen(function* () {
+      const cacheDirectory = temporaryCache()
+      const file = path.join(cacheDirectory, "models-dev-normalized-default.json")
+      writeFileSync(file, "{")
+      const state = yield* Ref.make(initialState)
+      const cache = makeCache()
+      writeCache(cache, fixture)
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false }, cacheDirectory)),
+      )
+      expect(result).toEqual(fixtureSnapshot)
+      expect(JSON.parse(readFileSync(file, "utf8")).version).toBe(1)
     }),
   )
 
@@ -1081,8 +1150,10 @@ describe("ModelsDev Service", () => {
       const cache = makeCache()
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
       const layer = Layer.fresh(
-        AppNodeBuilder.build(ModelsDev.node, [
+        AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Global.node, App.node]), [
           ModelsDev.node.replace(ModelsDev.configured({ fetch: true, snapshot: false })),
+          Global.node.replace(Global.layerWith({ cache: scratchCache })),
+          App.node.replace(App.layer({ version: "test" })),
           LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
           KV.node.replace(makeFailingWriteKV(cache)),
         ]),
