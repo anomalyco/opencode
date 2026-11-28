@@ -73,7 +73,7 @@ export function docs(): Plugin {
 
 /** The docs set a file's MDX belongs to. */
 function setOf(file: string) {
-  return docsSets.find((set) => file.startsWith(path.join(repository, set.content) + path.sep))
+  return docsSets.find((set) => path.normalize(file).startsWith(path.join(repository, set.content) + path.sep))
 }
 
 const pageSlugsCache = new Map<string, ReadonlySet<string>>()
@@ -141,7 +141,7 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
             remarkSlots,
           ],
     rehypePlugins: [rehypeShiki, rehypeTableScroll, [rehypeHeadings, { ids: english?.ids }]],
-    recmaPlugins: [recmaSolid],
+    recmaPlugins: [[recmaSolid, { preserveLinks: set.id === "v1" }]],
   })
   const markdown = set.id === "v1" ? v1Markdown(body) : body.trim()
   return [

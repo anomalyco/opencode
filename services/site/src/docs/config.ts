@@ -47,6 +47,7 @@ export const v1Docs: DocsSet = {
     "nb",
     "pl",
     "pt-br",
+    "fa",
     "ru",
     "th",
     "tr",

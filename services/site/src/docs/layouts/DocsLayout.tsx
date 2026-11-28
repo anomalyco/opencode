@@ -124,7 +124,7 @@ export function DocsLayout(props: {
   return (
     <html
       lang={props.v1 ? (props.v1.locale.lang ?? (props.v1.locale.path || "en")) : tag(locale)}
-      dir={props.v1 ? (props.v1.locale.path === "ar" ? "rtl" : "ltr") : dir(locale)}
+      dir={props.v1 ? (props.v1.locale.direction ?? "ltr") : dir(locale)}
     >
       <head>
         <meta charset="utf-8" />

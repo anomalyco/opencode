@@ -24,13 +24,13 @@
 
 /* Arabic and Thai letters join or stack marks on their base letters, so tracking pulls them apart
    (and the hero's negative tracking overlaps them). */
-[data-site]:is(:lang(ar), :lang(th)) * {
+[data-site]:is(:is(:lang(ar), :lang(fa)), :lang(th)) * {
   letter-spacing: normal !important;
 }
 
 /* Arabic titles are set in the sans stack: in OpenMono every space is a monospaced cell, which leaves
    wide gaps between Arabic words, and Latin names sit better with Arabic in Inter. */
-[data-site]:lang(ar) :is(h1, h2, h3):lang(ar) {
+[data-site]:is(:lang(ar), :lang(fa)) :is(h1, h2, h3):is(:lang(ar), :lang(fa)) {
   font-family: var(--font-sans);
   line-height: 1.35;
 }

@@ -9,7 +9,7 @@ import { docsHref, type DocsSection } from "./navigation"
  */
 export const v1Locales: V1Locale[] = [
   { path: "", label: "English" },
-  { path: "ar", label: "العربية" },
+  { path: "ar", label: "العربية", direction: "rtl" },
   { path: "bs", label: "Bosanski" },
   { path: "da", label: "Dansk" },
   { path: "de", label: "Deutsch" },
@@ -21,6 +21,7 @@ export const v1Locales: V1Locale[] = [
   { path: "nb", label: "Norsk Bokmål", site: "no" },
   { path: "pl", label: "Polski" },
   { path: "pt-br", label: "Português (Brasil)", lang: "pt-BR", site: "br" },
+  { path: "fa", label: "فارسی", direction: "rtl" },
   { path: "ru", label: "Русский" },
   { path: "th", label: "ไทย" },
   { path: "tr", label: "Türkçe" },
@@ -28,7 +29,13 @@ export const v1Locales: V1Locale[] = [
   { path: "zh-tw", label: "繁體中文", lang: "zh-Hant", site: "zht" },
 ]
 
-export type V1Locale = { path: string; label: string; lang?: string; site?: Locale }
+export type V1Locale = {
+  path: string
+  label: string
+  lang?: string
+  site?: Locale
+  direction?: "rtl"
+}
 
 // The sidebar's group titles in each language (Usage, Configure, Develop), from the Starlight config.
 const groupTitles: Record<string, readonly string[]> = {
@@ -45,6 +52,7 @@ const groupTitles: Record<string, readonly string[]> = {
   nb: ["Bruk", "Konfigurasjon", "Utvikling"],
   pl: ["Użycie", "Konfiguracja", "Rozwój"],
   "pt-br": ["Uso", "Configuração", "Desenvolvimento"],
+  fa: ["کاربرد", "پیکربندی", "توسعه"],
   ru: ["Использование", "Настройка", "Разработка"],
   th: ["การใช้งาน", "การกำหนดค่า", "การพัฒนา"],
   tr: ["Kullanım", "Yapılandırma", "Geliştirme"],

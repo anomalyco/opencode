@@ -1,0 +1,388 @@
+---
+title: افزونه‌ها
+description: گسترش امکانات OpenCode با ساخت افزونه.
+---
+
+افزونه‌ها می‌توانند به رویدادهای OpenCode واکنش نشان دهند و رفتار برنامه را تغییر دهند. با آن‌ها می‌توانید قابلیت تازه اضافه کنید، به سرویس‌های دیگر متصل شوید یا رفتار پیش‌فرض OpenCode را شخصی‌سازی کنید.
+
+برای نمونه، [افزونه‌های ساخته‌شده توسط جامعهٔ کاربران](/docs/ecosystem#plugins) را ببینید.
+
+---
+
+## استفاده از افزونه
+
+افزونه‌ها به دو روش بارگذاری می‌شوند.
+
+---
+
+### از فایل محلی
+
+فایل‌های JavaScript یا TypeScript را در پوشهٔ افزونه‌ها قرار دهید.
+
+- `.opencode/plugins/` برای افزونه‌های پروژه
+- `~/.config/opencode/plugins/` برای افزونه‌های سراسری
+
+OpenCode فایل‌های این پوشه‌ها را هنگام راه‌اندازی خودکار بارگذاری می‌کند.
+
+---
+
+### از npm
+
+بسته‌های npm را در فایل پیکربندی معرفی کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+هم بسته‌های معمولی و هم بسته‌های دارای محدودهٔ نام در npm پشتیبانی می‌شوند.
+
+فهرست افزونه‌های موجود را در [صفحهٔ ابزارهای جامعه](/docs/ecosystem#plugins) ببینید.
+
+---
+
+### نحوهٔ نصب افزونه‌ها
+
+**افزونه‌های npm** هنگام راه‌اندازی با Bun نصب می‌شوند. بسته‌ها و وابستگی‌هایشان در `~/.cache/opencode/node_modules/` ذخیره می‌شوند.
+
+**افزونه‌های محلی** مستقیماً از پوشهٔ افزونه‌ها بارگذاری می‌شوند. برای استفاده از بسته‌های خارجی، در پوشهٔ پیکربندی فایل `package.json` بسازید (بخش [وابستگی‌ها](#dependencies) را ببینید)، یا افزونه را در npm منتشر و [به پیکربندی اضافه کنید](/docs/config#plugins).
+
+---
+
+### ترتیب بارگذاری
+
+OpenCode افزونه‌ها را از همهٔ منابع بارگذاری و توابع رویداد را پشت سر هم اجرا می‌کند. ترتیب بارگذاری چنین است.
+
+1. پیکربندی سراسری (`~/.config/opencode/opencode.json`)
+2. پیکربندی پروژه (`opencode.json`)
+3. پوشهٔ سراسری افزونه‌ها (`~/.config/opencode/plugins/`)
+4. پوشهٔ افزونه‌های پروژه (`.opencode/plugins/`)
+
+بسته‌های npm با نام و نسخهٔ یکسان فقط یک بار بارگذاری می‌شوند. افزونهٔ محلی و افزونهٔ npm حتی اگر نام مشابه داشته باشند، جداگانه بارگذاری می‌شوند.
+
+---
+
+## ساخت افزونه
+
+افزونه یک **ماژول JavaScript یا TypeScript** است که یک یا چند تابع افزونه صادر می‌کند. هر تابع، شیء زمینهٔ اجرا را می‌گیرد و شیئی حاوی توابع واکنش به رویدادها (hook) برمی‌گرداند.
+
+---
+
+### وابستگی‌ها
+
+افزونه‌های محلی و ابزارهای سفارشی می‌توانند از بسته‌های npm استفاده کنند. وابستگی‌های لازم را در `package.json` در پوشهٔ پیکربندی بنویسید.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode هنگام راه‌اندازی `bun install` را اجرا می‌کند تا وابستگی‌ها نصب شوند. سپس می‌توانید آن‌ها را در افزونه‌ها و ابزارها وارد کنید.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### ساختار پایه
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+این مقادیر به تابع افزونه داده می‌شوند.
+
+- `project` اطلاعات پروژهٔ جاری
+- `directory` پوشهٔ کاری فعلی
+- `worktree` مسیر درخت کاری Git
+- `client` یک کلاینت SDK برای ارتباط با هوش مصنوعی در OpenCode
+- `$` [رابط پوستهٔ Bun](https://bun.com/docs/runtime/shell) برای اجرای فرمان‌ها
+
+---
+
+### پشتیبانی از TypeScript
+
+برای افزونهٔ TypeScript می‌توانید نوع‌ها را از بستهٔ افزونه وارد کنید.
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### رویدادها
+
+افزونه‌ها می‌توانند مانند نمونه‌های پایین صفحه برای دریافت رویدادها ثبت‌نام کنند. رویدادهای قابل استفاده در گروه‌های زیر آمده‌اند.
+
+#### رویدادهای فرمان
+
+- `command.executed`
+
+#### رویدادهای فایل
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### رویدادهای نصب
+
+- `installation.updated`
+
+#### رویدادهای LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### رویدادهای پیام
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### رویدادهای مجوز
+
+- `permission.asked`
+- `permission.replied`
+
+#### رویدادهای سرور
+
+- `server.connected`
+
+#### رویدادهای نشست
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### رویدادهای فهرست کارها
+
+- `todo.updated`
+
+#### رویدادهای پوستهٔ فرمان
+
+- `shell.env`
+
+#### رویدادهای ابزار
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### رویدادهای رابط ترمینالی
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## مثال‌ها
+
+نمونه‌های زیر قابلیت‌هایی را نشان می‌دهند که با افزونه می‌توانید به OpenCode اضافه کنید.
+
+---
+
+### ارسال اعلان
+
+با وقوع رویدادهای مشخص، اعلان بفرستید.
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+در این نمونه، `osascript` اسکریپت AppleScript را در macOS اجرا می‌کند تا اعلان بفرستد.
+
+:::note
+برنامهٔ دسکتاپ OpenCode می‌تواند هنگام آماده شدن پاسخ یا بروز خطا در نشست، خودکار اعلان سیستم بفرستد.
+:::
+
+---
+
+### محافظت از فایل‌های .env
+
+برای جلوگیری از خواندن فایل‌های `.env` توسط OpenCode، این افزونه را به کار ببرید.
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### افزودن متغیرهای محیطی
+
+متغیرهای محیطی را برای هر بار اجرای پوسته، چه در ابزارهای هوش مصنوعی و چه در ترمینال کاربر، تنظیم کنید.
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### ابزارهای سفارشی
+
+افزونه می‌تواند ابزار سفارشی به OpenCode اضافه کند.
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+تابع کمکی `tool` ابزاری می‌سازد که OpenCode می‌تواند فراخوانی کند. این تابع، تابع طرح‌وارهٔ Zod را می‌گیرد و تعریفی از ابزار با این اجزا برمی‌گرداند.
+
+- `description` شرح کار ابزار
+- `args` طرح‌وارهٔ Zod برای آرگومان‌های ابزار
+- `execute` تابعی که هنگام فراخوانی ابزار اجرا می‌شود
+
+ابزارهای سفارشی در کنار ابزارهای داخلی در دسترس OpenCode قرار می‌گیرند.
+
+:::note
+اگر ابزار افزونه با ابزاری داخلی هم‌نام باشد، ابزار افزونه اولویت دارد.
+:::
+
+---
+
+### ثبت گزارش
+
+برای ثبت گزارش ساخت‌یافته، به‌جای `console.log` از `client.app.log()` استفاده کنید.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+سطوح گزارش `debug`، `info`، `warn` و `error` هستند. جزئیات را در [مستندات SDK](/docs/sdk) ببینید.
+
+---
+
+### توابع رویداد فشرده‌سازی
+
+هنگام فشرده‌سازی نشست می‌توانید تعیین کنید چه اطلاعاتی در زمینهٔ کاری باقی بماند.
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## زمینهٔ تکمیلی
+
+اطلاعاتی را که باید پس از فشرده‌سازی باقی بماند ثبت کن:
+- وضعیت کار فعلی
+- تصمیم‌های مهمی که گرفته شده‌اند
+- فایل‌هایی که در حال تغییرند
+`)
+    },
+  }
+}
+```
+
+رویداد `experimental.session.compacting` پیش از آن رخ می‌دهد که مدل زبانی خلاصه‌ای برای ادامهٔ نشست تولید کند. از آن برای افزودن اطلاعات تخصصی‌ای استفاده کنید که درخواست پیش‌فرض فشرده‌سازی پوشش نمی‌دهد.
+
+با تنظیم `output.prompt` می‌توانید متن درخواست فشرده‌سازی را به‌کلی جایگزین کنید.
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+برای ادامهٔ نشستی با چند عامل، یک درخواست بنویس.
+
+موارد زیر را خلاصه کن:
+1. کار فعلی و وضعیت آن
+2. فایل‌های در حال ویرایش و عامل مسئول هر فایل
+3. موانع یا وابستگی میان کار عامل‌ها
+4. قدم‌های بعدی برای تکمیل کار
+
+خلاصه را به شکل درخواستی ساخت‌یافته بنویس تا عامل دیگری بتواند کار را از سر بگیرد.
+`
+    },
+  }
+}
+```
+
+با تعیین `output.prompt` همین متن جایگزین کل درخواست پیش‌فرض می‌شود و آرایهٔ `output.context` نادیده گرفته می‌شود.
