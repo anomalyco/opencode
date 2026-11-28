@@ -213,8 +213,8 @@ export function install() {
       const devices = (soon: boolean) =>
         mobileStores.filter((store) => store.soon === soon).map((store) => store.device)
       say([`OpenCode Mobile for ${devices(false).join(" and ")}: ${url("/mobile")}`])
-      for (const store of mobileStores.filter((item) => item.beta))
-        say([`The ${store.device} app is a public beta on TestFlight: ${store.href}`, dim])
+      for (const store of mobileStores.filter((item) => !item.soon))
+        say([`${store.device} on ${store.label}: ${store.href}`, dim])
       if (devices(true).length > 0) say([`Coming soon to ${devices(true).join(" and ")}.`, dim])
       say(["Pair it with your computer: run opencode pair in a terminal.", dim])
       return url("/mobile")

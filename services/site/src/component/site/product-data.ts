@@ -130,7 +130,7 @@ export const mobileStores = [
     device: "iPhone",
     href: "https://apps.apple.com/us/app/opencode/id6788226734",
     soon: false,
-    /** A TestFlight beta: links open in a new tab and carry the TestFlight badge. */
+    /** True for a TestFlight beta, whose links open in a new tab and carry the TestFlight badge. */
     beta: false,
   },
   {
