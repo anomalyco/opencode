@@ -13,6 +13,7 @@ export function make(input: {
     spawn: input.claude.spawn,
     which: () => EXECUTABLE,
     env: () => input.env ?? {},
+    directoryExists: async () => true,
     sessionExists: async () => true,
     fork: input.claude.fork,
     remove: input.claude.remove,
