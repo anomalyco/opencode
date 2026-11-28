@@ -47,6 +47,16 @@ describe("sidebarView", () => {
     expect(keys(ordering, state({ ordering: mode }))).toEqual([...expected])
   })
 
+  test.each(["updated", "created"] as const)("puts a draft row first among open rows by %s", (mode) => {
+    const rows = [
+      row({ key: "open-new", order: 0, updated: 50, created: 50 }),
+      row({ key: "draft", order: 1, updated: Number.POSITIVE_INFINITY, created: Number.POSITIVE_INFINITY }),
+      row({ key: "recent", open: false, updated: 100, created: 100 }),
+    ]
+
+    expect(keys(rows, state({ ordering: mode }))).toEqual(["draft", "open-new", "recent"])
+  })
+
   test("attention ranks status before recency and breaks ties by updated", () => {
     const rows = [
       row({ key: "idle", status: "idle", updated: 9 }),
