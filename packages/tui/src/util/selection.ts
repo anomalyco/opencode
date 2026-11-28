@@ -1,5 +1,6 @@
 import type { SelectionBehavior } from "@opentui/core"
-import type { ClipboardService } from "../context/clipboard"
+import type { CopyMode } from "../config"
+import type { ClipboardSelections, ClipboardService } from "../context/clipboard"
 
 type Toast = {
   show: (input: { message: string; variant: "info" | "success" | "warning" | "error" }) => void
@@ -36,12 +37,24 @@ export function copyOnSelectRelease(
   renderer: Renderer,
   toast: Toast,
   clipboard: ClipboardService,
+  mode: CopyMode = "select",
 ): boolean {
-  if (!event.isDragging) return false
-  return copy(renderer, toast, clipboard)
+  if (!event.isDragging || mode === "manual") return false
+  return copy(renderer, toast, clipboard, releaseSelections[mode])
 }
 
-export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
+const releaseSelections = {
+  select: ["clipboard"],
+  primary: ["primary"],
+  both: ["clipboard", "primary"],
+} as const satisfies Record<Exclude<CopyMode, "manual">, ClipboardSelections>
+
+export function copy(
+  renderer: Renderer,
+  toast: Toast,
+  clipboard: ClipboardService,
+  selections: ClipboardSelections = ["clipboard"],
+): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
   if (selection.isStart && selection.behavior === "cell") return false
@@ -53,10 +66,13 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
   const clipboardText =
     focus?.getClipboardText && selection.selectedRenderables.includes(focus) ? focus.getClipboardText(text) : text
 
-  clipboard
-    .write(clipboardText)
-    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-    .catch(toast.error)
+  const write = clipboard.write(clipboardText, selections)
+  // Like a native selection, a primary-only update is silent and best effort.
+  if (!selections.includes("clipboard")) {
+    void write.catch(() => {})
+    return true
+  }
+  write.then(() => toast.show({ message: "Copied to clipboard", variant: "info" })).catch(toast.error)
 
   // Copy never clears selection, including empty releases: clearing also resets multi-click history.
   return true
