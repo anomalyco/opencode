@@ -7851,4 +7851,76 @@ describe("SessionRunnerLLM", () => {
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
   })
+
+  scenario("exits the drain loop after a subagent tool call when subagent_wakeup is false", function* (s) {
+    const config = yield* Config.Test
+    yield* config.setEntries([
+      new Document({
+        type: "document",
+        info: new Info({
+          compaction: new ConfigCompaction.Info({
+            buffer: 3_000,
+            keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+          }),
+          subagent_wakeup: false,
+        }),
+      }),
+    ])
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        subagent: {
+          name: "subagent",
+          description: "Run a subagent",
+          input: Schema.Struct({ agent: Schema.String }),
+          output: Schema.Struct({ output: Schema.String }),
+          execute: () => Effect.succeed({ output: { output: "done" } }),
+        },
+      },
+      { codemode: false },
+    )
+    yield* s.admit("Start subagent")
+    yield* s.llm.push(TestLLM.toolCall("call-sub", "subagent", { agent: "general" }), TestLLM.text("Continued", "text-continued"))
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(1)
+  })
+
+  scenario("continues the drain loop after a subagent tool call when subagent_wakeup is true", function* (s) {
+    const config = yield* Config.Test
+    yield* config.setEntries([
+      new Document({
+        type: "document",
+        info: new Info({
+          compaction: new ConfigCompaction.Info({
+            buffer: 3_000,
+            keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+          }),
+          subagent_wakeup: true,
+        }),
+      }),
+    ])
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        subagent: {
+          name: "subagent",
+          description: "Run a subagent",
+          input: Schema.Struct({ agent: Schema.String }),
+          output: Schema.Struct({ output: Schema.String }),
+          execute: () => Effect.succeed({ output: { output: "done" } }),
+        },
+      },
+      { codemode: false },
+    )
+    yield* s.admit("Start subagent")
+    yield* s.llm.push(TestLLM.toolCall("call-sub", "subagent", { agent: "general" }), TestLLM.text("Continued", "text-continued"))
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+  })
 })
