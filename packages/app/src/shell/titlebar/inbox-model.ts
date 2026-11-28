@@ -404,8 +404,9 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     void entry.ctx.data.session.message.sync(entry.session.id).catch((error) => {
       if (isSessionNotFoundError(error)) forget(entry.conn, entry.session.id)
     })
+    // The inbox stands in for tabs, so it only routes to the session; route sync adds no tab in this layout.
     void startTransition(() => {
-      tabs.select(tabs.addSessionTab({ server: entry.server, sessionId: entry.session.id }))
+      tabs.select({ type: "session", server: entry.server, sessionId: entry.session.id })
       entry.ctx.data.session.remember(entry.ctx.data.session.get(entry.session.id) ?? entry.session)
       entry.ctx.projects.touch(directory)
     })

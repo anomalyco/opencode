@@ -27,6 +27,7 @@ function snapshot(sessionID: string, input: Partial<RouteTabSnapshot> = {}): Rou
     session: undefined,
     rootID: undefined,
     serverReady: false,
+    addsTabs: true,
     ...input,
   }
 }
@@ -110,6 +111,31 @@ describe("route tab sync", () => {
 
     expect(result.effects.at(-1)).toEqual([{ type: "tab.add", server, sessionID: "ses_root" }])
     expect(result.state).toMatchObject({ tab: "adding", lookup: "resolved" })
+  })
+
+  test("the Inbox layout routes to a session without opening its tab", () => {
+    const result = replay([
+      sync(snapshot("ses_root", { rootID: "ses_root", addsTabs: false })),
+      sync(
+        snapshot("ses_child", {
+          session: { id: "ses_child", parentID: "ses_root" },
+          serverReady: true,
+          addsTabs: false,
+        }),
+      ),
+      { type: "resolve.succeeded", attempt: 1, target: child, rootID: "ses_root" },
+    ])
+
+    expect(result.effects).toEqual([[], [{ type: "session.resolve", attempt: 1, target: child }], []])
+    expect(result.state).toMatchObject({ tab: "missing", lookup: "resolved" })
+  })
+
+  test("leaving the Inbox layout opens the routed session's tab", () => {
+    const inbox = replay([sync(snapshot("ses_root", { rootID: "ses_root", addsTabs: false }))])
+
+    expect(transitionRouteTab(inbox.state, sync(snapshot("ses_root", { rootID: "ses_root" }))).effects).toEqual([
+      { type: "tab.add", server, sessionID: "ses_root" },
+    ])
   })
 
   test("a routed session with a tab is still refreshed once", () => {
