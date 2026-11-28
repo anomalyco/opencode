@@ -631,7 +631,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "adapter.call",
         description: "Call an adapter-described tool",
-        signature: "tools.adapter.call({\n  count?: number,\n  id: string,\n}): Promise<void>",
+        signature: "tools.adapter.call({\n  id: string,\n  count?: number,\n}): Promise<void>",
       },
     ])
 

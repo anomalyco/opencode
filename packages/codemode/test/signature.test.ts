@@ -47,12 +47,12 @@ describe("pretty signature rendering", () => {
     expect(inputTypeScript(listIssues, true)).toBe(
       [
         "{",
+        "  /** Repository owner */",
+        "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
         "  after?: string,",
         "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
-        "  /** Repository owner */",
-        "  owner: string,",
         "  /** Results per page. @default 30 */",
         "  perPage?: number,",
         '  state?: "open" | "closed",',
@@ -63,7 +63,7 @@ describe("pretty signature rendering", () => {
 
   test("compact mode output is unchanged by the pretty machinery", () => {
     expect(inputTypeScript(listIssues)).toBe(
-      '{ after?: string; labels?: Array<string>; owner: string; perPage?: number; state?: "open" | "closed" }',
+      '{ owner: string; after?: string; labels?: Array<string>; perPage?: number; state?: "open" | "closed" }',
     )
     expect(inputTypeScript(lookupOrder)).toBe("{ id: string; verbose?: boolean }")
     expect(outputTypeScript(lookupOrder)).toBe("{ status: string }")
@@ -541,6 +541,7 @@ describe("member order does not change rendered signatures", () => {
         includeEngines: { type: "boolean" },
         includeDisabled: { type: "boolean" },
       },
+      required: ["refresh", "category"],
     } as const
     const reordered = {
       type: "object",
@@ -550,12 +551,13 @@ describe("member order does not change rendered signatures", () => {
         category: { type: "string" },
         refresh: { type: "boolean" },
       },
+      required: ["category", "refresh"],
     } as const
     for (const pretty of [false, true]) {
       expect(jsonSchemaToTypeScript(ordered, pretty)).toBe(jsonSchemaToTypeScript(reordered, pretty))
     }
     expect(jsonSchemaToTypeScript(ordered)).toBe(
-      "{ category?: string; includeDisabled?: boolean; includeEngines?: boolean; refresh?: boolean }",
+      "{ category: string; refresh: boolean; includeDisabled?: boolean; includeEngines?: boolean }",
     )
     // A genuine change still renders differently.
     expect(
@@ -675,7 +677,7 @@ describe("non-identifier property names render as quoted keys", () => {
 
   test("compact rendering quotes non-identifier keys and leaves identifiers bare", () => {
     expect(jsonSchemaToTypeScript(rawSchema)).toBe(
-      '{ "123"?: number; "@type": string; "foo-bar"?: string; plain?: boolean; "x.y"?: number }',
+      '{ "@type": string; "123"?: number; "foo-bar"?: string; plain?: boolean; "x.y"?: number }',
     )
   })
 
@@ -683,8 +685,8 @@ describe("non-identifier property names render as quoted keys", () => {
     expect(jsonSchemaToTypeScript(rawSchema, true)).toBe(
       [
         "{",
-        '  "123"?: number,',
         '  "@type": string,',
+        '  "123"?: number,',
         '  "foo-bar"?: string,',
         "  plain?: boolean,",
         "  /** Dotted name */",
@@ -757,12 +759,12 @@ describe("union schemas render every alternative", () => {
       "{ bounded: number",
       "count: number",
       "list: Array<number>",
-      "maybe?: number",
       "nested: { first: number; second: number }",
       "nullable: number | null",
       "plain: number",
       "positive: number",
-      "scores: { [key: string]: number } }",
+      "scores: { [key: string]: number }",
+      "maybe?: number }",
     ].join("; ")
     expect(inputTypeScript(tool)).toBe(compact)
     expect(outputTypeScript(tool)).toBe(compact)
@@ -987,12 +989,12 @@ describe("JSDoc signatures in catalogs and search results", () => {
     expect(item.signature).toBe(
       [
         "tools.github.list_issues({",
+        "  /** Repository owner */",
+        "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
         "  after?: string,",
         "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
-        "  /** Repository owner */",
-        "  owner: string,",
         "  /** Results per page. @default 30 */",
         "  perPage?: number,",
         '  state?: "open" | "closed",',
@@ -1139,9 +1141,9 @@ describe("empty object signatures", () => {
         extra: Schema.optionalKey(Schema.Struct({}).annotate({ description: "Extra data" })),
       }),
     )
-    expect(outputTypeScript(tool)).toBe("{ extra?: {}; meta: {} }")
+    expect(outputTypeScript(tool)).toBe("{ meta: {}; extra?: {} }")
     expect(outputTypeScript(tool, true)).toBe(
-      ["{", "  /** Extra data */", "  extra?: {},", "  meta: {},", "}"].join("\n"),
+      ["{", "  meta: {},", "  /** Extra data */", "  extra?: {},", "}"].join("\n"),
     )
   })
 

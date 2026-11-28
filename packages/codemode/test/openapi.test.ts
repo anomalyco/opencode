@@ -156,10 +156,10 @@ describe("OpenAPI.fromSpec", () => {
       throw new Error("happy-path fixture did not generate every operation")
     }
     expect(inputTypeScript(get)).toBe(
-      '{ "X-Trace-ID"?: string; include?: Array<string>; userId: string; verbose?: boolean }',
+      '{ userId: string; "X-Trace-ID"?: string; include?: Array<string>; verbose?: boolean }',
     )
     expect(inputTypeScript(create)).toBe('{ email: string; name: string; role?: "admin" | "member" }')
-    expect(inputTypeScript(search)).toBe("{ filter?: { page?: number; query: string }; tags?: Array<string> }")
+    expect(inputTypeScript(search)).toBe("{ filter?: { query: string; page?: number }; tags?: Array<string> }")
     expect(inputTypeScript(remove)).toBe("{ userId: string }")
     expect(outputTypeScript(get)).toContain("id: string")
     expect(outputTypeScript(create)).toContain('role?: "admin" | "member"')
@@ -1459,7 +1459,7 @@ describe("OpenAPI.fromSpec", () => {
     expect(Tool.isTool(update)).toBe(true)
     if (!Tool.isTool(update)) throw new Error("things.update was not generated")
     expect(inputTypeScript(update)).toBe(
-      "{ body_id: string; header_id: string; path_id: string; path_id_2?: string; query_id: string }",
+      "{ body_id: string; header_id: string; path_id: string; query_id: string; path_id_2?: string }",
     )
     expect(Tool.isTool(echo)).toBe(true)
     if (!Tool.isTool(echo)) throw new Error("echo was not generated")

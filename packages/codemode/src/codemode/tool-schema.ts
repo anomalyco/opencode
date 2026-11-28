@@ -208,9 +208,13 @@ const renderSchema = (
   if (schema.type === "object" || schema.properties) {
     const required = new Set(schema.required ?? [])
     // JSON object member order is not semantic, and MCP servers and proxies may re-serialize schemas in any order.
-    // Render fields in key order so the same schema always produces the same signature, and a reordering alone is
-    // never reported as a changed tool listing.
+    // Render required fields first, then optional ones, each group in key order, so the same schema always produces
+    // the same signature and a reordering alone is never reported as a changed tool listing. Required-first keeps
+    // the signal authors put in field order: the fields the model must send, usually the main argument, come first.
     const properties = Object.entries(schema.properties ?? {}).toSorted(([left], [right]) => {
+      const leftRequired = required.has(left)
+      const rightRequired = required.has(right)
+      if (leftRequired !== rightRequired) return leftRequired ? -1 : 1
       if (left < right) return -1
       if (left > right) return 1
       return 0
