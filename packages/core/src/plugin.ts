@@ -39,7 +39,6 @@ const layer = Layer.effect(
     const hold = () => Effect.sync(holdUnsafe)
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
-    let inventory: Plugin.Info[] = []
     const snapshot = () => [...Array.from(active.values()).map(slotInfo), ...discovered]
     // A changed `./gui-experimental` bundle alone restarts nothing; its revision is part of what changes, so the event
     // tells the app to reload it.
@@ -48,7 +47,7 @@ const layer = Layer.effect(
       () => bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid),
     )
     const list = Effect.fn("Plugin.list")(function* () {
-      return inventory
+      return snapshot()
     })
     const gui = Effect.fn("Plugin.gui")(function* (id: Plugin.ID) {
       const gui = active.get(id)?.plugin.gui
@@ -129,8 +128,7 @@ const layer = Layer.effect(
                 if (entry) active.set(definition.id, { ...entry, plugin: definition })
               }
               if (prefix === definitions.length && active.size === definitions.length) {
-                inventory = snapshot()
-                yield* publish(inventory)
+                yield* publish(snapshot())
                 return
               }
 
@@ -186,11 +184,9 @@ const layer = Layer.effect(
                       "plugin.id": definition.id,
                     })
                   }
-
-                  inventory = snapshot()
                 }),
               )
-              yield* publish(inventory)
+              yield* publish(snapshot())
             }),
           ),
         (release) => release,
@@ -211,9 +207,8 @@ const layer = Layer.effect(
               if (closed) return
               // Failure is already recorded on its exact activation, so an old queued item
               // cannot disable a replacement and teardown need not wait for this worker.
-              inventory = snapshot()
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
-              yield* publish(inventory)
+              yield* publish(snapshot())
               if (Exit.isFailure(refreshed))
                 yield* Effect.logWarning("failed to refresh state after disabling plugin", {
                   "plugin.id": item.plugin.id,
