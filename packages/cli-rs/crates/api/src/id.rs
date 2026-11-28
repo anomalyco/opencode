@@ -2,7 +2,6 @@
 //! 14 random base-62 characters. The counter orders IDs minted within one millisecond.
 
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const LENGTH: usize = 26;
 const CHARS: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -53,8 +52,10 @@ pub fn create(descending: bool, timestamp: i64) -> String {
     id
 }
 
+/// The same clock the client shows and the store times optimistic rows by: the P-TUI runner pins it
+/// (`OPENCODE_DRIVE_NOW`), and client-minted IDs must sort against the server's IDs minted on that clock.
 fn now() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as i64)
+    opencode_util::time::now_ms()
 }
 
 #[cfg(test)]
@@ -93,5 +94,28 @@ mod tests {
         let second = message();
         assert!(first < second, "ascending IDs sort by creation");
         assert!(part().starts_with("prt_"));
+    }
+
+    /// Message IDs take their timestamp from the client's clock, which the P-TUI runner pins
+    /// (`OPENCODE_DRIVE_NOW`): a client-minted row must sort with the server's IDs minted on the same clock.
+    #[test]
+    fn message_timestamps_read_the_sim_clock() {
+        const FIXED: i64 = 1_600_000_000_000;
+        // The process reads the clock once, so a child sets it before anything else runs.
+        if std::env::var_os("OPENCODE_RS_CLOCK_CHILD").is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "id::tests::message_timestamps_read_the_sim_clock"])
+                .env("OPENCODE_RS_CLOCK_CHILD", "1")
+                .env("OPENCODE_DRIVE_NOW", FIXED.to_string())
+                .output()
+                .unwrap();
+            let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            assert!(output.status.success() && stdout.contains("1 passed"), "{stdout}\n{stderr}");
+            return;
+        }
+        let id = message();
+        let stamp = (u64::from_str_radix(&id[4..16], 16).unwrap() >> 12) as i64;
+        let fixed = (FIXED as u64 & ((1 << 36) - 1)) as i64;
+        assert!((stamp - fixed).rem_euclid(1 << 36) < 5_000, "{}", id);
     }
 }

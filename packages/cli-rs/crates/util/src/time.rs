@@ -232,14 +232,22 @@ pub fn iso(ms: i64) -> Option<String> {
     UTC.at(ms).map(|time| time.iso())
 }
 
-/// Milliseconds since the epoch. `OPENCODE_DRIVE_NOW` sets the simulation clock's starting instant.
+/// The simulation clock's offset from `SystemTime`: `OPENCODE_DRIVE_NOW` sets its starting instant, and
+/// `OPENCODE_DRIVE_SINCE` the real instant that instant belongs to, so the processes started for one P-TUI side share
+/// a timeline. Without `SINCE` the clock starts at this process's first use.
+static OFFSET: LazyLock<i64> = LazyLock::new(|| {
+    let Some(start) = std::env::var("OPENCODE_DRIVE_NOW").ok().and_then(|start| start.parse::<i64>().ok()) else {
+        return 0;
+    };
+    let since = std::env::var("OPENCODE_DRIVE_SINCE")
+        .ok()
+        .and_then(|since| since.parse::<i64>().ok())
+        .unwrap_or_else(|| millis(SystemTime::now()));
+    start - since
+});
+
+/// Milliseconds since the epoch.
 pub fn now_ms() -> i64 {
-    static OFFSET: LazyLock<i64> = LazyLock::new(|| {
-        std::env::var("OPENCODE_DRIVE_NOW")
-            .ok()
-            .and_then(|start| start.parse::<i64>().ok())
-            .map_or(0, |start| start - millis(SystemTime::now()))
-    });
     millis(SystemTime::now()) + *OFFSET
 }
 

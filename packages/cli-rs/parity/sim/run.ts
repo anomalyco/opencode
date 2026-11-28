@@ -25,6 +25,14 @@ const RUN_DEADLINE = Number(process.env.PARITY_SIM_DEADLINE ?? 240_000)
 const WAIT = 30_000
 const password = "sim-parity"
 const CLOCK = path.join(import.meta.dir, "clock.ts")
+// The instant at which a side's simulated clock starts, shared by its server and client through the side's real
+// start (`OPENCODE_DRIVE_SINCE`), so their message IDs sort on one timeline. A scenario's date must not depend on when
+// the run happens: the server derives its `core/date` instruction from it, and a run that crosses midnight would
+// change that instruction between the two sides' servers, which start seconds apart, so only one screen would show
+// the "Instructions updated" row (H.2/session-open, 20261127-234831). 06:00 UTC is at least six hours from local
+// midnight in every time zone, and a run ends long before it. `scenario.now` overrides it for a screen that shows a
+// date.
+const DEFAULT_NOW = Date.UTC(2026, 5, 17, 6)
 // Both sides of a run share the sandbox path, so it never differs between them; masking its random name keeps the
 // committed captures the same from run to run.
 // Read only: each side gets a copy.
@@ -182,11 +190,15 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
   const configDir = path.join(box.root, "opencode-config")
   await Bun.write(path.join(configDir, "opencode.jsonc"), JSON.stringify(serverConfig(scenario), null, 2))
   const registry = path.join(box.root, "drive")
-  // A scenario's fixed clock: Rust reads the variable itself, and each TS process gets the preload that reads it.
-  const clock: Record<string, string> = scenario.now === undefined ? {} : { OPENCODE_DRIVE_NOW: String(scenario.now) }
+  // The fixed clock every side's processes share: Rust reads the variables itself, and each TS process gets the
+  // preload that reads them.
+  const clock: Record<string, string> = {
+    OPENCODE_DRIVE_NOW: String(scenario.now ?? DEFAULT_NOW),
+    OPENCODE_DRIVE_SINCE: String(Date.now()),
+  }
   const start = (side: Side, args: string[]) => {
     const cmd = command(side, args)
-    return side === "ts" && scenario.now !== undefined ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
+    return side === "ts" ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
   }
   const viewport = { cols: scenario.width ?? 100, rows: scenario.height ?? 30 }
   // Every endpoint asks the kernel for its port at bind time: a port checked and then bound seconds later can be taken

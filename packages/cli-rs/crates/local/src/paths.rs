@@ -228,6 +228,21 @@ mod tests {
     }
 
     #[test]
+    fn empty_xdg_vars_are_unset() {
+        let p = paths(&[
+            ("HOME", "/h"),
+            ("XDG_DATA_HOME", ""),
+            ("XDG_CACHE_HOME", ""),
+            ("XDG_CONFIG_HOME", ""),
+            ("XDG_STATE_HOME", ""),
+        ]);
+        assert_eq!(p.data, PathBuf::from("/h/.local/share/opencode"));
+        assert_eq!(p.cache, PathBuf::from("/h/.cache/opencode"));
+        assert_eq!(p.config, PathBuf::from("/h/.config/opencode"));
+        assert_eq!(p.state, PathBuf::from("/h/.local/state/opencode"));
+    }
+
+    #[test]
     fn enter_resolves_symlinks_and_reports_failures() {
         let dir = opencode_util::temp::tempdir().unwrap();
         let real = dir.path().join("real");
