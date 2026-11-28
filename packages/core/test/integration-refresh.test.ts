@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Context, Deferred, Effect, Fiber, Layer } from "effect"
+import { Clock, Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -114,5 +114,73 @@ it.effect("bounds a stuck integration refresh and allows a later attempt", () =>
       }),
     )
     expect(yield* services.a.connection.resolve(connection)).toMatchObject({ access: "new" })
+  }),
+)
+
+const rotating = (integrationID: Integration.ID, methodID: Integration.MethodID, exchanged: string[]) => ({
+  integrationID,
+  method: { id: methodID, type: "oauth" as const, label: "OAuth" },
+  authorize: () => Effect.die("unused sign-in"),
+  refresh: (value: Credential.OAuth) =>
+    Effect.gen(function* () {
+      exchanged.push(value.refresh)
+      const now = yield* Clock.currentTimeMillis
+      return Credential.OAuth.make({
+        ...value,
+        access: `access-${exchanged.length}`,
+        refresh: `refresh-${exchanged.length}`,
+        expires: now + 300_000,
+      })
+    }),
+})
+
+it.effect("uses a fresh 300-second OAuth token without refreshing it", () =>
+  Effect.gen(function* () {
+    const services = yield* locations
+    const integrationID = Integration.ID.make("openai")
+    const methodID = Integration.MethodID.make("oauth")
+    const exchanged: string[] = []
+    yield* services.a.transform((editor) => editor.method.update(rotating(integrationID, methodID, exchanged)))
+    const now = yield* Clock.currentTimeMillis
+    const stored = yield* services.credentials.create({
+      integrationID,
+      value: Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "access-0",
+        refresh: "refresh-0",
+        expires: now + 300_000,
+      }),
+    })
+    const connection = { type: "credential" as const, id: stored.id, label: stored.label, method: "oauth" as const }
+    for (let i = 0; i < 3; i++) yield* services.a.connection.resolve(connection)
+    expect(exchanged).toEqual([])
+  }),
+)
+
+it.effect("refreshes an OAuth token within 30 seconds of expiry", () =>
+  Effect.gen(function* () {
+    const services = yield* locations
+    const integrationID = Integration.ID.make("openai")
+    const methodID = Integration.MethodID.make("oauth")
+    const exchanged: string[] = []
+    yield* services.a.transform((editor) => editor.method.update(rotating(integrationID, methodID, exchanged)))
+    const now = yield* Clock.currentTimeMillis
+    const stored = yield* services.credentials.create({
+      integrationID,
+      value: Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "access-0",
+        refresh: "refresh-0",
+        expires: now + 31_000,
+      }),
+    })
+    const connection = { type: "credential" as const, id: stored.id, label: stored.label, method: "oauth" as const }
+    expect(yield* services.a.connection.resolve(connection)).toMatchObject({ access: "access-0" })
+    yield* TestClock.adjust("2 seconds")
+    expect(yield* services.a.connection.resolve(connection)).toMatchObject({ access: "access-1" })
+    expect(yield* services.a.connection.resolve(connection)).toMatchObject({ access: "access-1" })
+    expect(exchanged).toEqual(["refresh-0"])
   }),
 )
