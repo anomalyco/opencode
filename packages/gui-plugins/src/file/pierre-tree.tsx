@@ -436,7 +436,7 @@ export default function PierreFileTree(props: {
   }
 
   return (
-    <OpenInAppContextMenuV2 state={openIn} resolvePath={resolveContextPath} fit>
+    <OpenInAppContextMenuV2 state={openIn} resolvePath={resolveContextPath} screen={props.screen} fit>
       <div
         ref={wrapper}
         data-component="file-tree-v2"
