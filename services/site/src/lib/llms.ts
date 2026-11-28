@@ -38,6 +38,14 @@ export async function llmsText(locale: Locale) {
             .join("\n"),
         ]
       : []),
+    "## More from Anomaly",
+    [
+      `- ${link("Hex", "https://anoma.ly/hex")}: on-device voice dictation for macOS, Windows and Linux`,
+      `- ${link("Spaceman", "https://anoma.ly/spaceman")}: a macOS tiling window manager with stable logical windows`,
+      page("/product/browse"),
+      `- ${link("OpenTUI", "https://opentui.com")}: a library for building terminal user interfaces`,
+      `- ${link("Models.dev", "https://models.dev")}: an open-source database of AI models, their specs and prices`,
+    ].join("\n"),
     "## Console",
     [
       `- ${link("Console", "/console.md")}: model inference, Go subscriptions and tools for teams`,
