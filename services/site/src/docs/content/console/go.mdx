@@ -11,14 +11,14 @@ OpenCode Go gives you reliable access to popular open coding models, with three 
 | **Go Plus**  | **$40/month**                          | Higher usage limits across the models below                                |
 | **Go Teams** | **$20/member/month**, 2-member minimum | Every member gets their own limits, $5/month higher than Go on every model |
 
-Go works like any other provider in OpenCode. You subscribe to OpenCode Go and get your API key. It's **completely optional** and you don't need it to use OpenCode.
+Go works like any other provider in OpenCode. You subscribe in the Console and sign in to OpenCode with the same account. It's **completely optional** and you don't need it to use OpenCode.
 
 The service is designed primarily for international users and provides stable global access.
 
 ## How it works
 
-1. Sign in to the [OpenCode Console](https://opencode.ai/console), subscribe to Go, Go Plus, or Go Teams, add your billing details, and copy your API key.
-2. Run `/connect` in the TUI, select **OpenCode Go**, and paste your API key.
+1. Sign in to the [OpenCode Console](https://opencode.ai/console), subscribe to Go, Go Plus, or Go Teams, and add your billing details.
+2. Run `/connect` in the TUI and choose **OpenCode**, then **OpenCode account**. Approve the sign-in in your browser and pick the workspace with your Go subscription.
 
    ```text
    /connect
@@ -29,6 +29,10 @@ The service is designed primarily for international users and provides stable gl
    ```text
    /models
    ```
+
+Go models come through the OpenCode connection, so `/connect` has no separate **OpenCode Go** entry. To use a key
+instead, create one under **Account settings** → **Personal API keys** in the Console and connect it with
+`opencode auth login opencode-go`.
 
 <Callout>
   Go and Go Plus cover the member who subscribes and the workspace's API keys. Other members you invite use free models
