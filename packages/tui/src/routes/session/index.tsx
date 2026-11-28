@@ -1788,8 +1788,8 @@ export function Session(props: {
                       if (firstJump()) clearMessageNavigation()
                       if (event.scroll?.direction === "up" && revealOlderRows()) return
                       if (event.scroll?.direction === "down" && revealNewerRows()) return
-                      if (event.scroll?.direction === "up") scroll.scrollBy(-event.scroll.delta)
-                      if (event.scroll?.direction === "down") scroll.scrollBy(event.scroll.delta)
+                      // Reuse the scrollbox's wheel handling so acceleration and the configured scroll speed match.
+                      scroll.processMouseEvent(event)
                       updateAwayFromBottom()
                     }}
                   />

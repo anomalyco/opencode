@@ -262,6 +262,18 @@ test("collapsing details that no longer overflow hides Jump to latest", async ()
   }, tall)
 }, 20000)
 
+test("the wheel over a pinned summary scrolls the transcript", async () => {
+  await withSession(async (setup) => {
+    const label = "24 commands"
+    const { scroll } = await pin(setup, label)
+    const before = scroll.scrollTop
+    await setup.mockMouse.scroll(8, scroll.screenY, "down")
+    await setup.renderOnce()
+    expect(scroll.scrollTop).toBeGreaterThan(before)
+    expect(rowOf(setup.captureCharFrame(), `− ${label}`)).toBe(scroll.screenY)
+  }, tall)
+}, 20000)
+
 test("a group pins its summary while its body scrolls under the viewport top", async () => {
   await withSession(async (setup) => {
     const label = "24 commands"
