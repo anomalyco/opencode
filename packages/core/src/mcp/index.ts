@@ -156,6 +156,37 @@ const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Typ
 
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
+// The pooled connection outlives the Location that opened it, and the pool keeps the spec, so the
+// resolver must not be a closure in the Location's scope (it would keep that Location's forms and
+// bus alive). It captures only the config, the trust store, and the project ID.
+const resolvePinnedConfig = (
+  config: Mcp.ServerConfig,
+  trustedHosts: McpTrustedHost.Interface,
+  projectID: McpTrustedHost.Key["projectID"],
+): (() => Effect.Effect<Mcp.ServerConfig, Error>) => () =>
+  Effect.gen(function* () {
+    if (config.type !== "remote" || config.tls || !URL.canParse(config.url)) return config
+    const url = new URL(config.url)
+    if (url.protocol !== "https:") return config
+    const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
+    const host = McpTls.privateHost(url.hostname)
+    if (!host) return config
+    const stored = yield* trustedHosts.get({ projectID, host, port: McpTls.port(url) })
+    if (!stored) return config
+    const cert = yield* Effect.tryPromise({
+      try: () => McpTls.probeCertificate(url.hostname, McpTls.port(url)),
+      catch: (error) =>
+        new Error(`Cannot read the TLS certificate from ${url.hostname}:${McpTls.port(url)}: ${toError(error).message}`),
+    })
+    if (cert.fingerprint !== stored.fingerprint)
+      return yield* Effect.fail(
+        new Error(
+          `TLS certificate for ${host}:${McpTls.port(url)} changed since it was last trusted: expected ${stored.fingerprint}, got ${cert.fingerprint}. If the appliance rotated its certificate, re-pin it with: opencode mcp trust ${config.url} --force`,
+        ),
+      )
+    return { ...config, tls: { fingerprint: cert.fingerprint } }
+  })
+
 export interface Interface extends State.Transformable<Editor> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
@@ -678,7 +709,7 @@ export const layer = (options?: Options) =>
             config,
             // Pinned on every attempt so the stored certificate fingerprint also applies to reconnects;
             // a mismatched pin fails the attempt with the rotation message, unpinned hosts pass through.
-            resolveConfig: () => pinTrusted(config),
+            resolveConfig: resolvePinnedConfig(config, trustedHosts, location.project.id),
             directory: location.directory,
             clientInfo: options?.clientInfo,
             skills,
@@ -792,29 +823,6 @@ export const layer = (options?: Options) =>
           catch: (error) =>
             new Error(`Cannot read the TLS certificate from ${url.hostname}:${McpTls.port(url)}: ${toError(error).message}`),
         })
-      })
-
-      // A remote server at a private IP with no explicit TLS config connects pinned by the
-      // certificate's fingerprint (if this project already trusts one), which also covers
-      // appliance certificates without IP SANs. A rotated certificate fails the connection
-      // instead of being silently accepted.
-      const pinTrusted = Effect.fnUntraced(function* (config: Mcp.ServerConfig) {
-        if (config.type !== "remote" || config.tls || !URL.canParse(config.url)) return config
-        const url = new URL(config.url)
-        if (url.protocol !== "https:") return config
-        const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
-        const host = McpTls.privateHost(url.hostname)
-        if (!host) return config
-        const stored = yield* trustedHosts.get({ projectID: location.project.id, host, port: McpTls.port(url) })
-        if (!stored) return config
-        const cert = yield* presentedCertificate(url)
-        if (cert.fingerprint !== stored.fingerprint)
-          return yield* Effect.fail(
-            new Error(
-              `TLS certificate for ${host}:${McpTls.port(url)} changed since it was last trusted: expected ${stored.fingerprint}, got ${cert.fingerprint}. If the appliance rotated its certificate, re-pin it with: opencode mcp trust ${config.url} --force`,
-            ),
-          )
-        return { ...config, tls: { fingerprint: cert.fingerprint } }
       })
 
       const explainFailure = Effect.fnUntraced(function* (config: Mcp.ServerConfig, error: unknown) {
