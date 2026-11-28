@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { InputRenderable, TextareaRenderable } from "@opentui/core"
+import { InputRenderable, Renderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import type { FormFields, LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
@@ -508,7 +508,45 @@ test("keeps the OAuth paste prompt layout without new designs", async () => {
   expect(frame.split("Authorize opensend in your browser.").length).toBe(2)
 })
 
-async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
+test("keeps OAuth fields and actions visible in a short terminal", async () => {
+  await using fixture = await renderOAuth({
+    paste: true,
+    newDesigns: true,
+    url: `https://example.com/authorize?${"x".repeat(600)}ENDMARKER`,
+    width: 50,
+    height: 12,
+  })
+  let frame = await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL") && frame.includes("copy link"))
+  expect(frame).toContain("submit")
+
+  const find = (node: Renderable): Renderable | undefined =>
+    node.id === "oauth-paste-description" ? node : node.getChildren().map(find).find(Boolean)
+  const scroll = find(fixture.app.renderer.root)
+  if (!(scroll instanceof ScrollBoxRenderable)) throw new Error("expected scrollable authorization description")
+  await fixture.app.mockMouse.scroll(scroll.viewport.x + 1, scroll.viewport.y, "down")
+  await fixture.app.waitFor(() => scroll.scrollTop > 0)
+  await fixture.app.renderOnce()
+  frame = fixture.app.captureCharFrame()
+  expect(frame).toContain("Redirect URL")
+  expect(frame).toContain("copy link")
+  expect(frame).toContain("submit")
+})
+
+test("shows the OAuth authorization link in a roomy terminal", async () => {
+  await using fixture = await renderOAuth({
+    paste: true,
+    newDesigns: true,
+    url: `https://example.com/authorize?${"x".repeat(1500)}`,
+    width: 100,
+    height: 24,
+  })
+  const frame = await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL") && frame.includes("copy link"))
+  expect(frame).toContain("https://example.com/authorize?")
+  expect(frame).toContain("Redirect URL")
+  expect(frame).toContain("copy link")
+})
+
+async function renderOAuth(input: { paste?: true; newDesigns: boolean; url?: string; width?: number; height?: number }) {
   const calls = createFetch(async (url, request) => {
     const directory = decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
     const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
@@ -530,7 +568,7 @@ async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
         location,
         data: {
           attemptID: "att_test",
-          url: "https://opensend.example.com/api/auth/oauth2/authorize?response_type=code",
+          url: input.url ?? "https://opensend.example.com/api/auth/oauth2/authorize?response_type=code",
           instructions: "Authorize opensend in your browser. This window will close automatically.",
           mode: "auto",
           ...(input.paste ? { paste: true } : {}),
@@ -577,7 +615,7 @@ async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 100, height: 30, kittyKeyboard: true },
+    { width: input.width ?? 100, height: input.height ?? 30, kittyKeyboard: true },
   )
   app.renderer.start()
 
