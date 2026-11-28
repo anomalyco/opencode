@@ -1056,6 +1056,33 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.session.get(sessionID)).title).toBe("Manual title")
   })
 
+  scenario("exposes each step's assistant message id on model.request", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const stepIds: Array<SessionMessage.ID | undefined> = []
+    yield* hooks.register("session", "model.request", (event) =>
+      Effect.sync(() => {
+        stepIds.push(event.assistantMessageID)
+      }),
+    )
+    yield* s.llm.push(
+      TestLLM.toolCall("call-step-id", "echo", { text: "tool output" }),
+      TestLLM.text("Final answer", "text-step-id"),
+    )
+    yield* s.runPrompt("Two steps")
+
+    expect(s.requests).toHaveLength(2)
+    expect(stepIds).toHaveLength(2)
+    const first = stepIds[0]
+    const second = stepIds[1]
+    expect(first).toEqual(expect.any(String))
+    expect(second).toEqual(expect.any(String))
+    expect(first).not.toBe(second)
+    if (first === undefined || second === undefined) throw new Error("missing assistant message id on model.request")
+    const assistants = (yield* s.messages).filter((message) => message.type === "assistant")
+    expect(assistants.map((message) => message.id)).toContain(first)
+    expect(assistants.map((message) => message.id)).toContain(second)
+  })
+
   scenario("coalesces title generation while a request is active", function* (s) {
     yield* prepareTitleGeneration
 
