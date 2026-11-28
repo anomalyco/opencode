@@ -6,7 +6,7 @@ import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
 import { Locale } from "../../../util/locale"
-import { scriptLabel } from "../../../util/session"
+import { backgroundScripts, scriptLabel } from "../../../util/session"
 import { useComposerTab } from "./context"
 
 export function ScriptsTab(props: { sessionID: string }) {
@@ -20,7 +20,7 @@ export function ScriptsTab(props: { sessionID: string }) {
   const runningScripts = createMemo(() =>
     data.session.get(props.sessionID)?.parentID
       ? []
-      : data.job.list(props.sessionID).filter((job) => job.kind === "codemode" && job.sessionID === props.sessionID),
+      : backgroundScripts(data.session.message.list(props.sessionID), data.job.list(props.sessionID), props.sessionID),
   )
   // Labels scan the transcript, so only while the tab shows.
   const entries = createMemo(() => {

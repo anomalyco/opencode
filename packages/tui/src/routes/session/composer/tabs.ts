@@ -2,7 +2,7 @@ import { createEffect, createMemo, on, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Plugin } from "@opencode/plugin/tui"
 import type { ComposerTab } from "./context"
-import { ownedJobs } from "../../../util/session"
+import { backgroundScripts, ownedJobs } from "../../../util/session"
 
 const order = ["subagents", "shell", "scripts", "terminals"]
 
@@ -19,7 +19,7 @@ export function busyCounts(input: {
 }) {
   const jobs = input.data.job.list(input.sessionID)
   return {
-    scripts: jobs.filter((job) => job.kind === "codemode" && job.sessionID === input.sessionID).length,
+    scripts: backgroundScripts(input.data.session.message.list(input.sessionID), jobs, input.sessionID).length,
     subagents: input.data.session
       .family(input.sessionID)
       .filter(
