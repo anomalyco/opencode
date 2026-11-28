@@ -54,6 +54,8 @@ const LayerContext = createContext<{
   readonly id: string
   /** This layer's mount, which a `close()` from inside it targets. */
   readonly attempt: number
+  /** The owner this layer renders under, which dialogs opened from inside it render under too. */
+  readonly owner: Owner
   /** True from the moment this dialog starts closing, through its exit animation. */
   readonly closing: Accessor<boolean>
   setBackdropDismiss: (value: boolean) => void
@@ -218,6 +220,7 @@ function init(container: () => HTMLElement | undefined) {
                   value={{
                     id: effect.id,
                     attempt,
+                    owner: effect.request.owner,
                     closing,
                     setBackdropDismiss: (enabled) => dispatch({ type: "layer.backdrop-dismiss", attempt, enabled }),
                     setExitDuration: (exitMs) => dispatch({ type: "layer.exit-duration", attempt, exitMs }),
@@ -249,8 +252,6 @@ function init(container: () => HTMLElement | undefined) {
   return {
     dispatch,
     active: () => selectTopDialog(machine()),
-    /** Stacked dialogs render under the owner of the dialog below, so they see the same context. */
-    base: () => layers().at(-1)?.owner,
     open: (mode: "show" | "push", request: DialogRequest, id: string | undefined, aborted: boolean) => {
       const focus = captureFocus()
 
@@ -337,6 +338,11 @@ export function useDialog() {
     throw new Error("useDialog must be used within a DialogProvider")
   }
 
+  // A dialog opened from inside another renders under the same owner as that one, which outlives it when it is replaced.
+  // Opened from anywhere else, it renders under the caller, so it sees the caller's context rather than whichever
+  // dialog happens to be on top, such as a palette still closing after it ran the command that opened this one.
+  const base = layer?.owner ?? owner
+
   return {
     /** The top dialog that is open. One that has started closing no longer counts, though it waits to be disposed. */
     get active() {
@@ -351,13 +357,9 @@ export function useDialog() {
      * signal aborts, the open neither mounts nor replaces anything and onClose runs as for a replaced dialog.
      */
     show(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
-      const base = ctx.base() ?? owner
-
       return startTransition(() => ctx.open("show", { element, owner: base, onClose }, id, !!signal?.aborted))
     },
     push(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
-      const base = ctx.base() ?? owner
-
       return startTransition(() => ctx.open("push", { element, owner: base, onClose }, id, !!signal?.aborted))
     },
     /**
