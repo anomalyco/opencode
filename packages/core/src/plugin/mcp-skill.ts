@@ -4,7 +4,8 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Hash } from "@opencode/util/hash"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
-import { McpClient } from "../mcp/client.js"
+import type { McpClient } from "../mcp/client.js"
+import { McpError } from "../mcp/errors.js"
 import { Mcp } from "../mcp/index.js"
 import { AbsolutePath } from "../schema.js"
 import { Skill } from "../skill.js"
@@ -63,7 +64,7 @@ export const Plugin = define({
               new Skill.LoadError({
                 skill: id,
                 reason:
-                  error instanceof McpClient.SkillMismatchError
+                  error instanceof McpError.SkillMismatchError
                     ? { _tag: "Mismatch", file: file ?? Skill.manifest, check: error.check, detail: error.message }
                     : { _tag: "Unavailable", file: file ?? Skill.manifest, detail: error.message },
               }),

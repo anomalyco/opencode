@@ -7,6 +7,7 @@ import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import type { McpClient } from "./client.js"
+import { McpError } from "./errors.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
 
@@ -178,9 +179,6 @@ export function make(input: Input): Connection {
       yield* input.events.failed({ status: "needs_auth", error: message }, false)
     }).pipe(input.lock)
 
-  // The client module is loaded lazily, so match its tagged errors by tag rather than class.
-  const tagged = (error: Error, tag: string) => "_tag" in error && error._tag === tag
-
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
@@ -189,12 +187,12 @@ export function make(input: Input): Connection {
     const attempt = (target: McpClient.Connection) =>
       run(target).pipe(
         Effect.tapError((error) =>
-          tagged(error, "MCP.NeedsAuthError") ? refused(target, error.message) : Effect.void,
+          error instanceof McpError.NeedsAuthError ? refused(target, error.message) : Effect.void,
         ),
       )
     return attempt(client).pipe(
       Effect.catchIf(
-        (error) => tagged(error, "MCP.SessionExpiredError"),
+        (error) => error instanceof McpError.SessionExpiredError,
         (error) =>
           recover(client).pipe(Effect.flatMap(() => (state.client ? attempt(state.client) : Effect.fail(error)))),
       ),
@@ -271,10 +269,10 @@ export function make(input: Input): Connection {
       state.scope = undefined
       const error = Cause.squash(result.cause)
       yield* input.events.failed(
-        error instanceof McpClient.NeedsAuthError
+        error instanceof McpError.NeedsAuthError
           ? { status: "needs_auth", error: error.message }
           : { status: "failed", error: error instanceof Error ? error.message : String(error) },
-        error instanceof McpClient.ConnectError && error.answered === true,
+        error instanceof McpError.ConnectError && error.answered === true,
       )
     }).pipe(
       Effect.ensuring(input.events.settled),
