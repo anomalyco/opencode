@@ -35,10 +35,11 @@ $ ssh -L 49374:127.0.0.1:49374 my-server
 By default the server listens only on localhost. Its port depends on the
 platform:
 
-| Platform              | Default port |
-| --------------------- | ------------ |
-| macOS, Linux, and WSL | 49374        |
-| Windows               | 28894        |
+| Platform        | Default port |
+| --------------- | ------------ |
+| macOS and Linux | 49374        |
+| Windows         | 28894        |
+| WSL             | 24798        |
 
 Windows reserves ports from 49152 up, and WSL mirrored networking reserves
 another block below that. Print the current address with
