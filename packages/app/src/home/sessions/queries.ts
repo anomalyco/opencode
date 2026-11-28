@@ -1,8 +1,10 @@
 import type { SessionInfo } from "@opencode/client/promise"
+import { containsDirectory, sameDirectory } from "@opencode/util/path"
 import { queryOptions, skipToken } from "@tanstack/solid-query"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import type { LocalProject } from "@/shell/state/layout"
+import { ProjectID } from "@opencode/schema/project-id"
 import { workspaceSelectionDirectories } from "@/workspaces/paths"
 import { isSessionNotFoundError } from "@/runtime/server/errors"
 import { looksLikeSessionID } from "@/session/search"
@@ -28,8 +30,28 @@ export function homeSessionsQuery(conn: ServerConnection.Any | undefined, ctx: S
   })
 }
 
-export function projectSessionDirectories(project: LocalProject) {
-  return [project.worktree, ...workspaceSelectionDirectories(project, [])]
+export function projectSessionDirectories(project: LocalProject, projects: readonly LocalProject[]) {
+  const workspaces = workspaceSelectionDirectories(project, [])
+
+  if (project.id !== ProjectID.global) return [project.worktree, ...workspaces]
+
+  // An added ancestor owns its own root, but must not mask workspaces inside the selected project.
+  const roots = projects.map((item) => ({
+    directory: item.worktree,
+    containsProject: containsDirectory(item.worktree, project.worktree),
+  }))
+
+  return [
+    project.worktree,
+    ...workspaces.filter(
+      (directory) =>
+        !roots.some((root) =>
+          root.containsProject
+            ? sameDirectory(root.directory, directory)
+            : containsDirectory(root.directory, directory),
+        ),
+    ),
+  ]
 }
 
 export async function lookupHomeSession(ctx: ServerCtx, sessionID: string, signal?: AbortSignal) {

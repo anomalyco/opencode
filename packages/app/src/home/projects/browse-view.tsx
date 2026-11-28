@@ -124,7 +124,7 @@ function ProjectSessions(props: { target: ProjectBrowserTarget; back: () => void
     () => context()?.projects.forDirectory(props.target.directory) ?? { worktree: props.target.directory },
   )
 
-  const directories = createMemo(() => projectSessionDirectories(project()))
+  const directories = createMemo(() => projectSessionDirectories(project(), context()?.projects.used() ?? []))
 
   const unavailable = () => !context() || !canUseServer(global.servers.health[props.target.server])
 
