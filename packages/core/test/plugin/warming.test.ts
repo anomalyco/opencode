@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Message } from "@opencode/ai/effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import { Document, Info } from "@opencode/schema/config"
 import { Event } from "@opencode/schema/event"
@@ -13,6 +14,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionMessage } from "@opencode/core/session/message"
 import { Clock, DateTime, Duration, Effect, Exit, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../lib/effect"
@@ -44,26 +46,49 @@ const context: SessionContext = {
 const hit = { read: 1000, write: 10 }
 const miss = { read: 0, write: 1000 }
 const unreported = { read: 0, write: 0 }
+const cachedPricing: Model.Info["cost"] = [
+  {
+    input: Money.USDPerMillionTokens.make(3),
+    output: Money.USDPerMillionTokens.make(15),
+    cache: {
+      read: Money.USDPerMillionTokens.make(0.15),
+      write: Money.USDPerMillionTokens.zero,
+    },
+  },
+]
+
+type PingUsage = { readonly input?: number; readonly read: number; readonly write: number }
 
 /**
- * Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cache`. Each ping
- * reports the next cache usage in `usage` and takes `ping` to respond.
+ * Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cost` and cache
+ * settings. Each ping reports the next cache usage in `usage` and takes `ping` to respond. When set, `generateModel`
+ * handles generate requests.
  */
 const run = Effect.fnUntraced(function* (
   warming: unknown,
   cache?: Provider.Cache,
-  usage: ReadonlyArray<typeof hit> = [],
-  ping = Duration.zero,
+  usage: ReadonlyArray<PingUsage> = [],
+  options?: {
+    readonly ping?: Duration.Input
+    readonly cost?: Model.Info["cost"]
+    readonly generateModel?: Model.Info
+  },
 ) {
+  const ping = options?.ping ?? Duration.zero
+  const cost = options?.cost ?? []
+  const generateModel = options?.generateModel
   const warms: number[] = []
   const events = yield* Queue.unbounded<
-    SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
+    SessionEvent.Step.Ended | SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
   >()
   const hooks = new Map<string, (input: SessionContext) => Effect.Effect<void>>()
+  const catalog = generateModel
+    ? [{ ...model, cost, settings: { cache } }, generateModel]
+    : [{ ...model, cost, settings: { cache } }]
   yield* WarmingPlugin.Plugin.effect(
     host({
       model: {
-        list: () => Effect.succeed({ location: { directory }, data: [{ ...model, settings: { cache } }] }),
+        list: () => Effect.succeed({ location: { directory }, data: catalog }),
         default: () => Effect.die("unused model.default"),
         transform: () => Effect.die("unused model.transform"),
         reload: () => Effect.die("unused model.reload"),
@@ -71,15 +96,32 @@ const run = Effect.fnUntraced(function* (
       event: { subscribe: () => Stream.fromQueue(events) },
       session: {
         get: () => Effect.succeed(session),
-        generate: () =>
-          Clock.currentTimeMillis.pipe(
-            Effect.map((now) => {
-              const cache = usage[warms.length] ?? unreported
-              warms.push(now / 60_000)
-              return { text: "OK", tokens: { input: 0, output: 1, reasoning: 0, cache }, cost: Money.USD.zero }
-            }),
-            Effect.tap(() => Effect.sleep(ping)),
-          ),
+        generate: (input) =>
+          Effect.gen(function* () {
+            if (generateModel) {
+              const callback = hooks.get("generate")
+              if (callback)
+                yield* callback({
+                  ...context,
+                  model: { id: generateModel.id, providerID: generateModel.providerID },
+                  messages: [Message.user(input.prompt)],
+                })
+            }
+            const now = yield* Clock.currentTimeMillis
+            const next = usage[warms.length] ?? unreported
+            warms.push(now / 60_000)
+            yield* Effect.sleep(ping)
+            return {
+              text: "OK",
+              tokens: {
+                input: next.input ?? 0,
+                output: 1,
+                reasoning: 0,
+                cache: { read: next.read, write: next.write },
+              },
+              cost: Money.USD.zero,
+            }
+          }),
         hook: (name, callback) => {
           hooks.set(name, callback as (input: SessionContext) => Effect.Effect<void>)
           return Effect.succeed({ dispose: Effect.void })
@@ -91,9 +133,11 @@ const run = Effect.fnUntraced(function* (
       Config.testLayer([new Document({ type: "document", info: Schema.decodeUnknownSync(Info)({ warming }) })]),
     ),
   )
-  const hook = (name: string) => {
+  const hook = (name: string, override?: Partial<SessionContext>) => {
     const callback = hooks.get(name)
-    return callback ? callback({ ...context }) : Effect.die(`warming plugin did not register a ${name} hook`)
+    return callback
+      ? callback({ ...context, ...override })
+      : Effect.die(`warming plugin did not register a ${name} hook`)
   }
   const durable = { aggregateID: sessionID, seq: Event.Seq.make(0), version: Event.Version.make(1) }
   const emit = (event: Effect.Effect<void>) => event.pipe(Effect.andThen(Effect.yieldNow))
@@ -101,6 +145,29 @@ const run = Effect.fnUntraced(function* (
   const send = hook("context")
   /** A compaction request being sent. */
   const compact = hook("compaction")
+  const compactWith = (ref: SessionContext["model"]) => hook("compaction", { model: ref })
+  /** A step ending with the given token usage. */
+  const stepEnd = (tokens: PingUsage) =>
+    emit(
+      Queue.offer(events, {
+        id: Event.ID.create(),
+        created: 0,
+        durable,
+        type: "session.step.ended",
+        data: {
+          sessionID,
+          assistantMessageID: SessionMessage.ID.make("msg_warming_test"),
+          finish: "stop",
+          cost: Money.USD.zero,
+          tokens: {
+            input: tokens.input ?? 0,
+            output: 1,
+            reasoning: 0,
+            cache: { read: tokens.read, write: tokens.write },
+          },
+        },
+      }),
+    )
   /** The turn ending. */
   const end = emit(
     Queue.offer(events, {
@@ -127,7 +194,7 @@ const run = Effect.fnUntraced(function* (
   /** One whole turn whose response ends right away. */
   const turn = send.pipe(Effect.andThen(end))
   const at = (minutes: number) => TestClock.setTime(minutes * 60_000).pipe(Effect.andThen(Effect.yieldNow))
-  return { warms, send, end, compact, compactionFailed, remove, turn, at }
+  return { warms, send, stepEnd, end, compact, compactWith, compactionFailed, remove, turn, at }
 })
 
 describe("WarmingPlugin interval", () => {
@@ -191,7 +258,119 @@ describe("WarmingPlugin cache miss", () => {
 
   it.effect("doesn't count a ping without cache usage as a miss", () =>
     Effect.gen(function* () {
-      const warming = yield* run(true, undefined, [unreported, unreported])
+      const zeroCost: Model.Info["cost"] = [
+        {
+          input: Money.USDPerMillionTokens.zero,
+          output: Money.USDPerMillionTokens.zero,
+          cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+        },
+      ]
+      const warming = yield* run(
+        true,
+        undefined,
+        [
+          { input: 1000, read: 0, write: 0 },
+          { input: 1000, read: 0, write: 0 },
+        ],
+        { cost: zeroCost },
+      )
+      yield* warming.turn
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 8])
+    }),
+  )
+
+  it.effect("stops warming an implicit-cache model on the first miss when catalog pricing includes cache reads", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(
+        true,
+        undefined,
+        [
+          { input: 1000, read: 0, write: 0 },
+          { input: 10, read: 1000, write: 0 },
+        ],
+        { cost: cachedPricing },
+      )
+      yield* warming.turn
+      for (const minutes of [4, 8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("stops warming an unpriced implicit-cache model after an earlier ping hits and a later ping misses", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [
+        { input: 10, read: 1000, write: 0 },
+        { input: 1000, read: 0, write: 0 },
+        { input: 10, read: 1000, write: 0 },
+      ])
+      yield* warming.turn
+      for (const minutes of [4, 8, 12, 16]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4, 8])
+    }),
+  )
+
+  it.effect("stops warming an implicit-cache model without catalog pricing after a step reports cache reads", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [
+        { input: 1000, read: 0, write: 0 },
+        { input: 10, read: 1000, write: 0 },
+      ])
+      yield* warming.send
+      yield* warming.stepEnd({ input: 10, read: 1000, write: 0 })
+      yield* warming.end
+      for (const minutes of [4, 8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("doesn't let a compaction hook on another model overwrite the step model before step.ended", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(
+        true,
+        undefined,
+        [
+          { input: 1000, read: 0, write: 0 },
+          { input: 10, read: 1000, write: 0 },
+        ],
+        { generateModel: model },
+      )
+      yield* warming.send
+      yield* warming.compactWith({
+        id: Model.ID.make("compaction-model"),
+        providerID: model.providerID,
+      })
+      yield* warming.stepEnd({ input: 10, read: 1000, write: 0 })
+      yield* warming.end
+      for (const minutes of [4, 8, 12]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("stops warming after a partial implicit-cache miss without catalog pricing", () =>
+    Effect.gen(function* () {
+      const warming = yield* run(true, undefined, [
+        { input: 1000, read: 200, write: 0 },
+        { input: 10, read: 1000, write: 0 },
+      ])
+      yield* warming.turn
+      for (const minutes of [4, 8]) yield* warming.at(minutes)
+      expect(warming.warms).toEqual([4])
+    }),
+  )
+
+  it.effect("uses the generate request model rather than the scheduling model to judge cache misses", () =>
+    Effect.gen(function* () {
+      const nonReporting = Model.Info.default(Provider.ID.make("test"), Model.ID.make("local-generate"))
+      const warming = yield* run(
+        true,
+        undefined,
+        [
+          { input: 1000, read: 0, write: 0 },
+          { input: 1000, read: 0, write: 0 },
+        ],
+        { cost: cachedPricing, generateModel: nonReporting },
+      )
       yield* warming.turn
       for (const minutes of [4, 8]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4, 8])
@@ -200,7 +379,7 @@ describe("WarmingPlugin cache miss", () => {
 
   it.effect("keeps warming when a request is sent while a missed ping responds", () =>
     Effect.gen(function* () {
-      const warming = yield* run(true, { ttl: "5m" }, [miss, hit], Duration.seconds(30))
+      const warming = yield* run(true, { ttl: "5m" }, [miss, hit], { ping: Duration.seconds(30) })
       yield* warming.turn
       yield* warming.at(4.5)
       yield* warming.at(4.75)
@@ -225,7 +404,7 @@ describe("WarmingPlugin timing", () => {
 
   it.effect("counts the next interval from when a ping was sent", () =>
     Effect.gen(function* () {
-      const warming = yield* run(true, { ttl: "5m" }, [], Duration.seconds(30))
+      const warming = yield* run(true, { ttl: "5m" }, [], { ping: Duration.seconds(30) })
       yield* warming.turn
       for (const minutes of [4.5, 9, 9.5]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4.5, 9])
@@ -264,7 +443,7 @@ describe("WarmingPlugin lifecycle", () => {
   it.effect("keeps one loop when warming is turned off and on again before the next ping", () =>
     Effect.gen(function* () {
       const cache: { warming: boolean } = { warming: true }
-      const warming = yield* run(false, cache, [], Duration.seconds(30))
+      const warming = yield* run(false, cache, [], { ping: Duration.seconds(30) })
       yield* warming.turn
       yield* warming.at(1)
       cache.warming = false
