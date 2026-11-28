@@ -528,7 +528,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         list: (input) => response(vcs.branches({ search: input?.search, limit: input?.limit })),
       },
       status: () => response(vcs.status()),
-      diff: (input) => response(vcs.diff(input.mode, { context: input.context, base: input.base })),
+      diff: (input) =>
+        response(vcs.diff(input.mode, { context: input.context, base: input.base, untracked: input.untracked })),
       transform: vcs.transform,
       reload: vcs.reload,
     },
