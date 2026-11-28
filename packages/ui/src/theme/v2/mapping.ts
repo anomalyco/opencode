@@ -69,7 +69,7 @@ const light = {
   "v2-state-fg-success": ref("v2-green-800"),
   "v2-state-border-success": ref("v2-green-300"),
   "v2-state-bg-warning": ref("v2-yellow-100"),
-  "v2-state-fg-warning": ref("v2-yellow-800"),
+  "v2-state-fg-warning": ref("v2-yellow-1100"),
   "v2-state-border-warning": ref("v2-yellow-300"),
   "v2-state-bg-danger": ref("v2-red-100"),
   "v2-state-fg-danger": ref("v2-red-800"),

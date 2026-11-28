@@ -60,7 +60,7 @@
     --v2-state-fg-success: var(--v2-green-800);
     --v2-state-border-success: var(--v2-green-300);
     --v2-state-bg-warning: var(--v2-yellow-100);
-    --v2-state-fg-warning: var(--v2-yellow-800);
+    --v2-state-fg-warning: var(--v2-yellow-1100);
     --v2-state-border-warning: var(--v2-yellow-300);
     --v2-state-bg-danger: var(--v2-red-100);
     --v2-state-fg-danger: var(--v2-red-800);
@@ -318,7 +318,7 @@
     --v2-state-fg-success: var(--v2-green-800);
     --v2-state-border-success: var(--v2-green-300);
     --v2-state-bg-warning: var(--v2-yellow-100);
-    --v2-state-fg-warning: var(--v2-yellow-800);
+    --v2-state-fg-warning: var(--v2-yellow-1100);
     --v2-state-border-warning: var(--v2-yellow-300);
     --v2-state-bg-danger: var(--v2-red-100);
     --v2-state-fg-danger: var(--v2-red-800);
