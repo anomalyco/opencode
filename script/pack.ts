@@ -28,6 +28,7 @@ for (const name of [
   "codemode",
   "theme",
   "ai",
+  "ai-sdk-provider",
   "util",
   "protocol",
   "client",
