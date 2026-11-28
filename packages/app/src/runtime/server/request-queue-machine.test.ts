@@ -26,7 +26,7 @@ function run(events: readonly RequestQueueEvent[], options = config, from = crea
 
 const arrive = (url: string, now: number, priority: RequestPriority = 0, slow = false): RequestQueueEvent => ({
   type: "request.arrived",
-  method: priority === 2 ? "POST" : "GET",
+  method: priority === 3 ? "POST" : "GET",
   url,
   slow,
   priority,
@@ -49,7 +49,7 @@ describe("transitionRequestQueue", () => {
   })
 
   test("a starving background request is reported even when higher priorities queue ahead of it", () => {
-    const queued = run([arrive("/busy", 0), arrive("/background", 0), arrive("/write", 1_900, 2)])
+    const queued = run([arrive("/busy", 0), arrive("/background", 0), arrive("/write", 1_900, 3)])
     expect(queued.state.status === "queued" && queued.state.waiting.map((entry) => entry.url)).toEqual([
       "/write",
       "/background",
