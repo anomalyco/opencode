@@ -5,15 +5,13 @@ import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
   Context as ToolContext,
-  Error,
   Info,
   Metadata,
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Identifier } from "@opencode/schema/identifier"
-import { CallID } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
+import { CallID, Error } from "@opencode/schema/tool"
+import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { FileAccess } from "../file-access.js"
@@ -166,25 +164,36 @@ export const FullInput = Schema.Struct({
   }),
 })
 
-export const create = (
-  inventory: Inventory,
-  executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
-  permission: Permission.Interface,
-  /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
-  services?: Context.Context<Services>,
+const created = new WeakSet<Info["execute"]>()
+
+/** Whether a registration is a tool `create` made, the only kind the reserved name `execute` allows. */
+export const isTool = (tool: Info) => created.has(tool.execute)
+
+/** The `execute` tool, over the tools its call offers inside Code Mode (`context.tool`). */
+export const create = (options: {
+  readonly permission: Permission.Interface
+  /** With `full_codemode`, the Location's services, which turn on the experimental `path` and `Bun` globals. */
+  readonly services?: Context.Context<Services>
   /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
-  api?: Context.Context<Api>,
+  readonly api?: Context.Context<Api>
   /** With `codemode_agents`, what runs agent() and llm(). Without it, programs don't get them. */
-  agents?: Context.Context<Agents>,
-) => {
-  return {
+  readonly agents?: Context.Context<Agents>
+}) => {
+  const tool = {
     name: "execute",
-    description: description(services !== undefined),
-    input: services ? FullInput : CodeMode.Input,
+    description: description(options.services !== undefined),
+    input: options.services ? FullInput : CodeMode.Input,
     freeform: { type: "text", field: "code" },
     output: ExecuteOutput,
+    // Listed to the model directly; the tools it runs are the ones inside Code Mode.
+    options: { codemode: false },
     execute: ({ code }, context) =>
       Effect.gen(function* () {
+        // A program can't start a program, which would also let tools loop through Code Mode.
+        if ((yield* Parent) !== undefined)
+          return yield* new Error({ message: "execute can't be called from inside another tool." })
+        const reachable = context.tool.list()
+        const inventory = { tools: reachable.codemode, namespaces: reachable.namespaces }
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         // Changed only under the lock; each publish and the result take a copy.
@@ -220,30 +229,19 @@ export const create = (
         const diffs = CodeModeDiffs.make(record(() => {}))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: runExtensions(services !== undefined, agents !== undefined),
+            extensions: runExtensions(options.services !== undefined, options.agents !== undefined),
           })
           .pipe(
             Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
+              executeTool: (name, _tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
-                  // until the program ends its permission requests show on this call's.
-                  const id = CallID.make(`call_${Identifier.ascending()}`)
-                  yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
-                  // The program sees the same failure text the model gets for a direct call.
-                  const call = executeTool(name, tool, input, {
-                    ...context,
-                    id,
-                    codemode: true,
-                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
-                    progress: () => Effect.void,
-                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
-                    cancel: undefined,
-                  }).pipe(
-                    Effect.provideService(Parent, context.id),
-                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
-                  )
+                  // A nested call with its own ID. The program sees the same failure text the model gets for a direct call.
+                  const call = context.tool
+                    .call(name, input, { codemode: true })
+                    .pipe(
+                      Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
+                    )
                   // The name the program called, so a namespaced tool that happens to be named edit or write records nothing.
                   const executed = yield* CodeModeDiffs.around(diffs, name, input, call)
                   const content = resultContent(executed)
@@ -259,7 +257,9 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provide(yield* executionServices(context, permission, services, api, agents)),
+            Effect.provide(
+              yield* executionServices(context, options.permission, options.services, options.api, options.agents),
+            ),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
         const toolCalls = calls.slice()
@@ -295,6 +295,8 @@ export const create = (
         }
       }).pipe(Effect.scoped),
   } satisfies Info
+  created.add(tool.execute)
+  return tool
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
@@ -392,15 +394,15 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
 const runtimes = new WeakMap<
-  Inventory,
+  ReadonlyMap<string, Info>,
   CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | CodeModeAgents.Service>
 >()
 
 function runtime(inventory: Inventory) {
-  const cached = runtimes.get(inventory)
+  const cached = runtimes.get(inventory.tools)
   if (cached) return cached
   const created = CodeMode.make({ tools: inventoryTools(inventory), extensions, hooks: runHooks })
-  runtimes.set(inventory, created)
+  runtimes.set(inventory.tools, created)
   return created
 }
 

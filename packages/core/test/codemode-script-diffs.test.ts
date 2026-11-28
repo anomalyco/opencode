@@ -25,7 +25,7 @@ import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { registerToolPlugin, toolIdentity } from "./lib/tool"
+import { registerToolPlugin, toolIdentity, toolNodes } from "./lib/tool"
 
 // The real write, edit and patch tools, called from a script: their own results are what the script records, so this
 // pins the shape and wording each returns.
@@ -82,7 +82,7 @@ const run = (directory: string, code: string) =>
     Effect.provide(
       AppNodeBuilder.build(
         LayerNode.group([
-          Tool.node,
+          toolNodes,
           FileAccess.node,
           FileMutation.node,
           FileWrite.node,

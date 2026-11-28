@@ -8,6 +8,7 @@ import { Tool } from "@opencode/core/tool"
 import { Effect, Schema } from "effect"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
+import { toolNodes } from "../lib/tool"
 
 const echo: CodeModeCatalog.Tool = {
   type: "tool",
@@ -86,7 +87,7 @@ describe("CodeModeInstructions", () => {
       output: Schema.String,
       execute: () => Effect.succeed({ output: "zeta" }),
     }
-    const layer = AppNodeBuilder.build(Tool.node, [
+    const layer = AppNodeBuilder.build(toolNodes, [
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
     ])
 

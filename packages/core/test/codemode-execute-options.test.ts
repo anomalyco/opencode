@@ -28,12 +28,10 @@ const it = testEffect(
 )
 
 const tool = (full: boolean) =>
-  CodeModeTool.create(
-    { tools: new Map(), namespaces: new Map() },
-    () => Effect.die("unused"),
-    {} as Permission.Interface,
-    full ? (Context.empty() as never) : undefined,
-  )
+  CodeModeTool.create({
+    permission: {} as Permission.Interface,
+    services: full ? (Context.empty() as never) : undefined,
+  })
 
 const context = (sessionID: string): Tool.Context => ({
   sessionID: Session.ID.make(sessionID),

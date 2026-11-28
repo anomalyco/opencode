@@ -84,8 +84,7 @@ import {
   toolDefinitions,
   toolIdentity,
   toolNodeReplacements,
-  waitForTool,
-} from "./lib/tool"
+  waitForTool, toolNodes } from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
@@ -625,7 +624,7 @@ const permissions = permissionLayer({
 const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const outputData = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-mcp-output-"))
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
+  AppNodeBuilder.build(LayerNode.group([toolNodes, McpTool.node]), [
     ...toolNodeReplacements(permissions),
     Mcp.node.replace(mcp),
     Bus.node.replace(events),
@@ -2809,7 +2808,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
     }).pipe(
       Effect.provide(
         Layer.fresh(
-          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          AppNodeBuilder.build(LayerNode.group([toolNodes, McpTool.node, Bus.node]), [
             ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
@@ -2860,7 +2859,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+      AppNodeBuilder.build(LayerNode.group([toolNodes, McpTool.node, Bus.node]), [
         ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
@@ -2894,7 +2893,7 @@ const gatedServer = Effect.gen(function* () {
 
 // The real Mcp layer behind the tool registry; the bus never delivers, so only flush can register tools.
 const startupRegistry = (url: string) =>
-  AppNodeBuilder.build(LayerNode.group([Mcp.node, Tool.node, McpTool.node]), [
+  AppNodeBuilder.build(LayerNode.group([Mcp.node, toolNodes, McpTool.node]), [
     ...toolNodeReplacements(permissions),
     Mcp.node.replace(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false }))),
     Bus.node.replace(events),

@@ -20,7 +20,7 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, toolNodes } from "./lib/tool"
 
 const toolPaths = [
   "opencode.artifact_create",
@@ -50,7 +50,7 @@ const buildLayer = (artifactsEnabled: boolean, dir: string) => {
       Location.node,
       Permission.node,
       Session.node,
-      Tool.node,
+      toolNodes,
     ]),
     [
       Config.node.replace(Config.testLayer(entries)),

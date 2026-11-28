@@ -45,7 +45,6 @@ import { Rpc } from "@opencode/core/rpc"
 import { Skill } from "@opencode/core/skill"
 import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { Watcher } from "@opencode/core/filesystem/watcher"
-import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { WebSearch } from "@opencode/core/websearch"
@@ -55,6 +54,7 @@ import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
 import { offlineModels } from "../fixture/models"
+import { toolNodes } from "../lib/tool"
 
 const npmLayer = Layer.succeed(
   Npm.Service,
@@ -153,7 +153,7 @@ export const makePluginTestLayer = (
       Rpc.node,
       Skill.node,
       SkillDiscovery.node,
-      Tool.node,
+      toolNodes,
       Vcs.node,
       VideoGeneration.node,
       Watcher.node,

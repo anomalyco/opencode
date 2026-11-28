@@ -99,8 +99,10 @@ import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
+import { CodeModePlugin } from "../tool/plugin/codemode.js"
 import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
 import { CodeModeAgents } from "../codemode/agents.js"
+import { CodeModeApi } from "../codemode/api.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -143,6 +145,7 @@ const nodes = [
   BrowserTunnelGateway.node,
   BlobStore.node,
   CodeModeAgents.node,
+  CodeModeApi.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -248,6 +251,7 @@ const pre = [
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
+  CodeModePlugin.Plugin,
   CodeModeAgentsPlugin.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,

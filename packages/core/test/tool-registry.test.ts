@@ -13,7 +13,14 @@ import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { codeModeListings, executeTool, toolDefinitions, toolNodeReplacements } from "./lib/tool"
+import {
+  codeModeListings,
+  executeTool,
+  toolDefinitions,
+  toolNodeReplacements,
+  toolNodes,
+  registerCodeMode,
+} from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
@@ -41,7 +48,7 @@ const imageStore = Layer.mock(Image.Service, {
     })
   },
 })
-const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
+const registryLayer = AppNodeBuilder.build(LayerNode.group([toolNodes, PluginHooks.node, Flag.node, Permission.node]), [
   ...toolNodeReplacements(),
   Image.node.replace(imageStore),
 ])
@@ -82,7 +89,8 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
 describe("Code Mode path and Bun", () => {
   const types = Effect.gen(function* () {
     const tools = yield* Tool.Service
-    const snapshot = yield* tools.snapshot(undefined, { services: codeModeServices("/session/dir") })
+    yield* registerCodeMode(codeModeServices("/session/dir"))
+    const snapshot = yield* tools.snapshot()
     const result = yield* snapshot.execute({
       ...call("execute"),
       call: {
@@ -114,7 +122,7 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make() }, { namespace: "acme", codemode: false })
       yield* service.transform((editor) => {
-        expect(editor.list().map((tool) => tool.id)).toEqual(["acme_echo"])
+        expect(editor.list().map((tool) => tool.id)).toEqual(["execute", "acme_echo"])
         expect(editor.get("acme_echo")?.id).toBe("acme_echo")
         expect(editor.get("acme_echo")?.name).toBe("echo")
         expect(editor.get("missing")).toBeUndefined()
@@ -1348,6 +1356,30 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("refuses to run Code Mode from inside another tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const outer: Info = {
+        name: "outer",
+        description: "Starts a program",
+        input: Schema.Struct({}),
+        execute: (_, context) =>
+          context.tool
+            .call("execute", { code: "return 1" })
+            .pipe(
+              Effect.match({
+                onFailure: (error) => ({ content: error.message }),
+                onSuccess: () => ({ content: "ran" }),
+              }),
+            ),
+      }
+      yield* transform(service, { outer }, { codemode: false })
+      expect(yield* executeTool(service, call("outer"))).toMatchObject({
+        content: [{ text: "execute can't be called from inside another tool." }],
+      })
+    }),
+  )
+
   it.effect("passes complete call identity to tool execution", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1377,7 +1409,7 @@ describe("Tool", () => {
           ...identity,
           id: Tool.CallID.make("call-context"),
           progress: expect.any(Function),
-          tool: { call: expect.any(Function) },
+          tool: { call: expect.any(Function), list: expect.any(Function) },
         },
       ])
     }),
@@ -1389,12 +1421,13 @@ describe("Tool", () => {
       yield* transform(service, { count: { ...constant("1"), name: "count" } }, { namespace: "acme" })
 
       expect((yield* service.list()).map((tool) => [tool.id, tool.name])).toEqual([
+        ["execute", "execute"],
         ["echo", "echo"],
         ["acme_count", "count"],
       ])
 
       yield* service.transform((editor) => editor.remove("echo"))
-      expect((yield* service.list()).map((tool) => tool.id)).toEqual(["acme_count"])
+      expect((yield* service.list()).map((tool) => tool.id)).toEqual(["execute", "acme_count"])
     }),
   )
   ;[

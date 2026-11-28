@@ -56,9 +56,22 @@ export interface Context {
 export interface Calls {
   /**
    * Calls another registered tool as part of this call: the same input checks, `execute` hooks and permission rules as
-   * a call the model makes, with permission requests shown on this call. Fails with the tool's error.
+   * a call the model makes, with permission requests shown on this call. Fails with the tool's error. With
+   * `codemode`, it calls the way a Code Mode program does: only a tool inside Code Mode, with its Code Mode schemas.
    */
-  readonly call: (name: string, input: unknown) => Effect.Effect<Result, Error>
+  readonly call: (
+    name: string,
+    input: unknown,
+    options?: { readonly codemode?: boolean },
+  ) => Effect.Effect<Result, Error>
+  /** The tools this call may reach, by registry ID: offered to the model directly, and inside Code Mode. */
+  readonly list: () => Reachable
+}
+
+export interface Reachable {
+  readonly direct: ReadonlyMap<string, Info>
+  readonly codemode: ReadonlyMap<string, Info>
+  readonly namespaces: ReadonlyMap<string, Namespace>
 }
 
 export interface Namespace {

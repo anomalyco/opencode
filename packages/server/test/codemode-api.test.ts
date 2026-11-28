@@ -56,13 +56,7 @@ it.live("sends Code Mode opencode:// requests to the server's own router with th
       const api = Context.make(CodeModeApi.Service, Context.get(app, CodeModeApi.Service)).pipe(
         Context.add(Location.Service, yield* Location.Service),
       )
-      return yield* CodeModeTool.create(
-        { tools: new Map() },
-        () => Effect.die("The program calls no tools."),
-        permission,
-        undefined,
-        api,
-      ).execute(
+      return yield* CodeModeTool.create({ permission, api }).execute(
         {
           code: `const info = await (await fetch("opencode:///api/info")).json()
             const location = await (await fetch("opencode:///api/location")).json()

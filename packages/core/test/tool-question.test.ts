@@ -10,7 +10,7 @@ import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements, toolNodes } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_question_tool_test")
 const assertions: Permission.AssertInput[] = []
@@ -63,7 +63,7 @@ const questionToolNode = makeLocationNode({
 })
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Tool.node, questionToolNode]), [
+  AppNodeBuilder.build(LayerNode.group([toolNodes, questionToolNode]), [
     ...toolNodeReplacements(permission),
     Form.node.replace(form),
   ]),

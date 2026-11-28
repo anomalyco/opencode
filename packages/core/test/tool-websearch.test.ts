@@ -17,7 +17,7 @@ import { WebSearchMcp } from "@opencode/core/plugin/websearch/mcp"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements, toolNodes } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
 
@@ -73,7 +73,7 @@ const setup = Effect.gen(function* () {
     ),
   )
   const context = yield* Layer.build(
-    AppNodeBuilder.build(LayerNode.group([Tool.node, webSearchToolNode]), [
+    AppNodeBuilder.build(LayerNode.group([toolNodes, webSearchToolNode]), [
       ...toolNodeReplacements(
         permissionLayer({
           assert: (input) =>

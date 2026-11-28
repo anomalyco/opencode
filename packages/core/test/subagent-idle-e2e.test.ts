@@ -49,7 +49,7 @@ import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
+import { executeTool, registerCodeMode, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const e2e = testEffect(Layer.empty)
 
@@ -60,6 +60,7 @@ const pluginSupervisor = makeLocationNode({
       const hooks = yield* PluginHooks.Service
       yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
       yield* registerToolPlugin(ShellTool.Plugin)
+      yield* registerCodeMode()
     }),
   ),
   deps: [

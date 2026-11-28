@@ -134,12 +134,10 @@ describe("Code Mode Bun", () => {
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => fs.writeFile(file, "session\n"))
-        const result = yield* CodeModeTool.create(
-          { tools: new Map() },
-          () => Effect.die("The program calls no tools."),
-          yield* Permission.Service,
-          yield* CodeModeTool.services,
-        ).execute(
+        const result = yield* CodeModeTool.create({
+          permission: yield* Permission.Service,
+          services: yield* CodeModeTool.services,
+        }).execute(
           {
             code: `const written = await Bun.write("notes.txt", "one\\n")
               const notes = Bun.file("notes.txt")
@@ -150,7 +148,13 @@ describe("Code Mode Bun", () => {
               await notes.delete()
               return [...first, second, await notes.exists(), new Bun.Glob("notes.txt").scanSync()]`,
           },
-          { sessionID, ...toolIdentity, id: Tool.CallID.make("call_bun"), progress: () => Effect.void, tool: noToolCalls },
+          {
+            sessionID,
+            ...toolIdentity,
+            id: Tool.CallID.make("call_bun"),
+            progress: () => Effect.void,
+            tool: noToolCalls,
+          },
         )
 
         expect(JSON.parse(result.output.output)).toEqual([4, 4, "one\n", true, 4, true, "two\n", false, []])

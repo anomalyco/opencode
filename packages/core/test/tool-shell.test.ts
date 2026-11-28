@@ -54,7 +54,7 @@ import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, registerCodeMode } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
@@ -138,7 +138,7 @@ const executionNode = makeGlobalNode({
 
 const shellPluginSupervisor = makeLocationNode({
   name: "test/shell-plugins",
-  layer: Layer.effectDiscard(registerToolPlugin(ShellTool.Plugin)),
+  layer: Layer.effectDiscard(Effect.andThen(registerCodeMode(), registerToolPlugin(ShellTool.Plugin))),
   deps: [
     Agent.node,
     Config.node,
