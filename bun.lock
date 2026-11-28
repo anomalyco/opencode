@@ -746,16 +746,22 @@
         "@opencode/plugin": "workspace:*",
         "@opencode/protocol": "workspace:*",
         "@opencode/util": "workspace:*",
-        "@opentui/core": "catalog:",
         "effect": "catalog:",
         "ws": "8.21.0",
       },
       "devDependencies": {
+        "@opentui/core": "catalog:",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/ws": "8.18.1",
         "@typescript/native": "catalog:",
       },
+      "peerDependencies": {
+        "@opentui/core": ">=0.9.0",
+      },
+      "optionalPeers": [
+        "@opentui/core",
+      ],
     },
     "packages/stories": {
       "name": "@opencode/stories",
