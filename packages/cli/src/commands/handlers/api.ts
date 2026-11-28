@@ -1,11 +1,13 @@
 import { EOL } from "node:os"
-import { Effect, Option } from "effect"
+import { pipeline } from "node:stream/promises"
+import { Effect, Option, Predicate } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ServerConnection } from "../../services/server-connection"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
+const brokenPipeCodes = new Set(["EPIPE", "EOF", "ERR_STREAM_PREMATURE_CLOSE"])
 
 type Operation = {
   operationId?: string
@@ -40,6 +42,20 @@ export default Runtime.handler(
         body,
       }),
     )
+    const mediaType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase()
+    if (response.ok && mediaType === "text/event-stream" && response.body) {
+      const stream = response.body
+      const stdout = process.stdout
+      yield* Effect.tryPromise({
+        try: (signal) =>
+          pipeline(stream, stdout, { end: false, signal }).catch((error) => {
+            if ((stdout.errored !== null || stdout.destroyed) && isBrokenPipe(error)) return
+            throw error
+          }),
+        catch: (cause) => cause,
+      })
+      return
+    }
     const output = yield* Effect.promise(() => response.text())
     if (output) process.stdout.write(output + (output.endsWith(EOL) ? "" : EOL))
     if (!response.ok) {
@@ -48,6 +64,10 @@ export default Runtime.handler(
     }
   }),
 )
+
+function isBrokenPipe(error: unknown) {
+  return Predicate.hasProperty(error, "code") && typeof error.code === "string" && brokenPipeCodes.has(error.code)
+}
 
 export function resolveOperation(spec: OpenApi, operationID: string, params: Record<string, string>) {
   for (const [path, operations] of Object.entries(spec.paths ?? {})) {
