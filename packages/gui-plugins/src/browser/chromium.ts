@@ -18,6 +18,7 @@ import { attachChildren, releaseWorker } from "./child-targets"
 import { CodedError, missingArtifact, pageReports } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
+import { removeFilePickers } from "./file-pickers"
 import { guardMediaRequests } from "./media-gate"
 import { afterRefusal, agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
 import { cookieSite } from "./profile/sites"
@@ -1411,6 +1412,7 @@ export function createBrowserPage(
     passkeys.attach(),
     cdp.send("Page.enable"),
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
+    removeFilePickers(cdp),
     cdp.send("DOM.enable"),
     attachFrames(),
   ])).then(() => undefined).finally(() => opening?.[Symbol.dispose]())
