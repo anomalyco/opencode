@@ -33,7 +33,7 @@ import { makeMcpGroup } from "./groups/mcp.js"
 import { CredentialGroup } from "./groups/credential.js"
 import { ProjectGroup } from "./groups/project.js"
 import { WorktreeGroup } from "./groups/worktree.js"
-import { VcsGroup } from "./groups/vcs.js"
+import { makeVcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
 
@@ -52,7 +52,6 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof RpcGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ShellGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ReferenceGroup, LocationId>
-  | HttpApiGroup.AddMiddleware<typeof VcsGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ConfigGroup, LocationId>
 
 type PtyGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
@@ -109,6 +108,7 @@ type ApiGroups<
   | LocationGroup<LocationId, LocationService>
   | PtyGroups<LocationId, LocationService>
   | McpGroups<LocationId, LocationService>
+  | ReturnType<typeof makeVcsGroup<LocationId, LocationService>>
   | FormGroups<LocationId, LocationService>
   | SessionGroups<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
@@ -193,7 +193,7 @@ const makeApiFromGroup = <
     .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)
-    .add(VcsGroup.middleware(locationMiddleware))
+    .add(makeVcsGroup(locationMiddleware))
     .add(DebugGroup)
     .add(MigrationGroup)
     .add(WebSearchGroup.middleware(locationMiddleware))

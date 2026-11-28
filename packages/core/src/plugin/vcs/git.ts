@@ -62,6 +62,10 @@ export const Plugin = define({
   }),
 })
 
+export function branchInfo(proc: AppProcess.Interface, directory: string) {
+  return makeGit(proc).info(directory)
+}
+
 /**
  * Git adapter for the Vcs service. Ported from the V1 pipeline: patches are
  * batched through one `git diff` invocation where possible and capped by
@@ -73,12 +77,7 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
   const ctx: Ctx = { proc, git: makeGit(proc), directory: input.directory, worktree: input.worktree }
 
   return {
-    info: Effect.fn("VcsGit.info")(function* () {
-      const [current, root] = yield* Effect.all([ctx.git.branch(ctx.directory), ctx.git.defaultBranch(ctx.directory)], {
-        concurrency: 2,
-      })
-      return { branch: { current, default: root?.name } } satisfies Info
-    }),
+    info: () => ctx.git.info(ctx.directory),
     base: () => ctx.git.base(ctx.directory),
     branches: Effect.fn("VcsGit.branches")(function* (options?: BranchOptions) {
       return yield* ctx.git.branches(ctx.directory, options)
@@ -306,6 +305,11 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     if (list.includes("master")) return { name: "master", ref: "master" }
   })
 
+  const info = Effect.fn("VcsGit.info")(function* (cwd: string) {
+    const [current, root] = yield* Effect.all([branch(cwd), defaultBranch(cwd)], { concurrency: 2 })
+    return { branch: { current, default: root?.name } } satisfies Info
+  })
+
   const resolve = Effect.fnUntraced(function* (cwd: string, ref: string) {
     const result = yield* run(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], { cwd })
     if (result.exitCode !== 0) return
@@ -505,6 +509,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   return {
+    info,
     branch,
     branches,
     base,

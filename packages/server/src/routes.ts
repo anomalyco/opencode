@@ -30,6 +30,7 @@ import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
+import { AppProcess } from "@opencode/util/process"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
@@ -73,6 +74,7 @@ const applicationServiceNodes = [
   CodeModeApi.node,
   Global.node,
   FSUtil.node,
+  AppProcess.node,
   Database.node,
   KV.node,
   Bus.node,
