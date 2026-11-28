@@ -68,7 +68,7 @@ import {
   type ReadMarkdownImage,
   type MarkdownLocalFileExists,
 } from "../context/markdown"
-import { createMarkdownImages } from "./markdown-image"
+import { createMarkdownImages, prepareSvgImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 import { createDiagramPreview } from "./diagram-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
@@ -537,6 +537,8 @@ function createCodeDriver(wrapper: HTMLElement, labels: CodeLabels): CodeDriver 
   return driver
 }
 
+const MARKDOWN_IMAGES_CHANGED = "markdown-images-changed"
+
 function showCodeDecoration(
   wrapper: HTMLElement,
   previous: ReturnType<typeof viewCodeDecoration>,
@@ -569,7 +571,13 @@ function showCodeDecoration(
     wrapper.append(diagram, createDiagramButton(labels))
   }
 
-  if (!existing || view.svg !== previous.svg) diagram.innerHTML = view.svg ?? ""
+  if (existing && view.svg === previous.svg) return
+  diagram.innerHTML = view.svg ?? ""
+  prepareSvgImages(diagram)
+
+  // The diagram arrives after the render pass that loads images, so the component loads its images now.
+  if (diagram.querySelector("[data-local-image]"))
+    diagram.dispatchEvent(new Event(MARKDOWN_IMAGES_CHANGED, { bubbles: true }))
 }
 
 function createCodeActions(blocks: MarkdownCodeBlocks, block: MarkdownCodeBlock) {
@@ -1157,6 +1165,7 @@ export function Markdown(
   let linkCleanup: (() => void) | undefined
   let diagramCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
+  let diagramImagesCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
   let fragmentLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
@@ -1307,6 +1316,13 @@ export function Markdown(
     if (!fragmentLinkCleanup) fragmentLinkCleanup = setupFragmentLinks(container)
 
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
+
+    if (!diagramImagesCleanup) {
+      const reload = () => images?.update(container)
+      container.addEventListener(MARKDOWN_IMAGES_CHANGED, reload)
+      diagramImagesCleanup = () => container.removeEventListener(MARKDOWN_IMAGES_CHANGED, reload)
+    }
+
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
     // Cold timelines already wait for Markdown readiness before measuring and revealing their content. Include
     // path classification so the first visible frame uses the final blue-link styling and padding.
@@ -1331,6 +1347,8 @@ export function Markdown(
     if (fragmentLinkCleanup) fragmentLinkCleanup()
 
     if (faviconCleanup) faviconCleanup()
+
+    if (diagramImagesCleanup) diagramImagesCleanup()
     const container = root()
 
     if (container) disposeRenderedMarkdown(container)
