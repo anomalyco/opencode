@@ -191,6 +191,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             if (next.type === "error") {
               throw next.error
             }
+            admission.resolve()
             if (sent.mode !== "shell" && admissionVersion !== version) {
               do {
                 const current = admissionVersion
