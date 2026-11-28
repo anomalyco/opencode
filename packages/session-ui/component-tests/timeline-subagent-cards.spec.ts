@@ -1,6 +1,7 @@
 import { expect, story } from "../../stories/playwright/story"
 
 const consecutive = "current-session-research-agents--consecutive-subagents"
+
 const research = "current-session-research-agents--agent-research"
 
 // A subagent's card is a block of its own: the current timeline's 28px click-area rule for rows of text must not
@@ -46,6 +47,7 @@ for (const placement of ["separate", "grouped"] as const) {
 // tool-error-card.css's 24px height with 12px of padding, which would squeeze its title into a 12px box.
 story("tool error card triggers keep their 28px click area in the current timeline", async ({ mount }) => {
   const timeline = await mount(research, { args: { scenario: "failures" } })
+
   const triggers = timeline.locator(
     '[data-component="card"][data-kind="tool-error-card"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"]',
   )
