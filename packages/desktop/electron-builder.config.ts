@@ -7,6 +7,7 @@ import { NativeArch } from "../../script/native-arch"
 import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
 import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
 import { previewBinding, verifyPreviewBinding } from "./script/preview-binding"
+import { setMachOUuid } from "./script/macho-uuid"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -150,8 +151,16 @@ const getBase = (appId: string): Configuration => {
 
       // With an Icon Composer mac.icon, electron-builder bundles the ICNS that actool generates as the pre-macOS 26
       // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship ours instead.
-      if (context.electronPlatformName === "darwin")
+      if (context.electronPlatformName === "darwin") {
         await copyFile(path.join(packageDir, "resources/icons/icon.icns"), path.join(resources, "icon.icns"))
+        // Give the main executable its own LC_UUID instead of stock Electron's, which macOS Local Network privacy
+        // would otherwise share with every app on the same Electron version (#65751). Signing runs after this hook.
+        const app = context.packager.appInfo
+        await setMachOUuid(
+          path.join(context.appOutDir, `${app.productFilename}.app`, "Contents", "MacOS", app.productFilename),
+          `${appId} ${app.version} ${arch}`,
+        )
+      }
 
       if (context.electronPlatformName !== "win32") return
 
@@ -185,6 +194,8 @@ const getBase = (appId: string): Configuration => {
         NSMicrophoneUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"],
         // Sites in the browser pane may ask for the camera; without this key macOS ends the app when it asks.
         NSCameraUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.cameraUsage"],
+        // Without it the Local Network prompt shows macOS's generic text instead of what OpenCode uses it for (#65751).
+        NSLocalNetworkUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.localNetworkUsage"],
         // The CLI server and its terminals run as children of the app, so macOS asks for their access to
         // these protected locations in the app's name. The prompt shows the description (#56479).
         NSDocumentsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.documentsFolderUsage"],
