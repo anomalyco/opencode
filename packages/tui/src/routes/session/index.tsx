@@ -355,8 +355,10 @@ export function Session(props: {
         data.session.permission.sync(sessionID).catch(() => undefined),
         data.session.form.sync(sessionID).catch(() => undefined),
       ])
+      if (route.sessionID !== sessionID) return
       const info = data.session.get(sessionID)
       if (!info) {
+        if (!data.session.missing(sessionID)) return
         toast.show({
           message: `Session not found: ${sessionID}`,
           variant: "error",
@@ -375,7 +377,10 @@ export function Session(props: {
         variant: "error",
         duration: 5000,
       })
-      sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+      // The event stream can reconnect before session reads succeed. Keep the tab on a temporary failure.
+      if (data.session.missing(sessionID)) {
+        sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+      }
     })
   })
 

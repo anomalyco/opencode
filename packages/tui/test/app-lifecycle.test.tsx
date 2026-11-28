@@ -958,6 +958,61 @@ test("keeps assistant footer metrics current after prepend, refresh, and revert"
   expect(reverted).not.toContain("50.0 tok/s")
 })
 
+test("a failed session read after reconnect keeps the tab until the server confirms it is missing", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_reconnect_tab",
+    title: "Reconnect tab fixture",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  let status = 200
+  const unavailable = Promise.withResolvers<void>()
+  const missing = Promise.withResolvers<void>()
+  await using setup = await createAppFixture({
+    state: state.path,
+    config: { animations: false, tabs: { mode: "on" } },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [], cursor: {} })
+      if (
+        url.pathname === `/api/session/${session.id}/inbox` ||
+        url.pathname === `/api/session/${session.id}/permission`
+      )
+        return json({ data: [] })
+      if (url.pathname !== `/api/session/${session.id}`) return undefined
+      if (status === 503) {
+        unavailable.resolve()
+        return new Response(null, { status })
+      }
+      if (status === 404) {
+        missing.resolve()
+        return json(
+          { _tag: "SessionNotFoundError", sessionID: session.id, message: "Fixture session removed" },
+          { status },
+        )
+      }
+      return json({ data: session })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes(session.title))
+
+  status = 503
+  setup.events.disconnect()
+  await unavailable.promise
+  const failed = await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus: 503"))
+  expect(failed).toContain(session.title)
+
+  status = 404
+  setup.events.disconnect()
+  await missing.promise
+  await setup.waitForFrame((frame) => !frame.includes(session.title))
+})
+
 test("session startup prompt is submitted exactly once", async () => {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24 })
