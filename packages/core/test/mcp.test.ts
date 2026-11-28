@@ -1972,6 +1972,8 @@ test("marks an MCP server with an invalid config as failed", async () => {
             status: "failed",
             error: "Invalid MCP OAuth redirect_uri: not a url",
           })
+          yield* service.add("unset", new ConfigMCP.Remote({ ...config, oauth: { redirect_uri: "" } }))
+          expect(yield* status("unset")).toEqual({ status: "connected" })
           expect(yield* status("resources")).toEqual({ status: "connected" })
 
           yield* service.add("broken", new ConfigMCP.Remote(config))

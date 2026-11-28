@@ -38,9 +38,10 @@ export const remote = (
   const url = URL.parse(config.url)
   if (!url) return invalid(server, `Invalid MCP server URL: ${config.url}`)
   const oauth = config.oauth || undefined
-  const redirect = oauth?.redirect_uri === undefined ? undefined : URL.parse(oauth.redirect_uri)
+  // An empty value counts as unset, as an unset `{env:VAR}` substitutes one.
+  const redirect = oauth?.redirect_uri ? URL.parse(oauth.redirect_uri) : undefined
   if (redirect === null) return invalid(server, `Invalid MCP OAuth redirect_uri: ${oauth?.redirect_uri}`)
-  const metadata = oauth?.auth_server_metadata_url === undefined ? undefined : URL.parse(oauth.auth_server_metadata_url)
+  const metadata = oauth?.auth_server_metadata_url ? URL.parse(oauth.auth_server_metadata_url) : undefined
   if (metadata === null)
     return invalid(server, `Invalid MCP OAuth auth_server_metadata_url: ${oauth?.auth_server_metadata_url}`)
   return Result.succeed({ type: "remote", config, url, redirect, metadata })
