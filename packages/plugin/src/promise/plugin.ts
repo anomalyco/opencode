@@ -13,6 +13,7 @@ import type { MCPDomain } from "./mcp.js"
 import type { ModelDomain } from "./model.js"
 import type { PermissionDomain } from "./permission.js"
 import type { ProviderDomain } from "./provider.js"
+import type { Registration } from "./registration.js"
 import type { ReferenceDomain } from "./reference.js"
 import type { RpcDomain } from "./rpc.js"
 import type { SessionDomain } from "./session.js"
@@ -34,6 +35,10 @@ export interface Context {
   readonly credential: Pick<CredentialApi, "activate">
   readonly event: EventDomain
   readonly experimental: {
+    readonly modelDiscovery: {
+      /** Marks initial catalog discovery as pending. Dispose after publishing the catalog or when discovery fails. */
+      readonly begin: () => Promise<Registration>
+    }
     readonly terminal: Pick<OpenCodeClient["experimental"]["persistentPty"], "read">
     /** Stateless generation with a model and a prompt: no session, history or tools. Video jobs are server-only for now. */
     readonly generate: Omit<ExperimentalGenerateApi, "video">

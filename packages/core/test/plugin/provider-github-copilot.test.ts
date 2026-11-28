@@ -1,9 +1,10 @@
 import { App } from "@opencode/core/app"
 import { Agent } from "@opencode/schema/agent"
+import { ModelDiscovery } from "@opencode/schema/model-discovery"
 import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Model } from "@opencode/core/model"
@@ -11,6 +12,7 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { ModelDiscoveryPlugin } from "@opencode/core/plugin/model-discovery"
 import {
   copilotBaseURL,
   copilotEntitlementError,
@@ -19,6 +21,7 @@ import {
 } from "@opencode/core/plugin/provider/github-copilot"
 import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
+import { Rpc } from "@opencode/core/rpc"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
 import { advance, drain } from "../lib/clock"
@@ -649,9 +652,43 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("marks discovery ready on the first transient failure and publishes after the retry", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Deferred.make<void>()
+      const retry = yield* Deferred.make<void>()
+      const api = copilotAPI([])
+      const state = { attempts: 0 }
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      yield* addPlugin().pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) => {
+            if (!request.url.endsWith("/models")) return api.execute(request)
+            if (++state.attempts > 1) return Deferred.await(retry).pipe(Effect.andThen(api.execute(request)))
+            return Deferred.await(catalog).pipe(
+              Effect.as(HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))),
+            )
+          }),
+        ),
+      )
+      const providers = yield* Provider.Service
+      expect(yield* providers.discoveryReady).toBe(false)
+      yield* Deferred.succeed(catalog, undefined)
+      yield* drain
+      expect(yield* providers.discoveryReady).toBe(true)
+
+      yield* Deferred.succeed(retry, undefined)
+      const models = yield* Model.Service
+      yield* advance(() => state.attempts > 1)
+      yield* drain
+      expect((yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5")))?.enabled).toBe(true)
+    }),
+  )
+
   it.effect("routes Auto through Copilot's router and keeps the pick until compaction", () =>
     Effect.gen(function* () {
       const picks: unknown[] = []
+      const catalog = yield* Deferred.make<void>()
       const state = { pick: "routed", available: true, listed: false, auth: "" }
       const remote = (id: string, extra: Record<string, unknown> = {}) => ({
         model_picker_enabled: false,
@@ -672,6 +709,7 @@ describe("GithubCopilotPlugin", () => {
             return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
           if (request.url.endsWith("/models")) {
             state.listed = true
+            yield* Deferred.await(catalog)
             return HttpClientResponse.fromWeb(
               request,
               Response.json({
@@ -701,8 +739,24 @@ describe("GithubCopilotPlugin", () => {
       yield* connect({ apiEndpoint: "https://copilot.test" })
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
       const models = yield* Model.Service
+      const rpc = yield* Rpc.Service
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin, "other-provider")
+      yield* ModelDiscoveryPlugin.effect(host)
+      const ready = rpc.call(ModelDiscovery.Definition.id, "ready", undefined)
       yield* advance(() => state.listed)
-      yield* drain
+      expect(yield* ready).toBe(false)
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* host.experimental.modelDiscovery.begin()
+          yield* Deferred.succeed(catalog, undefined)
+          yield* drain
+          expect(yield* ready).toBe(false)
+          // A pending catalog does not block reads or hide models another provider already published.
+          expect((yield* models.available()).some((model) => model.providerID === Provider.ID.githubCopilot)).toBe(true)
+        }),
+      )
+      expect(yield* ready).toBe(true)
       // Free plans hide every model from the picker; Auto is the one they can select.
       expect(
         (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),

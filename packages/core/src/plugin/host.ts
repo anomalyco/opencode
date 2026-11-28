@@ -288,6 +288,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       }) as Plugin.Context["event"]["subscribe"],
     },
     experimental: {
+      modelDiscovery: { begin: providers.beginDiscovery },
       terminal: {
         read: (input) => persistentPty.read(input.sessionID, input.lines),
       },

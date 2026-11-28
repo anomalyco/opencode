@@ -382,6 +382,7 @@ export function fromPromise(plugin: Plugin) {
               ),
           },
           experimental: {
+            modelDiscovery: { begin: () => register(host.experimental.modelDiscovery.begin()) },
             terminal: {
               read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
             },

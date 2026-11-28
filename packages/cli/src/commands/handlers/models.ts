@@ -1,6 +1,7 @@
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
-import { Effect } from "effect"
+import { ModelDiscovery } from "@opencode/schema/model-discovery"
+import { Effect, Schedule } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -15,8 +16,16 @@ export default Runtime.handler(
       baseUrl: server.endpoint.url,
       headers: Service.headers(server.endpoint),
     })
-    yield* waitForPlugins(client, process.cwd())
-    const response = yield* Effect.promise(() => client.model.list({ location: { directory: process.cwd() } }))
+    const location = { directory: process.cwd() }
+    yield* waitForPlugins(client, location.directory)
+    // Plugins can publish models after activation. A one-shot command would miss those updates.
+    const discovery = client.rpc(ModelDiscovery.Definition)
+    yield* Effect.tryPromise((signal) => discovery.ready(undefined, { location, signal })).pipe(
+      Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("100 millis") }),
+      Effect.timeout("10 seconds"),
+      Effect.ignore,
+    )
+    const response = yield* Effect.promise(() => client.model.list({ location }))
     const models = response.data
       .map((model) => `${model.providerID}/${model.id}`)
       .toSorted((a, b) => a.localeCompare(b))

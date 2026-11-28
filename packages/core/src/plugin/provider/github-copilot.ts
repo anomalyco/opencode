@@ -179,6 +179,7 @@ export const GithubCopilotPlugin = define({
       value.type === "oauth" ? { baseURL: copilotBaseURL(value.metadata) } : {},
     )
     const discovered = yield* ProviderRefresh.start({
+      discovery: ctx.experimental.modelDiscovery.begin(),
       integrationID: "github-copilot",
       initial: {} as {
         readonly baseURL?: string

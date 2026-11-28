@@ -62,10 +62,11 @@ describe("SharedCache", () => {
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
       const remote = { results: [] as unknown[], loads: 0 }
-      const get = (force?: boolean) =>
+      const get = (force?: boolean, onRetry?: Effect.Effect<void>) =>
         cache.get({
           key: "models",
           force,
+          onRetry,
           load: Effect.suspend(() => {
             remote.loads++
             const result = remote.results.shift()
@@ -80,9 +81,16 @@ describe("SharedCache", () => {
       expect(yield* Effect.flip(get())).toBe(401)
       remote.results = [timeout, timeout, "list"]
       const flaky = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
+      const retrying = yield* Deferred.make<void>()
+      const joined = yield* get(true, Deferred.succeed(retrying, undefined).pipe(Effect.asVoid)).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.await(retrying)
+      expect(remote.loads).toBe(2)
       yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1 second")))
       yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2 seconds")))
       expect(yield* Fiber.join(flaky)).toBe("list")
+      expect(yield* Fiber.join(joined)).toBe("list")
       expect(remote.loads).toBe(4)
 
       remote.results = [401, timeout, timeout, timeout, timeout]
