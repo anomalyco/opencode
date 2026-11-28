@@ -3,13 +3,14 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { inspect } from "node:util"
-import { Cause, Deferred, Effect, Exit, PlatformError, Redacted, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Option, PlatformError, Redacted, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Teardown } from "@opencode/util/teardown"
 import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { testEffect } from "../lib/effect"
+import { waitUntil } from "../lib/eventually"
 
 const live = LayerNode.compile(CrossSpawnSpawner.node)
 const fx = testEffect(live)
@@ -329,6 +330,38 @@ describe("cross-spawn spawner", () => {
         )
 
         expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
+      }),
+    )
+
+    fx.live(
+      "forceKillAfter kills the rest of the process group after its leader exits",
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+
+        // The leader exits on SIGTERM. Its child installs the SIGTERM trap before reporting its PID and redirects
+        // stdio before sleeping, so "close" doesn't wait for it.
+        const handle = yield* ChildProcess.make(
+          "sh",
+          ["-c", 'sh -c \'trap "" TERM; echo $$; exec >/dev/null 2>&1; exec sleep 30\' & wait'],
+          { stdin: "ignore" },
+        )
+        yield* Effect.addFinalizer(() =>
+          Effect.try(() => process.kill(-Number(handle.pid), "SIGKILL")).pipe(Effect.ignore),
+        )
+        const child = Number(new TextDecoder().decode(Option.getOrThrow(yield* Stream.runHead(handle.stdout))))
+        expect(alive(child)).toBe(true)
+
+        // Exceeds the 30 s test timeout so only the post-close group SIGKILL can stop the child.
+        yield* handle.kill({ forceKillAfter: 35_000 })
+
+        // With no reaping init the killed child stays a zombie, which alive() still reports, so "Z" in /proc counts as
+        // stopped. macOS has no /proc but always reaps orphans.
+        yield* waitUntil(
+          Effect.tryPromise(() => fs.readFile(`/proc/${child}/stat`, "utf8")).pipe(
+            Effect.map((stat) => stat.charAt(stat.lastIndexOf(")") + 2) === "Z"),
+            Effect.orElseSucceed(() => !alive(child)),
+          ),
+        )
       }),
     )
   })
