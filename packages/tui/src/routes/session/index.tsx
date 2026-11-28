@@ -775,7 +775,7 @@ export function Session(props: {
   )
   const runPendingAction = createSingleFlight<string>()
   // Uses the captured sessionID: after an await, route.sessionID may already name another tab, or none.
-  const requestPending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
+  const requestPending = async (action: PendingAction, inboxID: string) => {
     const request =
       action === "steer"
         ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "steer" })
@@ -787,7 +787,7 @@ export function Session(props: {
       (error) => error,
     )
     if (!error) return true
-    const label = failureLabel ?? (action === "cancel" ? "delete" : action)
+    const label = action === "cancel" ? "delete" : action
     toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
     return false
   }
@@ -795,10 +795,13 @@ export function Session(props: {
     (await runPendingAction(inboxID, () => requestPending(action, inboxID))) ?? false
   // The cancel releases blobs nothing else references, so media refs load into the draft first. Resolves with the
   // composer it wrote to, if any, once the prompt is back; undefined if the cancel failed or was already running.
-  const undoPending = (inboxID: string, message: ProjectedPrompt, failureLabel?: string) =>
+  const undoPending = (inboxID: string, message: ProjectedPrompt) =>
     runPendingAction(inboxID, async () => {
       const restored = await restorePrompt(message)
-      if (!(await requestPending("cancel", inboxID, failureLabel))) return
+      if ((await data.session.input.withdraw({ sessionID, inboxID })) === "delivered") {
+        toast.show({ message: "Prompt was already sent. Use /undo to take it back", variant: "warning" })
+        return
+      }
       return { composer: appendToSessionPrompt(sessionID, restored, renderer.widthMethod) }
     })
   const openQueuedPrompts = () =>
@@ -839,7 +842,7 @@ export function Session(props: {
                 toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
                 return
               }
-              void undoPending(queued.id, queued.payload, "undo")
+              void undoPending(queued.id, queued.payload)
                 .then((undone) => {
                   if (!undone || sessionDisposed) return
                   dialog.clear()
@@ -1263,16 +1266,12 @@ export function Session(props: {
           dialog.clear()
           return
         }
-        const undo = pendingDeliveries().has(message.id)
-          ? undoPending(message.id, message)
-          : (async () => {
-              const restored = await restorePrompt(message)
-              await client.api.session.interrupt({ sessionID })
-              await client.api.experimental.session.wait({ sessionID })
-              await client.api.session.revert.stage({ sessionID, messageID: message.id })
-              appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
-            })()
-        void undo.catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+        // Read the prompt before undo: a withdraw releases its media blob at once, and a failed read leaves the draft alone.
+        void (async () => {
+          const restored = await restorePrompt(message)
+          await data.session.undo({ sessionID, messageID: message.id })
+          appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+        })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         dialog.clear()
       },
     },

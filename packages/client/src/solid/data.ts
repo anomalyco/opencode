@@ -506,6 +506,21 @@ export function createData(config: CreateDataInput) {
     setStore("session", "pending", sessionID, index, { ...item, delivery })
   }
 
+  // Cancellation is idempotent, so only the follow-up read tells us whether
+  // delivery won over the withdraw. Inbox IDs double as message IDs.
+  async function withdrawInput(sessionID: string, inboxID: string) {
+    await api().session.inbox.cancel({ sessionID, inboxID })
+    return api()
+      .session.message.get({ sessionID, messageID: inboxID })
+      .then(
+        () => "delivered" as const,
+        (error: unknown) => {
+          if (isMessageNotFoundError(error)) return "withdrawn" as const
+          throw error
+        },
+      )
+  }
+
   // Inbox IDs of optimistic admissions awaiting acknowledgement, so rejection
   // only rolls back unacknowledged rows and a pending re-fetch cannot wipe a
   // row the server does not know about yet. Prompts clear on their durable
@@ -1805,6 +1820,19 @@ export function createData(config: CreateDataInput) {
           status === "running" ? [sessionID] : [],
         )
       },
+      // A projection that already shows the message and no longer has it pending proves delivery,
+      // so the withdraw can be skipped and the revert staged directly.
+      undo(input: { sessionID: string; messageID: string }) {
+        return sendAdmission(input.sessionID, async () => {
+          const delivered =
+            !result.session.input.has(input.sessionID, input.messageID) &&
+            result.session.message.get(input.sessionID, input.messageID) !== undefined
+          if (!delivered && (await withdrawInput(input.sessionID, input.messageID)) === "withdrawn") return
+          await api().session.interrupt({ sessionID: input.sessionID })
+          await api().experimental.session.wait({ sessionID: input.sessionID })
+          await api().session.revert.stage({ sessionID: input.sessionID, messageID: input.messageID })
+        })
+      },
       // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
@@ -1816,6 +1844,9 @@ export function createData(config: CreateDataInput) {
           return (
             store.session.pending[sessionID]?.some((item) => item.id === inboxID && item.type !== "compaction") ?? false
           )
+        },
+        withdraw(input: { sessionID: string; inboxID: string }) {
+          return sendAdmission(input.sessionID, () => withdrawInput(input.sessionID, input.inboxID))
         },
       },
       pending: {
