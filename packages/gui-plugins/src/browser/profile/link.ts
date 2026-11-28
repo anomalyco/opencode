@@ -151,8 +151,9 @@ export function createCookieMirror(input: { profile: MirroredSession; other: Mir
   const listener =
     (side: LinkSide): ChangeListener =>
     (_event, cookie, cause, removed) => {
-      // An overwrite removes the old value just before it inserts the new one, whose event follows.
-      if (cause === "overwrite" || cause === "expired-overwrite") return
+      // An overwrite removes the old value just before it inserts the new one, whose event follows. An expired
+      // overwrite, as a site's `Max-Age=0` sign-out, inserts nothing: its removal is the change.
+      if (cause === "overwrite") return
 
       if (cookie.domain?.replace(/^\./, "") === PROBE_COOKIE.host) return
       const change: CookieChange = { side, cookie: fromElectron(cookie), removed }
