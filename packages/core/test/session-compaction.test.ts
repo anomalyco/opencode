@@ -167,6 +167,17 @@ it.effect("compaction truncation does not split surrogate pairs", () =>
   }),
 )
 
+it.effect("compaction truncates large tool call inputs", () =>
+  Effect.gen(function* () {
+    const recent = yield* recentWithToolOutput(
+      Session.ID.make("ses_truncate_input"),
+      [{ type: "text", text: "ok" }],
+      { content: "x".repeat(5_000) },
+    )
+    expect(recent).toContain(`[Assistant tool call]: read({"content":"${"x".repeat(1_238)}\n[truncated])`)
+  }),
+)
+
 it.effect("summaries written before kept-message references keep their stored recent text", () =>
   Effect.gen(function* () {
     const id = Session.ID.make("ses_legacy_recent")
@@ -610,7 +621,11 @@ const storeMessages = (sessionID: Session.ID, messages: readonly SessionMessage.
   })
 
 /** The recent text a manual compaction keeps when the latest exchange is one tool call with this output. */
-const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateCompleted["content"]) =>
+const recentWithToolOutput = (
+  id: Session.ID,
+  content: SessionMessage.ToolStateCompleted["content"],
+  input: unknown = {},
+) =>
   Effect.gen(function* () {
     const session = yield* insertSession(id)
     const user = (text: string) =>
@@ -630,7 +645,7 @@ const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateC
           type: "tool",
           id: "call_read",
           name: "read",
-          state: { status: "completed", input: {}, content },
+          state: { status: "completed", input, content },
           time: { created: 0 },
         },
       ],
