@@ -412,6 +412,7 @@ describe("SubagentTool", () => {
           expect(settled.metadata).toEqual({
             sessionID: outputSessionID(settled.metadata),
             status: "running",
+            promptMessageID: expect.any(String),
           })
           expect((yield* sessions.get(outputSessionID(settled.metadata))).parentID).toBe(parent.id)
         }),
@@ -452,7 +453,11 @@ describe("SubagentTool", () => {
           const child = yield* sessions.get(outputSessionID(settled.metadata))
           expect(settled.output).toMatchObject({ sessionID: child.id, status: "running" })
           expect(settled.output.output).toContain(`sessionID: ${child.id}`)
-          expect(settled.metadata).toEqual({ sessionID: child.id, status: "running" })
+          expect(settled.metadata).toEqual({
+            sessionID: child.id,
+            status: "running",
+            promptMessageID: expect.any(String),
+          })
           expect(progress[0]).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
             parentID: parent.id,
@@ -849,7 +854,11 @@ describe("SubagentTool", () => {
           expect(settled.metadata).toMatchObject({
             status: "running",
           })
-          expect(settled.metadata).toEqual({ sessionID: childID, status: "running" })
+          expect(settled.metadata).toEqual({
+            sessionID: childID,
+            status: "running",
+            promptMessageID: expect.any(String),
+          })
           expect(settled.content).toEqual([{ type: "text", text: expect.stringContaining(`sessionID: ${childID}`) }])
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]

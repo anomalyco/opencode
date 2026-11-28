@@ -162,7 +162,7 @@ export const Plugin = {
                 ((yield* sessions.active).has(existing.id) || (yield* jobs.get(existing.id))?.status === "running")
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              yield* sessions
+              const prompt = yield* sessions
                 .prompt({
                   sessionID: child.id,
                   text:
@@ -185,14 +185,13 @@ export const Plugin = {
                 description: input.description,
               }
               yield* subagents.start(recovery)
-              return backgroundResult(child.id)
-            }).pipe(
-              Effect.map((output) => ({
+              const output = backgroundResult(child.id)
+              return {
                 output,
                 content: output.output,
-                metadata: { sessionID: output.sessionID, status: output.status },
-              })),
-            ),
+                metadata: { sessionID: child.id, status: output.status, promptMessageID: prompt.id },
+              }
+            }),
         }),
       )
       .pipe(Effect.orDie)
