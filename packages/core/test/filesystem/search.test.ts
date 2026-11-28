@@ -6,6 +6,8 @@ import path from "path"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Protected } from "@opencode/core/filesystem/protected"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
@@ -231,6 +233,41 @@ describe("FileSystemSearch", () => {
         expect(observed?.cwd).toBe(directory)
         expect(observed?.hidden).toBe(true)
         expect(entries.map((entry) => entry.path)).toEqual([RelativePath.make("remote.ts")])
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.effect("reports search unavailable when the environment has no ripgrep", () =>
+    Effect.gen(function* () {
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make("/workspace") })),
+          ),
+        ),
+        Environment.node.replace(
+          Layer.succeed(
+            Environment.Service,
+            Environment.make(Environment.ID.make("no-rg"), { spawner: EnvironmentUnavailable.spawner }),
+          ),
+        ),
+        Ripgrep.node.replace(
+          Layer.succeed(
+            Ripgrep.Service,
+            Ripgrep.Service.of({
+              find: () => Effect.succeed([]),
+              glob: () => Effect.succeed([]),
+              grep: () => Effect.succeed([]),
+            }),
+          ),
+        ),
+      ])
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect(yield* search.find({ query: "a" }).pipe(Effect.flip)).toEqual(
+          new FileSystem.UnavailableError({ message: "Search is not available in this environment" }),
+        )
       }).pipe(Effect.provide(layer))
     }),
   )

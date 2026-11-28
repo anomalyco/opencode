@@ -241,6 +241,47 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.effect("dies on a genuine environment failure instead of reporting the location unavailable", () =>
+    Effect.gen(function* () {
+      const memory = makeMemoryDriver()
+      const failed = new Environment.Failed({ path: "/workspace/broken.txt", cause: new Error("disk on fire") })
+      const workspaceID = Workspace.ID.make("wrk_filesystem_failed")
+      const env = Environment.workspace(workspaceID, {
+        spawner: memory.spawner,
+        overrides: {
+          ...memory.overrides,
+          read: () => Effect.fail(failed),
+          write: () => Effect.fail(failed),
+        },
+      })
+      const layer = LayerNode.compile(FileSystem.node, {
+        replacements: [
+          Location.node.replace(
+            Layer.succeed(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make("/workspace"), workspaceID })),
+            ),
+          ),
+          Environment.node.replace(Layer.succeed(Environment.Service, env)),
+        ],
+      })
+      const expectDefect = (effect: Effect.Effect<unknown, unknown, FileSystem.Service>) =>
+        effect.pipe(
+          Effect.exit,
+          Effect.map((exit) => {
+            expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true)
+            if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(failed)
+          }),
+        )
+
+      yield* Effect.gen(function* () {
+        const filesystem = yield* FileSystem.Service
+        yield* expectDefect(filesystem.read({ path: RelativePath.make("broken.txt") }))
+        yield* expectDefect(filesystem.write({ path: "broken.txt", data: new Uint8Array([1]) }))
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
   it.effect(
     "reads, paginates chunks, lists, writes, and enforces lexical confinement over remote Environment.files",
     () =>

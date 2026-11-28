@@ -226,7 +226,7 @@ describe("pty create defaults", () => {
 const unsupportedIt = testEffect(Pty.unsupportedLayer)
 
 describe("Pty.unsupportedLayer", () => {
-  unsupportedIt.effect("returns empty list, fails lookups with NotFoundError, and dies on create", () =>
+  unsupportedIt.effect("returns empty list, fails lookups with NotFoundError, and reports create as unavailable", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service
       const id = Pty.ID.make("pty_unsupported")
@@ -240,10 +240,10 @@ describe("Pty.unsupportedLayer", () => {
         new Pty.NotFoundError({ ptyID: id }),
       )
 
-      const created = yield* pty.create({}).pipe(Effect.exit)
-      expect(Exit.isFailure(created) && Cause.hasDies(created.cause)).toBe(true)
-      if (Exit.isFailure(created))
-        expect(Cause.pretty(created.cause)).toContain("Pty.create is not supported in this runtime")
+      // A declared failure, not a defect, so the server can answer 503 instead of an undeclared 500.
+      expect(yield* pty.create({}).pipe(Effect.flip)).toEqual(
+        new Pty.UnavailableError({ message: "PTY sessions are not available in this runtime" }),
+      )
     }),
   )
 })

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Layer, Sink, Stream } from "effect"
+import { Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -54,6 +54,49 @@ it.live("boots the workerd profile over durable object storage", () =>
 
     // alarm() runs cleanly as a no-op when no workspaces are pending suspension.
     yield* Effect.promise(() => handler.alarm())
+  }),
+)
+
+it.live("answers 503 for filesystem and pty routes on a bare workerd location", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerWorkerd.create({
+      storage: makeDurableObjectStorage(),
+      password: "secret",
+      app: { version: "workerd-test" },
+      config: { content: "{}" },
+    })
+    const authorization = `Basic ${btoa("opencode:secret")}`
+    const request = (method: string, path: string, body?: string, contentType = "application/json") =>
+      Effect.promise(() =>
+        handler(
+          new Request(`http://opencode.local${path}`, {
+            method,
+            headers: { authorization, ...(body === undefined ? {} : { "content-type": contentType }) },
+            body,
+          }),
+        ),
+      )
+    const expectUnavailable = (service: string, method: string, path: string, body?: string, contentType?: string) =>
+      Effect.gen(function* () {
+        const response = yield* request(method, path, body, contentType)
+        expect(response.status).toBe(503)
+        expect(yield* Effect.promise(() => response.json())).toMatchObject({
+          _tag: "ServiceUnavailableError",
+          service,
+        })
+      })
+
+    yield* expectUnavailable("filesystem", "GET", "/api/fs/list?location[directory]=/")
+    yield* expectUnavailable("filesystem", "GET", "/api/fs/read/a.txt?location[directory]=/")
+    yield* expectUnavailable("filesystem", "GET", "/api/fs/find?location[directory]=/&query=a")
+    yield* expectUnavailable(
+      "filesystem",
+      "POST",
+      "/api/experimental/fs/write?location[directory]=/&path=/out.txt",
+      "unavailable",
+      "application/octet-stream",
+    )
+    yield* expectUnavailable("pty", "POST", "/api/pty?location[directory]=/", "{}")
   }),
 )
 
@@ -208,39 +251,30 @@ it.effect(
         }),
       ).pipe(Effect.provide(workspaceLayer))
 
-      // Bare workerd location (no workspace) dies cleanly without touching node:fs across read, list, write, and find.
+      // Bare workerd location (no workspace) reports a typed unavailable error without touching node:fs
+      // across read, list, write, and find.
       const bareLayer = AppNodeBuilder.build(FileSystem.node, [
         ...ServerWorkerd.replacements({ storage }),
         Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/") }))),
         ),
       ])
-      const expectDefectContaining = (effect: Effect.Effect<unknown, unknown, FileSystem.Service>, expected: string) =>
+      const expectUnavailable = (effect: Effect.Effect<unknown, unknown, FileSystem.Service>) =>
         effect.pipe(
           Effect.provide(bareLayer),
-          Effect.exit,
-          Effect.map((exit) => {
-            expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true)
-            if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain(expected)
+          Effect.flip,
+          Effect.map((error) => {
+            expect(error).toMatchObject({
+              _tag: "FileSystem.UnavailableError",
+              message: expect.stringContaining("no execution plane"),
+            })
           }),
         )
 
-      yield* expectDefectContaining(
-        FileSystem.Service.use((fs) => fs.list()),
-        "no execution plane",
-      )
-      yield* expectDefectContaining(
-        FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make("a.txt") })),
-        "no execution plane",
-      )
-      yield* expectDefectContaining(
-        FileSystem.Service.use((fs) => fs.write({ path: "a.txt", data: new Uint8Array([1]) })),
-        "no execution plane",
-      )
-      yield* expectDefectContaining(
-        FileSystem.Service.use((fs) => fs.find({ query: "a" })),
-        "Search is not available",
-      )
+      yield* expectUnavailable(FileSystem.Service.use((fs) => fs.list()))
+      yield* expectUnavailable(FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make("a.txt") })))
+      yield* expectUnavailable(FileSystem.Service.use((fs) => fs.write({ path: "a.txt", data: new Uint8Array([1]) })))
+      yield* expectUnavailable(FileSystem.Service.use((fs) => fs.find({ query: "a" })))
     }),
 )
 
@@ -291,10 +325,10 @@ it.effect("wires Pty.unsupportedLayer in ServerWorkerd.replacements", () =>
     const id = Pty.ID.make("pty_workerd")
     expect(yield* pty.list()).toEqual([])
     expect(yield* pty.get(id).pipe(Effect.flip)).toEqual(new Pty.NotFoundError({ ptyID: id }))
-    const created = yield* pty.create({}).pipe(Effect.exit)
-    expect(Exit.isFailure(created) && Cause.hasDies(created.cause)).toBe(true)
-    if (Exit.isFailure(created))
-      expect(Cause.pretty(created.cause)).toContain("Pty.create is not supported in this runtime")
+    expect(yield* pty.create({}).pipe(Effect.flip)).toMatchObject({
+      _tag: "Pty.UnavailableError",
+      message: "PTY sessions are not available in this runtime",
+    })
   }).pipe(
     Effect.provide(AppNodeBuilder.build(Pty.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }))),
   ),

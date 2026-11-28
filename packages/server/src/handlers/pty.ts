@@ -9,7 +9,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
-import { ForbiddenError, PtyNotFoundError } from "@opencode/protocol/errors"
+import { ForbiddenError, PtyNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
@@ -40,10 +40,14 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
           const pty = yield* Pty.Service
           const location = yield* Location.Service
           return yield* response(
-            pty.create({
-              ...ctx.payload,
-              cwd: ctx.payload.cwd || location.directory,
-            }),
+            pty
+              .create({
+                ...ctx.payload,
+                cwd: ctx.payload.cwd || location.directory,
+              })
+              .pipe(
+                Effect.mapError((error) => new ServiceUnavailableError({ message: error.message, service: "pty" })),
+              ),
           )
         }),
       )
