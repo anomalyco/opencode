@@ -343,3 +343,36 @@ export const PatchFollowUps = {
     )
   },
 }
+
+// A long turn that called many different tools, so the label outgrows the row.
+const manyToolNames = [
+  "shell",
+  "read",
+  "write",
+  "execute",
+  "skill",
+  "browser.tabs.open",
+  "browser.wait",
+  "browser.evaluate",
+  "browser.find",
+  "browser.screenshot",
+  "browser.console",
+  "browser.reload",
+  "browser.click",
+  "browser.type",
+]
+
+export const ManyTools = {
+  render: () => {
+    const [open, setOpen] = createSignal(false)
+    const tools = manyToolNames.map((name, index) => storyTool(`many_${index}`, name, "completed", {}))
+
+    return (
+      <section style={{ width: "100%", "max-width": "720px", padding: "24px" }}>
+        <CurrentSessionProviders document={storyDocument(tools)}>
+          <CurrentContextToolGroup parts={tools} busy={false} open={open()} onOpenChange={setOpen} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}

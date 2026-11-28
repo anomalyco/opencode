@@ -1427,7 +1427,10 @@
     flex-shrink: 0;
   }
 
+  /* BasicTool titles never shrink; a group's names every tool it used, so it truncates instead of overflowing. */
   [data-slot="basic-tool-tool-title"] {
+    flex-shrink: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
