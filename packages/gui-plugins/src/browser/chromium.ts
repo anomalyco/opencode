@@ -18,6 +18,7 @@ import { attachChildren, releaseWorker } from "./child-targets"
 import { CodedError, missingArtifact, pageReports } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
+import { guardPrint } from "./print-gate"
 import { guardMediaRequests } from "./media-gate"
 import { afterRefusal, agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
 import { cookieSite } from "./profile/sites"
@@ -622,10 +623,12 @@ export function createBrowserPage(
     }
   })
 
+  const prints = guardPrint(cdp, activity)
+
   // Set the nested auto-attach policy before the new renderer can create its own children.
   const prepareFrame = async (sessionID: string) => {
     try {
-      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID), passkeys.attach(sessionID)])
+      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), prints.attach(sessionID), media.attach(sessionID), passkeys.attach(sessionID)])
       await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
     } catch {
       // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
@@ -1185,6 +1188,7 @@ export function createBrowserPage(
   )
   cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
     choosers.detach(sessionId)
+    prints.detach(sessionId)
     // Only the session that showed the extension's document clears it: the frame keeps its target ID across a swap, and
     // the web session it replaced may detach after the extension's attached.
     extensionTargets.delete(sessionId)
@@ -1407,6 +1411,7 @@ export function createBrowserPage(
         ]),
     diagnostics.enable(),
     choosers.attach(),
+    prints.attach(),
     media.attach(),
     passkeys.attach(),
     cdp.send("Page.enable"),
@@ -1560,7 +1565,7 @@ export function createBrowserPage(
       const signIn = origin === "agent" ? prompts.agentWait(leavable.includes(command.action.type)) : undefined
 
       try {
-        const intercepting = choosers.update()
+        const intercepting = Promise.all([choosers.update(), prints.update()]).then(() => undefined)
 
         // Updating the file chooser intercept is a renderer call, which an open dialog blocks until it is answered.
         if (command.action.type === "dialog") void intercepting.catch(() => undefined)
