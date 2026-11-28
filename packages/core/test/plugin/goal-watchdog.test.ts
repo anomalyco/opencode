@@ -112,7 +112,7 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
 })
 
 describe("goal plugin waiting", () => {
-  it.effect("pauses a goal an earlier server process left active when the plugin starts", () =>
+  it.effect("re-arms an active goal left by an earlier process and pauses it when nothing wakes the Session", () =>
     Effect.gen(function* () {
       const plugin = yield* run({
         id: "goal-earlier",
@@ -125,8 +125,16 @@ describe("goal plugin waiting", () => {
       })
 
       expect(plugin.goal()).toMatchObject({
+        status: "active",
+        rounds: 1,
+      })
+      expect(plugin.goal()?.boot).not.toBe("an-earlier-process")
+
+      // The Session never wakes after the restart, so the watchdog started by the re-arm must pause the goal.
+      yield* TestClock.adjust(GoalPlugin.WAIT_LIMIT)
+      expect(plugin.goal()).toMatchObject({
         status: "paused",
-        reason: "The server restarted while the goal was active",
+        reason: "Nothing ran for 30 minutes while the goal waited on background work",
       })
     }),
   )

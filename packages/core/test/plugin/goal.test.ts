@@ -443,11 +443,14 @@ describe("goal plugin", () => {
     }),
   )
 
-  it.live("pauses a goal set by an earlier server process instead of continuing it", () =>
+  it.live("re-arms a goal set by an earlier server process and keeps working on it", () =>
     Effect.gen(function* () {
       const session = yield* project()
       const sessions = yield* Session.Service
-      const verdicts = reviewer('{"verdict":"continue","reason":"Not yet."}')
+      const verdicts = reviewer(
+        '{"verdict":"continue","reason":"Not yet."}',
+        '{"verdict":"done","reason":"The migration is done."}',
+      )
       yield* serve(verdicts.respond)
       yield* setGoal(session.id, {
         id: "goal-earlier",
@@ -462,10 +465,10 @@ describe("goal plugin", () => {
       yield* sessions.prompt({ sessionID: session.id, text: "Server came back" })
       yield* sessions.wait(session.id)
 
-      expect(verdicts.asked()).toBe(0)
+      expect(verdicts.asked()).toBe(2)
       expect(yield* goal(session.id)).toMatchObject({
-        status: "paused",
-        reason: "The server restarted while the goal was active",
+        status: "complete",
+        reason: "The migration is done.",
       })
     }),
   )
