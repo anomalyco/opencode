@@ -1,4 +1,5 @@
 import type { ParentProps } from "solid-js"
+import { createAppKeymap, type AppKeymap } from "../../../../app/src/shell/commands/keymap"
 import {
   formatKeybindParts,
   matchKeybind,
@@ -42,6 +43,11 @@ export function useCommand() {
   return {
     options,
     catalog: options,
+    registerKeyLayer(layer: Parameters<AppKeymap["registerLayer"]>[0]) {
+      const app = createAppKeymap({ blocked: () => false, editable: () => true })
+      app.keymap.registerLayer(layer)
+      return app.destroy
+    },
     register() {
       return () => undefined
     },

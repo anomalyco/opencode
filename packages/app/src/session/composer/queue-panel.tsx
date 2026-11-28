@@ -13,7 +13,8 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
-import { formatKeybind } from "@/shell/commands/command"
+import { useCommand } from "@/shell/commands/command"
+import { PROMPT_KEYBINDS } from "@/composer/keybinds"
 import type { SessionQueueView } from "./queue"
 import type { QueueRow } from "./queue-machine"
 import {
@@ -169,6 +170,7 @@ function sameIDs(a: readonly string[], b: readonly string[]) {
 }
 
 function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: QueueRow | undefined; index: number }) {
+  const command = useCommand()
   const language = useLanguage()
   const leaving = () => props.index < 0
   const editing = () => props.queue.editing() === props.id
@@ -261,7 +263,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
                   <div class="flex items-center gap-4">
                     <span>{language.t("session.queue.steerTooltip")}</span>
                     <Show when={props.index === 0}>
-                      <Keybind keys={[formatKeybind("mod", language.t), "↵"]} variant="neutral" />
+                      <Keybind keys={command.keybindParts(PROMPT_KEYBINDS.alternate.id)} variant="neutral" />
                     </Show>
                   </div>
                 }

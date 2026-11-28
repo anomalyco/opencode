@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, pageMessagesFrom, provider, sessionHref } from "../utils/app"
 import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
+import { promptShortcuts } from "../utils/prompt-shortcuts"
 import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-server"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
@@ -923,6 +924,142 @@ async function expectCaretVisible(input: Locator) {
     )
     .toBe(true)
 }
+
+test("prompt shortcuts rebind through Settings and preserve selected newline undo", async ({ page }) => {
+  const prompts: { text: unknown; delivery: unknown }[] = []
+
+  const { editor } = await openSession(page, {
+    name: "ComposerShortcuts",
+    sessionStatus: { ses_composershortcuts: { type: "running" } },
+    onPrompt: ({ body }) => void prompts.push({ text: body.text, delivery: body.delivery }),
+  })
+
+  await editor.fill("hello")
+  const shortcuts = await promptShortcuts(page)
+  await expect(shortcuts.binding("submit")).toHaveText("Enter")
+  await shortcuts.record("submit.alternate", "Backspace", "Unassigned")
+  await shortcuts.record("submit", "Backspace", "Unassigned")
+  await shortcuts.record("newline", "Enter", "Enter")
+  await shortcuts.record("submit", "Control+Enter", /^(Ctrl\+|⌃)Enter$/)
+  await shortcuts.close()
+  await expect(editor).toHaveText("hello")
+
+  await editor.press("ControlOrMeta+a")
+  await editor.press("ArrowLeft")
+  await editor.press("ArrowRight")
+  await editor.press("Shift+ArrowRight")
+  await editor.press("Shift+ArrowRight")
+  await editor.press("Shift+ArrowRight")
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("ell")
+  await editor.press("Enter")
+  await expect.poll(() => editor.innerText()).toBe("h\no")
+  await editor.press("ControlOrMeta+z")
+  await expect(editor).toHaveText("hello")
+
+  await page.locator('[data-action="composer-submit"]').hover()
+  await expect(page.getByRole("tooltip").locator('[data-slot="keybind-v2-label"]')).toHaveText([/^(Ctrl|⌃)$/, "Enter"])
+  await editor.press("Control+Enter")
+  await expect(editor).toBeEmpty()
+  await expect.poll(() => prompts).toEqual([{ text: "hello", delivery: "steer" }])
+})
+
+test("a recorded prompt sequence waits for its last key and leaves composition alone", async ({ page }) => {
+  const sent: unknown[] = []
+
+  const { editor } = await openSession(page, {
+    name: "ComposerSequence",
+    onPrompt: ({ body }) => void sent.push(body.text),
+  })
+
+  await editor.fill("send this once")
+  const shortcuts = await promptShortcuts(page)
+  await shortcuts.record("submit", "Control+F8", /F8$/)
+  await shortcuts.settings.getByRole("button", { name: "Add a key", exact: true }).click()
+  await page.keyboard.press("Enter")
+  await expect(shortcuts.binding("submit")).toHaveText(/F8 Enter$/)
+  await shortcuts.close()
+
+  const hint = page.getByRole("status").filter({ hasText: "Submit prompt" })
+  await editor.press("Control+F8")
+  await expect(hint).toBeVisible()
+  await editor.press("Escape")
+  await expect(hint).toHaveCount(0)
+  await editor.press("Control+F8")
+  await expect(hint).toBeVisible()
+  await editor.dispatchEvent("compositionstart")
+  await expect(hint).toHaveCount(0)
+  await editor.press("Control+F8")
+  await expect(hint).toHaveCount(0)
+  await editor.dispatchEvent("compositionend")
+  await editor.press("Control+F8")
+  await expect(hint).toBeVisible()
+  await expect(editor).toHaveText("send this once")
+  await editor.press("Enter")
+  await expect.poll(() => sent).toEqual(["send this once"])
+  await expect(editor).toBeEmpty()
+})
+
+test("prompt shortcuts support Alt+Enter, alternate delivery, disabling, and reset", async ({ page }) => {
+  const prompts: { text: unknown; delivery: unknown }[] = []
+
+  const { editor } = await openSession(page, {
+    name: "ComposerAlternateShortcuts",
+    sessionStatus: { ses_composeralternateshortcuts: { type: "running" } },
+    onPrompt: ({ body }) => void prompts.push({ text: body.text, delivery: body.delivery }),
+  })
+
+  const shortcuts = await promptShortcuts(page)
+  await shortcuts.binding("submit.first").hover()
+  await expect(page.getByRole("tooltip")).toHaveText(/Alt|⌥/)
+  // Rebinding Queue first releases Alt+Enter for newline.
+  await shortcuts.record("submit.first", "Control+q", /^(Ctrl\+|⌃)Q$/)
+  await shortcuts.record("newline", "Alt+Enter", /^(Alt\+|⌥)Enter$/)
+  await shortcuts.record("submit.alternate", "Control+Shift+Enter", /^(Ctrl\+Shift\+|⌃⇧)Enter$/)
+  await shortcuts.close()
+  await editor.fill("queued")
+  await editor.press("End")
+  await editor.press("Alt+Enter")
+  await editor.press("x")
+  await expect.poll(() => editor.innerText()).toBe("queued\nx")
+  await expect(page.locator('[data-action="composer-alternate-delivery"]')).toHaveText(/Queue.*Enter/)
+  await expect(page.locator('[data-action="composer-alternate-delivery"] [data-slot="keybind-v2-label"]')).toHaveText([
+    /^(Ctrl|⌃)$/,
+    /^(Shift|⇧)$/,
+    "Enter",
+  ])
+  await editor.press("Control+Shift+Enter")
+  await expect(editor).toBeEmpty()
+  await expect.poll(() => prompts).toEqual([{ text: "queued\nx", delivery: "queue" }])
+
+  const disabled = await promptShortcuts(page)
+
+  for (const id of ["submit", "newline", "submit.alternate", "submit.first"])
+    await disabled.record(id, "Backspace", "Unassigned")
+  await disabled.close()
+  await editor.fill("disabled shortcuts")
+
+  for (const keys of ["Enter", "Alt+Enter", "Control+Enter", "Control+Shift+Enter", "Control+q"])
+    await editor.press(keys)
+  await expect(editor).toHaveText("disabled shortcuts")
+  await expect(page.locator('[data-action="composer-alternate-delivery"] [data-slot="keybind-v2-label"]')).toHaveCount(
+    0,
+  )
+  expect(prompts).toHaveLength(1)
+
+  const restored = await promptShortcuts(page)
+  await restored.settings.getByRole("button", { name: "Reset to defaults", exact: true }).click()
+  await expect(restored.binding("submit")).toHaveText("Enter")
+  await restored.close()
+  await editor.fill("restored defaults")
+  await editor.press("Enter")
+  await expect(editor).toBeEmpty()
+  await expect
+    .poll(() => prompts)
+    .toEqual([
+      { text: "queued\nx", delivery: "queue" },
+      { text: "restored defaults", delivery: "steer" },
+    ])
+})
 
 test("keeps a 25000-line crash report editable in a new session", async ({ page }) => {
   const input = await draft(page)

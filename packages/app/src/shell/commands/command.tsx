@@ -524,6 +524,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     return {
       register,
+      registerKeyLayer: app.keymap.registerLayer.bind(app.keymap),
       trigger(id: string, source?: CommandSource, input?: string) {
         return run(id, source, input)
       },

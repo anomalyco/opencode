@@ -343,7 +343,11 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     composer={
                       <Show
                         when={state.composerPreviewOpen && props.composerPreview}
-                        fallback={<Composer model={prompt.controller} borderUnderlay />}
+                        fallback={
+                          <SettingsProvider>
+                            <Composer model={prompt.controller} borderUnderlay />
+                          </SettingsProvider>
+                        }
                       >
                         {(preview) =>
                           preview()((activity) => {

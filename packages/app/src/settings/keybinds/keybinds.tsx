@@ -4,6 +4,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
 import { Predicate } from "effect"
@@ -445,6 +446,8 @@ export function createKeybindSettingsController(
       filtered: (query: string) => filteredFor(query, list(), grouped(), (id) => format(effective(id))),
       title,
       keybind: (id: string) => format(effective(id)),
+      alternatives: (id: string) =>
+        [...new Set((effective(id) ?? "").split(",").map(format))].filter(Boolean).join(" / "),
     },
     capture: {
       active: () => selectCapturingKeybind(captureState()),
@@ -485,6 +488,7 @@ export function SettingsKeybinds(props: { active?: boolean }) {
       filtered={controller.catalog.filtered}
       title={controller.catalog.title}
       keybind={controller.catalog.keybind}
+      alternatives={controller.catalog.alternatives}
       active={controller.capture.active()}
       prefix={controller.capture.prefix()}
       extendable={controller.capture.extendable}
@@ -503,6 +507,7 @@ function SettingsKeybindsView(props: {
   filtered: (query: string) => Map<KeybindGroup, string[]>
   title: (id: string) => string
   keybind: (id: string) => string
+  alternatives: (id: string) => string
   active: string | null
   prefix: string
   extendable: (id: string) => boolean
@@ -552,6 +557,7 @@ function SettingsKeybindsView(props: {
                             <ShortcutButton
                               id={id}
                               binding={props.keybind(id)}
+                              alternatives={props.alternatives(id)}
                               active={props.active}
                               prefix={props.prefix}
                               onCapture={props.onCapture}
@@ -592,6 +598,7 @@ function SettingsKeybindsView(props: {
 function ShortcutButton(props: {
   id: string
   binding: string
+  alternatives: string
   active: string | null
   prefix: string
   onCapture: (id: string) => void
@@ -607,18 +614,20 @@ function ShortcutButton(props: {
           {language.t("settings.shortcuts.unbind")}
         </Button>
       </Show>
-      <Button
-        type="button"
-        size="small"
-        variant={props.binding ? "ghost" : "ghost-muted"}
-        data-keybind-id={props.id}
-        data-expanded={recording() ? "" : undefined}
-        onClick={() => props.onCapture(props.id)}
-      >
-        <Show when={recording()} fallback={props.binding || language.t("settings.shortcuts.unassigned")}>
-          {props.prefix ? `${props.prefix} …` : language.t("settings.shortcuts.pressKeys")}
-        </Show>
-      </Button>
+      <Tooltip value={props.alternatives} inactive={!props.binding || recording()}>
+        <Button
+          type="button"
+          size="small"
+          variant={props.binding ? "ghost" : "ghost-muted"}
+          data-keybind-id={props.id}
+          data-expanded={recording() ? "" : undefined}
+          onClick={() => props.onCapture(props.id)}
+        >
+          <Show when={recording()} fallback={props.binding || language.t("settings.shortcuts.unassigned")}>
+            {props.prefix ? `${props.prefix} …` : language.t("settings.shortcuts.pressKeys")}
+          </Show>
+        </Button>
+      </Tooltip>
     </div>
   )
 }
