@@ -41,6 +41,11 @@ export interface Events {
 export interface Spec {
   readonly name: string
   readonly config: Mcp.ServerConfig
+  /**
+   * Resolved on every attempt and used in place of `config`, so per-attempt settings such as a
+   * certificate pin also apply to reconnects. A failure is reported through `failed`.
+   */
+  readonly resolveConfig?: () => Effect.Effect<Mcp.ServerConfig, Error>
   readonly directory: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
   /** Lists the server's MCP Skills when it offers them. */
@@ -216,8 +221,19 @@ export function make(input: Input): Connection {
   const start: Effect.Effect<void> = Effect.suspend(() =>
     Effect.gen(function* () {
       yield* input.events.connecting
+      const resolved = yield* (input.spec.resolveConfig
+        ? input.spec.resolveConfig()
+        : Effect.succeed(input.spec.config)).pipe(Effect.exit)
+      if (Exit.isFailure(resolved)) {
+        const error = Cause.squash(resolved.cause)
+        return yield* input.events.failed(
+          { status: "failed", error: error instanceof Error ? error.message : String(error) },
+          // The pin check probed the server, which answered with the untrusted certificate.
+          true,
+        )
+      }
+      const config = resolved.value
       // Checked before the OAuth provider is built, which parses the URL too.
-      const config = input.spec.config
       if (config.type === "remote" && !URL.canParse(config.url))
         return yield* input.events.failed({ status: "failed", error: `Invalid MCP server URL: ${config.url}` }, false)
       const scope = yield* Scope.fork(input.scope)

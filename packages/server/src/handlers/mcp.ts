@@ -2,7 +2,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Mcp } from "@opencode/core/mcp/index"
 import { PtyTicket } from "@opencode/core/pty/ticket"
-import { ForbiddenError, McpServerNotFoundError } from "@opencode/protocol/errors"
+import { ForbiddenError, InvalidRequestError, McpServerNotFoundError } from "@opencode/protocol/errors"
 import { PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "@opencode/protocol/groups/pty"
 import { Effect, Queue } from "effect"
 import { HttpServerResponse } from "effect/http"
@@ -15,6 +15,9 @@ import { holdLocation, type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
   effect.pipe(Effect.mapError((error) => new McpServerNotFoundError({ server: error.server, message: error.message })))
+
+const invalid = <A, R>(effect: Effect.Effect<A, Error, R>) =>
+  effect.pipe(Effect.mapError((error) => new InvalidRequestError({ message: error.message })))
 
 export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
   Effect.gen(function* () {
@@ -60,6 +63,28 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
           const service = yield* Mcp.Service
           yield* notFound(service.disconnect(ctx.params.server))
           return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "mcp.trust.inspect",
+        Effect.fn(function* (ctx) {
+          const service = yield* Mcp.Service
+          return yield* response(invalid(service.trustInspect({ url: ctx.payload.url })))
+        }),
+      )
+      .handle(
+        "mcp.trust.pin",
+        Effect.fn(function* (ctx) {
+          const service = yield* Mcp.Service
+          return yield* response(
+            invalid(
+              service.trust({
+                url: ctx.payload.url,
+                force: ctx.payload.force,
+                expectFingerprint: ctx.payload.expectFingerprint,
+              }),
+            ),
+          )
         }),
       )
       .handle(

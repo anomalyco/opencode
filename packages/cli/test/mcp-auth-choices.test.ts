@@ -60,3 +60,22 @@ test("mcp auth accepts an optional server name and rejects no-name noninteractiv
   expect(await new Response(missing.stderr).text()).toBe("")
   expect(await missing.exited).toBe(1)
 })
+
+test("mcp trust takes a server URL, a force flag, and a yes flag", async () => {
+  const cli = (args: string[]) =>
+    Bun.spawn([process.execPath, "run", "src/index.ts", "mcp", "trust", ...args], {
+      cwd: path.join(import.meta.dir, ".."),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+  const help = cli(["--help"])
+  const helpText = await new Response(help.stdout).text()
+  expect(helpText).toContain("opencode mcp trust [flags] <url>")
+  expect(helpText).toContain("--force")
+  expect(helpText).toContain("--yes")
+  expect(await help.exited).toBe(0)
+
+  const missing = cli([])
+  expect(await new Response(missing.stdout).text()).toContain("opencode mcp trust [flags] <url>")
+  expect(await missing.exited).toBe(1)
+})
