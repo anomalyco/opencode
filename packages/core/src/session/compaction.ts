@@ -641,7 +641,8 @@ export const layer = Layer.effect(
      * estimate ran low, so the next attempts aim at 85%, 70%, 50%, then 35% of the first rejected request's estimate,
      * each shortening the transcript again from scratch, and a rejection after those gives up. A "payload too large"
      * rejection is about bytes, which inline media almost always accounts for, so one on the unchanged request resends
-     * it as text, which carries no media, without counting; one on text counts as "too long". Other provider errors
+     * it as text, which carries no media, without counting; one on text counts as "too long". A rejected WebSocket
+     * continuation retries once immediately in full mode after the transport clears the socket. Other provider errors
      * resend the same request under the session's retry policy. A `Failure` from `send` is a reply that cannot be
      * used, and is never retried.
      */
@@ -669,6 +670,7 @@ export const layer = Layer.effect(
       let rejected: number | undefined
       let asText = shrink.text ?? false
       let fit = shrink.fit
+      let recoverContinuation = true
 
       while (true) {
         const measured = rejections === 0 ? shrink.measured : undefined
@@ -720,6 +722,15 @@ export const layer = Layer.effect(
           target = Math.floor(rejected * step)
           fit = target
           rejections++
+          continue
+        }
+
+        if (
+          recoverContinuation &&
+          cause.reason._tag === "Transport" &&
+          (cause.reason.recovery === "retry-full" || cause.reason.recovery === "rotate-and-retry-full")
+        ) {
+          recoverContinuation = false
           continue
         }
 

@@ -50,7 +50,9 @@ const it = testEffect(
   ),
 )
 
-const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {}) {
+const setup = Effect.fnUntraced(function* (
+  options: { endpoint?: boolean; webSocket?: { readonly rejections: ReadonlyArray<string> } } = {},
+) {
   const endpoint = options.endpoint ?? false
   const db = (yield* Database.Service).db
   const bus = yield* Bus.Service
@@ -62,21 +64,29 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
   const state = { failure: false, flaky: false, hang: false, overflow: false, calls: 0 }
+  let nextConnection = 0
+  const wsRequests: Array<{ readonly connection: number; readonly body: Record<string, unknown> }> = []
+  const ws = {
+    opens: 0,
+    rejections: [...(options.webSocket?.rejections ?? [])],
+    requests: wsRequests,
+  }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
+  const decodeBody = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
   const server = yield* Effect.acquireRelease(
     Effect.sync(() =>
-      Bun.serve({
+      Bun.serve<{ id: number }>({
         hostname: "127.0.0.1",
         port: 0,
-        async fetch(request) {
+        async fetch(request, server) {
+          if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+            if (server.upgrade(request, { data: { id: nextConnection++ } })) return undefined
+            return new Response("Upgrade rejected", { status: 503 })
+          }
           state.calls++
           headers.push(request.headers)
-          bodies.push(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
-              await request.text(),
-            ),
-          )
+          bodies.push(decodeBody(await request.text()))
           if (state.hang) {
             Deferred.doneUnsafe(blocked, Effect.void)
             return hanging.promise
@@ -131,6 +141,52 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
             { headers: { "content-type": "text/event-stream" } },
           )
         },
+        websocket: {
+          open() {
+            ws.opens++
+          },
+          message(socket, data) {
+            state.calls++
+            const body = decodeBody(String(data))
+            ws.requests.push({ connection: socket.data.id, body })
+            const trigger = JSON.stringify(body).includes("compaction_trigger")
+            const rejection = trigger ? ws.rejections.shift() : undefined
+            if (rejection) {
+              socket.send(
+                JSON.stringify({
+                  type: "error",
+                  error: {
+                    type: "invalid_request_error",
+                    code: rejection,
+                    message: `fixture ${rejection}`,
+                  },
+                }),
+              )
+              return
+            }
+            const id = `resp_${state.calls}`
+            const checkpoint = {
+              type: "compaction",
+              id: `cmp_${state.calls}`,
+              encrypted_content: `encrypted_${state.calls}`,
+            }
+            const output = trigger ? [checkpoint] : []
+            socket.send(JSON.stringify({ type: "response.created", response: { id } }))
+            if (trigger)
+              socket.send(JSON.stringify({ type: "response.output_item.done", output_index: 0, item: checkpoint }))
+            socket.send(
+              JSON.stringify({
+                type: "response.completed",
+                response: {
+                  id,
+                  status: "completed",
+                  output,
+                  usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
+                },
+              }),
+            )
+          },
+        },
       }),
     ),
     (server) =>
@@ -149,8 +205,10 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
     {
       capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
       cost: [],
-      limit: { context: 200_000, output: 32_000 },
+      // Keep primary and compaction output limits identical on WebSocket tests so continuation matches.
+      limit: { context: 200_000, output: options.webSocket ? 16_000 : 32_000 },
       compaction: { type: "native" },
+      transport: options.webSocket ? "websocket" : undefined,
     },
   )
   const sessionID = SessionSchema.ID.create()
@@ -174,14 +232,16 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
     render: { initial: String, changed: (_previous, value) => value, removed: () => "removed" },
   })
   yield* InstructionState.prepare(db, bus, instructions, sessionID)
-  yield* hooks.register("session", "model.request", (event) =>
-    Effect.sync(() => {
-      event.headers["x-test-hook"] = event.kind
-    }),
-  )
-  yield* hooks.register("session", "http.request", (event) =>
-    Effect.sync(() => event.request.headers.set("x-http-hook", event.kind)),
-  )
+  if (!options.webSocket) {
+    yield* hooks.register("session", "model.request", (event) =>
+      Effect.sync(() => {
+        event.headers["x-test-hook"] = event.kind
+      }),
+    )
+    yield* hooks.register("session", "http.request", (event) =>
+      Effect.sync(() => event.request.headers.set("x-http-hook", event.kind)),
+    )
+  }
   const prompt = Effect.fnUntraced(function* (text: string, synthetic = false) {
     const id = SessionMessage.ID.create()
     yield* inbox.admit({
@@ -236,6 +296,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
     bodies,
     headers,
     state,
+    ws,
     blocked,
     sessionID,
     store,
@@ -400,6 +461,89 @@ it.live("compaction hooks supply the summary instead of provider compaction", ()
     })
   }),
 )
+
+for (const code of ["previous_response_not_found", "websocket_connection_limit_reached"] as const) {
+  it.live(`native trigger compaction rotates socket and retries once in full mode after ${code}`, () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup({ webSocket: { rejections: [code] } })
+      const retries: PluginHooks.Domains["session"]["retry"][] = []
+      yield* fixture.hooks.register("session", "retry", (event) =>
+        Effect.sync(() => {
+          retries.push(event)
+        }),
+      )
+      yield* fixture.prompt("Original user request")
+      const context = yield* fixture.load
+      const prepared = yield* fixture.requests.primary({
+        session: context.session,
+        agent: context.agent.id,
+        model: context.model,
+        tools: context.tools,
+        webSocket: "session",
+        ...SessionModelRequest.baseTranscript({ ...context, agent: context.agent.info }),
+      })
+      const client = yield* LLMClient.Service
+      yield* client.generate(prepared.request, prepared.options)
+
+      expect(yield* fixture.compact).toEqual({ status: "completed" })
+      const checkpoint = yield* fixture.checkpoint
+      expect(JSON.stringify(checkpoint.native.messages)).toContain("encrypted_3")
+      expect(fixture.ws.opens).toBe(2)
+      expect(fixture.bodies).toHaveLength(0)
+      expect(retries).toHaveLength(0)
+      expect(fixture.ws.requests).toHaveLength(3)
+      // First compaction attempt reuses the socket with the stored continuation checkpoint.
+      expect(fixture.ws.requests[1]?.connection).toBe(0)
+      expect(fixture.ws.requests[1]?.body).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "compaction_trigger" }],
+      })
+      // Second compaction attempt opens a fresh socket and sends full history without previous_response_id.
+      expect(fixture.ws.requests[2]?.connection).toBe(1)
+      expect(fixture.ws.requests[2]?.body).not.toHaveProperty("previous_response_id")
+      expect(fixture.ws.requests[2]?.body).toMatchObject({
+        input: [
+          { role: "developer" },
+          { role: "user", content: [{ type: "input_text", text: "Original user request" }] },
+          { type: "compaction_trigger" },
+        ],
+      })
+    }),
+  )
+
+  it.live(`native trigger compaction fails cleanly after consecutive ${code} rejections`, () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup({ webSocket: { rejections: [code, code] } })
+      yield* fixture.prompt("Original user request")
+      const context = yield* fixture.load
+      const prepared = yield* fixture.requests.primary({
+        session: context.session,
+        agent: context.agent.id,
+        model: context.model,
+        tools: context.tools,
+        webSocket: "session",
+        ...SessionModelRequest.baseTranscript({ ...context, agent: context.agent.info }),
+      })
+      const client = yield* LLMClient.Service
+      yield* client.generate(prepared.request, prepared.options)
+
+      expect(yield* fixture.compact).toMatchObject({
+        status: "failed",
+        error: { message: expect.stringContaining(code) },
+      })
+      expect(fixture.ws.opens).toBe(2)
+      expect(fixture.bodies).toHaveLength(0)
+      // 1 primary + 1 rejected incremental compaction + 1 rejected full recovery = 3 total.
+      expect(fixture.ws.requests).toHaveLength(3)
+      expect(fixture.ws.requests[1]?.body).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "compaction_trigger" }],
+      })
+      expect(fixture.ws.requests[2]?.connection).toBe(1)
+      expect(fixture.ws.requests[2]?.body).not.toHaveProperty("previous_response_id")
+    }),
+  )
+}
 
 test("retained user budget counts attachments and drops whole oldest messages", () => {
   const model = SessionRunnerModel.resolved(OpenAI.responses("gpt-5.4-mini"), {
