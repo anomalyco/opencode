@@ -475,6 +475,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("list", {
           description: "List top-level sessions in the current project, newest first",
           params: {
+            archived: Flag.Boolean("archived").pipe(
+              Flag.withDescription("Show only archived sessions (use --no-archived to exclude them)"),
+              Flag.optional,
+            ),
             maxCount: Flag.Int("max-count").pipe(
               Flag.withAlias("n"),
               Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
@@ -485,6 +489,18 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDescription("Output format"),
               Flag.withDefault("table"),
             ),
+          },
+        }),
+        Spec.make("archive", {
+          description: "Archive a session",
+          params: {
+            sessionID: Argument.String("sessionID").pipe(Argument.withDescription("Session ID to archive")),
+          },
+        }),
+        Spec.make("unarchive", {
+          description: "Restore an archived session",
+          params: {
+            sessionID: Argument.String("sessionID").pipe(Argument.withDescription("Session ID to restore")),
           },
         }),
         Spec.make("delete", {
