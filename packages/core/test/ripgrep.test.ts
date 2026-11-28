@@ -194,7 +194,7 @@ describe("Ripgrep", () => {
         yield* Effect.promise(() =>
           fs.writeFile(
             path.join(tmp.path, "generated.ts"),
-            `Cloudflare${"x".repeat(70 * 1024)}\n${"y".repeat(35 * 1024)}Cloudflare${"y".repeat(35 * 1024)}\n`,
+            `Cloudflare${"x".repeat(70 * 1024)}\n${"y".repeat(35 * 1024)}Cloudflare${"y".repeat(35 * 1024)}\n${"z".repeat(35 * 1024)}Cloudflare\n`,
           ),
         )
 
@@ -207,11 +207,12 @@ describe("Ripgrep", () => {
           limit: 10,
         })
 
-        expect(matches).toHaveLength(2)
+        expect(matches).toHaveLength(3)
         expect(matches[0]?.entry.path).toBe(RelativePath.make("generated.ts"))
         expect(matches[0]?.text).toBe(`Cloudflare${"x".repeat(1_990)}...`)
         expect(matches[0]?.submatches).toEqual([{ text: "Cloudflare", start: 0, end: 10 }])
         expect(matches[1]?.text).toBe(`...${"y".repeat(1_000)}Cloudflare${"y".repeat(990)}...`)
+        expect(matches[2]?.text).toBe(`...${"z".repeat(1_989)}Cloudflare\n`)
       }),
     ),
   )

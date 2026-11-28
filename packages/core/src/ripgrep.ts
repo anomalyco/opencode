@@ -54,12 +54,17 @@ const around = (text: string, at: number) => {
   )
 }
 
-// rg reports a match's start as a byte offset into the line.
+// rg reports a match's start as a byte offset into the line, which is also its index when the line is ASCII.
 const preview = (data: typeof RawData.Type, match = 0) => {
   if ("text" in data)
     return data.text.length <= MAX_LINE_CHARS
       ? data.text
-      : around(data.text, new TextEncoder().encodeInto(data.text, new Uint8Array(match)).read)
+      : around(
+          data.text,
+          Buffer.byteLength(data.text) === data.text.length
+            ? match
+            : new TextEncoder().encodeInto(data.text, new Uint8Array(match)).read,
+        )
   const bytes = Buffer.from(data.bytes, "base64")
   const text = bytes.toString("utf8")
   return text.length <= MAX_LINE_CHARS ? text : around(text, bytes.subarray(0, match).toString("utf8").length)
