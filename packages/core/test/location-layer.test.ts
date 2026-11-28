@@ -24,19 +24,21 @@ import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
+import { LocationServiceMap, buildLocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Config } from "@opencode/core/config"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionExecution } from "@opencode/core/session/execution"
 import { Workspace } from "@opencode/core/workspace"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
@@ -773,6 +775,99 @@ describe("LocationServiceMap", () => {
             providerID: "other",
             modelID: "hidden",
           })
+        }),
+      ),
+    ),
+  )
+
+  it.live("fails loudly when a location has zero provider plugins instead of draining silently", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const errors: unknown[] = []
+          const executionFailures: SessionEvent.Execution.Failed[] = []
+          const corruptLayer = AppNodeBuilder.build(
+            LayerNode.group([Database.node, Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]),
+            [
+              Global.node.replace(tempGlobalLayer),
+              offlineModels,
+              LocationServiceMap.node.replace(
+                buildLocationServiceMap([
+                  Global.node.replace(tempGlobalLayer),
+                  offlineModels,
+                  // Simulate a corrupt location where builtin provider plugins never activated.
+                  PluginSupervisor.node.replace(Layer.empty),
+                ]),
+              ),
+            ],
+          ).pipe(
+            Layer.provideMerge(
+              Logger.layer([
+                Logger.make((entry) => {
+                  if (entry.logLevel === "Error") errors.push(entry.message)
+                }),
+              ]),
+            ),
+          )
+
+          yield* Effect.gen(function* () {
+            const bus = yield* Bus.Service
+            const sessions = yield* Session.Service
+            const execution = yield* SessionExecution.Service
+            yield* bus.project(SessionEvent.Execution.Failed, (event) =>
+              Effect.sync(() => void executionFailures.push(event)),
+            )
+
+            // Case 1: Zero plugins at all (neither agents nor providers registered).
+            const emptySession = yield* sessions.create({
+              location,
+              model: { providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5") },
+            })
+            yield* sessions.prompt({ sessionID: emptySession.id, text: "hello", resume: false })
+            const emptyFailure = yield* execution.resume(emptySession.id).pipe(Effect.flip)
+            expect(emptyFailure).toMatchObject({
+              _tag: "SessionRunnerModel.NoProvidersError",
+              sessionID: emptySession.id,
+            })
+
+            // Case 2: An agent exists, but zero provider plugins are registered.
+            yield* Effect.gen(function* () {
+              const agents = yield* Agent.Service
+              yield* agents.transform((editor) => {
+                editor.update(Agent.ID.make("build"), (agent) => {
+                  agent.mode = "primary"
+                })
+                editor.default(Agent.ID.make("build"))
+              })
+            }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
+
+            const modelSession = yield* sessions.create({
+              location,
+              model: { providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5") },
+            })
+            yield* sessions.prompt({ sessionID: modelSession.id, text: "hello again", resume: false })
+            const modelFailure = yield* execution.resume(modelSession.id).pipe(Effect.flip)
+            expect(modelFailure).toMatchObject({
+              _tag: "SessionRunnerModel.NoProvidersError",
+              sessionID: modelSession.id,
+            })
+          }).pipe(Effect.provide(corruptLayer), Effect.scoped)
+
+          expect(executionFailures).toHaveLength(2)
+          for (const event of executionFailures) {
+            expect(event.data.error).toMatchObject({
+              type: "provider.no-route",
+              message: expect.stringContaining("builtin provider plugins failed to load"),
+            })
+          }
+          expect(
+            errors.some((message) =>
+              JSON.stringify(message).includes(
+                "location has no registered providers; builtin provider plugins are missing",
+              ),
+            ),
+          ).toBe(true)
         }),
       ),
     ),

@@ -192,7 +192,7 @@ test("TUI plugins importing @opencode/plugin/tui and solid-js alongside effect r
         'import { Effect, Schema } from "effect"; import { some } from "effect/Option"; export const helper = { Effect, Schema, some }',
       "node_modules/zod/package.json": '{"name":"zod","type":"module","exports":{".":"./index.js"}}',
       "node_modules/zod/index.js": "export const fromPluginZod = true",
-      "helper.ts": ['import { fromPluginZod }', 'from "zod"; export { fromPluginZod }'].join(" "),
+      "helper.ts": ["import { fromPluginZod }", 'from "zod"; export { fromPluginZod }'].join(" "),
       "tui.ts": [
         "import { createSignal }",
         'from "solid-js"',
@@ -855,6 +855,118 @@ test.each(["ts", "tsx"])("%s wildcard package barrels retain live exports", asyn
   expect(loaded).toMatchObject({ default: { value: "package" }, count: 0 })
   loaded.increment()
   expect(loaded).toMatchObject({ count: 1 })
+})
+
+test("concurrent readers serialize module loads for the same entrypoint and share unchanged revisions", async () => {
+  const dir = await tmpdir()
+  const entry = new URL("shared.ts", pathToFileURL(dir.path + path.sep))
+  const helper = new URL("helper.ts", pathToFileURL(dir.path + path.sep))
+  const log = path.join(dir.path, "evals.log")
+  await Bun.write(helper, 'export const label = "v1"')
+  await Bun.write(
+    entry,
+    `import { appendFileSync } from "node:fs"
+import { label } from "./helper.ts"
+appendFileSync(${JSON.stringify(log)}, "enter\\n")
+await Bun.sleep(15)
+appendFileSync(${JSON.stringify(log)}, "leave\\n")
+export default { label }`,
+  )
+  const watchedA: string[] = []
+  const watchedB: string[] = []
+  const sourcesA = createPluginSources(async (file) => void watchedA.push(file))
+  const sourcesB = createPluginSources(async (file) => void watchedB.push(file))
+  try {
+    const [firstA, firstB] = await Promise.all([sourcesA.read(entry.href), sourcesB.read(entry.href)])
+    expect((await Bun.file(log).text()).trim().split("\n")).toEqual(["enter", "leave"])
+    expect(firstA.version).toBe(firstB.version)
+    expect(firstA.module).toBe(firstB.module)
+    expect(watchedA).toContain(fileURLToPath(helper))
+    expect(watchedB).toContain(fileURLToPath(helper))
+
+    await Bun.write(helper, 'export const label = "v2"')
+    const [secondA, secondB] = await Promise.all([sourcesA.read(entry.href), sourcesB.read(entry.href)])
+    expect((await Bun.file(log).text()).trim().split("\n")).toEqual(["enter", "leave", "enter", "leave"])
+    expect(secondA.version).toBe(secondB.version)
+    expect(secondA.version).not.toBe(firstA.version)
+    expect(secondA.module).toMatchObject({ default: { label: "v2" } })
+    expect(secondB.module).toMatchObject({ default: { label: "v2" } })
+  } finally {
+    sourcesA.dispose()
+    sourcesB.dispose()
+    await dir[Symbol.asyncDispose]()
+  }
+})
+
+test("concurrent readers serialize different entrypoints that share a local helper", async () => {
+  const dir = await tmpdir()
+  const base = pathToFileURL(dir.path + path.sep)
+  const entryA = new URL("entry-a.ts", base)
+  const entryB = new URL("entry-b.ts", base)
+  const helper = new URL("shared-helper.ts", base)
+  const log = path.join(dir.path, "helper-evals.log")
+  const writeHelper = (label: string) =>
+    Bun.write(
+      helper,
+      `import { appendFileSync } from "node:fs"
+appendFileSync(${JSON.stringify(log)}, "enter\\n")
+await Bun.sleep(15)
+appendFileSync(${JSON.stringify(log)}, "leave\\n")
+export const label = ${JSON.stringify(label)}`,
+    )
+  await writeHelper("v1")
+  await Bun.write(entryA, 'import { label } from "./shared-helper.ts"; export default { entry: "a", label }')
+  await Bun.write(entryB, 'import { label } from "./shared-helper.ts"; export default { entry: "b", label }')
+
+  const watchedA: string[] = []
+  const watchedB: string[] = []
+  const sourcesA = createPluginSources(async (file) => void watchedA.push(file))
+  const sourcesB = createPluginSources(async (file) => void watchedB.push(file))
+  try {
+    const [firstA1, firstA2, firstB1, firstB2] = await Promise.all([
+      sourcesA.read(entryA.href),
+      sourcesB.read(entryA.href),
+      sourcesA.read(entryB.href),
+      sourcesB.read(entryB.href),
+    ])
+    expect((await Bun.file(log).text()).trim().split("\n")).toEqual(["enter", "leave", "enter", "leave"])
+    expect(firstA1.version).toBe(firstA2.version)
+    expect(firstA1.module).toBe(firstA2.module)
+    expect(firstB1.version).toBe(firstB2.version)
+    expect(firstB1.module).toBe(firstB2.module)
+    expect(firstA1.module).toMatchObject({ default: { entry: "a", label: "v1" } })
+    expect(firstB1.module).toMatchObject({ default: { entry: "b", label: "v1" } })
+    expect(watchedA).toContain(fileURLToPath(helper))
+    expect(watchedB).toContain(fileURLToPath(helper))
+
+    await writeHelper("v2")
+    const [secondA1, secondA2, secondB1, secondB2] = await Promise.all([
+      sourcesA.read(entryA.href),
+      sourcesB.read(entryA.href),
+      sourcesA.read(entryB.href),
+      sourcesB.read(entryB.href),
+    ])
+    expect((await Bun.file(log).text()).trim().split("\n")).toEqual([
+      "enter",
+      "leave",
+      "enter",
+      "leave",
+      "enter",
+      "leave",
+      "enter",
+      "leave",
+    ])
+    expect(secondA1.version).toBe(secondA2.version)
+    expect(secondA1.version).not.toBe(firstA1.version)
+    expect(secondB1.version).toBe(secondB2.version)
+    expect(secondB1.version).not.toBe(firstB1.version)
+    expect(secondA1.module).toMatchObject({ default: { entry: "a", label: "v2" } })
+    expect(secondB1.module).toMatchObject({ default: { entry: "b", label: "v2" } })
+  } finally {
+    sourcesA.dispose()
+    sourcesB.dispose()
+    await dir[Symbol.asyncDispose]()
+  }
 })
 
 async function fixture(watch: (file: string) => Promise<void> = async () => {}) {

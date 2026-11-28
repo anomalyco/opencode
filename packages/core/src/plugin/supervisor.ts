@@ -1,7 +1,8 @@
 export * as PluginSupervisor from "./supervisor.js"
 
-import { Event } from "@opencode/schema/config"
+import { Document, type Entry, Event } from "@opencode/schema/config"
 import { Cause, Effect, Layer, Queue, Stream } from "effect"
+import { Config } from "../config.js"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
@@ -22,8 +23,6 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   install: boolean,
   running: ReadonlyMap<string, Plugin.Generation>,
 ) {
-  const matches = (selector: string, target: string) =>
-    selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
   const packages = new Map<string, Plugin.Generation>()
@@ -34,22 +33,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   for (const operation of operations) {
     if (operation.type === "remove") {
       if (operation.target === "*") failures.clear()
-      plugins()
-        .filter((plugin) => matches(operation.target, plugin.id) && !PluginInternal.guarded.has(plugin.id))
-        .forEach((plugin) => enabled.delete(plugin.id))
+      applySelection(plugins(), enabled, operation)
       continue
     }
 
-    const matched = plugins().filter((plugin) => matches(operation.target, plugin.id))
-    const selectsPlugins =
-      matched.length > 0 ||
-      operation.target === "*" ||
-      operation.target.endsWith(".*") ||
-      operation.target.startsWith("opencode.")
-    if (selectsPlugins) {
-      matched.forEach((plugin) => enabled.add(plugin.id))
-      continue
-    }
+    if (applySelection(plugins(), enabled, operation)) continue
 
     const plugin = yield* modules.load(operation, { install }).pipe(
       Effect.catchCause((cause) => {
@@ -96,15 +84,70 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
     ...post.filter((plugin) => enabled.has(plugin.id)),
   ]
-  // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
-  // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
+  return {
+    ...deduplicate(ordered, [...failures.values()]),
+    packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),
+    pending: [...pending],
+  }
+})
+
+function matches(selector: string, target: string) {
+  return selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
+}
+
+function applySelection(
+  plugins: readonly Plugin.Generation[],
+  enabled: Set<string>,
+  operation: Pick<ConfigPluginSource.Operation, "type" | "target">,
+) {
+  if (operation.type === "remove") {
+    plugins
+      .filter((plugin) => matches(operation.target, plugin.id) && !PluginInternal.guarded.has(plugin.id))
+      .forEach((plugin) => enabled.delete(plugin.id))
+    return true
+  }
+  const matched = plugins.filter((plugin) => matches(operation.target, plugin.id))
+  const selectsPlugins =
+    matched.length > 0 ||
+    operation.target === "*" ||
+    operation.target.endsWith(".*") ||
+    operation.target.startsWith("opencode.")
+  if (!selectsPlugins) return false
+  matched.forEach((plugin) => enabled.add(plugin.id))
+  return true
+}
+
+function selectDefinitions(
+  definitions: readonly Plugin.Generation[],
+  operations: readonly Pick<ConfigPluginSource.Operation, "type" | "target">[],
+) {
+  const enabled = new Set(definitions.map((plugin) => plugin.id))
+  operations.forEach((operation) => applySelection(definitions, enabled, operation))
+  return definitions.filter((plugin) => enabled.has(plugin.id))
+}
+
+function documentOperations(entries: readonly Entry[]) {
+  return entries
+    .filter((entry): entry is Document => entry.type === "document")
+    .flatMap((entry) => entry.info.plugins ?? [])
+    .flatMap((input): readonly Pick<ConfigPluginSource.Operation, "type" | "target">[] => {
+      // ConfigPluginSource.parse throws on a lone "-"; skip only that entry so one invalid item
+      // does not discard valid config operations during first-activation fallback.
+      if (input === "-") return []
+      const operation = ConfigPluginSource.parse(input)
+      return [{ type: operation.type, target: operation.target }]
+    })
+}
+
+// Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
+// Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
+function deduplicate(ordered: readonly Plugin.Generation[], failures: readonly Plugin.Failure[]) {
   const duplicate = (plugin: Plugin.Generation, index: number) =>
     ordered.findIndex((other) => other.id === plugin.id) !== index
   return {
     plugins: ordered.filter((plugin, index) => !duplicate(plugin, index)),
-    packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),
     failures: [
-      ...failures.values(),
+      ...failures,
       ...ordered.filter(duplicate).map((plugin) => ({
         id: Plugin.ID.make(plugin.id),
         source: plugin.source ?? { type: "builtin" as const },
@@ -112,15 +155,15 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         features: plugin.features ?? { server: true as const },
       })),
     ],
-    pending: [...pending],
   }
-})
+}
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
     const instance = yield* InstancePlugins.Service
+    const config = yield* Config.Service
     const sources = yield* ConfigPluginSource.Service
     const modules = yield* PluginModule.make()
     const bus = yield* Bus.Service
@@ -134,6 +177,13 @@ export const layer = Layer.effectDiscard(
     let packages = new Set<string>()
     // Last generation handed to the registry per target; a failed reload keeps it in place.
     let running = new Map<string, Plugin.Generation>()
+    // Last successfully applied plugin set; a failed reload keeps it active and surfaces the error.
+    let applied:
+      | { readonly plugins: readonly Plugin.Generation[]; readonly failures: readonly Plugin.Failure[] }
+      | undefined
+    // Operations read during the current activation attempt, so a first-activation failure after
+    // reading operations still respects disabled builtins.
+    let lastOperations: readonly ConfigPluginSource.Operation[] | undefined
     let outdated = new Set<string>()
     const updating = new Set<string>()
     // The check interval in which each outdated plugin was last considered for updating on its own. Once per interval,
@@ -143,6 +193,24 @@ export const layer = Layer.effectDiscard(
     let generation = 0
     let observed = 0
 
+    const source = (source: Plugin.Source) =>
+      source.type === "package"
+        ? {
+            ...source,
+            ...(outdated.has(source.target) ? { outdated: true as const } : {}),
+            ...(updating.has(source.target) ? { updating: true as const } : {}),
+          }
+        : source
+
+    const apply = (resolved: {
+      readonly plugins: readonly Plugin.Generation[]
+      readonly failures: readonly Plugin.Failure[]
+    }) =>
+      registry.activate(
+        resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
+        resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
+      )
+
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
       const current = ++generation
       // Combine internal plugins with host-contributed plugins in boot order.
@@ -150,27 +218,21 @@ export const layer = Layer.effectDiscard(
       // container writes, so the instance's explicit choices win over globals.
       const pre = [...internal.pre, ...sdk.all(), ...instance.all()]
       const post = internal.post
+      lastOperations = undefined
       const operations = yield* sources.operations()
+      lastOperations = operations
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(modules, pre, post, operations, false, running)
-      const source = (source: Plugin.Source) =>
-        source.type === "package"
-          ? {
-              ...source,
-              ...(outdated.has(source.target) ? { outdated: true as const } : {}),
-              ...(updating.has(source.target) ? { updating: true as const } : {}),
-            }
-          : source
-      const apply = (resolved: typeof immediate) =>
-        registry.activate(
-          resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
-          resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
-        )
       yield* apply(immediate)
+      applied = { plugins: immediate.plugins, failures: immediate.failures }
+      running = immediate.packages
       const resolved = immediate.pending.length
         ? yield* resolve(modules, pre, post, operations, true, running)
         : immediate
-      if (resolved !== immediate) yield* apply(resolved)
+      if (resolved !== immediate) {
+        yield* apply(resolved)
+        applied = { plugins: resolved.plugins, failures: resolved.failures }
+      }
       running = resolved.packages
       // A newer version that fails to load leaves the running one in place. Stop using the newer one on disk too, so a
       // restart loads the version that works.
@@ -261,7 +323,50 @@ export const layer = Layer.effectDiscard(
     yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(triggers).pipe(Stream.debounce("100 millis"))).pipe(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
-          yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
+          yield* activate().pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              const error = Cause.squash(cause)
+              const detail = error instanceof Error && error.message ? error.message : String(error)
+              const failure: Plugin.Failure = {
+                source: { type: "builtin" },
+                state: { status: "failed", error: `Failed to reload plugins: ${detail}`, ref },
+                features: { server: true },
+              }
+              const fallback = Effect.gen(function* () {
+                if (applied) return applied
+                const definitions = [...internal.pre, ...sdk.all(), ...instance.all(), ...internal.post]
+                const operations =
+                  lastOperations ??
+                  (yield* config.entries().pipe(
+                    Effect.map(documentOperations),
+                    Effect.catchCause((entriesCause) =>
+                      Cause.hasInterruptsOnly(entriesCause)
+                        ? Effect.failCause(entriesCause)
+                        : Effect.succeed(undefined),
+                    ),
+                  ))
+                // If config cannot be read at all, fall back only to guarded builtins so disabled
+                // builtins are never turned back on.
+                const selected = operations
+                  ? selectDefinitions(definitions, operations)
+                  : definitions.filter((plugin) => PluginInternal.guarded.has(plugin.id))
+                return deduplicate(selected, [])
+              })
+              return Effect.logError("failed to reload plugins", { ref, cause }).pipe(
+                Effect.andThen(fallback),
+                Effect.flatMap((retained) =>
+                  apply({ plugins: retained.plugins, failures: [...retained.failures, failure] }).pipe(
+                    Effect.tap(() => Effect.sync(() => (applied = retained))),
+                    Effect.catchCause((restoreCause) =>
+                      Effect.logError("failed to retain previous plugins", { ref, cause: restoreCause }),
+                    ),
+                  ),
+                ),
+              )
+            }),
+          )
           if (observed !== target) return
           const settled = release
           release = undefined
@@ -277,6 +382,7 @@ const nodeDeps = [
   Plugin.node,
   SdkPlugins.node,
   InstancePlugins.node,
+  Config.node,
   ConfigPluginSource.node,
   PluginUpdate.node,
   Bus.node,

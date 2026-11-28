@@ -18,8 +18,7 @@ import { SessionRunnerModel } from "./runner/model.js"
 const tokenSharingMessages = {
   subscription_sharing_user_not_eligible:
     "ChatGPT token sharing isn't available for this account. Connect with an API key or choose another provider.",
-  subscription_sharing_usage_limit_exceeded:
-    "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+  subscription_sharing_usage_limit_exceeded: "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
   subscription_sharing_workplace_individual_usage_limit_exceeded:
     "You've reached the usage limit your ChatGPT workspace admin set for you. Ask them to raise it in the OpenAI Admin Console.",
   subscription_sharing_usage_unavailable: "ChatGPT usage can't be checked right now. Try again later.",
@@ -98,6 +97,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
     return { type: "provider.unsupported-operation", message: cause.message }
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
   if (
+    cause instanceof SessionRunnerModel.NoProvidersError ||
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
     cause instanceof ModelResolver.VariantUnavailableError ||

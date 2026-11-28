@@ -1,17 +1,20 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
+import { Event } from "@opencode/schema/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
+import { Config } from "@opencode/core/config"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Instance } from "@opencode/core/instance"
-import { LocationServiceMap } from "@opencode/core/location-services"
+import { LocationServiceMap, buildLocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -38,14 +41,18 @@ const greeter = (command: string, plugin: string = id) =>
   })
 
 // Every supervisor activation scans the config plugin operations once, so counting scans counts activations.
-const source: { activations: number; operations: ConfigPluginSource.Operation[] } = { activations: 0, operations: [] }
+const source: { activations: number; operations: ConfigPluginSource.Operation[]; fail?: Error } = {
+  activations: 0,
+  operations: [],
+}
 const sourceLayer = Layer.succeed(
   ConfigPluginSource.Service,
   ConfigPluginSource.Service.of({
     operations: () =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         source.activations++
-        return source.operations
+        if (source.fail) return Effect.die(source.fail)
+        return Effect.succeed(source.operations)
       }),
     changes: () => Stream.never,
   }),
@@ -415,9 +422,7 @@ describe("PluginSupervisor", () => {
 
       expect(source.activations).toBe(2)
 
-      yield* sdk
-        .register(greeter("greet-cross-location", "cross-location"))
-        .pipe(Effect.provide(locations.get(refA)))
+      yield* sdk.register(greeter("greet-cross-location", "cross-location")).pipe(Effect.provide(locations.get(refA)))
 
       yield* advance(() => source.activations === 4)
 
@@ -481,5 +486,396 @@ describe("PluginSupervisor", () => {
       )
       expect(language).toBe(fakeLanguageModel)
     }),
+  )
+
+  it.effect("keeps builtins active and reports an error when initial activation fails", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      source.fail = new Error("broken plugin config")
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const result = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const providers = yield* Provider.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        return {
+          inventory: yield* plugins.list(),
+          providers: yield* providers.all(),
+          command: yield* commands.get("instance-greet"),
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(Effect.sync(() => (source.fail = undefined))),
+      )
+
+      expect(result.providers.length).toBeGreaterThan(0)
+      expect(result.command).toBeDefined()
+      expect(result.inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("broken plugin config"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
+
+  testEffect(Layer.empty).live("keeps a disabled builtin provider off when initial activation fails", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      source.fail = new Error("broken plugin config")
+      const directory = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(directory.path, ".opencode/opencode.json"),
+          JSON.stringify({ plugins: ["-opencode.provider.ollama"] }),
+        ),
+      )
+      const layer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+        [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationServiceMap.node.replace(
+            buildLocationServiceMap([
+              Global.node.replace(tempGlobalLayer),
+              offlineModels,
+              ConfigPluginSource.node.replace(sourceLayer),
+            ]),
+          ),
+        ],
+      )
+      const inventory = yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        return yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          return yield* plugins.list()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(Effect.provide(layer), Effect.scoped, Effect.ensuring(Effect.sync(() => (source.fail = undefined))))
+
+      const status = (pluginID: string) => inventory.find((plugin) => plugin.id === pluginID)?.state.status
+      expect(status("opencode.provider.ollama")).toBeUndefined()
+      expect(status("opencode.provider.opencode")).toBe("active")
+      expect(status("opencode.config.policy")).toBe("active")
+      expect(status("opencode.provider.openai")).toBe("active")
+      expect(inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("broken plugin config"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
+
+  testEffect(Layer.empty).live("falls back only to guarded builtins when config cannot be read on boot", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      let failConfig = false
+      const brokenConfigLayer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+        [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationServiceMap.node.replace(
+            buildLocationServiceMap([
+              Global.node.replace(tempGlobalLayer),
+              offlineModels,
+              Config.node.replace(
+                Layer.succeed(
+                  Config.Service,
+                  Config.Service.of({
+                    entries: () =>
+                      Effect.suspend(() =>
+                        failConfig ? Effect.die(new Error("unreadable config")) : Effect.succeed([]),
+                      ),
+                    changes: () => Stream.never,
+                  }),
+                ),
+              ),
+              ConfigPluginSource.node.replace(
+                Layer.succeed(
+                  ConfigPluginSource.Service,
+                  ConfigPluginSource.Service.of({
+                    operations: () =>
+                      Effect.suspend(() => {
+                        failConfig = true
+                        return Effect.die(new Error("unreadable config"))
+                      }),
+                    changes: () => Stream.never,
+                  }),
+                ),
+              ),
+            ]),
+          ),
+        ],
+      )
+      const inventory = yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        return yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          return yield* plugins.list()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(Effect.provide(brokenConfigLayer), Effect.scoped)
+
+      const loadedIDs = inventory.flatMap((plugin) => (plugin.id ? [plugin.id] : []))
+      expect(loadedIDs).toEqual([
+        Plugin.ID.make("opencode.provider.opencode"),
+        Plugin.ID.make("opencode.config.policy"),
+      ])
+      expect(inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("unreadable config"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
+
+  it.effect("keeps the previous working plugin set and reports the error when a reload fails", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      source.fail = undefined
+      const bus = yield* Bus.Service
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const providers = yield* Provider.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        const beforeProviders = (yield* providers.all()).length
+        expect(beforeProviders).toBeGreaterThan(0)
+        expect(yield* commands.get("instance-greet")).toBeDefined()
+
+        let updated = 0
+        yield* Effect.acquireRelease(
+          bus.listen((event) => Effect.sync(() => void (event.type === Plugin.Event.Updated.type && updated++))),
+          (unsubscribe) => unsubscribe,
+        )
+
+        source.fail = new Error("reload boom")
+        const activations = source.activations
+        yield* bus.publish(Event.Updated, {})
+        yield* advance(() => source.activations > activations)
+        yield* plugins.awaitActivation
+
+        expect((yield* providers.all()).length).toBe(beforeProviders)
+        expect(yield* commands.get("instance-greet")).toBeDefined()
+        expect(updated).toBeGreaterThan(0)
+        expect(yield* plugins.list()).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("reload boom"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+
+        // Fixing the error and reloading clears the reported failure.
+        source.fail = undefined
+        const nextActivations = source.activations
+        yield* bus.publish(Event.Updated, {})
+        yield* advance(() => source.activations > nextActivations)
+        yield* plugins.awaitActivation
+
+        expect((yield* plugins.list()).filter((plugin) => plugin.state.status === "failed")).toEqual([])
+        expect((yield* providers.all()).length).toBe(beforeProviders)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(Effect.sync(() => (source.fail = undefined))),
+      )
+    }),
+  )
+
+  const bootInventory = (
+    plugins: readonly (string | { package: string; options?: Record<string, unknown> })[],
+    fail?: Error,
+  ) =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins })),
+      )
+      const locationReplacements: LayerNode.Replacements = [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        ...(fail
+          ? [
+              ConfigPluginSource.node.replace(
+                Layer.succeed(
+                  ConfigPluginSource.Service,
+                  ConfigPluginSource.Service.of({
+                    operations: () => Effect.die(fail),
+                    changes: () => Stream.never,
+                  }),
+                ),
+              ),
+            ]
+          : []),
+      ]
+      const layer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+        [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationServiceMap.node.replace(buildLocationServiceMap(locationReplacements)),
+        ],
+      )
+      return yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        return yield* Effect.gen(function* () {
+          const pluginService = yield* Plugin.Service
+          yield* pluginService.awaitActivation
+          return yield* pluginService.list()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(Effect.provide(layer), Effect.scoped)
+    })
+
+  const activeIDs = (inventory: readonly Plugin.Info[]) =>
+    inventory.flatMap((plugin) => (plugin.state.status === "active" && plugin.id ? [plugin.id] : []))
+
+  testEffect(Layer.empty).live(
+    "agrees between normal activation and first-activation fallback when disabling a builtin provider",
+    () =>
+      Effect.gen(function* () {
+        const plugins = ["-opencode.provider.ollama"] as const
+        const normal = yield* bootInventory(plugins)
+        const fallback = yield* bootInventory(plugins, new Error("broken plugin config"))
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(normalActive).not.toContain(Plugin.ID.make("opencode.provider.ollama"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.openai"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.opencode"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.config.policy"))
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("broken plugin config"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
+
+  testEffect(Layer.empty).live(
+    "agrees between normal activation and first-activation fallback for .* prefix matching and object entries",
+    () =>
+      Effect.gen(function* () {
+        const plugins = ["-opencode.provider.*", { package: "opencode.provider.openai" }] as const
+        const normal = yield* bootInventory(plugins)
+        const fallback = yield* bootInventory(plugins, new Error("broken plugin config"))
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(normalActive).not.toContain(Plugin.ID.make("opencode.provider.ollama"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.openai"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.opencode"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.config.agent"))
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("broken plugin config"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
+
+  testEffect(Layer.empty).live(
+    "agrees between normal activation and first-activation fallback for * removal and guarded builtins",
+    () =>
+      Effect.gen(function* () {
+        const plugins = [
+          "-*",
+          "-opencode.config.policy",
+          "-opencode.provider.opencode",
+          "opencode.provider.openai",
+        ] as const
+        const normal = yield* bootInventory(plugins)
+        const fallback = yield* bootInventory(plugins, new Error("broken plugin config"))
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(normalActive.toSorted()).toEqual([
+          Plugin.ID.make("opencode.config.policy"),
+          Plugin.ID.make("opencode.provider.openai"),
+          Plugin.ID.make("opencode.provider.opencode"),
+        ])
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("broken plugin config"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
+
+  testEffect(Layer.empty).live(
+    "skips a lone '-' entry in first-activation fallback without discarding other config operations or builtins",
+    () =>
+      Effect.gen(function* () {
+        const normal = yield* bootInventory(["-opencode.provider.*", "opencode.provider.openai"])
+        const fallback = yield* bootInventory(["-opencode.provider.*", "-", "opencode.provider.openai"])
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(fallbackActive).not.toContain(Plugin.ID.make("opencode.provider.ollama"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.provider.openai"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.provider.opencode"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.config.policy"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.config.agent"))
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("Plugin remove operation requires a target"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
   )
 })
