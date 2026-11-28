@@ -450,6 +450,7 @@ const make = Effect.gen(function* () {
     readonly method: Method
     readonly command: string[]
     readonly displayCommand?: string[]
+    readonly timeout?: Duration.Input
     readonly title?: string
     readonly retry?: string
   }) => {
@@ -463,7 +464,7 @@ const make = Effect.gen(function* () {
         },
         cause === undefined ? undefined : { cause },
       )
-    return exec(input.command, "5 minutes").pipe(
+    return exec(input.command, input.timeout ?? "5 minutes").pipe(
       Effect.flatMap((result) =>
         result.code === 0 ? Effect.succeed(result) : Effect.fail(failure(resultDetail(result))),
       ),
@@ -517,8 +518,8 @@ const make = Effect.gen(function* () {
     yield* Effect.scoped(
       Effect.gen(function* () {
         // Other OpenCode processes may be installing at the same time. Wait longer than the
-        // slowest install (curl runs two 5-minute commands).
-        yield* flock.acquire("cli-upgrade", undefined, { timeoutMs: Duration.toMillis("15 minutes") })
+        // slowest install (curl can take five minutes to fetch the script and ten to install).
+        yield* flock.acquire("cli-upgrade", undefined, { timeoutMs: Duration.toMillis("20 minutes") })
         if (method === "bun") {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
@@ -551,6 +552,7 @@ const make = Effect.gen(function* () {
               command: [bash, installer, "--version", version, "--no-modify-path"],
               displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
               title: "The OpenCode installer failed",
+              timeout: "10 minutes",
             }),
           )
         }
