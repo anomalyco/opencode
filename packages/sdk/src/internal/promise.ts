@@ -2,6 +2,7 @@ export * as PromiseSdk from "./promise"
 
 import { OpenCode } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin"
+import type { Workspace } from "@opencode/core/workspace"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 import type { CreateOptions, Interface } from "../opencode"
@@ -38,12 +39,22 @@ export async function createWithHost(
     const { PluginPromise } = await import("@opencode/core/plugin/promise")
     return host.runtime.runPromise(host.plugins.register(PluginPromise.fromPromise(plugin)))
   }
+  const workspace = host.workspace
   return {
     host,
     sdk: {
       ...client,
       sessions: client.session,
       events: client.event,
+      workspace: {
+        create: (input) => host.runtime.runPromise(workspace.create(input)),
+        attach: (input) => host.runtime.runPromise(workspace.attach(input)),
+        provision: (input: { readonly workspaceID: Workspace.ID }) =>
+          host.runtime.runPromise(workspace.provision(input.workspaceID)),
+        destroy: (input: { readonly workspaceID: Workspace.ID }) =>
+          host.runtime.runPromise(workspace.destroy(input.workspaceID)),
+        suspendIdle: () => host.runtime.runPromise(workspace.suspendIdle()),
+      },
       plugin: Object.assign(register, client.plugin),
       close: host.close,
       [Symbol.asyncDispose]: host.close,

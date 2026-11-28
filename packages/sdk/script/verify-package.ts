@@ -110,6 +110,7 @@ export class OpenCodeDO {
     this.opencode = state.blockConcurrencyWhile(() => OpenCodeWorkerd.create({
       storage: state.storage,
       app: { version: "packed-workerd" },
+      password: "packed-secret",
       models: { fetch: false },
       instances: {
         key: session => String(session.metadata.thread),
@@ -151,6 +152,9 @@ export class OpenCodeDO {
       throw new Error("Packed instance configuration did not share or prepare prompts correctly")
     }
     await opencode.alarm()
+    // Outside requests need the password; the in-process client below carries it itself.
+    const served = await opencode.fetch(new Request("http://opencode.local/api/info"))
+    if (served.status !== 401) throw new Error("Packed workerd fetch without a password returned " + served.status)
     return Response.json(await opencode.server.info())
   }
 

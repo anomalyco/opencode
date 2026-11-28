@@ -4,7 +4,7 @@ import { Context, Effect, flow, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/http"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { isAllowedCorsOrigin } from "./cors"
+import { type CorsOptions, isAllowedCorsOrigin } from "./cors"
 import { RequestSite } from "./request-site"
 import { withoutParentSpan } from "./request-tracing"
 import { createRoutes } from "./routes"
@@ -18,21 +18,22 @@ export interface BootOptions {
   readonly overrides?: LayerNode.Replacements
 }
 
-/** Internal entry for runtime profiles (such as `ServerWorkerd.create`) that also need the built service context. */
+/** `make`, also returning the built service context, for callers (such as tests) that read services from it. */
 export const makeWithContext = Effect.fn("ServerFetch.makeWithContext")(function* (
   options: ServerOptions = {},
   boot: BootOptions = {},
 ) {
   const context = yield* build(createRoutes(options, () => [], boot.overrides ?? []))
-  const handler = yield* serve(
-    context,
-    flow(
-      RequestSite.middleware(options),
-      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
-    ),
-  )
+  const handler = yield* serve(context, middleware(options))
   return { handler, context }
 })
+
+/** What a served handler runs in front of the routes: cross-site browser requests get 403, then CORS. */
+export const middleware = (options: CorsOptions) =>
+  flow(
+    RequestSite.middleware(options),
+    HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
+  )
 
 /**
  * Builds a route layer (`createRoutes` or `createEmbeddedRoutes`) in the current Scope. Shared with the SDK's

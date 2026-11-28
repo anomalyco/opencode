@@ -10,10 +10,17 @@ export type Configuration = WorkerdProfile.Configuration
 export interface CreateOptions extends WorkerdProfile.Options {
   readonly log?: LogOptions
   readonly plugins?: OpenCode.CreateOptions["plugins"]
+  readonly workspaceProviders?: OpenCode.CreateOptions["workspaceProviders"]
   readonly instances?: OpenCode.CreateOptions["instances"]
 }
 
 export type Interface = OpenCode.Interface & {
+  /**
+   * Serves a request from outside the Durable Object, as `ServerWorkerd.create`'s handler does: `/api/*` and the
+   * `/api/event` stream behind `password` and the cross-site and CORS checks, and machine-link WebSocket upgrades.
+   * Return it from the Durable Object's `fetch()` method.
+   */
+  readonly fetch: (request: Request) => Promise<Response>
   /** Suspends any workspaces past their idle threshold; call from the Durable Object's `alarm()` method. */
   readonly alarm: () => Promise<void>
 }
@@ -28,25 +35,31 @@ export type Interface = OpenCode.Interface & {
  * Object can be evicted mid-turn with no teardown; the write-ahead execution
  * claim marks the turn and the boot-time sweep replays it.
  *
- * Forward the Durable Object's `alarm()` lifecycle method to `opencode.alarm()`
- * so idle remote workspaces suspend while the Durable Object hibernates at
- * zero idle cost.
+ * Forward the Durable Object's `fetch()` to `opencode.fetch(request)` to serve
+ * the HTTP API and machine links, and its `alarm()` to `opencode.alarm()` so
+ * idle remote workspaces suspend while the Durable Object hibernates at zero
+ * idle cost.
  *
  * Returns the same typed `OpenCode.Interface` as `OpenCode.create` plus
- * `alarm()` — typed session operations plus the live `events.subscribe()`
- * stream — served over an in-process fetch transport, so no request leaves the
- * isolate.
+ * `fetch()` and `alarm()` — typed session operations plus the live
+ * `events.subscribe()` stream — served over an in-process fetch transport, so
+ * no request leaves the isolate.
  */
 export const create = async (options: CreateOptions): Promise<Interface> => {
-  const profile = WorkerdProfile.make(options)
   const created = await PromiseSdk.createWithHost(
-    { ...profile.options, log: options.log, plugins: options.plugins, instances: options.instances },
-    { overrides: profile.replacements },
+    {
+      log: options.log,
+      plugins: options.plugins,
+      workspaceProviders: options.workspaceProviders,
+      instances: options.instances,
+    },
+    { profile: WorkerdProfile.make(options) },
   )
   return {
     ...created.sdk,
+    fetch: created.host.handler,
     alarm: async () => {
-      await created.host.runtime.runPromise(created.host.workspace.suspendIdle())
+      await created.sdk.workspace.suspendIdle()
     },
   }
 }

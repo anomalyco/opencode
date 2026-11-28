@@ -2,20 +2,25 @@ export * as WorkerdProfile from "./workerd"
 
 import type { Config } from "@opencode/schema/config"
 import { ServerWorkerd } from "@opencode/server/workerd"
+import type { EmbeddedHost } from "./host"
 
 export type Configuration = Omit<typeof Config.Info.Encoded, "plugins">
 
-export interface Options extends Omit<ServerWorkerd.Options, "password" | "config"> {
+export interface Options extends Omit<ServerWorkerd.Options, "config"> {
   readonly config?: Configuration
 }
 
-export function make({ config, ...options }: Options) {
-  const server = {
+/** The host profile serving `ServerWorkerd`'s routes and handler, so the SDK and the server boot workerd one way. */
+export function make(options: Options): EmbeddedHost.Profile {
+  const server: ServerWorkerd.Options = {
     ...options,
-    config: config === undefined ? undefined : { content: JSON.stringify(config) },
+    // Named like every other embedded host unless the embedder names it.
+    app: { ...options.app, name: options.app?.name ?? "sdk" },
+    config: options.config === undefined ? undefined : { content: JSON.stringify(options.config) },
   }
   return {
-    options: ServerWorkerd.serverOptions(server),
-    replacements: ServerWorkerd.replacements(server),
+    routes: (overrides) => ServerWorkerd.routes(server, overrides),
+    serve: (context) => ServerWorkerd.serve(context, server),
+    password: options.password,
   }
 }
