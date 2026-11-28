@@ -70,7 +70,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const registrationFile = options.mode === "service" ? yield* ServiceConfig.registrationFile() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
-      const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const port =
+        options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.servicePort(config) : undefined)
       const findIncumbent =
         registrationFile !== undefined && port !== undefined
           ? Service.incumbent({ file: registrationFile, url: serviceURL(hostname, port) })

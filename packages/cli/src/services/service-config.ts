@@ -4,6 +4,7 @@ import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Result, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
+import { release } from "os"
 import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
@@ -52,14 +53,32 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
+export type Platform = NodeJS.Platform | "wsl"
+
+export function defaultPort(channel = OPENCODE_CHANNEL, platform = hostPlatform()) {
   const port = channelPort(channel)
   // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
   // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
   // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
   // 12 bits: 0xC0DE becomes 0x70DE.
   if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
+  // WSL forwards its localhost ports to the same port on the Windows host, so the Windows reservations apply to it too.
+  // The 0x6000 block avoids them and stays apart from a Windows service on the loopback both share: 0xC0DE becomes 0x60DE.
+  if (platform === "wsl" && port >= 0x8000) return 0x6000 | (port & 0xfff)
   return port
+}
+
+// On WSL the first password is written with the port, so a config with a password and no port comes from a build before
+// WSL got its own default. It keeps 0xC0DE, the port its pairings, tunnels and saved links use.
+export function servicePort(config: Info, channel = OPENCODE_CHANNEL, platform = hostPlatform()) {
+  if (platform === "wsl" && config.password !== undefined) return defaultPort(channel, "linux")
+  return defaultPort(channel, platform)
+}
+
+// WSL shows only in the kernel release: 6.6.87.2-microsoft-standard-WSL2, or 4.4.0-19041-Microsoft on WSL 1.
+function hostPlatform(): Platform {
+  if (process.platform === "linux" && /microsoft/i.test(release())) return "wsl"
+  return process.platform
 }
 
 function channelPort(channel: string) {
@@ -192,14 +211,19 @@ const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
 })
 
-export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {
+export const password = Effect.fn("cli.service-config.password")(function* (value?: string, platform = hostPlatform()) {
   const existing = yield* read()
   if (value === undefined && existing.password) return existing.password
   const next = value ?? randomBytes(32).toString("base64url")
+  // A new WSL setup keeps the default it started with, so a later default change cannot move it.
+  const port =
+    platform === "wsl" && existing.password === undefined && existing.port === undefined
+      ? defaultPort(OPENCODE_CHANNEL, platform)
+      : existing.port
 
   // Keep one private credential across server restarts so discovered clients
   // can reconnect without exposing a password flag or environment variable.
-  yield* write({ ...existing, password: next })
+  yield* write({ ...existing, password: next, ...(port === undefined ? {} : { port }) })
   return next
 })
 
