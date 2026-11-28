@@ -22,6 +22,15 @@ import { databasePath } from "./database-path"
 
 export type Mode = "default" | "service" | "stdio"
 
+// An AppImage launcher leaves these on the desktop process. This service is a separate process, so clearing them
+// here keeps every child (shells, persistent terminals, LSP/MCP servers, formatters) from inheriting launcher
+// state, while the desktop main process keeps `APPIMAGE` in case it needs it for updates.
+const LAUNCHER_ENV = ["ARGV0", "APPIMAGE", "APPDIR"] as const
+
+export const stripLauncherEnv = () => {
+  for (const key of LAUNCHER_ENV) delete process.env[key]
+}
+
 export type Options = {
   readonly mode: Mode
   readonly hostname?: string
@@ -48,6 +57,7 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 const processEffect = Effect.fnUntraced(function* (options: Options) {
   const inherited = process.env.OPENCODE_PTY_HANDOFF
   delete process.env.OPENCODE_PTY_HANDOFF
+  stripLauncherEnv()
   const handoff =
     inherited === undefined
       ? undefined
