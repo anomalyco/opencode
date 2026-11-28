@@ -976,6 +976,13 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         yield* SessionBlob.releaseSession(db, event.data.sessionID)
         yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
+        // V1→V2 migrated databases keep the legacy `session` table; deleting its row lets the
+        // existing foreign keys cascade to legacy `message` / `part` / `todo`. Fresh V2-only
+        // databases never create it.
+        const legacy = yield* db
+          .get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)
+          .pipe(Effect.orDie)
+        if (legacy) yield* db.run(sql`DELETE FROM session WHERE id = ${event.data.sessionID}`).pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
