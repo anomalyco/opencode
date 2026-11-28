@@ -3,6 +3,7 @@ import { expect, test } from "bun:test"
 import { Effect, FileSystem } from "effect"
 import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/effect/service"
+import { withEnsureTiming } from "../src/service-timing"
 import {
   catchesSigterm,
   expectNotListening,
@@ -480,6 +481,41 @@ test("replaces an incompatible owner that appears during startup", async () => {
   expect(info.version).toBe("test")
   await old.exited
 })
+
+test.skipIf(process.platform === "win32")(
+  "does not spawn a replacement while an incompatible service survives SIGKILL",
+  async () => {
+    await using fixture = await serviceFixture()
+    const registration = fixture.registration
+    fixture.spawnUnreaped("lingering", "60000")
+    await fixture.waitForFile()
+    const original = await Bun.file(registration).json()
+
+    await expect(
+      run(
+        Service.ensure(
+          withEnsureTiming(
+            {
+              file: registration,
+              version: "other",
+              command: fixture.command("record-start"),
+            },
+            {
+              pollInterval: 20,
+              requestTimeout: 100,
+              spawnDelay: 50,
+              promiseTimeout: 500,
+              stopPollInterval: 5,
+              stopPollAttempts: 15,
+            },
+          ),
+        ),
+      ),
+    ).rejects.toThrow(`Server process ${original.pid} is still running`)
+    expect(await Bun.file(registration + ".started").exists()).toBe(false)
+  },
+  15_000,
+)
 
 function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))

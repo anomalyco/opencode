@@ -49,6 +49,16 @@ export function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
+/** Whether a process has exited. Only ESRCH confirms exit; EPERM means it still exists. */
+export function processExited(pid: number, kill: (pid: number, signal: 0) => void = process.kill) {
+  try {
+    kill(pid, 0)
+    return false
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "ESRCH"
+  }
+}
+
 /** Ask a registered owner for its health and classify the answer. */
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
