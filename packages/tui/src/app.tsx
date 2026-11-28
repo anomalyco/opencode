@@ -217,9 +217,7 @@ export type TuiInput = {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
-  const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
-    terminalSuspend: process.platform !== "win32",
-  })
+  const { config, options: configOptions, warning } = yield* Config.load(input.config)
   const headers = Service.headers(input.server.endpoint)
   const options = {
     baseUrl: input.server.endpoint.url,
@@ -389,11 +387,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                               >
                                 <ClipboardProvider value={clipboard}>
                                   <ArgsProvider {...input.args}>
-                                    <ConfigProvider
-                                      config={config}
-                                      service={input.config}
-                                      options={{ terminalSuspend: process.platform !== "win32" }}
-                                    >
+                                    <ConfigProvider config={config} service={input.config} options={configOptions}>
                                       <Keymap.Provider>
                                         <ToastProvider>
                                           <RouteProvider
@@ -439,7 +433,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                                 packages={input.packages}
                                                                                 directories={pluginDirectories}
                                                                               >
-                                                                                <App />
+                                                                                <App warning={warning} />
                                                                               </PluginProvider>
                                                                             </PanelProvider>
                                                                           </UpdateNotificationProvider>
@@ -493,7 +487,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App() {
+function App(props: { warning?: string }) {
   const app = useTuiApp()
   const startup = useTuiStartup()
   const config = useConfig()
@@ -691,11 +685,12 @@ function App() {
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
-            message: `Invalid model format: ${args.model}`,
-            duration: 3000,
+            message: [props.warning, `Invalid model format: ${args.model}`].filter(Boolean).join("\n"),
+            duration: props.warning ? 10000 : 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
+      if (props.warning) toast.show({ variant: "warning", message: props.warning, duration: 10000 })
       if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",

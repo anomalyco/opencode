@@ -2,7 +2,7 @@ export * as Config from "./config"
 
 import { Global } from "@opencode/util/global"
 import { Flock } from "@opencode/util/flock"
-import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Context, Effect, FileSystem, Layer, Option, Result, Schema, SchemaIssue, SchemaParser } from "effect"
 import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
@@ -13,14 +13,16 @@ export * from "./schema"
 
 export interface Interface {
   readonly path: string
-  readonly get: () => Effect.Effect<Info>
+  readonly get: (warn?: (message: string) => void) => Effect.Effect<Info>
   readonly update: (update: (draft: Draft<Info>) => void) => Effect.Effect<Info, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/config/Config") {}
 
 const decode = Schema.decodeUnknownOption(Info)
+const decodeFile = SchemaParser.decodeUnknownResult(Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
+const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 const empty: Info = {}
 
 export const layer = Layer.effect(
@@ -33,10 +35,25 @@ export const layer = Layer.effect(
       ? Option.getOrUndefined(decode(parseRecord(process.env.OPENCODE_CLI_CONFIG_CONTENT)))
       : undefined
 
-    const readJson = Effect.fnUntraced(function* () {
+    const readConfig = Effect.fnUntraced(function* (warn?: (message: string) => void) {
       const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
-      return parseRecord(text)
+      const record = parseRecord(text)
+      if (record === undefined) {
+        warn?.("Invalid JSON object in cli.json")
+        return undefined
+      }
+      const result = decodeFile(record)
+      if (Result.isSuccess(result)) return result.success
+      if (warn) {
+        const fields = new Set(
+          formatIssues(result.failure)
+            .issues.map((issue) => issue.path?.map((key) => String(typeof key === "object" ? key.key : key)).join("."))
+            .filter(Boolean),
+        )
+        warn(fields.size ? `Invalid setting in cli.json (${[...fields].join(", ")})` : "Invalid setting in cli.json")
+      }
+      return undefined
     })
 
     const write = Effect.fnUntraced(function* (text: string) {
@@ -61,11 +78,11 @@ export const layer = Layer.effect(
           }),
         ),
       )
-    const load = Effect.fnUntraced(function* (migration?: Info) {
-      return merge(migration ?? Option.getOrUndefined(decode(yield* readJson())), content)
+    const load = Effect.fnUntraced(function* (migration?: Info, warn?: (message: string) => void) {
+      return merge(migration ?? (yield* readConfig(warn)), content)
     })
 
-    const get = Effect.fn("cli.config.get")(() =>
+    const get = Effect.fn("cli.config.get")((warn?: (message: string) => void) =>
       withLock(
         Effect.gen(function* () {
           const migration = yield* migrate.pipe(
@@ -75,7 +92,7 @@ export const layer = Layer.effect(
           )
           if (migration?.cause)
             yield* Effect.logWarning("failed to persist migrated cli config", { cause: migration.cause })
-          return yield* load(migration?.info)
+          return yield* load(migration?.info, warn)
         }),
       ),
     )
