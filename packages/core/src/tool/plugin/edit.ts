@@ -47,17 +47,18 @@ const normalizeForMatch = (value: string) =>
     .replace(/[‐‑‒–—―−]/g, "-")
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
 
-const findOccurrences = (content: string, search: string) => {
+const findOccurrences = (content: string, search: string, replaceAll: boolean) => {
   const result: Match[] = []
   let offset = 0
   while ((offset = content.indexOf(search, offset)) !== -1) {
     result.push({ start: offset, end: offset + search.length })
-    offset += search.length
+    // A single edit must identify a unique start. Bulk replacements consume the matched span.
+    offset += replaceAll ? search.length : 1
   }
   return result
 }
 
-const findLineOccurrences = (content: string, search: string) => {
+const findLineOccurrences = (content: string, search: string, replaceAll: boolean) => {
   const trailingNewline = search.endsWith("\n")
   const expected = search.split("\n")
   if (trailingNewline) expected.pop()
@@ -88,6 +89,7 @@ const findLineOccurrences = (content: string, search: string) => {
     if (trailingNewline && !last.newline) return []
     return [{ start: line.start, end: trailingNewline ? last.end : last.contentEnd }]
   })
+  if (!replaceAll) return candidates
   return candidates.reduce<Match[]>((result, candidate) => {
     if (result.some((match) => match.end > candidate.start && match.start < candidate.end)) return result
     result.push(candidate)
@@ -161,16 +163,17 @@ const alignLines = (before: string[], after: string[]) => {
  * Matches against the LF view Read shows the model, then maps offsets back to the source, so CRLF and mixed line
  * endings neither block matches nor leak into untouched regions.
  */
-const matchView = (source: string, oldString: string, newString: string) => {
+const matchView = (source: string, oldString: string, newString: string, replaceAll: boolean) => {
   const view = source.replaceAll(crlf, "\n")
   const removed = [...source.matchAll(/\r\n/g)].map((match, index) => match.index - index)
   const fileEnding = lineEnding(source, "\n")
   const search = oldString.replaceAll(crlf, "\n")
   const replacement = newString.replaceAll(crlf, "\n")
-  const exact = findOccurrences(view, search)
+  const exact = findOccurrences(view, search, replaceAll)
   // These one-to-one mappings preserve offsets into the LF view.
-  const unicode = exact.length > 0 ? [] : findOccurrences(normalizeForMatch(view), normalizeForMatch(search))
-  const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(view, search)
+  const unicode =
+    exact.length > 0 ? [] : findOccurrences(normalizeForMatch(view), normalizeForMatch(search), replaceAll)
+  const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(view, search, replaceAll)
   return {
     matches: (exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing).map((match) => ({
       start: match.start + countBefore(removed, match.start),
@@ -311,11 +314,12 @@ export const Plugin = {
               // Strings that differ only in \r ask to change line endings themselves, so they apply to the exact
               // bytes. Every other edit matches the LF view Read shows the model and keeps the file's endings.
               const endingsOnly = input.oldString.replaceAll("\r", "") === input.newString.replaceAll("\r", "")
+              const replaceAll = input.replaceAll === true
               const { matches, replace } = endingsOnly
-                ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
-                : matchView(source, input.oldString, input.newString)
+                ? { matches: findOccurrences(source, input.oldString, replaceAll), replace: () => input.newString }
+                : matchView(source, input.oldString, input.newString, replaceAll)
               const replacements = matches.length
-              const selected = input.replaceAll === true ? matches : matches.slice(0, 1)
+              const selected = replaceAll ? matches : matches.slice(0, 1)
               const replaced = [
                 ...selected.flatMap((match, index) => [
                   source.slice(selected[index - 1]?.end ?? 0, match.start),
@@ -324,7 +328,7 @@ export const Plugin = {
                 source.slice(selected.at(-1)?.end ?? 0),
               ].join("")
               const preview =
-                replacements > 0 && (replacements === 1 || input.replaceAll === true)
+                replacements > 0 && (replacements === 1 || replaceAll)
                   ? fileDiff(target.resource, source, replaced)
                   : undefined
               yield* fileWrite.authorize(target, context, preview)
@@ -341,7 +345,7 @@ export const Plugin = {
                   message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
                 })
               }
-              if (replacements > 1 && input.replaceAll !== true) {
+              if (replacements > 1 && !replaceAll) {
                 return yield* new ToolFailure({
                   message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                 })

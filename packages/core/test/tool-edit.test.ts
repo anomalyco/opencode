@@ -520,6 +520,36 @@ describe("EditTool", () => {
     }),
   )
 
+  for (const sample of [
+    { name: "exact", text: "#endif\n#endif\n#endif", oldString: "#endif\n#endif", newString: "x", all: "x\n#endif" },
+    { name: "Unicode", text: "———", oldString: "--", newString: "x", all: "x—" },
+    { name: "trailing whitespace", text: "a \na \na ", oldString: "a\na", newString: "x", all: "x\na " },
+    { name: "line-ending-only", text: "\n\n\n", oldString: "\n\n", newString: "\r\n\r\n", all: "\r\n\r\n\n" },
+  ]) {
+    it.live(`rejects overlapping ${sample.name} matches unless replaceAll is set`, () =>
+      withTempDir((tmp) => {
+        const edit = makeEditFixture()
+        const file = path.join(tmp.path, "overlap.txt")
+        const input = { path: "overlap.txt", oldString: sample.oldString, newString: sample.newString }
+        return withTool(tmp.path, edit, (registry) =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() => fs.writeFile(file, sample.text))
+            const single = yield* executeTool(registry, call(input))
+            expect(single).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("Found 2 matches for oldString") },
+            })
+            expect(edit.writes).toEqual([])
+
+            const all = yield* executeTool(registry, call({ ...input, replaceAll: true }))
+            expect(all).toMatchObject({ status: "completed", output: "Edited overlap.txt (1 replacement)" })
+            expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(sample.all)
+          }),
+        )
+      }),
+    )
+  }
+
   it.live("replaces every exact occurrence when replaceAll is true", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
