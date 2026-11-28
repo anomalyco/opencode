@@ -2042,6 +2042,15 @@ export interface FileApi<E = never> {
   readonly unwatch: ExperimentalFileUnwatchOperation<E>
 }
 
+export type ExperimentalFileMkdirInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+export type ExperimentalFileMkdirOutput = { readonly location: Location.PublicRef; readonly data: FileSystem.Mkdir }
+export type ExperimentalFileMkdirOperation<E = never> = (
+  input: ExperimentalFileMkdirInput,
+) => Effect.Effect<ExperimentalFileMkdirOutput, E>
+
 export type ExperimentalFileWatchInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly path: string
@@ -2061,6 +2070,7 @@ export type ExperimentalFileUnwatchOperation<E = never> = (
 ) => Effect.Effect<ExperimentalFileUnwatchOutput, E>
 
 export interface ExperimentalFileApi<E = never> {
+  readonly mkdir: ExperimentalFileMkdirOperation<E>
   readonly watch: ExperimentalFileWatchOperation<E>
   readonly unwatch: ExperimentalFileUnwatchOperation<E>
 }

@@ -46,3 +46,8 @@ export interface Write extends Schema.Schema.Type<typeof Write> {}
 export const Write = Schema.Struct({
   path: AbsolutePath,
 }).annotate({ identifier: "FileSystem.Write" })
+
+export interface Mkdir extends Schema.Schema.Type<typeof Mkdir> {}
+export const Mkdir = Schema.Struct({
+  path: AbsolutePath,
+}).annotate({ identifier: "FileSystem.Mkdir" })

@@ -3,7 +3,7 @@ import { FileSystem } from "@opencode/core/filesystem"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { Location } from "@opencode/core/location"
 import { RelativePath } from "@opencode/core/schema"
-import { FileNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { FileNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect, Option, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -58,6 +58,21 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
             return yield* fs.write({ path: ctx.query.path, data: ctx.payload })
+          }),
+        ),
+      )
+      .handle("fs.mkdir", (ctx) =>
+        response(
+          Effect.gen(function* () {
+            const environment = yield* Environment.Service
+            if (!environment.path.isAbsolute(ctx.query.path))
+              return yield* new InvalidRequestError({
+                message: "The folder path must be absolute",
+                field: "path",
+              })
+            const location = yield* Location.Service
+            const fs = yield* FileSystem.Service
+            return yield* fs.mkdir({ path: environment.path.resolve(location.directory, ctx.query.path) })
           }),
         ),
       )

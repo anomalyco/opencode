@@ -1,6 +1,6 @@
 export * as FileSystem from "./filesystem.js"
 
-import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
+import { Entry, FileSystem, FindInput, Mkdir, Write } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Context, Effect, Layer, Option, PlatformError, Schema, Stream } from "effect"
@@ -18,6 +18,11 @@ export interface WriteInput {
   /** Absolute, or relative to the location directory. */
   readonly path: string
   readonly data: Uint8Array
+}
+
+export interface MkdirInput {
+  /** An absolute path in the environment; missing parent directories are created. */
+  readonly path: string
 }
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
@@ -61,7 +66,7 @@ export interface ListInput {
   readonly path?: string
 }
 
-export { FindInput, Write }
+export { FindInput, Mkdir, Write }
 
 export const DEFAULT_SEARCH_LIMIT = 100
 export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
@@ -102,6 +107,8 @@ export interface Interface {
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   /** Writes a file at an absolute path or one relative to the location; not confined to it. */
   readonly write: (input: WriteInput) => Effect.Effect<Write>
+  /** Creates a directory at an absolute path in the environment; not confined to the location. */
+  readonly mkdir: (input: MkdirInput) => Effect.Effect<Mkdir>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
@@ -232,6 +239,12 @@ const baseLayer = Layer.effect(
 
     return Service.of({
       find: search.find,
+      // Like write, mkdir is not confined to the location so the picker can create a project folder.
+      mkdir: Effect.fn("FileSystem.mkdir")(function* (input) {
+        const target = input.path
+        yield* environment.files.mkdir(target).pipe(Effect.orDie)
+        return Mkdir.make({ path: AbsolutePath.make(target) })
+      }),
       read: Effect.fn("FileSystem.read")((input) => readFile(input.path)),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.

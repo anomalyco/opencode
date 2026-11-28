@@ -435,6 +435,8 @@ export type LocationPublicRef = { directory: AbsolutePath }
 
 export type FileSystemWrite = { path: AbsolutePath }
 
+export type FileSystemMkdir = { path: AbsolutePath }
+
 export type ReferenceLocalSource = { type: "local"; path: AbsolutePath }
 
 export type WorktreeDirectory = { directory: AbsolutePath; strategy?: string }
@@ -4626,6 +4628,13 @@ export type ExperimentalFileWriteInput = {
 }
 
 export type ExperimentalFileWriteOutput = { location: LocationPublicRef; data: FileSystemWrite }
+
+export type ExperimentalFileMkdirInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+
+export type ExperimentalFileMkdirOutput = { location: LocationPublicRef; data: FileSystemMkdir }
 
 export type ExperimentalFileWatchInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined

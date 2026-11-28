@@ -203,6 +203,8 @@ import type {
   FileFindOutput,
   ExperimentalFileWriteInput,
   ExperimentalFileWriteOutput,
+  ExperimentalFileMkdirInput,
+  ExperimentalFileMkdirOutput,
   ExperimentalFileWatchInput,
   ExperimentalFileWatchOutput,
   ExperimentalFileUnwatchInput,
@@ -1417,6 +1419,18 @@ export function make(options: ClientOptions) {
               declaredStatuses: [400, 401, 404],
               empty: false,
               binaryBody: true,
+            },
+            requestOptions,
+          ),
+        mkdir: (input: ExperimentalFileMkdirInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalFileMkdirOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/fs/mkdir`,
+              query: { location: input["location"], path: input["path"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
             },
             requestOptions,
           ),

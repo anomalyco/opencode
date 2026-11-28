@@ -9881,6 +9881,103 @@
         }
       }
     },
+    "/api/experimental/fs/mkdir": {
+      "post": {
+        "tags": ["filesystem"],
+        "operationId": "experimental.fs.mkdir",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "An absolute path in the requested location's environment. Missing parent directories are created."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FileSystem.Mkdir"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a directory at an absolute path in the requested location's environment, creating missing parent directories, and return the path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
+        "summary": "Create directory"
+      }
+    },
     "/api/experimental/fs/watch": {
       "post": {
         "tags": ["filesystem"],
@@ -20060,6 +20157,16 @@
           }
         },
         "required": ["path", "type"],
+        "additionalProperties": false
+      },
+      "FileSystem.Mkdir": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "$ref": "#/components/schemas/AbsolutePath"
+          }
+        },
+        "required": ["path"],
         "additionalProperties": false
       },
       "FileSystem.Write": {
