@@ -1,0 +1,17 @@
+
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "default_agent": "roblox",
+
+  "mcp": {
+    "servers": {
+      "Roblox_Studio": {
+        "type": "local",
+        "command": [
+          "/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP"
+        ]
+      }
+    }
+  }
+}
