@@ -10,51 +10,14 @@ import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { which } from "../util/which.js"
+import bundled from "./bundled.js"
+import { PLATFORM, VERSION } from "./release.js"
 
 export namespace RipgrepBinary {
-  const VERSION = "15.1.0"
-  // SHA-256 of each release asset, from the `<asset>.sha256` files published with ripgrep 15.1.0. Release assets
-  // can be replaced after publication, so a download is only written and run when it matches the pinned hash.
-  const PLATFORM = {
-    "arm64-darwin": {
-      platform: "aarch64-apple-darwin",
-      extension: "tar.gz",
-      sha256: "378e973289176ca0c6054054ee7f631a065874a352bf43f0fa60ef079b6ba715",
-    },
-    "arm64-linux": {
-      platform: "aarch64-unknown-linux-gnu",
-      extension: "tar.gz",
-      sha256: "2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e",
-    },
-    "x64-darwin": {
-      platform: "x86_64-apple-darwin",
-      extension: "tar.gz",
-      sha256: "64811cb24e77cac3057d6c40b63ac9becf9082eedd54ca411b475b755d334882",
-    },
-    "x64-linux": {
-      platform: "x86_64-unknown-linux-musl",
-      extension: "tar.gz",
-      sha256: "1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599",
-    },
-    "arm64-win32": {
-      platform: "aarch64-pc-windows-msvc",
-      extension: "zip",
-      sha256: "00d931fb5237c9696ca49308818edb76d8eb6fc132761cb2a1bd616b2df02f8e",
-    },
-    "ia32-win32": {
-      platform: "i686-pc-windows-msvc",
-      extension: "zip",
-      sha256: "725be85a1e8f92878a548f40ee4f6df64bc93b809586462b3c6d884e1de1e83a",
-    },
-    "x64-win32": {
-      platform: "x86_64-pc-windows-msvc",
-      extension: "zip",
-      sha256: "124510b94b6baa3380d051fdf4650eaa80a302c876d611e9dba0b2e18d87493a",
-    },
-  } as const
-
   interface Interface {
     readonly filepath: Effect.Effect<string, Error>
+    /** The rg `filepath` finds without downloading one, if any. */
+    readonly installed: Effect.Effect<string | undefined, Error>
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/RipgrepBinary") {}
@@ -115,39 +78,55 @@ export namespace RipgrepBinary {
         if (process.platform !== "win32") yield* fs.chmod(target, 0o755)
       }, Effect.scoped)
 
-      return Service.of({
-        filepath: yield* Effect.cached(
-          Effect.gen(function* () {
-            const system = yield* Effect.sync(() => findExecutable(process.platform === "win32" ? "rg.exe" : "rg"))
-            if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
+      const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
+      const existing = Effect.gen(function* () {
+        const system = yield* Effect.sync(() => findExecutable(process.platform === "win32" ? "rg.exe" : "rg"))
+        if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
+        if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+      })
 
-            const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
-            if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+      const filepath = yield* Effect.cached(
+        Effect.gen(function* () {
+          const found = yield* existing
+          if (found) return found
 
-            const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
-            const config = PLATFORM[platformKey]
-            if (!config) throw new Error(`unsupported platform for ripgrep: ${platformKey}`)
-
-            const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
-            const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
-            const archive = path.join(global.bin, filename)
-
-            yield* Effect.logInfo("downloading ripgrep", { url })
-            yield* fs.ensureDir(global.bin).pipe(Effect.orDie)
-            const bytes = yield* HttpClientRequest.get(url).pipe(
-              http.execute,
-              Effect.flatMap((response) => response.arrayBuffer),
-              Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
-            )
-            if (bytes.byteLength === 0) throw new Error(`failed to download ripgrep from ${url}`)
-            verify(new Uint8Array(bytes), filename, config.sha256)
-
-            yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
-            yield* extract(archive, config, target)
-            yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
+          if (bundled) {
+            // Written beside the target and renamed, so another process never runs a partly written copy.
+            const temporary = `${target}.${process.pid}.tmp`
+            yield* fs.writeWithDirs(temporary, yield* fs.readFile(bundled), 0o755)
+            yield* fs.rename(temporary, target)
             return target
-          }),
-        ),
+          }
+
+          const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
+          const config = PLATFORM[platformKey]
+          if (!config) throw new Error(`unsupported platform for ripgrep: ${platformKey}`)
+
+          const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
+          const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
+          const archive = path.join(global.bin, filename)
+
+          yield* Effect.logInfo("downloading ripgrep", { url })
+          yield* fs.ensureDir(global.bin).pipe(Effect.orDie)
+          const bytes = yield* HttpClientRequest.get(url).pipe(
+            http.execute,
+            Effect.flatMap((response) => response.arrayBuffer),
+            Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
+          )
+          if (bytes.byteLength === 0) throw new Error(`failed to download ripgrep from ${url}`)
+          verify(new Uint8Array(bytes), filename, config.sha256)
+
+          yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
+          yield* extract(archive, config, target)
+          yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
+          return target
+        }),
+      )
+
+      return Service.of({
+        filepath,
+        // With a bundled copy `filepath` never downloads; without one, only what is already there is used.
+        installed: bundled ? filepath : existing,
       })
     }),
   )

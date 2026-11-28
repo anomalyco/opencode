@@ -13,6 +13,7 @@ import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@openc
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
+import { resolveRipgrep } from "./ripgrep"
 import { NativeArch } from "../../../script/native-arch"
 import { bundledModelsSnapshot, modelsSnapshotPlugin } from "../../core/script/models-snapshot"
 
@@ -32,6 +33,8 @@ const baselineFlag = process.argv.includes("--baseline")
 const requestedTarget = process.env.OPENCODE_TARGET
 const skipInstall = process.argv.includes("--skip-install")
 const skipWebUi = process.argv.includes("--skip-web-ui")
+// For builds without network access that put their own rg on PATH, such as Nix.
+const skipRipgrep = process.argv.includes("--skip-ripgrep")
 const solidPlugin = createSolidTransformPlugin()
 const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
 const releaseAssets = new Map<string, Promise<Map<string, string>>>()
@@ -145,6 +148,19 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       }))
     },
   }
+  const ripgrep = skipRipgrep ? undefined : await resolveRipgrep(item)
+  const ripgrepPlugin: BunPlugin = {
+    name: "ripgrep-binary",
+    setup(build) {
+      build.onLoad({ filter: /ripgrep[/\\]bundled\.ts$/ }, () => ({
+        loader: "js",
+        contents: ripgrep
+          ? `import file from ${JSON.stringify(ripgrep.replaceAll("\\", "/"))} with { type: "file" }
+export default file`
+          : "export default undefined",
+      }))
+    },
+  }
   const simulationInputs = new Set<string>()
   const simulationGraphPlugin: BunPlugin = {
     name: "opencode-simulation-graph",
@@ -193,6 +209,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       parcelWatcherPlugin,
       irohBindingPlugin,
       opencodePtyPlugin,
+      ripgrepPlugin,
       pluginRuntimePlugin,
       wsReexportPlugin,
       simulationGraphPlugin,

@@ -121,7 +121,13 @@ describe("ripgrep environment", () => {
       })
       const layer = AppNodeBuilder.build(Ripgrep.node, [
         RipgrepBinary.node.replace(
-          Layer.succeed(RipgrepBinary.Service, RipgrepBinary.Service.of({ filepath: Effect.succeed("/host/bin/rg") })),
+          Layer.succeed(
+            RipgrepBinary.Service,
+            RipgrepBinary.Service.of({
+              filepath: Effect.succeed("/host/bin/rg"),
+              installed: Effect.succeed("/host/bin/rg"),
+            }),
+          ),
         ),
       ])
       const matches = yield* Effect.flatMap(Ripgrep.Service, (rg) =>

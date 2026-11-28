@@ -55,7 +55,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preBuild
 
     cd ./packages/cli
-    bun --bun ./script/build.ts --single --skip-install
+    bun --bun ./script/build.ts --single --skip-install --skip-ripgrep
 
     runHook postBuild
   '';

@@ -5,6 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
+import path from "path"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Stream, Struct } from "effect"
 import { Agent } from "../../agent.js"
 import { Bus } from "../../bus.js"
@@ -14,6 +15,7 @@ import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
+import { RipgrepBinary } from "../../ripgrep/binary.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionMessage } from "../../session/message.js"
@@ -315,6 +317,7 @@ export const Plugin = {
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
+    const ripgrep = yield* RipgrepBinary.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (
       invocation: ShellCreateBefore,
@@ -470,6 +473,16 @@ export const Plugin = {
                       stoppedBeforeStart,
                     ),
                   )
+                  // The rg the grep and glob tools use, so the model's commands can run it even without a system copy.
+                  // Never downloaded here, so a command doesn't wait on the network; without one it still runs, and
+                  // resolution reports some failures as defects.
+                  const rg = target.environment.local
+                    ? yield* ripgrep.installed.pipe(
+                        Effect.map(Option.fromUndefinedOr),
+                        Effect.orElseSucceed(() => Option.none<string>()),
+                        Effect.catchDefect(() => Effect.succeed(Option.none<string>())),
+                      )
+                    : Option.none<string>()
                   const info = yield* shell.create(
                     {
                       command: input.command,
@@ -494,6 +507,15 @@ export const Plugin = {
                         invocation.env.OPENCODE = "1"
                         invocation.env.AI_AGENT ||= "opencode"
                         invocation.env.OPENCODE_SESSION_ID = context.sessionID
+                        // Appended, so an rg already on the user's PATH still wins, as it does for the search tools.
+                        if (Option.isSome(rg)) {
+                          const key =
+                            Object.keys(invocation.env).find((name) => name.toUpperCase() === "PATH") ?? "PATH"
+                          const entries = (invocation.env[key] ?? "").split(path.delimiter).filter(Boolean)
+                          const directory = path.dirname(rg.value)
+                          if (!entries.includes(directory))
+                            invocation.env[key] = [...entries, directory].join(path.delimiter)
+                        }
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
                           Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
