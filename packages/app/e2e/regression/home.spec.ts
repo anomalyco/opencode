@@ -28,6 +28,20 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   await page.goto("/")
 }
 
+test("Home opens when the browser has no Array.prototype.toSorted", async ({ page }) => {
+  await page.addInitScript(() => {
+    const proto: { toSorted?: typeof Array.prototype.toSorted } = Array.prototype
+
+    delete proto.toSorted
+  })
+  const workspace = await mockWorkspace(page, { name: "LegacyBrowser" })
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  await page.goto("/")
+
+  const projects = page.getByRole("complementary", { name: "Projects" })
+  await expectAppVisible(projects.getByRole("button", { name: /LegacyBrowser/ }))
+})
+
 test("Home projects, utility rows, search and recent sessions show keyboard focus", async ({ page }) => {
   const workspace = await mockWorkspace(page, { name: "HomeFocus" })
 
