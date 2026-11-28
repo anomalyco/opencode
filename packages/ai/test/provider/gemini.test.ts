@@ -155,6 +155,41 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
         { role: "model", parts: [{ text: "After." }] },
+        { role: "user", parts: [{ text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("drops a trailing thought-only model turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [Message.user("Hi."), Message.assistant([{ type: "reasoning", text: "thinking" }])],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([{ role: "user", parts: [{ text: "Hi." }] }])
+    }),
+  )
+
+  it.effect("asks the model to continue after a dropped thought-only tail", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user("Hi."),
+            Message.assistant("Hello."),
+            Message.assistant([{ type: "reasoning", text: "thinking" }]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        { role: "user", parts: [{ text: "Hi." }] },
+        { role: "model", parts: [{ text: "Hello." }] },
+        { role: "user", parts: [{ text: "Continue." }] },
       ])
     }),
   )
@@ -1378,6 +1413,7 @@ describe("Gemini route", () => {
       )
       expect(prepared.body.contents).toEqual([
         { role: "model", parts: [{ text: "All done.", thoughtSignature: "text_sig" }] },
+        { role: "user", parts: [{ text: "Continue." }] },
       ])
     }),
   )

@@ -419,8 +419,21 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   }
 
   flushMedia()
-  return contents
+  return endOnUserTurn(contents)
 })
+
+// Gemini rejects contents that end on a model turn. A thought-only tail is dropped, since the model cannot
+// continue from it, and any other model tail without a function call gets a user turn asking it to continue.
+// A tail with function calls is left as is: a text turn cannot stand in for their function responses.
+const endOnUserTurn = (contents: GeminiContent[]) => {
+  const last = contents.at(-1)
+  if (last?.role === "model" && (last.parts ?? []).every((part) => "thought" in part && part.thought === true))
+    contents.pop()
+  const tail = contents.at(-1)
+  if (tail?.role === "model" && !(tail.parts ?? []).some((part) => "functionCall" in part))
+    contents.push({ role: "user", parts: [{ text: "Continue." }] })
+  return contents
+}
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const definitions = ProviderShared.flattenTools(request.tools)
