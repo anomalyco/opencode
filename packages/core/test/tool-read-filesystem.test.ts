@@ -89,13 +89,7 @@ describe("ReadToolFileSystem scan ranges", () => {
       expect(file.calls[0]?.length).toBe(256 * 1024)
       expect(file.calls[1]?.length).toBe(1024 * 1024)
       expect(file.calls.slice(2).every((call) => call.length <= 256 * 1024)).toBe(true)
-      expect(yield* file.read({ offset: 3 })).toEqual({
-        type: "text",
-        content: "",
-        note: "Line 3 is 513 KB, more than the 50 KB one read returns, so it isn't shown.",
-        offset: 3,
-        lineCount: 0,
-      })
+      expect(yield* file.read({ offset: 3 })).toEqual({ type: "line-too-large", line: 3, bytes: 2 * 256 * 1024 + 5 })
     }),
   )
 
@@ -285,6 +279,13 @@ describe("ReadToolFileSystem", () => {
       const long = "x".repeat(40 * 1024) + "\n" + "é".repeat(500)
       yield* files.writeFileString(file, long)
       expect(yield* read()).toEqual({ type: "text", content: long, offset: 1, lineCount: 2 })
+
+      // Each invalid byte decodes to a three-byte replacement character.
+      yield* files.writeFile(
+        file,
+        Buffer.concat(Array.from({ length: 25 }, () => Buffer.from("\xff".repeat(1_000) + "\n", "latin1"))),
+      )
+      expect(yield* read()).toMatchObject({ type: "text", offset: 1, lineCount: 17, next: 18 })
     }),
   )
 
@@ -654,7 +655,7 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("returns long lines whole and a note for a line over a page", () =>
+  it.effect("returns long lines whole and reports a line too large for a page", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = path.join(directory, "long.txt")
@@ -672,14 +673,7 @@ describe("ReadToolFileSystem", () => {
       yield* files.writeFileString(file, `one\n${"z".repeat(60 * 1024)}\nthree\n`)
       const read = (offset: number) => ReadToolFileSystem.read(environment, absolute(file), "long.txt", { offset })
       expect(yield* read(1)).toEqual({ type: "text", content: "one", offset: 1, lineCount: 1, next: 2 })
-      expect(yield* read(2)).toEqual({
-        type: "text",
-        content: "",
-        note: "Line 2 is 60 KB, more than the 50 KB one read returns, so it isn't shown. Continue at offset 3.",
-        offset: 2,
-        lineCount: 0,
-        next: 3,
-      })
+      expect(yield* read(2)).toEqual({ type: "line-too-large", line: 2, bytes: 60 * 1024, next: 3 })
       expect(yield* read(3)).toEqual({ type: "text", content: "three", offset: 3, lineCount: 1 })
     }),
   )

@@ -209,9 +209,9 @@ describe("Ripgrep", () => {
 
         expect(matches).toHaveLength(2)
         expect(matches[0]?.entry.path).toBe(RelativePath.make("generated.ts"))
-        expect(matches[0]?.text).toBe(`Cloudflare${"x".repeat(1_990)}…`)
+        expect(matches[0]?.text).toBe(`Cloudflare${"x".repeat(1_990)}...`)
         expect(matches[0]?.submatches).toEqual([{ text: "Cloudflare", start: 0, end: 10 }])
-        expect(matches[1]?.text).toBe(`…${"y".repeat(1_000)}Cloudflare${"y".repeat(990)}…`)
+        expect(matches[1]?.text).toBe(`...${"y".repeat(1_000)}Cloudflare${"y".repeat(990)}...`)
       }),
     ),
   )
@@ -231,8 +231,8 @@ describe("Ripgrep", () => {
         const matches = yield* ripgrep.grep({ environment, cwd: tmp.path, pattern: "tail", limit: 10 })
 
         expect(matches.map((match) => match.text)).toEqual([
-          `…${"x".repeat(999)}tail${"x".repeat(997)}…`,
-          `…${"x".repeat(1_000)}tail${"x".repeat(995)}…`,
+          `...${"x".repeat(999)}tail${"x".repeat(997)}...`,
+          `...${"x".repeat(1_000)}tail${"x".repeat(995)}...`,
         ])
       }),
     ),

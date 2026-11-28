@@ -14,6 +14,8 @@ export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
 const MAX_SCAN_CHUNK = 4 * 1024 * 1024
 const TAIL_LINES = 100
+// Decoding drops at most a BOM and a carriage return, so a line with more bytes can't fit a page.
+const MAX_LINE_BYTES = MAX_READ_BYTES + 4
 export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
 export class BinaryFileError extends Schema.TaggedError<BinaryFileError>()("ReadTool.BinaryFileError", {
@@ -74,13 +76,20 @@ export const TextContent = Schema.Struct({
     description: "The line to continue reading from. Absent when the content reaches the end of the file.",
   }),
   content: Schema.String,
-  note: Schema.optionalKey(Schema.String).annotate({
-    description: "Shown instead of content when the line at offset is too big for one read.",
-  }),
 }).annotate({ identifier: "ReadTool.TextContent" })
 export type TextContent = typeof TextContent.Type
 // The line count stays out of the tool output, which reads like a file length; formatting needs it to place a trailing newline.
 export type TextPage = TextContent & { readonly lineCount: number }
+
+export const LineTooLarge = Schema.Struct({
+  type: Schema.Literal("line-too-large"),
+  line: PositiveInt,
+  bytes: PositiveInt,
+  next: Schema.optionalKey(PositiveInt).annotate({
+    description: "The line to continue reading from. Absent when this is the last line of the file.",
+  }),
+}).annotate({ identifier: "ReadTool.LineTooLarge" })
+export type LineTooLarge = typeof LineTooLarge.Type
 
 export const DirectoryContent = Schema.Struct({
   type: Schema.Literal("directory"),
@@ -99,7 +108,7 @@ export const MediaContent = Schema.Struct({
 }).annotate({ identifier: "ReadTool.MediaContent" })
 export type MediaContent = typeof MediaContent.Type
 
-export const Output = Schema.Union([TextContent, DirectoryContent, MediaContent])
+export const Output = Schema.Union([TextContent, LineTooLarge, DirectoryContent, MediaContent])
 export type Output = typeof Output.Type
 
 // Media bytes travel beside the reference so the tool can attach them without storing them in its output.
@@ -145,16 +154,12 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
-    const lines = new TextDecoder().decode(first.bytes).split("\n")
+    const content = new TextDecoder().decode(first.bytes)
+    const lines = content.split("\n")
     // A final separator ends the last physical line; keep it in whole-file content.
     const count = lines.at(-1) === "" ? lines.length - 1 : lines.length
-    if (count <= MAX_READ_LINES) {
-      const content = lines.join("\n")
-      if (Buffer.byteLength(content) <= MAX_READ_BYTES) {
-        const result: TextPage = { type: "text", content, offset: 1, lineCount: count }
-        return result
-      }
-    }
+    if (count <= MAX_READ_LINES && Buffer.byteLength(content) <= MAX_READ_BYTES)
+      return { type: "text" as const, content, offset: 1, lineCount: count }
   }
 
   return yield* textPage(files, input, resource, first, page)
@@ -192,7 +197,7 @@ const textPage = Effect.fnUntraced(function* (
   let consumed = 0
   let next: number | undefined
   let firstNul = Infinity
-  let skipped: { line: number; bytes: number } | undefined
+  let tooLarge: { line: number; bytes: number } | undefined
   const decoder = new TextDecoder("utf-8", { ignoreBOM: true })
 
   const range = (offset: number, length: number) => readFile(files, input, resource, { offset, length })
@@ -228,16 +233,15 @@ const textPage = Effect.fnUntraced(function* (
       const lf = chunk.indexOf(10, local)
       const end = point.byte + (lf < 0 ? chunk.length : lf)
       const length = end - start
-      // Decoding drops at most a BOM and a carriage return, so a longer line can't fit a page and is never read.
       let text: string | undefined
-      if (length <= MAX_READ_BYTES + 4) {
-        const bytes =
+      if (length <= MAX_LINE_BYTES) {
+        const raw =
           start >= point.byte
             ? chunk.subarray(start - point.byte, start - point.byte + length)
             : start + length <= first.bytes.length
               ? first.bytes.subarray(start, start + length)
               : yield* reread(start, length)
-        text = decoder.decode(bytes)
+        text = decoder.decode(raw)
         // Single-chunk pages decode from byte zero. Streamed pages decode from the selected line,
         // except a past-end tail, whose embedded BOM remains content.
         if (
@@ -246,17 +250,17 @@ const textPage = Effect.fnUntraced(function* (
         )
           text = text.slice(1)
         if (text.endsWith("\r")) text = text.slice(0, -1)
-        if (Buffer.byteLength(text) > MAX_READ_BYTES) text = undefined
       }
-      if (text === undefined) {
+      const bytes = text === undefined ? length : Buffer.byteLength(text)
+      if (text === undefined || bytes > MAX_READ_BYTES) {
         if (!tail && entries.length > 0) {
           next = line
           return
         }
-        // A page holds whole lines only, so this line gets a note instead. A tail drops the lines before it.
+        // A page holds whole lines, so this line is reported instead. A tail keeps only the lines after it.
         entries.length = 0
         size = 0
-        skipped = { line, bytes: length }
+        tooLarge = { line, bytes }
         consumed = end + Number(lf >= 0)
         if (!tail) {
           if (consumed < first.info.size) next = line + 1
@@ -266,7 +270,7 @@ const textPage = Effect.fnUntraced(function* (
         start = end + 1
         continue
       }
-      const cost = Buffer.byteLength(text) + (entries.length > 0 ? 1 : 0)
+      const cost = bytes + (entries.length > 0 ? 1 : 0)
       if (!tail && size + cost > MAX_READ_BYTES) {
         next = line
         return
@@ -301,12 +305,17 @@ const textPage = Effect.fnUntraced(function* (
     }
     byte += chunk.length
     // Any byte after a full page starts another line, even if that line has no newline for megabytes.
-    if (next === undefined && (entries.length >= limit || size >= MAX_READ_BYTES) && consumed < byte)
+    // An unfinished line too big for a page ends this page too, without reading the rest of it.
+    if (
+      next === undefined &&
+      (entries.length >= limit || size >= MAX_READ_BYTES || (entries.length > 0 && byte - start > MAX_LINE_BYTES)) &&
+      consumed < byte
+    )
       next = requested + entries.length
     if (next !== undefined || byte >= first.info.size) break
     // Grow only while skipping lines; keep page reads (including an unfinished selected line) small.
     const length =
-      entries.length > 0 || (requested > 0 && total >= requested - 1)
+      entries.length > 0 || (requested > 0 && total >= requested - 1 && byte - start <= MAX_LINE_BYTES)
         ? FIRST_CHUNK
         : Math.max(FIRST_CHUNK, Math.min(chunk.length * 4, MAX_SCAN_CHUNK))
     const more = yield* range(byte, Math.min(length, first.info.size - byte))
@@ -334,7 +343,7 @@ const textPage = Effect.fnUntraced(function* (
       if (next !== undefined) break
     }
     if (tail) {
-      if (skipped) from = entries.length === 0 ? skipped.line : skipped.line + 1
+      if (tooLarge) from = tooLarge.line + 1
       while (size > MAX_READ_BYTES) {
         size -= Buffer.byteLength(entries.shift() ?? "") + 1
         from++
@@ -344,27 +353,20 @@ const textPage = Effect.fnUntraced(function* (
   }
 
   if (firstNul < consumed) return yield* new BinaryFileError({ resource })
-  if (skipped && entries.length === 0) {
-    const result: TextPage = {
-      type: "text",
-      content: "",
-      note:
-        `Line ${skipped.line} is ${formatSize(skipped.bytes)}, more than the ${MAX_READ_BYTES / 1024} KB one read returns, so it isn't shown.` +
-        (next === undefined ? "" : ` Continue at offset ${next}.`),
-      offset: skipped.line,
-      lineCount: 0,
+  if (tooLarge && entries.length === 0)
+    return {
+      type: "line-too-large" as const,
+      line: tooLarge.line,
+      bytes: tooLarge.bytes,
       ...(next === undefined ? {} : { next }),
     }
-    return result
-  }
-  const result: TextPage = {
-    type: "text",
+  return {
+    type: "text" as const,
     content: entries.join("\n"),
     offset: from,
     lineCount: entries.length,
     ...(next === undefined ? {} : { next }),
   }
-  return result
 })
 
 const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep = path.sep): DirectoryContent => {
@@ -384,7 +386,3 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
     ...(offset - 1 + selected.length < visible.length ? { next: offset + selected.length } : {}),
   }
 }
-
-// Rounds up, so a line just over the page budget never reads as the budget itself.
-const formatSize = (bytes: number) =>
-  bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`

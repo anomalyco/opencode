@@ -46,14 +46,23 @@ const rawText = (data: typeof RawData.Type) =>
   "text" in data ? data.text : Buffer.from(data.bytes, "base64").toString("utf8")
 
 // A long line shows the part around its first match, not its start, which may be far from the match.
-const preview = (data: typeof RawData.Type, match: number | undefined) => {
-  const text = rawText(data)
-  if (text.length <= MAX_LINE_CHARS) return text
-  const bytes = "text" in data ? Buffer.from(data.text) : Buffer.from(data.bytes, "base64")
-  const at = match === undefined ? 0 : bytes.subarray(0, match).toString("utf8").length
+const around = (text: string, at: number) => {
   const start = Math.max(0, Math.min(at - MAX_LINE_CHARS / 2, text.length - MAX_LINE_CHARS))
   const rest = TextBoundary.tail(text, text.length - start)
-  return (start > 0 ? "…" : "") + TextBoundary.head(rest, MAX_LINE_CHARS) + (rest.length > MAX_LINE_CHARS ? "…" : "")
+  return (
+    (start > 0 ? "..." : "") + TextBoundary.head(rest, MAX_LINE_CHARS) + (rest.length > MAX_LINE_CHARS ? "..." : "")
+  )
+}
+
+// rg reports a match's start as a byte offset into the line.
+const preview = (data: typeof RawData.Type, match = 0) => {
+  if ("text" in data)
+    return data.text.length <= MAX_LINE_CHARS
+      ? data.text
+      : around(data.text, new TextEncoder().encodeInto(data.text, new Uint8Array(match)).read)
+  const bytes = Buffer.from(data.bytes, "base64")
+  const text = bytes.toString("utf8")
+  return text.length <= MAX_LINE_CHARS ? text : around(text, bytes.subarray(0, match).toString("utf8").length)
 }
 
 export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
