@@ -192,6 +192,28 @@ Before changing the API, ask me to choose between a breaking change and a compat
 Permission: `question` with `*` as its resource. A client must support the
 interactive form, and dismissing it cancels the question.
 
+### Todowrite
+
+`todowrite` creates and updates a todo list to track progress during complex, multi-step work. Each item has a short `content` describing the task and a `status` (`pending`, `in_progress`, or `completed`). The list is session-scoped. It is shown in the TUI session and sidebar while the experimental todo feature is enabled, and it is an artifact of the `todowrite` tool result, so there is no separate HTTP API for it. To clear the list, call `todowrite` with an empty array.
+
+```text
+Track the three steps of this refactor, then mark each one completed as you finish it.
+```
+
+`todowrite` is experimental. Enable it with:
+
+```json
+{
+  "experimental": {
+    "todo": true
+  }
+}
+```
+
+in `opencode.json` (project) or `opencode.jsonc`. While the flag is off the tool is not registered and the model cannot use it. See [`experimental.todo`](/config#todos) for the flag.
+
+Permission: `todowrite` with `*` as its resource. Subagents do not get `todowrite` by default. Grant it explicitly with `"permission": { "todowrite": "allow" }` on the subagent definition when a subagent should maintain its own list.
+
 ### Skill
 
 `skill` loads the instructions and bundled resources for one available skill
