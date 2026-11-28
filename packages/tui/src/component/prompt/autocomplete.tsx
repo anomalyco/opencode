@@ -481,18 +481,22 @@ export function Autocomplete(props: {
   }
 
   const commands = createMemo((): AutocompleteOption[] => {
+    const commandNames = new Set<string>()
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
       if (!slash) return []
-      return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
-        display: `/${name}`,
-        description: command.description ?? command.title,
-        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
-      }))
+      return [slash.name, ...(slash.aliases ?? [])].map((name) => {
+        commandNames.add(name)
+        return {
+          display: `/${name}`,
+          description: command.description ?? command.title,
+          onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+        }
+      })
     })
-    const commandNames = new Set<string>()
 
     for (const serverCommand of data.location.command.list(location.current) ?? []) {
+      if (commandNames.has(serverCommand.name)) continue
       commandNames.add(serverCommand.name)
       results.push({
         display: "/" + serverCommand.name,
