@@ -189,7 +189,7 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
           fallback={
             <Show
               when={generated()}
-              fallback={<span data-slot="project-avatar-initial">{first(split.fallback)}</span>}
+              fallback={<span data-slot="project-avatar-initial" aria-hidden="true">{first(split.fallback)}</span>}
             >
               {(key) => <GeneratedAvatar seed={key()} />}
             </Show>
