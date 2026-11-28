@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
@@ -66,9 +66,7 @@ const startEntries = Effect.fnUntraced(function* (
   yield* ConfigCompatibilityPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
   )
-  yield* ConfigSkillPlugin.Plugin.effect(
-    pluginHost,
-  ).pipe(
+  yield* ConfigSkillPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
     Effect.provideService(SkillDiscovery.Service, discovery),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
@@ -132,9 +130,9 @@ describe("SkillFile.parse", () => {
     expect(parse("disable-model-invocation: yes")).toMatchObject({ skill: { autoinvoke: false } })
     expect(parse("disable-model-invocation: false")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
     expect(parse("disable-model-invocation: maybe")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
-    expect(
-      parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true"),
-    ).toMatchObject({ skill: { autoinvoke: true } })
+    expect(parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true")).toMatchObject({
+      skill: { autoinvoke: true },
+    })
   })
 
   test("parses root and nested skill ids and metadata flags", () => {
@@ -207,7 +205,9 @@ describe("ConfigSkillPlugin.Plugin", () => {
             { claude: [AbsolutePath.make(claude)], agents: [AbsolutePath.make(agents)] },
           )
           const watcher = yield* Watcher.Test
-          expect(yield* watcher.subscriptions()).toEqual(expected.map((item) => ({ path: item, type: "directory", ignore: SkillScan.ignore.toSorted() })))
+          expect(yield* watcher.subscriptions()).toEqual(
+            expected.map((item) => ({ path: item, type: "directory", ignore: SkillScan.ignore.toSorted() })),
+          )
         }),
       ),
     ),
@@ -590,12 +590,90 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect((yield* service.list()).find((item) => item.id === "review")?.description).toBe("Review once")
         }).pipe(
           Effect.provide(
-            Config.testLayer(
-              [new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) })],
-              { claude: [AbsolutePath.make(path.join(tmp.path, ".claude"))], agents: [] },
-            ),
+            Config.testLayer([new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) })], {
+              claude: [AbsolutePath.make(path.join(tmp.path, ".claude"))],
+              agents: [],
+            }),
           ),
         ),
+      ),
+    ),
+  )
+})
+
+describe("ConfigSkillPlugin.Plugin skipped skills", () => {
+  it.live("warns at the default log level when a skill file cannot be loaded", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            // Unparseable YAML reaches gray-matter twice: directly and through the sanitize fallback.
+            await fs.mkdir(path.join(tmp.path, "unparseable"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "unparseable", "SKILL.md"),
+              "---\ndescription: foo: bar\nmetadata: [\n---\n# unparseable",
+            )
+            // Parses as YAML, but the frontmatter decodes into the wrong shape.
+            await fs.mkdir(path.join(tmp.path, "mismatch"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "mismatch", "SKILL.md"),
+              "---\nname: mismatch\ndescription: [not, a, string]\n---\n# mismatch",
+            )
+          })
+          const warnings: string[] = []
+          const skill = yield* start([tmp.path], tmp.path).pipe(
+            Effect.withLogger(
+              Logger.make((entry) => {
+                if (entry.logLevel === "Warn") warnings.push(JSON.stringify([entry.message, entry.cause]))
+              }),
+            ),
+          )
+
+          expect(yield* skill.list()).toEqual([])
+          expect(warnings.filter((line) => line.includes("skill file skipped"))).toHaveLength(2)
+          expect(warnings.some((line) => line.includes("unparseable") && line.includes("markdown"))).toBe(true)
+          expect(warnings.some((line) => line.includes("mismatch") && line.includes("frontmatter"))).toBe(true)
+        }),
+      ),
+    ),
+  )
+})
+
+describe("ConfigCompatibilityPlugin.Plugin skipped skills", () => {
+  it.live("warns at the default log level when a Claude-compatible skill file cannot be loaded", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const claude = path.join(tmp.path, "claude")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(claude, "skills", "good"), { recursive: true })
+            await fs.mkdir(path.join(claude, "skills", "badshape"), { recursive: true })
+            await fs.writeFile(
+              path.join(claude, "skills", "good", "SKILL.md"),
+              "---\nname: good\ndescription: control skill\n---\n# good",
+            )
+            // Parses as YAML, but the frontmatter decodes into the wrong shape.
+            await fs.writeFile(
+              path.join(claude, "skills", "badshape", "SKILL.md"),
+              "---\nname: badshape\ndescription: [not, a, string]\n---\n# badshape",
+            )
+          })
+          const warnings: string[] = []
+          const skill = yield* startEntries([], tmp.path, tmp.path, emptyDiscovery, {
+            claude: [AbsolutePath.make(claude)],
+            agents: [],
+          }).pipe(
+            Effect.withLogger(
+              Logger.make((entry) => {
+                if (entry.logLevel === "Warn") warnings.push(JSON.stringify([entry.message, entry.cause]))
+              }),
+            ),
+          )
+
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("good")])
+          expect(warnings.filter((line) => line.includes("skill file skipped"))).toHaveLength(1)
+          expect(warnings.some((line) => line.includes("badshape") && line.includes("frontmatter"))).toBe(true)
+        }),
       ),
     ),
   )
