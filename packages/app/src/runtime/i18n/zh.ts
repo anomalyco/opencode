@@ -745,7 +745,7 @@ export const dict = {
   "settings.timeline.preset.quiet": "安静",
   "settings.timeline.preset.text-only": "仅文本",
   "settings.timeline.description.everything": "单独显示所有活动。 展开shell输出、编辑和思考。",
-  "settings.timeline.description.detailed": "展开shell输出和编辑。 单独显示子代理，并在已使用中对其他活动进行分组。",
+  "settings.timeline.description.detailed": "展开shell输出和编辑。 单独显示子智能体，并在已使用中对其他活动进行分组。",
   "settings.timeline.description.text-only": "隐藏所有活动。仅显示消息。",
   "settings.timeline.description.custom": "为每个活动类别使用您选择的位置和详细信息。",
   "settings.timeline.custom": "自定义",
@@ -754,7 +754,7 @@ export const dict = {
   "settings.timeline.category.shell": "Shell 命令",
   "settings.timeline.category.edit": "编辑",
   "settings.timeline.category.thinking": "思考",
-  "settings.timeline.category.subagents": "子代理",
+  "settings.timeline.category.subagents": "子智能体",
   "settings.timeline.category.notices": "注意事项",
   "settings.timeline.category.tools": "其他工具",
 
