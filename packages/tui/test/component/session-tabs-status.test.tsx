@@ -37,6 +37,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [newTab, setNewTab] = createSignal(false)
     const settings: Info = { tabs: { mode: "on" } }
     const copied: string[] = []
+    const closedTabs: string[] = []
     const reopened: string[] = []
     const [closed, setClosed] = createSignal([
       { sessionID: "closed-new", title: "Most recently closed" },
@@ -62,7 +63,9 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           if (sessionID === "first") setStatus((current) => ({ ...current, unread: undefined }))
         })
       },
-      close() {},
+      close(sessionID?: string) {
+        if (sessionID) closedTabs.push(sessionID)
+      },
       move() {},
       add() {},
       recentlyClosed: closed,
@@ -225,6 +228,24 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       expect(active()).toBe("second")
       await app.mockMouse.click(column + 1, row + 3)
       expect(copied).toEqual(["first"])
+      await app.waitForFrame((frame) => !frame.includes("Rename"))
+
+      const closeAfterTitle = orientation === "vertical" ? "Close tabs below" : "Close tabs to the right"
+      await app.mockMouse.click(column, row, MouseButton.RIGHT)
+      await app.waitForFrame((frame) => frame.includes(closeAfterTitle))
+      const closeAfterRow = app
+        .captureCharFrame()
+        .split("\n")
+        .findIndex((line) => line.includes(closeAfterTitle))
+      await app.mockMouse.click(column + 1, closeAfterRow)
+      expect(closedTabs).toEqual(["second"])
+      await app.waitForFrame((frame) => !frame.includes("Rename"))
+
+      const secondRow = rows.findIndex((line) => line.includes("Second"))
+      await app.mockMouse.click(rows[secondRow]!.indexOf("Second"), secondRow, MouseButton.RIGHT)
+      await app.waitForFrame((frame) => frame.includes("Rename"))
+      expect(app.captureCharFrame()).not.toContain(closeAfterTitle)
+      await app.mockMouse.click(59, 9)
       await app.waitForFrame((frame) => !frame.includes("Rename"))
 
       setNewTab(true)
