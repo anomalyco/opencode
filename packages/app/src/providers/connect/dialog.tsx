@@ -9,7 +9,7 @@ import { Field } from "@opencode/ui/field"
 import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { TextInput } from "@opencode/ui/text-input"
-import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
+import { type Component, createEffect, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -64,6 +64,8 @@ export const DialogConnectProvider: Component<{
   controller?: ReturnType<typeof useProviderConnectController>
   /** Opened for one provider from another flow, with no way back to the provider list. */
   standalone?: boolean
+  /** Starts the provider's first method of this kind as soon as its methods load, instead of listing them. */
+  method?: ProviderConnectMethod["type"]
   selection?: ModelSelection
   onDone?: () => void
   onConnected?: (provider: string) => void
@@ -92,6 +94,19 @@ export const DialogConnectProvider: Component<{
 
   const view = controller.view
   const frame = () => view().frame
+
+  // The named method starts once, the first time the methods are listed; going back lists them as usual.
+  const preselect = { pending: props.method !== undefined }
+  createEffect(() => {
+    const connect = view().connect
+
+    if (!preselect.pending || connect?.status !== "choosing") return
+    const index = connect.methods.findIndex((method) => method.type === props.method)
+    preselect.pending = false
+
+    if (index >= 0) controller.input({ type: "method.selected", index })
+  })
+
   const consoleSelected = () => view().provider === CONSOLE_INTEGRATION
   let focusHost: HTMLDivElement | undefined
   const holdFocus = () => focusHost?.focus({ preventScroll: true })

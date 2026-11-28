@@ -260,6 +260,7 @@ impl Client {
     endpoint!(" `GET /api/websearch/provider` (`providers`)", websearch_providers, websearch_providers_call, json, WebsearchProvidersOutput, input: WebsearchProvidersInput);
     endpoint!(" `POST /api/websearch` (`query`)", websearch_query, websearch_query_call, json, WebsearchQueryOutput, input: WebsearchQueryInput);
     endpoint!(" `GET /api/experimental/usage/limits` (`limits`)", experimental_usage_limits, experimental_usage_limits_call, json, ExperimentalUsageLimitsOutput, input: ExperimentalUsageLimitsInput);
+    endpoint!(" `GET /api/experimental/usage/go` (`go`)", experimental_usage_go, experimental_usage_go_call, json, ExperimentalUsageGoOutput, input: ExperimentalUsageGoInput);
     endpoint!(" `GET /api/experimental/flag` (`get`)", experimental_flag_get, experimental_flag_get_call, json, ExperimentalFlagGetOutput, input: ExperimentalFlagGetInput);
     endpoint!(" `GET /api/config` (`get`)", config_get, config_get_call, json, ConfigGetOutput, input: ConfigGetInput);
     endpoint!(" `GET /api/config/shell` (`shells`)", config_shells, config_shells_call, json, ConfigShellsOutput);

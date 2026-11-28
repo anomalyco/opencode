@@ -3024,8 +3024,18 @@ export type ExperimentalUsageLimitsOperation<E = never> = (
   input?: ExperimentalUsageLimitsInput,
 ) => Effect.Effect<ExperimentalUsageLimitsOutput, E>
 
+export type ExperimentalUsageGoInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ExperimentalUsageGoOutput = {
+  readonly location: Location.PublicRef
+  readonly data: UsageLimits.GoConnection | null
+}
+export type ExperimentalUsageGoOperation<E = never> = (
+  input?: ExperimentalUsageGoInput,
+) => Effect.Effect<ExperimentalUsageGoOutput, E>
+
 export interface ExperimentalUsageApi<E = never> {
   readonly limits: ExperimentalUsageLimitsOperation<E>
+  readonly go: ExperimentalUsageGoOperation<E>
 }
 
 export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

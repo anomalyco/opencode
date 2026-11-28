@@ -40,6 +40,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { startDragOut } from "@/runtime/platform/drag-out"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
+import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { isServerIncompatible } from "@/runtime/server/health-machine"
@@ -107,7 +108,10 @@ type Attached = {
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
   scoped: (name: string) => void
-  layout: Omit<Layout, "narrow" | "settings" | "project" | "draft" | "command" | "stored" | "side" | "open"> & {
+  layout: Omit<
+    Layout,
+    "narrow" | "settings" | "project" | "draft" | "connect" | "command" | "stored" | "side" | "open"
+  > & {
     open(key: string, session: SessionRef, options?: BuiltinOpenOptions): void
     stored(plugin: string, session: SessionRef): readonly string[]
     /** `width` and `resize` take the panel's host key, `${plugin}:${panel id}`. */
@@ -116,6 +120,7 @@ type Attached = {
   settings: (page?: string) => void
   project: (server: string, title: string) => void
   draft: Layout["draft"]
+  connect: Layout["connect"]
   command: (id: string) => void
   run: (id: string) => boolean
   notify: (plugin: string, options: NotifyOptions) => Promise<NotifyResult>
@@ -486,6 +491,7 @@ export function createHostApis() {
       settings: (page) => write((value) => value.settings(page)),
       project: (server, title) => write((value) => value.project(server, title)),
       draft: (input) => write((value) => value.draft(input)),
+      connect: (input) => write((value) => value.connect(input)),
       command: (id) => write((value) => value.command(id)),
     }),
     embeds: () => embeds,
@@ -519,6 +525,7 @@ export { PluginAttachmentProvider, usePluginAttachment } from "./attachment"
 /** Builds the session and layout attachment before readiness; its `attach` connects HostApis as the routes render. */
 export function createPluginAttachment(apis: HostApis) {
   const global = useGlobal()
+  const dialog = useDialog()
   const tabs = useTabs()
   const layout = useLayout()
   const route = useCurrentRoute()
@@ -1193,6 +1200,20 @@ export function createPluginAttachment(apis: HostApis) {
       const server = servers.list.find((conn) => ServerConnection.key(conn) === input.server)
 
       if (server) void tabs.newDraft({ server: ServerConnection.key(server), directory: input.directory }, input.prompt)
+    },
+    connect: async (input) => {
+      const conn = connection(input.server)
+
+      if (!conn) return
+      const { DialogConnectProvider, useProviderConnectController } = await import("@/providers/connect/dialog")
+      const controller = useProviderConnectController()
+
+      controller.select(input.integration)
+      void dialog.show(() => (
+        <ServerProvider conn={conn}>
+          <DialogConnectProvider controller={controller} defaultLocation standalone method={input.method} />
+        </ServerProvider>
+      ))
     },
     command: (id) => void run(id),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),

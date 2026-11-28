@@ -2200,6 +2200,15 @@ pub fn experimental_usage_limits(input: &ExperimentalUsageLimitsInput) -> Call<E
     call
 }
 
+/// `GET /api/experimental/usage/go` (`go`)
+pub fn experimental_usage_go(input: &ExperimentalUsageGoInput) -> Call<ExperimentalUsageGoOutput> {
+    let mut call = Call::new("GET", "/api/experimental/usage/go".to_owned(), Reply::Json, 200, &[400, 401, 404, 503]);
+    if let Some(value) = &input.location {
+        call.query("location", value);
+    }
+    call
+}
+
 /// `GET /api/experimental/flag` (`get`)
 pub fn experimental_flag_get(input: &ExperimentalFlagGetInput) -> Call<ExperimentalFlagGetOutput> {
     let mut call = Call::new("GET", "/api/experimental/flag".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -3350,6 +3359,9 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.usage.limits" => Some((|| {
             Ok(experimental_usage_limits(&ExperimentalUsageLimitsInput { location: field(input, "location")? }).cast())
+        })()),
+        "experimental.usage.go" => Some((|| {
+            Ok(experimental_usage_go(&ExperimentalUsageGoInput { location: field(input, "location")? }).cast())
         })()),
         "experimental.flag.get" => Some((|| {
             Ok(experimental_flag_get(&ExperimentalFlagGetInput { location: field(input, "location")? }).cast())

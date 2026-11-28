@@ -102,6 +102,7 @@ const layout: BuiltinLayout = {
   settings() {},
   project() {},
   draft() {},
+  connect() {},
   command() {},
 }
 
@@ -398,6 +399,7 @@ function standIn(overrides: Partial<Interface>): Interface {
     settings() {},
     project() {},
     draft() {},
+    connect() {},
     command() {},
     run: () => false,
     notify: async () => ({ notification: false, sound: false }),

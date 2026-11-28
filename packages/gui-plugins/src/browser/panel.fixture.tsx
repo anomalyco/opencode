@@ -1501,6 +1501,7 @@ export function mountBrowserRegion(input: RegionHost) {
       settings() {},
       project() {},
       draft() {},
+      connect() {},
       command() {},
     })
 

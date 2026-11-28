@@ -12366,6 +12366,44 @@ pub struct ExperimentalUsageLimitsOutput {
     pub data: Option<UsageLimitsInfo>,
 }
 
+/// Input of `Client::experimental_usage_go`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalUsageGoInput {
+    pub location: Option<LocationQueryInput>,
+}
+
+literal_enum! {
+UsageLimitsGoConnectionConnection {
+    Account => "account",
+    Key => "key",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct UsageLimitsGoConnectionWorkspace {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(rename = "goURL")]
+    pub go_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageLimitsGoConnection {
+    pub connection: UsageLimitsGoConnectionConnection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<UsageLimitsGoConnectionWorkspace>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<UsageLimitsGo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalUsageGoOutput {
+    pub location: LocationPublicRef,
+    #[serde(default)]
+    pub data: Option<UsageLimitsGoConnection>,
+}
+
 /// Input of `Client::experimental_flag_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFlagGetInput {
@@ -13180,6 +13218,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_stream_tunnel: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub go_settings: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
