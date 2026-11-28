@@ -1,8 +1,9 @@
 export * as Database from "./database.js"
 
 import { EffectDrizzleSqlite } from "./drizzle.js"
-import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
-import { Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { errorCode, resultCode, sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
+import { Cause, Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { isSqlError } from "effect/sql/SqlError"
 import type { SqlClient } from "effect/sql"
 import { Global } from "@opencode/util/global"
 import { closeSync, existsSync, openSync } from "node:fs"
@@ -32,6 +33,38 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // cross-object I/O.
 // Only a database file the user opens imports their legacy auth.json; in-memory and injected databases belong to
 // embedders and tests, which must not pick up the user's credentials.
+//
+// A boot failure reaches the process log as a bare defect, so each setup step logs the operation, the database
+// file where the step determines it, and the driver's SQLite code and extended result code when available.
+const logStartup = (operation: string, file: string | undefined, error: unknown) => {
+  const driver = isSqlError(error) ? error.reason.cause : undefined
+  const code = errorCode(driver)
+  const errno = resultCode(driver)
+  return Effect.logError("Failed to configure database", {
+    operation,
+    ...(file === undefined ? {} : { file }),
+    ...(code === undefined ? {} : { code }),
+    ...(errno === undefined ? {} : { errno }),
+    error,
+  })
+}
+
+const setupStep = (operation: string, file?: string) => {
+  return <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.tapError(self, (error) => logStartup(operation, file, error))
+}
+
+// The driver opens the file while the sqlite layer builds, and sqliteLayer dies on failure; tapping the layer's
+// Cause is the only place that still sees the driver's SqlError.
+const openLayer = (filename: string) =>
+  sqliteLayer({ filename }).pipe(
+    Layer.tapCause((cause) =>
+      // Interrupting the layer build is not a startup failure.
+      cause.reasons.some((reason) => !Cause.isInterruptReason(reason))
+        ? logStartup("open", "main", Cause.squash(cause))
+        : Effect.void,
+    ),
+  )
+
 const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentials = false) =>
   Layer.effect(
     Service,
@@ -41,15 +74,19 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
       const durableObject = EffectDrizzleSqlite.managesTransactionsNatively(db.$client)
 
       if (supportsTuningPragmas && !durableObject) {
-        yield* db.run("PRAGMA journal_mode = WAL")
-        yield* db.run("PRAGMA synchronous = NORMAL")
-        yield* db.run("PRAGMA busy_timeout = 5000")
-        yield* db.run("PRAGMA cache_size = -64000")
+        // Enabling WAL creates the -wal and -shm files, so an I/O error here belongs to those, not main.
+        yield* db.run("PRAGMA journal_mode = WAL").pipe(setupStep("journal_mode", "wal"))
+        yield* db.run("PRAGMA synchronous = NORMAL").pipe(setupStep("synchronous"))
+        yield* db.run("PRAGMA busy_timeout = 5000").pipe(setupStep("busy_timeout"))
+        yield* db.run("PRAGMA cache_size = -64000").pipe(setupStep("cache_size"))
       }
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
-      if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
+      if (supportsForeignKeyToggle && !durableObject)
+        yield* db.run("PRAGMA foreign_keys = ON").pipe(setupStep("foreign_keys"))
       const semaphore = yield* lock
-      yield* semaphore.withPermit(DatabaseMigration.apply(db, { legacyCredentials }))
+      yield* semaphore
+        .withPermit(DatabaseMigration.apply(db, { legacyCredentials }))
+        .pipe(setupStep("migration", "main"))
 
       return { db }
     }).pipe(Effect.orDie),
@@ -74,7 +111,7 @@ export function layer(options: Options = { path: ":memory:" }) {
         (filename === ":memory:"
           ? databaseLayer(Semaphore.make(1))
           : databaseLayer(Effect.succeed(lockFor(filename)), true)
-        ).pipe(Layer.provide(sqliteLayer({ filename })))
+        ).pipe(Layer.provide(openLayer(filename)))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
