@@ -254,6 +254,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.gen(function* () {
       const options = {
         externalOutputMode: "passthrough",
+        remote: false,
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
