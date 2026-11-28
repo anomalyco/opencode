@@ -1,10 +1,11 @@
 import { createMemo } from "solid-js"
-import type { UpdaterState } from "@/updater"
+import type { MajorUpdateState, UpdaterState } from "@/updater"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
+import { useMajorUpdate } from "@/context/major-update"
 import { showToast } from "@/utils/toast"
 
-export function updaterAction(state: UpdaterState | undefined) {
+export function updaterAction(state: UpdaterState | undefined, major?: MajorUpdateState["status"]) {
   if (!state) return { label: "settings.updates.action.checkNow" as const }
   switch (state.status) {
     case "checking":
@@ -18,6 +19,9 @@ export function updaterAction(state: UpdaterState | undefined) {
     case "disabled":
       return { label: "settings.updates.action.checkNow" as const }
     default:
+      // OpenCode 2 downloads once OpenCode 1 is up to date, and a check waits for that download. Another check could
+      // only wait with it.
+      if (major === "downloading") return { label: "settings.updates.action.downloading" as const }
       return { label: "settings.updates.action.checkNow" as const, run: "check" as const }
   }
 }
@@ -25,7 +29,8 @@ export function updaterAction(state: UpdaterState | undefined) {
 export function useUpdaterAction() {
   const platform = usePlatform()
   const language = useLanguage()
-  const action = createMemo(() => updaterAction(platform.updater?.state()))
+  const major = useMajorUpdate()
+  const action = createMemo(() => updaterAction(platform.updater?.state(), major.status()))
 
   return {
     action,
@@ -35,6 +40,9 @@ export function useUpdaterAction() {
       if (run !== "check") return
 
       const state = await platform.updater?.check()
+      // With no OpenCode 1 release left to install, checking for updates opens the OpenCode 2.0 offer instead. The
+      // check is run from Settings, which stays open underneath.
+      if (state?.status !== "ready" && major.offered()) return major.open({ stack: true })
       if (state?.status === "up-to-date") {
         showToast({
           variant: "success",

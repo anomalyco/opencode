@@ -175,6 +175,8 @@ const main = Effect.gen(function* () {
       app.quit()
     })
   }
+  // The updater starts once the app is ready. Until then nothing can be armed.
+  const upgrade = { armed: () => false, stopped: false }
 
   try {
     setDefaultCACertificates([...new Set([...getCACertificates("default"), ...getCACertificates("system")])])
@@ -221,9 +223,19 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     setAppQuitting()
-    void stopSidecars()
+    const stopping = stopSidecars()
+    // An armed OpenCode 2 installer starts the moment the app has quit, and it replaces the files the servers run
+    // from. That quit waits, once, until the servers are gone. Every other quit goes on as before.
+    if (upgrade.stopped || !upgrade.armed()) return
+    event.preventDefault()
+    void stopping
+      .catch((error) => logger.error("failed to stop servers before the upgrade", error))
+      .finally(() => {
+        upgrade.stopped = true
+        app.quit()
+      })
   })
 
   app.on("will-quit", () => {
@@ -272,12 +284,26 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
+  // macOS is left out: its installer waits for the app to exit by itself, and holding a quit there can cancel a logout.
+  upgrade.armed = () => {
+    if (process.platform === "darwin") return false
+    const status = updater.major.getState().status
+    return status === "scheduling" || status === "scheduled"
+  }
+  const trigger = (id: string) => {
+    const win = getLastFocusedWindow()
+    if (win) sendMenuCommand(win, id)
+  }
+  const showUpdater = () =>
+    showUpdaterDialog(updater, true, () => {
+      if (BrowserWindow.getAllWindows().length > 0) return trigger("update.open")
+      // macOS keeps running with every window closed. A new window asks the updater as it starts, and opens the offer.
+      updater.major.ask()
+      restoreMainWindows()
+    })
   const menuDeps = {
-    trigger: (id: string) => {
-      const win = getLastFocusedWindow()
-      if (win) sendMenuCommand(win, id)
-    },
-    checkForUpdates: () => void showUpdaterDialog(updater, true),
+    trigger,
+    checkForUpdates: () => void showUpdater(),
     relaunch,
   }
   registerIpcHandlers({
@@ -303,7 +329,7 @@ const main = Effect.gen(function* () {
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     updater,
-    showUpdater: () => showUpdaterDialog(updater, true),
+    showUpdater,
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),

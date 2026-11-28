@@ -23,4 +23,15 @@ describe("updaterAction", () => {
       label: "settings.updates.action.installing",
     })
   })
+
+  test("shows the OpenCode 2 download instead of another check", () => {
+    expect(updaterAction({ status: "up-to-date" }, "downloading")).toEqual({
+      label: "settings.updates.action.downloading",
+    })
+    expect(updaterAction({ status: "up-to-date" }, "ready")).toEqual({
+      label: "settings.updates.action.checkNow",
+      run: "check",
+    })
+    expect(updaterAction({ status: "checking" }, "downloading")).toEqual({ label: "settings.updates.action.checking" })
+  })
 })

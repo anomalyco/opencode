@@ -28,6 +28,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
+import { useMajorUpdate } from "@/context/major-update"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -110,6 +111,7 @@ export default function LegacyLayout(props: ParentProps) {
   const layout = useLayout()
   const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
+  const major = useMajorUpdate()
   const pickDirectory = useDirectoryPicker()
   const settings = useSettings()
   const server = useServer()
@@ -2257,7 +2259,21 @@ export default function LegacyLayout(props: ParentProps) {
         }
       />
       <Show when={updateVersion() !== undefined}>
-        <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
+        <UpdateAvailableToast
+          description={language.t("toast.update.description", { version: updateVersion() ?? "" })}
+          action={language.t("toast.update.action.installRestart")}
+          run={installUpdate}
+          language={language}
+        />
+      </Show>
+      {/* This titlebar has no update pill, so the same toast leads to the OpenCode 2.0 offer. */}
+      <Show when={updateVersion() === undefined && major.visible()}>
+        <UpdateAvailableToast
+          description={language.t("dialog.update.major.title")}
+          action={language.t("titlebar.update")}
+          run={() => void major.open()}
+          language={language}
+        />
       </Show>
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
@@ -2410,8 +2426,9 @@ export default function LegacyLayout(props: ParentProps) {
 }
 
 function UpdateAvailableToast(props: {
-  version: string
-  install: () => void
+  description: string
+  action: string
+  run: () => void
   language: ReturnType<typeof useLanguage>
 }) {
   let toastId: number | undefined
@@ -2421,11 +2438,11 @@ function UpdateAvailableToast(props: {
       persistent: true,
       icon: "download",
       title: props.language.t("toast.update.title"),
-      description: props.language.t("toast.update.description", { version: props.version }),
+      description: props.description,
       actions: [
         {
-          label: props.language.t("toast.update.action.installRestart"),
-          onClick: props.install,
+          label: props.action,
+          onClick: props.run,
         },
         {
           label: props.language.t("toast.update.action.notYet"),

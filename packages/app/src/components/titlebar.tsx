@@ -25,6 +25,7 @@ import { LayoutRoute, useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { useMajorUpdate } from "@/context/major-update"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
@@ -68,6 +69,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const language = useLanguage()
   const settings = useSettings()
   const server = useServer()
+  const major = useMajorUpdate()
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
@@ -124,6 +126,15 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
     const installing = props.update?.installing() ?? false
     const version = props.update?.version()
+    // An OpenCode 1 release keeps the pill. Otherwise the pill opens the OpenCode 2.0 offer.
+    if (version === undefined && !installing && major.visible())
+      return {
+        visible: true,
+        installing: false,
+        label: language.t("titlebar.update"),
+        ariaLabel: language.t("toast.update.title"),
+        onInstall: () => void major.open(),
+      }
     return {
       visible: version !== undefined || installing,
       installing,
