@@ -1,5 +1,5 @@
 import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
-import { createEffect, on, onCleanup, type Accessor } from "solid-js"
+import { createEffect, createMemo, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
 import { useData } from "../../context/data"
@@ -146,46 +146,41 @@ export function createSessionRows(
 
   // Re-reduce when the revert boundary changes (stage/clear/commit). These reactions defer
   // their first run: the mount effect above has already reduced the same state.
-  createEffect(on(revertBoundary, rebuild, { defer: true }))
+  // A refresh replaces the session's info, pending list and message list even when nothing these
+  // reactions read has changed, and each rebuild re-keys and reconciles the whole transcript.
+  // Each trigger is a memo that notifies only when its value changes.
+  createEffect(on(createMemo(revertBoundary), rebuild, { defer: true }))
 
-  createEffect(
-    on(
-      () =>
-        data.session.pending.list(sessionID()).flatMap((item) => {
-          if (item.type === "compaction") return [`${item.id}:compaction`]
-          if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
-          return []
-        }),
-      rebuild,
-      { defer: true },
-    ),
+  const queuedKeys = createMemo(
+    () =>
+      data.session.pending.list(sessionID()).flatMap((item) => {
+        if (item.type === "compaction") return [`${item.id}:compaction`]
+        if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
+        return []
+      }),
+    undefined,
+    { equals: sameKeys },
   )
+  createEffect(on(queuedKeys, rebuild, { defer: true }))
 
-  createEffect(
-    on(
-      () =>
-        data.session.message.list(sessionID()).flatMap((message) =>
+  // Every message contributes its ID and type, so a message of any type that appears, disappears or moves
+  // rebuilds even when no live event handler covers it (`session.moved`, a skill read back after an
+  // interrupted run). Kinds that render state beyond their identity add it.
+  const messageKeys = createMemo(
+    () =>
+      data.session.message
+        .list(sessionID())
+        .map((message) =>
           message.type === "user" || message.type === "synthetic"
-            ? [
-                {
-                  id: message.id,
-                  created: message.time.created,
-                  input: data.session.input.has(sessionID(), message.id),
-                },
-              ]
-            : message.type === "compaction" || message.type === "idle"
-              ? [
-                  {
-                    id: message.id,
-                    created: message.time.created,
-                  },
-                ]
-              : [],
+            ? `${message.id}:${message.type}:${message.time.created}:${data.session.input.has(sessionID(), message.id)}`
+            : message.type === "compaction"
+              ? `${message.id}:${message.type}:${message.time.created}:${message.status}`
+              : `${message.id}:${message.type}:${message.time.created}`,
         ),
-      rebuild,
-      { defer: true },
-    ),
+    undefined,
+    { equals: sameKeys },
   )
+  createEffect(on(messageKeys, rebuild, { defer: true }))
 
   createEffect(on([turnTokens, verbosity], rebuild, { defer: true }))
 
@@ -324,6 +319,10 @@ export function createSessionRows(
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
 
   return rows
+}
+
+function sameKeys(a: readonly string[], b: readonly string[]) {
+  return a.length === b.length && a.every((key, index) => key === b[index])
 }
 
 function rowKey(row: SessionRow) {
