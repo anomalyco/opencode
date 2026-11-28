@@ -2110,6 +2110,53 @@ test("a failed file search offers a retry instead of no results", async ({ page 
   await expect(failure).toHaveCount(0)
 })
 
+for (const scope of ["worktree", "subdirectory"] as const) {
+  test(`untracked folders and full diffs stay in the session's linked worktree (${scope})`, async ({ page }) => {
+    const root = "C:/OpenCode/ReviewWorktree"
+    const directory = scope === "subdirectory" ? `${root}/src` : root
+    const folder = scope === "subdirectory" ? "src/example" : "example"
+    const requests: { directory: string; context?: string }[] = []
+    await openSession(page, {
+      name: "ReviewWorktree",
+      directory: root,
+      sessions: [{ id: "ses_reviewworktree", directory }],
+      project: { canonical: "C:/OpenCode/ReviewMain", sandboxes: [root] },
+      vcsDiff: (input) => {
+        requests.push(input)
+
+        if (input.directory === root && input.context === "3")
+          return [fileDiff(`${folder}/nested/notes.ts`, { status: "added" })]
+
+        if (input.directory === directory) return [fileDiff(`${folder}/`, { status: "added" })]
+
+        if (input.directory === `${root}/${folder}`) return [fileDiff(`${folder}/nested/`, { status: "added" })]
+
+        if (input.directory === `${root}/${folder}/nested`)
+          return [fileDiff(`${folder}/nested/notes.ts`, { status: "added", loaded: false })]
+
+        return []
+      },
+    })
+    const panel = page.locator("#review-panel")
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    await openReviewLauncher(panel)
+
+    for (const name of ["example", "nested", "notes.ts"]) {
+      const item = panel.getByRole("treeitem", { name, exact: true })
+
+      await expect(item).toBeVisible()
+      await item.click()
+    }
+
+    await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("notes.ts")
+    await expect(panel.locator("diffs-container")).toContainText("export const value = 'after'")
+    expect(requests).toContainEqual({ directory: `${root}/${folder}`, mode: "working", context: undefined })
+    expect(requests).toContainEqual({ directory: `${root}/${folder}/nested`, mode: "working", context: undefined })
+    expect(requests).toContainEqual({ directory: root, mode: "working", context: "3" })
+    expect(requests.every((input) => input.directory.startsWith(root))).toBe(true)
+  })
+}
+
 // An untracked folder whose listing failed used to look empty, and opening it again never asked the server again.
 test("an untracked folder that cannot load says so, and loads once it is opened again", async ({ page }) => {
   const workspace = await openSession(page, {

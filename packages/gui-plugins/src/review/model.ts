@@ -121,6 +121,10 @@ export function createReviewModel(input: {
   const queryClient = useQueryClient()
   const directory = () => screen.file.root
 
+  // Git paths belong to this Location's worktree, which can differ from the project's canonical checkout.
+  const rootDirectory = () =>
+    reviewRootDirectory(view().server.data.location.info({ directory: directory() })?.project.directory ?? directory())
+
   // The filter is transient by design: a persisted filter would silently hide files after a reload.
   const [filter, setFilter] = createSignal("")
 
@@ -519,7 +523,7 @@ export function createReviewModel(input: {
 
       return {
         serverID: context.target.serverID,
-        root: reviewRootDirectory(view().project?.worktree ?? directory()),
+        root: rootDirectory(),
         directory: context.target.directory,
         mode: context.target.mode,
         branch: context.target.branch,
@@ -737,7 +741,7 @@ export function createReviewModel(input: {
       }
 
       if (value === "turn") return { kind: "turn", sessionID: session.id, ...file }
-      const root = reviewRootDirectory(session.project?.worktree ?? directory())
+      const root = rootDirectory()
 
       return {
         kind: "vcs",
