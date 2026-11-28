@@ -110,8 +110,11 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
             system: [...transcript.system, ...(input.system === undefined ? [] : [SystemPart.make(input.system)])],
             messages: [
               ...transcript.messages,
-              ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
-              Message.user(input.prompt),
+              // Neither is part of the history later requests repeat, so cache breakpoints stay before them.
+              ...(history.instructionUpdate
+                ? [Message.system([{ ...Message.text(history.instructionUpdate), transient: true }])]
+                : []),
+              Message.user([{ ...Message.text(input.prompt), transient: true }]),
             ],
             ...(input.output === undefined ? {} : { toolChoice: OUTPUT_TOOL }),
           })

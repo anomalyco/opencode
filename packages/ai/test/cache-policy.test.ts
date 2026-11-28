@@ -567,6 +567,74 @@ describe("applyCachePolicy", () => {
     expect(applyCachePolicy(compactionOnly)).toBe(compactionOnly)
   })
 
+  it.effect("keeps message breakpoints before request-local text", () =>
+    Effect.gen(function* () {
+      const reminder = { ...Message.text("Keep working on the goal"), transient: true }
+      type Body = {
+        messages: Array<{ role: string; content: Array<{ type?: string; text?: string; cache_control?: unknown }> }>
+      }
+      const marked = (body: Body) =>
+        body.messages.flatMap((message) =>
+          message.content.flatMap((block) => (block.cache_control ? [block.text] : [])),
+        )
+      const first = (yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          messages: [
+            Message.user("First"),
+            Message.assistant("Answer"),
+            Message.user([Message.text("Second"), reminder]),
+          ],
+        }),
+      )).body as Body
+      // The next step no longer has the reminder after "Second", so the entry this request writes must end before it.
+      const next = (yield* compileRequest(
+        ai.request({
+          model: anthropicModel,
+          messages: [
+            Message.user("First"),
+            Message.assistant("Answer"),
+            Message.user("Second"),
+            Message.assistant("Reply"),
+            Message.user([reminder]),
+          ],
+        }),
+      )).body as Body
+
+      expect(marked(first)).toEqual(["Second"])
+      expect(first.messages.at(-1)?.content.at(-1)).toEqual({ type: "text", text: "Keep working on the goal" })
+      expect(marked(next)).toEqual(["Reply"])
+      expect(JSON.stringify(next)).not.toContain("transient")
+    }),
+  )
+
+  it.effect("ends message breakpoints before a system update that request-local text follows", () =>
+    Effect.gen(function* () {
+      // Opus 5 takes native system updates: one that user content follows is sent after that content, one that a
+      // reply follows stays in place. A breakpoint on the update would cache the request-local text before it.
+      const model = AnthropicMessages.route
+        .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+        .model({ id: "claude-opus-5" })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user("Task"),
+            Message.system("Updated instructions"),
+            Message.user([{ ...Message.text("Keep-alive"), transient: true }]),
+          ],
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ content: Array<{ text?: string; cache_control?: unknown }> }> }
+      expect(
+        body.messages.flatMap((message) =>
+          message.content.flatMap((block) => (block.cache_control ? [block.text] : [])),
+        ),
+      ).toEqual(["Task"])
+    }),
+  )
+
   test("returns the same request reference when policy is a no-op (pure function)", () => {
     const request = ai.request({
       model: anthropicModel,
