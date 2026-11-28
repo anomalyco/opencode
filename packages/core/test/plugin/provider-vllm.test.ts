@@ -1,12 +1,15 @@
 import { Bus } from "@opencode/core/bus"
+import { Agent } from "@opencode/schema/agent"
 import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { make, VLLMPlugin } from "@opencode/core/plugin/provider/vllm"
 import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, Logger, Schema } from "effect"
@@ -36,6 +39,26 @@ const remoteModel = (id: string, max_model_len = 32_768, owned_by = "vllm") => (
 })
 
 describe("VLLMPlugin", () => {
+  // vLLM already stops at the context window, and rejects a prompt plus output limit past it.
+  it.live("leaves title and generate requests at the server's own limit", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* addPlugin("http://127.0.0.1:9")
+      const request = {
+        sessionID: Session.ID.make("ses_test"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("vllm"), id: Model.ID.make("served") }),
+        system: [],
+        messages: [],
+        options: {},
+      }
+      expect((yield* hooks.trigger("session", "title", request)).options.maxTokens).toBeUndefined()
+      expect(
+        (yield* hooks.trigger("session", "generate", { ...request, agent: Agent.ID.make("build"), tools: {} })).options
+          .maxTokens,
+      ).toBeUndefined()
+    }),
+  )
+
   it.live("waits for readiness and discovers official vLLM model metadata", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
