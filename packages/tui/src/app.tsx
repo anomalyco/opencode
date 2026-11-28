@@ -778,7 +778,7 @@ function App() {
         category: "System",
         palette: undefined,
         run: () => {
-          dialog.replace(() => <CommandPaletteDialog />)
+          dialog.replace(() => <CommandPaletteDialog pluginSettings={plugins.settings} />)
         },
       },
       {
@@ -1089,7 +1089,7 @@ function App() {
         suggested: true,
         slash: { name: "settings" },
         run: () => {
-          dialog.replace(() => <DialogConfig />)
+          dialog.replace(() => <DialogConfig pluginSettings={plugins.settings} />)
         },
         category: "System",
       },

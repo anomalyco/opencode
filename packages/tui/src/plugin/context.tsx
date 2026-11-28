@@ -16,7 +16,7 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath } from "url"
-import type { Page } from "@opencode/plugin/tui/context"
+import type { DecoratableTool, Page, SettingItem, ToolDecorator } from "@opencode/plugin/tui/context"
 import { Host } from "@opencode/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
@@ -27,7 +27,14 @@ import { useTuiLifecycle } from "../context/runtime"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { errorMessage } from "../util/error"
-import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
+import {
+  createPluginContext,
+  usePluginHost,
+  type Dispose,
+  type RegisteredSlot,
+  type RegisteredToolDecorator,
+  type SlotRender,
+} from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverPluginTargets, localSource, mergePluginTargets } from "./discovery"
 import { createPluginSources } from "./source"
@@ -62,8 +69,14 @@ type Value = {
     readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
   }
   readonly markdown: () => MarkdownOptions["renderBlock"]
+  readonly settings: () => ReadonlyArray<{ readonly pluginID: string; readonly item: SettingItem }>
+  readonly toolDecorator: (tool: DecoratableTool) => ToolDecorator | undefined
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
+}
+
+type RegisteredTool = RegisteredToolDecorator & {
+  readonly order: number
 }
 
 type Registration = {
@@ -76,6 +89,8 @@ type Registration = {
   routes: Record<string, Page>
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
+  settings: Record<string, SettingItem>
+  tools: Record<string, RegisteredTool>
   cleanups: Dispose[]
 }
 
@@ -111,6 +126,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   // events do not repeatedly tear down and restore the last good generation.
   const setupFailures = new Map<string, { version: string; options: Registration["options"]; error: string }>()
   let operationID = 0
+  let toolOrder = 0
   const trace: Trace = (stage, tags, task) => {
     const id = ++operationID
     const started = Date.now()
@@ -141,10 +157,28 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const markdown = createMarkdownRenderer(() =>
     Object.values(store.registrations).flatMap((registration) => (registration.active ? [registration.markdown] : [])),
   )
+  const settings = createMemo(() =>
+    Object.entries(store.registrations).flatMap(([pluginID, registration]) =>
+      registration.active ? Object.values(registration.settings).map((item) => ({ pluginID, item })) : [],
+    ),
+  )
+  const toolDecorators = createMemo(() => {
+    const winners: Partial<Record<DecoratableTool, RegisteredTool>> = {}
+    for (const registration of Object.values(store.registrations)) {
+      if (!registration.active) continue
+      for (const entry of Object.values(registration.tools)) {
+        const current = winners[entry.tool]
+        if (!current || entry.order > current.order) winners[entry.tool] = entry
+      }
+    }
+    return winners
+  })
   const clearContributions = (id: string) => {
     setStore("registrations", id, "routes", reconcileStore({}))
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
+    setStore("registrations", id, "settings", reconcileStore({}))
+    setStore("registrations", id, "tools", reconcileStore({}))
   }
 
   const activate = async (id: string) => {
@@ -155,6 +189,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       clearContributions(id)
       setStore("registrations", id, "cleanups", [])
     })
+    let settingUp = true
     const owned: Dispose[] = []
     const context = createPluginContext({
       host,
@@ -163,11 +198,25 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       owned,
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
-        set: (
-          kind: "routes" | "slots" | "markdown",
-          name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
-        ) => setStore("registrations", id, kind, name, () => value),
+        set(...args) {
+          switch (args[0]) {
+            case "routes":
+              setStore("registrations", id, "routes", args[1], () => args[2])
+              return
+            case "slots":
+              setStore("registrations", id, "slots", args[1], () => args[2])
+              return
+            case "markdown":
+              setStore("registrations", id, "markdown", args[1], () => args[2])
+              return
+            case "settings":
+              setStore("registrations", id, "settings", args[1], () => args[2])
+              return
+            case "tools":
+              setStore("registrations", id, "tools", args[1], () => ({ ...args[2], order: ++toolOrder }))
+              return
+          }
+        },
         remove: (kind, name) =>
           setStore(
             "registrations",
@@ -176,21 +225,25 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
               delete registrations[id][kind][name]
             }),
           ),
-        active: () => Boolean(store.registrations[id]?.active),
+        active: () => Boolean(store.registrations[id]?.active || settingUp),
       },
     })
     const cleanup = await trace("setup", { plugin: id, target: item.target }, () =>
       setup(item.plugin, context, owned),
-    ).catch((error) => {
-      clearContributions(id)
-      if (item.target)
-        setupFailures.set(item.target, {
-          version: item.version,
-          options: snapshotOptions(item.options),
-          error: errorMessage(error),
-        })
-      throw error
-    })
+    )
+      .catch((error) => {
+        clearContributions(id)
+        if (item.target)
+          setupFailures.set(item.target, {
+            version: item.version,
+            options: snapshotOptions(item.options),
+            error: errorMessage(error),
+          })
+        throw error
+      })
+      .finally(() => {
+        settingUp = false
+      })
     if (cleanup) owned.push(async () => cleanup())
     if (item.target && sameGeneration(setupFailures.get(item.target), item)) setupFailures.delete(item.target)
     batch(() => {
@@ -608,6 +661,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slots: { register: registerSlot, resolved },
         markdown,
+        settings,
+        toolDecorator: (tool) => toolDecorators()[tool]?.decorator,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -708,6 +763,8 @@ function toRegistration(item: Desired): Registration {
     routes: {},
     slots: {},
     markdown: {},
+    settings: {},
+    tools: {},
     cleanups: [],
   }
 }
@@ -754,4 +811,8 @@ export function usePlugin() {
   const value = useContext(PluginContext)
   if (!value) throw new Error("PluginProvider is missing")
   return value
+}
+
+export function useOptionalPlugin() {
+  return useContext(PluginContext)
 }

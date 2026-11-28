@@ -1,4 +1,5 @@
 import { createMemo, createSignal } from "solid-js"
+import type { SettingItem } from "@opencode/plugin/tui/context"
 import { useConfig, useNewDesigns } from "../config"
 import { useThemes } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
@@ -21,7 +22,7 @@ type Setting = {
   format?: (value: unknown) => string
   keywords?: readonly string[]
   /** Under the "new-designs" experiment, enter opens this picker instead of cycling. ←/→ still cycle. */
-  open?: (dialog: DialogContext) => void
+  open?: (dialog: DialogContext, pluginSettings?: () => ReadonlyArray<PluginSettingEntry>) => void
 }
 
 export const settings: Setting[] = [
@@ -32,9 +33,11 @@ export const settings: Setting[] = [
     description: "Color theme used across the interface",
     default: "opencode",
     keywords: ["color scheme", "colors"],
-    open: (dialog) =>
+    open: (dialog, pluginSettings) =>
       dialog.replace(() => (
-        <DialogThemeList onClose={() => dialog.replace(() => <DialogConfig current="theme.name" />)} />
+        <DialogThemeList
+          onClose={() => dialog.replace(() => <DialogConfig current="theme.name" pluginSettings={pluginSettings} />)}
+        />
       )),
   },
   {
@@ -385,20 +388,33 @@ export function settingID(setting: Setting) {
   return setting.path.join(".")
 }
 
-export function DialogConfig(props: { current?: string }) {
+export type PluginSettingEntry = { readonly pluginID: string; readonly item: SettingItem }
+
+type Entry =
+  | { readonly kind: "builtin"; readonly id: string; readonly setting: Setting }
+  | { readonly kind: "plugin"; readonly id: string; readonly setting: SettingItem }
+
+export function DialogConfig(props: { current?: string; pluginSettings?: () => ReadonlyArray<PluginSettingEntry> }) {
   const config = useConfig()
   const newDesigns = useNewDesigns()
   const dialog = useDialog()
   const toast = useToast()
   const themes = useThemes()
+  const pluginSettings = () => props.pluginSettings?.() ?? []
+  const entries = createMemo<readonly Entry[]>(() => [
+    ...settings.map((setting): Entry => ({ kind: "builtin", id: settingID(setting), setting })),
+    ...pluginSettings().map(
+      ({ pluginID, item }): Entry => ({ kind: "plugin", id: `${pluginID}:${item.id}`, setting: item }),
+    ),
+  ])
   const current = Math.max(
     0,
-    settings.findIndex((setting) => settingID(setting) === props.current),
+    entries().findIndex((entry) => entry.id === props.current),
   )
   const [selected, setSelected] = createSignal(current)
   const [saving, setSaving] = createSignal(false)
 
-  const value = (setting: Setting) => {
+  const builtinValue = (setting: Setting) => {
     const current = setting.path.reduce<unknown>((result, key) => {
       if (!result || typeof result !== "object") return undefined
       return (result as Record<string, unknown>)[key]
@@ -407,42 +423,81 @@ export function DialogConfig(props: { current?: string }) {
     if (setting.path.join(".") === "theme.name") return themes.selected
     return current ?? setting.default
   }
-  const values = (setting: Setting) =>
-    setting.path.join(".") === "theme.name"
+  const readValue = (entry: Entry): { readonly ok: true; readonly value: unknown } | { readonly ok: false } => {
+    if (entry.kind === "builtin") return { ok: true, value: builtinValue(entry.setting) }
+    try {
+      return { ok: true, value: entry.setting.value() }
+    } catch {
+      return { ok: false }
+    }
+  }
+  const values = (entry: Entry) => {
+    if (entry.kind === "plugin") return entry.setting.values
+    return entry.setting.path.join(".") === "theme.name"
       ? Object.keys(themes.all()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
-      : setting.values
-  const display = (setting: Setting) => {
-    const current = value(setting)
-    if (setting.format) return setting.format(current)
-    const index = setting.values?.indexOf(current)
-    return index === undefined || index < 0 ? String(current) : (setting.labels?.[index] ?? String(current))
+      : entry.setting.values
+  }
+  const display = (entry: Entry) => {
+    const current = readValue(entry)
+    if (!current.ok) return "error"
+    try {
+      if (entry.setting.format) return entry.setting.format(current.value)
+      const index = entry.setting.values?.indexOf(current.value)
+      return index === undefined || index < 0
+        ? String(current.value)
+        : (entry.setting.labels?.[index] ?? String(current.value))
+    } catch {
+      return "error"
+    }
   }
   const options = createMemo(() =>
-    settings.map((setting, index) => ({
-      title: setting.title,
-      category: setting.category,
-      searchText: setting.keywords?.join(" "),
+    entries().map((entry, index) => ({
+      title: entry.setting.title,
+      category: entry.setting.category,
+      searchText: entry.setting.keywords?.join(" "),
       footer: newDesigns() ? (
-        <DialogSelectChoice value={display(setting)} active={selected() === index} open={setting.open !== undefined} />
+        <DialogSelectChoice
+          value={display(entry)}
+          active={selected() === index}
+          open={entry.kind === "builtin" && entry.setting.open !== undefined}
+        />
       ) : (
-        display(setting)
+        display(entry)
       ),
       footerOverhang: newDesigns() ? 2 : undefined,
-      detail: newDesigns() ? setting.description : undefined,
+      detail: newDesigns() ? entry.setting.description : undefined,
       value: index,
     })),
   )
 
   async function change(direction: number, index = selected()) {
     if (saving()) return
-    const setting = settings[index]
-    const current = value(setting)
-    const choices = values(setting)
+    const entry = entries()[index]
+    if (!entry) return
+    const currentState = readValue(entry)
+    if (!currentState.ok) return
+    const current = currentState.value
+    const choices = values(entry)
     const next = choices
-      ? choices[(choices.indexOf(current) + direction + choices.length) % choices.length]
-      : Math.min(setting.max!, Math.max(setting.min!, Number(current) + direction * setting.step!))
+      ? choices.length > 0
+        ? choices[(choices.indexOf(current) + direction + choices.length) % choices.length]
+        : current
+      : entry.setting.step !== undefined && entry.setting.min !== undefined && entry.setting.max !== undefined
+        ? Math.min(entry.setting.max, Math.max(entry.setting.min, Number(current) + direction * entry.setting.step))
+        : current
     if (next === current) return
     setSaving(true)
+    if (entry.kind === "plugin") {
+      try {
+        await entry.setting.onChange(next)
+      } catch (error) {
+        toast.error(error)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    const setting = entry.setting
     await config
       .update((draft) => {
         const parent = setting.path.slice(0, -1).reduce<Record<string, unknown>>((result, key) => {
@@ -469,8 +524,9 @@ export function DialogConfig(props: { current?: string }) {
       filterThreshold={0.7}
       onMove={(option) => setSelected(option.value)}
       onSelect={(option) => {
-        const open = settings[option.value].open
-        if (newDesigns() && open) return open(dialog)
+        const entry = entries()[option.value]
+        if (entry?.kind === "builtin" && newDesigns() && entry.setting.open)
+          return entry.setting.open(dialog, props.pluginSettings)
         void change(1, option.value)
       }}
       footerHints={newDesigns() ? [] : [{ title: "change", label: "←/→" }]}

@@ -623,6 +623,44 @@ const current = context.ui.panel.current()
 context.ui.panel.close()
 ```
 
+## Settings
+
+Register a reactive setting in the Settings dialog; the returned function removes it.
+
+```ts
+import { createSignal } from "solid-js"
+
+const [compact, setCompact] = createSignal(false)
+
+const unregister = context.ui.settings.register({
+  id: "compact",
+  title: "Compact output",
+  category: "Acme",
+  description: "Hide extra details",
+  value: compact,
+  values: [false, true],
+  labels: ["off", "on"],
+  onChange: (next) => setCompact(next === true),
+})
+return unregister
+```
+
+## Tool decorators
+
+Decorate the built-in `"shell"` tool card header, path, spacing, or command prefix. Currently only `"shell"` is
+supported; when multiple decorators are active, the last registered one wins.
+
+```ts
+const unregister = context.ui.tools.decorate("shell", (tool) => {
+  if (!tool.workdir) return
+  return {
+    path: { label: "# shell in", value: tool.workdir },
+    commandPrefix: "",
+  }
+})
+return unregister
+```
+
 ## Formatting
 
 Format filesystem paths for display, including home-directory abbreviation.

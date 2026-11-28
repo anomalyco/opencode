@@ -2,7 +2,7 @@ import { createMemo } from "solid-js"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { type DialogContext } from "../ui/dialog"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "../context/keymap"
-import { DialogConfig, settingID, settings } from "./dialog-config"
+import { DialogConfig, settingID, settings, type PluginSettingEntry } from "./dialog-config"
 
 function isSuggestedPaletteCommand(command: KeymapCommand) {
   const suggested = command.suggested
@@ -11,7 +11,7 @@ function isSuggestedPaletteCommand(command: KeymapCommand) {
   return false
 }
 
-export function CommandPaletteDialog() {
+export function CommandPaletteDialog(props: { pluginSettings?: () => ReadonlyArray<PluginSettingEntry> } = {}) {
   const commands = Keymap.useCommands()
   const shortcuts = Keymap.useShortcuts()
   const options = createMemo(() =>
@@ -34,20 +34,32 @@ export function CommandPaletteDialog() {
       }
     }),
   )
-  const settingOptions = settings.map((setting) => ({
-    title: setting.title,
-    category: setting.category,
-    searchText: setting.keywords?.join(" "),
-    searchFooter: `Settings · ${setting.category}`,
-    value: `setting:${settingID(setting)}`,
-    onSelect: (dialog: DialogContext) => {
-      dialog.replace(() => <DialogConfig current={settingID(setting)} />)
-    },
-  }))
+  const settingOptions = createMemo(() => [
+    ...settings.map((setting) => ({
+      title: setting.title,
+      category: setting.category,
+      searchText: setting.keywords?.join(" "),
+      searchFooter: `Settings · ${setting.category}`,
+      value: `setting:${settingID(setting)}`,
+      onSelect: (dialog: DialogContext) => {
+        dialog.replace(() => <DialogConfig current={settingID(setting)} pluginSettings={props.pluginSettings} />)
+      },
+    })),
+    ...(props.pluginSettings?.() ?? []).map(({ pluginID, item }) => ({
+      title: item.title,
+      category: item.category,
+      searchText: item.keywords?.join(" "),
+      searchFooter: `Settings · ${item.category}`,
+      value: `setting:${pluginID}:${item.id}`,
+      onSelect: (dialog: DialogContext) => {
+        dialog.replace(() => <DialogConfig current={`${pluginID}:${item.id}`} pluginSettings={props.pluginSettings} />)
+      },
+    })),
+  ])
 
   let ref: DialogSelectRef<string>
   const list = () => {
-    if (ref?.filter) return [...options(), ...settingOptions]
+    if (ref?.filter) return [...options(), ...settingOptions()]
     return [
       ...options()
         .filter((option) => option.suggested)
