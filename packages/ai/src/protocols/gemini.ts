@@ -426,6 +426,13 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
   const definitions = ProviderShared.flattenTools(request.tools)
   const hasTools = definitions.length > 0
   const options = yield* decodeOptions(request.providerOptions ?? {})
+  const thinking = options.thinkingConfig
+  const thinkingBudget = thinking?.thinkingBudget
+  const thinkingLevel = thinking?.thinkingLevel
+  const isGemini4 = /^gemini-4(?:[.-]|$)/i.test(request.model.id)
+  // Gemini 4 rejects numeric budgets and MINIMAL; LOW is the closest available setting to off.
+  const useLowestThinkingLevel =
+    isGemini4 && (thinkingLevel?.toLowerCase() === "minimal" || (thinkingLevel === undefined && thinkingBudget === 0))
   const generationConfig = {
     maxOutputTokens: request.maxTokens,
     temperature: request.temperature,
@@ -435,21 +442,17 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     presencePenalty: request.presencePenalty,
     seed: request.seed,
     stopSequences: request.stop,
-    // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
-      options.thinkingConfig === undefined
+      thinking === undefined
         ? undefined
         : {
-            ...options.thinkingConfig,
-            includeThoughts: options.thinkingConfig.includeThoughts ?? true,
+            includeThoughts: thinking.includeThoughts ?? true,
+            thinkingLevel: useLowestThinkingLevel ? "LOW" : thinkingLevel,
+            // On budget-based models, thinking beyond the output limit leaves the answer empty.
             thinkingBudget:
-              options.thinkingConfig.thinkingBudget === undefined
+              isGemini4 || thinkingBudget === undefined
                 ? undefined
-                : ProviderShared.fitThinkingBudget(
-                    options.thinkingConfig.thinkingBudget,
-                    request.maxTokens,
-                    MIN_THINKING_BUDGET,
-                  ),
+                : ProviderShared.fitThinkingBudget(thinkingBudget, request.maxTokens, MIN_THINKING_BUDGET),
           },
   }
 
