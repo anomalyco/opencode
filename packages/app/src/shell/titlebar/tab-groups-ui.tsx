@@ -185,11 +185,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
           server: tab.server,
           serverLabel,
           projectID: project?.id,
-          projectName: project
-            ? displayName(project)
-            : directory
-              ? displayName({ worktree: directory })
-              : undefined,
+          projectName: project ? displayName(project) : directory ? displayName({ worktree: directory }) : undefined,
           directory,
           active: false,
         }
@@ -527,10 +523,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
     const measureGeometry = (listEl: HTMLDivElement): VerticalDragGeometry => {
       const listRect = listEl.getBoundingClientRect()
 
-      const slotRects = new Map<
-        string,
-        { top: number; bottom: number; tabTop: number; tabBottom: number }
-      >()
+      const slotRects = new Map<string, { top: number; bottom: number; tabTop: number; tabBottom: number }>()
 
       listEl.querySelectorAll<HTMLElement>("[data-titlebar-tab-slot][data-tab-key]").forEach((el) => {
         const key = el.dataset.tabKey
@@ -877,9 +870,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       tabTransformY: (key: string) => {
         const current = drag()
 
-        return selectDraggingTabKey(current) === key
-          ? selectDraggedOffsetY(current)
-          : selectTabShiftY(current, key)
+        return selectDraggingTabKey(current) === key ? selectDraggedOffsetY(current) : selectTabShiftY(current, key)
       },
       tabLaneShift: (key: string) => {
         const current = drag()
@@ -945,6 +936,50 @@ export function createVerticalTabGroupSections() {
   )
 }
 
+export function GroupColorPicker(props: {
+  value: TabGroupColor
+  onChange: (color: TabGroupColor) => void
+  class?: string
+}) {
+  const language = useLanguage()
+
+  return (
+    <div
+      class={
+        props.class
+          ? `flex items-center justify-between gap-1 ${props.class}`
+          : "flex items-center justify-between gap-1"
+      }
+      role="radiogroup"
+      aria-label={language.t("tabs.groups.color")}
+    >
+      <For each={AUTO_TAB_GROUP_COLORS}>
+        {(color) => {
+          const selected = () => props.value === color
+
+          return (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={selected()}
+              aria-label={language.t(`tabs.groups.color.${color}`)}
+              title={language.t(`tabs.groups.color.${color}`)}
+              data-group-color={color}
+              class="flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110"
+              classList={{
+                "ring-2 ring-v2-text-text-base ring-offset-1 ring-offset-v2-background-bg-base": selected(),
+              }}
+              onClick={() => props.onChange(color)}
+            >
+              <span data-group-swatch class="block size-3.5 rounded-full" />
+            </button>
+          )
+        }}
+      </For>
+    </div>
+  )
+}
+
 function GroupEditorMenuItems(props: { group: ComputedTabGroup }) {
   const tabGroups = useTabGroups()
   const language = useLanguage()
@@ -963,35 +998,11 @@ function GroupEditorMenuItems(props: { group: ComputedTabGroup }) {
           onFocusIn={(event) => event.stopPropagation()}
           onInput={(event) => tabGroups.renameGroup(props.group, event.currentTarget.value)}
         />
-        <div
-          class="mt-2 flex items-center justify-between gap-1 px-0.5"
-          role="radiogroup"
-          aria-label={language.t("tabs.groups.color")}
-        >
-          <For each={AUTO_TAB_GROUP_COLORS}>
-            {(color) => {
-              const selected = () => props.group.color === color
-
-              return (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selected()}
-                  aria-label={language.t(`tabs.groups.color.${color}`)}
-                  title={language.t(`tabs.groups.color.${color}`)}
-                  data-group-color={color}
-                  class="flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110"
-                  classList={{
-                    "ring-2 ring-v2-text-text-base ring-offset-1 ring-offset-v2-background-bg-base": selected(),
-                  }}
-                  onClick={() => tabGroups.recolorGroup(props.group, color)}
-                >
-                  <span data-group-swatch class="block size-3.5 rounded-full" />
-                </button>
-              )
-            }}
-          </For>
-        </div>
+        <GroupColorPicker
+          class="mt-2 px-0.5"
+          value={props.group.color}
+          onChange={(color) => tabGroups.recolorGroup(props.group, color)}
+        />
       </div>
       <Show when={props.group.kind === "manual" || props.group.allTabs.length > 0}>
         <Menu.Separator />
