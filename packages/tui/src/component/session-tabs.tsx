@@ -1,6 +1,7 @@
 import {
   BoxRenderable,
   CliRenderEvents,
+  MouseButton,
   RGBA,
   ScrollBoxRenderable,
   TextAttributes,
@@ -13,6 +14,7 @@ import {
   Match,
   Show,
   Switch,
+  batch,
   createComputed,
   createEffect,
   createMemo,
@@ -1273,6 +1275,36 @@ function VerticalSessionTabs(props: {
   )
 }
 
+function TabOverflowButton(props: { side: "before" | "after"; count: number; onClick: () => void }) {
+  const theme = useTheme()
+  const [hovered, setHovered] = createSignal(false)
+  let pressed = false
+
+  return (
+    <text
+      width={sessionTabOverflowWidth(props.count)}
+      fg={hovered() ? theme.text.base : theme.text.muted}
+      bg={hovered() ? theme.background.action.primary.hovered : undefined}
+      selectable={false}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => {
+        setHovered(false)
+        pressed = false
+      }}
+      onMouseDown={(event) => (pressed = event.button === MouseButton.LEFT)}
+      onMouseDrag={() => (pressed = false)}
+      onMouseUp={(event) => {
+        if (event.button !== MouseButton.LEFT || !pressed) return
+        pressed = false
+        event.stopPropagation()
+        props.onClick()
+      }}
+    >
+      {props.side === "before" ? `‹${props.count}` : ` ${props.count}›`}
+    </text>
+  )
+}
+
 function HorizontalSessionTabs(props: {
   controller?: SessionTabsController
   animations?: boolean
@@ -1320,6 +1352,13 @@ function HorizontalSessionTabs(props: {
   const idleNumber = () => tint(theme.text.formfield.base, theme.background.base, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
+  const [scrollStart, setScrollStart] = createSignal<number>()
+  // Selecting a session or resizing the terminal makes the strip follow the active tab again.
+  createComputed(() => {
+    activeID()
+    dimensions().width
+    setScrollStart(undefined)
+  })
   const ordered = createMemo(() => {
     const pending = preview()
     if (!pending) return tabs.tabs()
@@ -1347,8 +1386,18 @@ function HorizontalSessionTabs(props: {
         activeID(),
         dimensions().width - (showPlus() ? ADD_TAB_WIDTH : 0),
         previous?.start,
+        scrollStart(),
       ),
   )
+  const scrollTabs = (step: -1 | 1) => {
+    if (dragging() || suppressClick) return
+    const current = layout()
+    if ((step < 0 ? current.before : current.after) === 0) return
+    batch(() => {
+      releaseCloseHold()
+      setScrollStart(current.start + step)
+    })
+  }
   createEffect(() => {
     if (closeHold() && !heldLayout()) clearCloseHold()
   })
@@ -1541,11 +1590,14 @@ function HorizontalSessionTabs(props: {
       }}
       onMouseDrag={drag}
       onMouseDragEnd={release}
+      onMouseScroll={(event) => {
+        const direction = event.scroll?.direction
+        if (direction === "up" || direction === "left") scrollTabs(-1)
+        if (direction === "down" || direction === "right") scrollTabs(1)
+      }}
     >
       <Show when={layout().before > 0}>
-        <text width={sessionTabOverflowWidth(layout().before)} fg={theme.text.muted} selectable={false}>
-          ‹{layout().before}
-        </text>
+        <TabOverflowButton side="before" count={layout().before} onClick={() => scrollTabs(-1)} />
       </Show>
       <For each={layout().tabs}>
         {(tab) => {
@@ -1749,9 +1801,7 @@ function HorizontalSessionTabs(props: {
         }}
       </For>
       <Show when={layout().after > 0}>
-        <text width={sessionTabOverflowWidth(layout().after)} fg={theme.text.muted} selectable={false}>
-          {" " + layout().after}›
-        </text>
+        <TabOverflowButton side="after" count={layout().after} onClick={() => scrollTabs(1)} />
       </Show>
       <Show when={showPlus()}>
         <text

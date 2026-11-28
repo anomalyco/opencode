@@ -10,6 +10,82 @@ import { emptyThemeSource } from "../fixture/fixture"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
+test("scrolls hidden tabs into view without switching the active session", async () => {
+  const titles = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"]
+  const [active, setActive] = createSignal("One")
+  const controller = {
+    tabs: () => titles.map((title) => ({ sessionID: title, title })),
+    current: active,
+    select: setActive,
+    close() {},
+    move() {},
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { mode: "on" } })}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <box flexDirection="column">
+              <SessionTabs controller={controller} animations={false} />
+              <text>selectable transcript text</text>
+            </box>
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 46, height: 24 },
+  )
+
+  try {
+    await app.renderOnce()
+    const strip = () => app.captureCharFrame().split("\n")[0] ?? ""
+    expect(strip()).toContain("Two")
+    await app.mockMouse.click(strip().indexOf("Two"), 0)
+    expect(active()).toBe("Two")
+    await app.renderOnce()
+    expect(strip()).not.toContain("Nine")
+    expect(strip()).toContain("›")
+
+    const beforeScroll = strip()
+    await app.mockMouse.pressDown(5, 1)
+    await app.mockMouse.release(strip().indexOf("›"), 0)
+    await app.renderOnce()
+    expect(strip()).toBe(beforeScroll)
+
+    const scrollTo = async (indicator: string, title: string) => {
+      for (let index = 0; index < titles.length && !strip().includes(title); index++) {
+        expect(strip()).toContain(indicator)
+        await app.mockMouse.click(strip().indexOf(indicator), 0)
+        await app.renderOnce()
+      }
+      expect(strip()).toContain(title)
+    }
+    await scrollTo("›", "Nine")
+    expect(strip()).not.toContain("Two")
+    expect(active()).toBe("Two")
+    await app.mockMouse.click(strip().indexOf("Nine"), 0)
+    expect(active()).toBe("Nine")
+    await app.renderOnce()
+
+    await scrollTo("‹", "One")
+    expect(active()).toBe("Nine")
+    await app.mockMouse.scroll(10, 0, "down")
+    await app.renderOnce()
+    expect(strip()).not.toContain("One")
+    await app.mockMouse.scroll(10, 0, "up")
+    await app.renderOnce()
+    expect(strip()).toContain("One")
+    expect(active()).toBe("Nine")
+
+    setActive("Eight")
+    await app.renderOnce()
+    expect(strip()).toContain("Eight")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("releasing a transcript selection over tab controls does not activate them", async () => {
   const [active, setActive] = createSignal("first")
   const [added, setAdded] = createSignal(0)
