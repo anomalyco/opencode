@@ -22,6 +22,22 @@ export const UsageGroup = HttpApiGroup.make("server.usage")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("usage.go", "/api/experimental/usage/go", {
+      query: LocationQuery,
+      success: Location.response(Schema.NullOr(UsageLimits.GoConnection)),
+      error: ServiceUnavailableError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.usage.go",
+          summary: "Get OpenCode Go connection",
+          description:
+            "Experimental: may change without compatibility guarantees. Return how OpenCode Go is connected at the location, through the OpenCode account or an API key, with that credential's Go allowance, or null when nothing connects it.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "usage",

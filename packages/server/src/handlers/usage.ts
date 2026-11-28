@@ -7,17 +7,30 @@ import { response } from "../location"
 
 export const UsageHandler = HttpApiBuilder.group(Api, "server.usage", (handlers) =>
   Effect.gen(function* () {
-    return handlers.handle(
-      "usage.limits",
-      Effect.fn("server.usage.limits")(function* () {
-        const limits = yield* UsageLimits.Service
-        return yield* response(
-          limits.get().pipe(
-            Effect.map((info) => info ?? null),
-            Effect.mapError((error) => new ServiceUnavailableError({ message: error.message, service: "opencode" })),
-          ),
-        )
-      }),
-    )
+    return handlers
+      .handle(
+        "usage.limits",
+        Effect.fn("server.usage.limits")(function* () {
+          const limits = yield* UsageLimits.Service
+          return yield* response(
+            limits.get().pipe(
+              Effect.map((info) => info ?? null),
+              Effect.mapError((error) => new ServiceUnavailableError({ message: error.message, service: "opencode" })),
+            ),
+          )
+        }),
+      )
+      .handle(
+        "usage.go",
+        Effect.fn("server.usage.go")(function* () {
+          const limits = yield* UsageLimits.Service
+          return yield* response(
+            limits.go().pipe(
+              Effect.map((info) => info ?? null),
+              Effect.mapError((error) => new ServiceUnavailableError({ message: error.message, service: "opencode" })),
+            ),
+          )
+        }),
+      )
   }),
 )

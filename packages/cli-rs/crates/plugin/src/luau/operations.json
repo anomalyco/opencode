@@ -185,6 +185,7 @@
 "websearch.providers":{"method":"GET","path":"/api/websearch/provider","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "websearch.query":{"method":"POST","path":"/api/websearch","fields":[["location","query",true,"{ directory: string? }?"],["query","payload",false,null],["providerID","payload",true,null]],"body":"object","reply":"json"},
 "experimental.usage.limits":{"method":"GET","path":"/api/experimental/usage/limits","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
+"experimental.usage.go":{"method":"GET","path":"/api/experimental/usage/go","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "experimental.flag.get":{"method":"GET","path":"/api/experimental/flag","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "config.get":{"method":"GET","path":"/api/config","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "config.shells":{"method":"GET","path":"/api/config/shell","fields":[],"body":null,"reply":"json"},

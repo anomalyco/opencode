@@ -351,6 +351,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalUsageGoInput,
+  ExperimentalUsageGoOutput,
   ExperimentalFlagGetInput,
   ExperimentalFlagGetOutput,
   ConfigGetInput,
@@ -2187,8 +2189,14 @@ const EndpointExperimentalUsageLimits = (raw: RawClient["server.usage"]) => (inp
     raw["usage.limits"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalUsageGo = (raw: RawClient["server.usage"]) => (input?: ExperimentalUsageGoInput) =>
+  preserveEffect<ExperimentalUsageGoOutput>()(
+    raw["usage.go"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupExperimentalUsage = (raw: RawClient["server.usage"]) => ({
   limits: EndpointExperimentalUsageLimits(raw),
+  go: EndpointExperimentalUsageGo(raw),
 })
 
 const EndpointExperimentalFlagGet = (raw: RawClient["server.flag"]) => (input?: ExperimentalFlagGetInput) =>

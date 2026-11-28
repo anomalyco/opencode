@@ -1,5 +1,5 @@
-import type { IntegrationInfo, UsageLimitsInfo, UsageLimitsMeter } from "@opencode/client/promise"
-import { createMemo, createSignal, For, Match, Show, Switch, type Accessor } from "solid-js"
+import type { UsageLimitsGoConnection, UsageLimitsMeter } from "@opencode/client/promise"
+import { createSignal, For, Match, Show, Switch, type Accessor } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import type definition from "./index"
@@ -18,38 +18,36 @@ export type GoServer = {
   readonly id: string
   readonly data: {
     readonly location: {
-      readonly integration: {
-        list(): readonly Pick<IntegrationInfo, "id" | "connections">[] | undefined
-        sync(): Promise<void>
-      }
       readonly usage: {
-        limits(): UsageLimitsInfo | null | undefined
-        sync(): Promise<void>
-        invalidate(): void
+        readonly go: {
+          info(): UsageLimitsGoConnection | null | undefined
+          sync(): Promise<void>
+          invalidate(): void
+        }
       }
     }
   }
 }
 
-/** The OpenCode Go page: the subscription's usage limits, or how to subscribe. */
+/** The OpenCode Go page: how Go is connected and its usage, or how to subscribe and connect it. */
 export default function GoPage(props: { server: Accessor<GoServer | undefined> }) {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const system = ctx.system
   const [failed, setFailed] = createSignal(false)
 
-  // Spend moves with every request and a plan changes in the browser, so the page loads fresh limits when it opens,
-  // when the window regains focus and on retry, showing the server's cache meanwhile. Signing in or out, or switching
-  // workspace, refreshes the cache by itself.
+  // Spend moves with every request and a plan changes in the browser, so the page loads fresh usage when it opens,
+  // when the window regains focus and on retry, showing the server's cache meanwhile. Connecting, disconnecting and
+  // switching workspace refresh the cache by themselves.
   const load = () => {
     const server = props.server()
 
     if (!server) return
-    const location = server.data.location
+    const go = server.data.location.usage.go
 
     setFailed(false)
-    location.usage.invalidate()
-    void Promise.all([location.integration.sync(), location.usage.sync()]).catch(() => {
+    go.invalidate()
+    void go.sync().catch(() => {
       if (props.server() === server) setFailed(true)
     })
   }
@@ -57,35 +55,27 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
   createKeyed(props.server, load)
   makeEventListener(window, "focus", load)
 
-  const limits = () => props.server()?.data.location.usage.limits()
-
-  const signedIn = () =>
-    props
-      .server()
-      ?.data.location.integration.list()
-      ?.find((integration) => integration.id === "opencode")?.connections.length
-
-  const status = createMemo(() => {
-    if (limits()?.go) return "subscribed"
-
-    if (signedIn() === 0) return "signed-out"
-
-    if (signedIn() && limits() !== undefined) return "not-subscribed"
-
-    if (failed()) return "failed"
-
-    return "loading"
-  })
+  // Null while nothing connects Go; undefined until the server answers.
+  const go = () => props.server()?.data.location.usage.go.info()
 
   const description = () => {
-    const workspace = limits()?.workspace
+    const value = go()
 
-    return workspace ? ctx.t("signedIn", { workspace: workspace.name ?? workspace.id }) : ctx.t("description")
+    if (!value) return ctx.t("description")
+
+    if (value.connection === "key" || !value.workspace) return ctx.t("connected.key")
+
+    return ctx.t("connected.account", { workspace: value.workspace.name ?? value.workspace.id })
   }
 
-  // A workspace without Go looks the same whether it never subscribed or its plan lapsed. A sign-in that names no
-  // workspace, such as an API key, has no limits to tell.
-  const subscribe = () => (limits() ? "renew" : "subscribe")
+  const connect = (integration: string) => {
+    const server = props.server()
+
+    if (server) ctx.layout.connect({ server: server.id, integration })
+  }
+
+  // The workspace's own Go page; a key doesn't say which workspace it belongs to.
+  const goURL = () => go()?.workspace?.goURL ?? GO_URL
 
   const duration = (until: number) => {
     const minutes = Math.max(1, Math.floor((until - Date.now()) / 60_000))
@@ -98,6 +88,12 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
     return ctx.t("duration.minutes", { minutes })
   }
 
+  const change = (value: UsageLimitsGoConnection) => (
+    <ui.Button variant="ghost" onClick={() => connect(value.integrationID)}>
+      {ctx.t("change")}
+    </ui.Button>
+  )
+
   return (
     <ui.SettingsLayout
       title={ctx.t("title")}
@@ -109,25 +105,48 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
       }
     >
       <Switch>
-        <Match when={limits()?.go}>
-          {(go) => (
-            <>
-              <ui.SettingsSection title={ctx.t("usage.title")}>
-                <For each={WINDOWS}>
-                  {(window) => <Meter label={ctx.t(`usage.${window}`)} meter={go()[window]} duration={duration} />}
-                </For>
-              </ui.SettingsSection>
-              <ui.SettingsSection>
-                <ui.SettingsRow title={ctx.t("manage.title")} description={ctx.t("manage.description")}>
-                  <ui.Button variant="neutral" onClick={() => system.openExternal(limits()?.workspace.goURL ?? GO_URL)}>
-                    {ctx.t("manage.action")}
-                  </ui.Button>
-                </ui.SettingsRow>
-              </ui.SettingsSection>
-            </>
+        <Match when={go()}>
+          {(value) => (
+            <Show
+              when={value().usage}
+              fallback={
+                <ui.SettingsSection>
+                  <ui.SettingsRow title={ctx.t("renew.title")} description={ctx.t("renew.description")}>
+                    <div class="flex flex-wrap justify-end gap-2">
+                      {change(value())}
+                      <ui.Button variant="submit" onClick={() => system.openExternal(goURL())}>
+                        {ctx.t("subscribe.action")}
+                      </ui.Button>
+                    </div>
+                  </ui.SettingsRow>
+                </ui.SettingsSection>
+              }
+            >
+              {(usage) => (
+                <>
+                  <ui.SettingsSection title={ctx.t("usage.title")}>
+                    <For each={WINDOWS}>
+                      {(window) => (
+                        <Meter label={ctx.t(`usage.${window}`)} meter={usage()[window]} duration={duration} />
+                      )}
+                    </For>
+                  </ui.SettingsSection>
+                  <ui.SettingsSection>
+                    <ui.SettingsRow title={ctx.t("manage.title")} description={ctx.t("manage.description")}>
+                      <div class="flex flex-wrap justify-end gap-2">
+                        {change(value())}
+                        <ui.Button variant="neutral" onClick={() => system.openExternal(goURL())}>
+                          {ctx.t("manage.action")}
+                        </ui.Button>
+                      </div>
+                    </ui.SettingsRow>
+                  </ui.SettingsSection>
+                </>
+              )}
+            </Show>
           )}
         </Match>
-        <Match when={status() === "loading"}>
+        <Match when={go() === undefined && !failed()}>
           <div class="flex min-h-[120px] items-center justify-center">
             <ui.Loader />
           </div>
@@ -135,7 +154,7 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
         <Match when={true}>
           <ui.SettingsSection
             footer={
-              <Show when={status() === "failed"}>
+              <Show when={failed()}>
                 <div class="flex flex-wrap items-center gap-2 text-text-weak">
                   <p>{ctx.t("failed.description")}</p>
                   <ui.Button size="small" variant="ghost" onClick={load}>
@@ -145,25 +164,16 @@ export default function GoPage(props: { server: Accessor<GoServer | undefined> }
               </Show>
             }
           >
-            <ui.SettingsRow title={ctx.t(`${subscribe()}.title`)} description={ctx.t(`${subscribe()}.description`)}>
-              <ui.Button variant="submit" onClick={() => system.openExternal(limits()?.workspace.goURL ?? GO_URL)}>
+            <ui.SettingsRow title={ctx.t("subscribe.title")} description={ctx.t("subscribe.description")}>
+              <ui.Button variant="submit" onClick={() => system.openExternal(GO_URL)}>
                 {ctx.t("subscribe.action")}
               </ui.Button>
             </ui.SettingsRow>
-            <Show when={status() === "signed-out"}>
-              <ui.SettingsRow title={ctx.t("signIn.title")} description={ctx.t("signIn.description")}>
-                <ui.Button
-                  variant="neutral"
-                  onClick={() => {
-                    const server = props.server()
-
-                    if (server) ctx.layout.connect({ server: server.id, integration: "opencode" })
-                  }}
-                >
-                  {ctx.t("signIn.action")}
-                </ui.Button>
-              </ui.SettingsRow>
-            </Show>
+            <ui.SettingsRow title={ctx.t("connect.title")} description={ctx.t("connect.description")}>
+              <ui.Button variant="neutral" onClick={() => connect("opencode")}>
+                {ctx.t("connect.action")}
+              </ui.Button>
+            </ui.SettingsRow>
           </ui.SettingsSection>
         </Match>
       </Switch>

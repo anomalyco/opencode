@@ -2441,9 +2441,9 @@ fn every_operation_is_one_request_in_luau_rust_and_the_generated_client() {
             (sdk, luau) => panic!("{name}: Rust {sdk:?}, Luau {luau:?}"),
         }
     }
-    // 190 operations; the plugin paths refuse the two streams of events, the byte upload and the three that take a
+    // 191 operations; the plugin paths refuse the two streams of events, the byte upload and the three that take a
     // ticket header.
-    assert_eq!((samples.len(), refused.len()), (190, 6), "refused: {refused:?}");
+    assert_eq!((samples.len(), refused.len()), (191, 6), "refused: {refused:?}");
 }
 
 #[test]

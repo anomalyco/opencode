@@ -12276,8 +12276,6 @@ pub struct UsageLimitsInfoWorkspace {
     pub name: Option<String>,
     #[serde(rename = "usageURL")]
     pub usage_url: String,
-    #[serde(rename = "goURL", default, skip_serializing_if = "Option::is_none")]
-    pub go_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12366,6 +12364,46 @@ pub struct ExperimentalUsageLimitsOutput {
     pub location: LocationPublicRef,
     #[serde(default)]
     pub data: Option<UsageLimitsInfo>,
+}
+
+/// Input of `Client::experimental_usage_go`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalUsageGoInput {
+    pub location: Option<LocationQueryInput>,
+}
+
+literal_enum! {
+UsageLimitsGoConnectionConnection {
+    Account => "account",
+    Key => "key",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct UsageLimitsGoConnectionWorkspace {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(rename = "goURL")]
+    pub go_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageLimitsGoConnection {
+    pub connection: UsageLimitsGoConnectionConnection,
+    #[serde(rename = "integrationID")]
+    pub integration_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<UsageLimitsGoConnectionWorkspace>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<UsageLimitsGo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalUsageGoOutput {
+    pub location: LocationPublicRef,
+    #[serde(default)]
+    pub data: Option<UsageLimitsGoConnection>,
 }
 
 /// Input of `Client::experimental_flag_get`.

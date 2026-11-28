@@ -36,6 +36,7 @@ import type {
   ShellInfo,
   SkillInfo,
   ToolContent,
+  UsageLimitsGoConnection,
   UsageLimitsInfo,
   VcsInfo,
   OpenCodeEvent,
@@ -121,6 +122,9 @@ type LocationData = {
   // The Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to; null when it
   // isn't signed in.
   usageLimits?: UsageLimitsInfo | null
+  // How OpenCode Go is connected, through the account or a key, with that credential's allowance; null when nothing
+  // connects it.
+  goConnection?: UsageLimitsGoConnection | null
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellWithLocation>
@@ -1623,7 +1627,11 @@ export function createData(config: CreateDataInput) {
   }
 
   function refreshCatalog(type: CatalogEvent, location: LocationRef) {
-    if (type === "provider.updated") return refreshLocation("provider", result.location.provider, location)
+    // Which credential Go uses follows the provider catalog, as the Console's Go provider comes and goes.
+    if (type === "provider.updated") {
+      refreshLocation("goConnection", goConnection, location)
+      return refreshLocation("provider", result.location.provider, location)
+    }
     if (type === "model.updated") return refreshLocation("model", result.location.model, location)
     if (type === "agent.updated") return refreshLocation("agent", result.location.agent, location)
     if (type === "command.updated") return refreshLocation("command", result.location.command, location)
@@ -1650,6 +1658,7 @@ export function createData(config: CreateDataInput) {
       sync.has(`location.usageLimits:${locationKey(location)}`)
     usageLimits.invalidate(location)
     if (loaded) refresh(() => usageLimits.sync(location))
+    refreshLocation("goConnection", goConnection, location)
   }
 
   function locationResource<Field extends keyof LocationData>(
@@ -1676,6 +1685,7 @@ export function createData(config: CreateDataInput) {
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
+  const goConnection = locationResource("goConnection", (location) => api().experimental.usage.go({ location }))
   // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
   const dormantFlags = new Set<string>()
   const [canonicalDirectory, setCanonicalDirectory] = createStore<Record<string, string>>({})
@@ -2505,7 +2515,12 @@ export function createData(config: CreateDataInput) {
         return flags.list(ref)?.[key] === true
       },
       flags: { list: flags.list, sync: flags.sync, invalidate: flags.invalidate },
-      usage: { limits: usageLimits.list, sync: usageLimits.sync, invalidate: usageLimits.invalidate },
+      usage: {
+        limits: usageLimits.list,
+        sync: usageLimits.sync,
+        invalidate: usageLimits.invalidate,
+        go: { info: goConnection.list, sync: goConnection.sync, invalidate: goConnection.invalidate },
+      },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
       config: locationResource("config", async (location) => ({

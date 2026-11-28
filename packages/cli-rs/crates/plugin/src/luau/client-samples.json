@@ -185,6 +185,7 @@
 "websearch.providers":{"location":{"directory":"s3"}},
 "websearch.query":{"location":{"directory":"s3"},"query":"s0","providerID":"s0"},
 "experimental.usage.limits":{"location":{"directory":"s3"}},
+"experimental.usage.go":{"location":{"directory":"s3"}},
 "experimental.flag.get":{"location":{"directory":"s3"}},
 "config.get":{"location":{"directory":"s3"}},
 "config.shells":{},

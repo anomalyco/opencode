@@ -2,7 +2,6 @@ export * as UsageLimits from "./usage-limits.js"
 
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
-import { Provider } from "@opencode/schema/provider"
 import { UsageLimits } from "@opencode/schema/usage-limits"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -11,9 +10,13 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConsoleAccess } from "./console-access.js"
 import type { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
+import { Provider } from "./provider.js"
 
 export const Info = UsageLimits.Info
 export type Info = UsageLimits.Info
+
+export const GoConnection = UsageLimits.GoConnection
+export type GoConnection = UsageLimits.GoConnection
 
 export class UnavailableError extends Schema.TaggedError<UnavailableError>()("UsageLimits.UnavailableError", {
   message: Schema.String,
@@ -22,6 +25,8 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Us
 export interface Interface {
   /** The usage limits of the OpenCode Console workspace this location is signed in to, if it is. */
   readonly get: () => Effect.Effect<Info | undefined, UnavailableError>
+  /** How OpenCode Go is connected here and its allowance, if any credential connects it. */
+  readonly go: () => Effect.Effect<GoConnection | undefined, UnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/UsageLimits") {}
@@ -30,20 +35,27 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const integrations = yield* Integration.Service
+    const providers = yield* Provider.Service
     const http = yield* HttpClient.HttpClient
 
-    const get = Effect.fn("UsageLimits.get")(function* () {
-      const connection = yield* integrations.connection.active(Integration.ID.make("opencode"))
+    const active = Effect.fn("UsageLimits.active")(function* (integrationID: Integration.ID) {
+      const connection = yield* integrations.connection.active(integrationID)
       if (!connection) return undefined
       const credential = yield* integrations.connection
         .resolve(connection)
         .pipe(Effect.mapError((error) => new UnavailableError({ message: error.message })))
       if (!credential || credential.type === "external") return undefined
+      return { integrationID, credential }
+    })
+
+    const get = Effect.fn("UsageLimits.get")(function* () {
+      const credential = (yield* active(Integration.ID.make("opencode")))?.credential
+      if (!credential) return undefined
       const workspaceID = credential.metadata?.orgID
       if (typeof workspaceID !== "string") return undefined
       const server = ConsoleAccess.server(credential)
       const [budgets, go] = yield* Effect.all(
-        [readBudgets(http, server, credential), readGo(http, server, credential, workspaceID)],
+        [readBudgets(http, server, credential), readGo(http, new URL(server).origin, credential, workspaceID)],
         { concurrency: 2 },
       ).pipe(
         Effect.timeoutOrElse({
@@ -56,21 +68,56 @@ export const layer = Layer.effect(
           id: workspaceID,
           ...(typeof credential.metadata?.orgName === "string" ? { name: credential.metadata.orgName } : {}),
           usageURL: `${server}/${workspaceID}/activity/overview`,
-          goURL: `${server}/${workspaceID}/go`,
         },
         ...(go === undefined ? {} : { go }),
         budgets,
       }
     })
 
-    return Service.of({ get })
+    // Go requests use the connection of the `opencode-go` provider's integration, as ModelResolver picks it: the
+    // Console's provider while the signed-in workspace has Go, else the models.dev provider's own key.
+    const go = Effect.fn("UsageLimits.go")(function* () {
+      const provider = yield* providers.get(Provider.ID.make("opencode-go"))
+      const used =
+        (yield* active(provider?.integrationID ?? Integration.ID.make("opencode-go"))) ??
+        (yield* active(Integration.ID.make("opencode")))
+      if (!used) return undefined
+      const value = used.credential
+      if (value.type === "oauth") {
+        const workspaceID = value.metadata?.orgID
+        if (typeof workspaceID !== "string") return undefined
+        const server = ConsoleAccess.server(value)
+        const usage = yield* readGo(http, new URL(server).origin, value, workspaceID).pipe(timeout)
+        return {
+          connection: "account" as const,
+          integrationID: used.integrationID,
+          workspace: {
+            id: workspaceID,
+            ...(typeof value.metadata?.orgName === "string" ? { name: value.metadata.orgName } : {}),
+            goURL: `${server}/${workspaceID}/go`,
+          },
+          ...(usage === undefined ? {} : { usage }),
+        }
+      }
+      // A key names its own workspace, and Go answers at the origin its requests go to.
+      const baseURL = provider?.settings?.baseURL
+      const origin = new URL(typeof baseURL === "string" ? baseURL : ConsoleAccess.server(value)).origin
+      const usage = yield* readGo(http, origin, value).pipe(timeout)
+      return {
+        connection: "key" as const,
+        integrationID: used.integrationID,
+        ...(usage === undefined ? {} : { usage }),
+      }
+    })
+
+    return Service.of({ get, go })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Integration.node, httpClient],
+  deps: [Integration.node, Provider.node, httpClient],
 })
 
 // One budget as `GET /api/policies/current-budgets` describes it.
@@ -151,21 +198,21 @@ function readBudgets(http: HttpClient.HttpClient, server: string, credential: Cr
 }
 
 /**
- * The Go allowance, from the inference API that shares the Console's origin. Go refuses (403) a workspace the member
- * doesn't subscribe to Go in, which has no allowance to show.
+ * The Go allowance, from the inference API at `origin`. Go refuses (403) a workspace without an active subscription,
+ * which has no allowance to show. An account names its workspace; a key resolves its own.
  */
 function readGo(
   http: HttpClient.HttpClient,
-  server: string,
+  origin: string,
   credential: Credential.Key | Credential.OAuth,
-  workspaceID: string,
+  workspaceID?: string,
 ) {
   return HttpClient.withScope(http)
     .execute(
-      HttpClientRequest.get(`${new URL(server).origin}/zen/go/v1/usage`).pipe(
+      HttpClientRequest.get(`${origin}/zen/go/v1/usage`).pipe(
         HttpClientRequest.acceptJson,
         HttpClientRequest.bearerToken(credential.type === "oauth" ? credential.access : credential.key),
-        HttpClientRequest.setHeader("x-opencode-org-id", workspaceID),
+        workspaceID ? HttpClientRequest.setHeader("x-opencode-org-id", workspaceID) : (request) => request,
       ),
     )
     .pipe(
@@ -187,6 +234,11 @@ function readGo(
       ),
     )
 }
+
+const timeout = Effect.timeoutOrElse({
+  duration: Duration.seconds(15),
+  orElse: () => Effect.fail(new UnavailableError({ message: "OpenCode Go usage timed out" })),
+})
 
 function meter(value: typeof GoMeter.Type) {
   return { percent: value.percent, limited: value.status === "rate-limited", resetsAt: value.resetsAt.getTime() }

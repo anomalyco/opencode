@@ -70,9 +70,28 @@ export const Info = Schema.Struct({
     name: Schema.String.pipe(optional),
     /** The member's usage page in OpenCode Console. */
     usageURL: Schema.String,
-    /** The workspace's OpenCode Go page in OpenCode Console, where it subscribes and manages its plan. */
-    goURL: Schema.String.pipe(optional),
   }),
   go: Go.pipe(optional),
   budgets: Schema.Array(Budget),
 }).annotate({ identifier: "UsageLimits.Info" })
+
+/**
+ * How OpenCode Go is connected at a location: the credential its requests use, as model resolution picks it, and that
+ * credential's allowance. A signed-in account whose workspace has no Go answers for it when no Go key does.
+ */
+export interface GoConnection extends Schema.Schema.Type<typeof GoConnection> {}
+export const GoConnection = Schema.Struct({
+  /** `account`: the OpenCode account sign-in. `key`: an API key, entered in the app, from the environment or config. */
+  connection: Schema.Literals(["account", "key"]),
+  /** The integration whose connection Go uses, to change it. */
+  integrationID: Schema.String,
+  /** The account's workspace; a key doesn't say which workspace it belongs to. */
+  workspace: Schema.Struct({
+    id: Schema.String,
+    name: Schema.String.pipe(optional),
+    /** The workspace's OpenCode Go page in OpenCode Console, where it subscribes and manages its plan. */
+    goURL: Schema.String,
+  }).pipe(optional),
+  /** The allowance; absent when Go refuses the credential, as it does without an active subscription. */
+  usage: Go.pipe(optional),
+}).annotate({ identifier: "UsageLimits.GoConnection" })

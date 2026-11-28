@@ -2449,6 +2449,13 @@ export type PushDevice = {
   time: { created: number; updated: number }
 }
 
+export type UsageLimitsGoConnection = {
+  connection: "account" | "key"
+  integrationID: string
+  workspace?: { id: string; name?: string; goURL: string }
+  usage?: UsageLimitsGo
+}
+
 export type SessionInboxMove = {
   id: SessionMessageID
   sessionID: SessionID
@@ -2811,7 +2818,7 @@ export type ConfigEntry =
 export type AutomationAction = AutomationActionPrompt | AutomationActionCode | AutomationActionShell
 
 export type UsageLimitsInfo = {
-  workspace: { id: string; name?: string; usageURL: string; goURL?: string }
+  workspace: { id: string; name?: string; usageURL: string }
   go?: UsageLimitsGo
   budgets: Array<UsageLimitsBudget>
 }
@@ -5246,6 +5253,10 @@ export type ExperimentalUsageLimitsInput = {
 }
 
 export type ExperimentalUsageLimitsOutput = { location: LocationPublicRef; data: UsageLimitsInfo | null }
+
+export type ExperimentalUsageGoInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+
+export type ExperimentalUsageGoOutput = { location: LocationPublicRef; data: UsageLimitsGoConnection | null }
 
 export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
