@@ -14,6 +14,7 @@ import {
   sameTarget,
   TIMELINE_SYNC_TIMEOUT_MS,
   timelineSyncError,
+  timelineSyncRetryDelay,
   transitionTimelineSync,
   type TimelineSyncEffect,
   type TimelineSyncEvent,
@@ -166,6 +167,16 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
       { defer: true },
     ),
   )
+  createEffect(() => {
+    const state = syncState()
+    const delay = timelineSyncRetryDelay(state)
+
+    if (server.ctx.sdk.connection.status() !== "connected" || delay === undefined) return
+
+    // A single fetch can fail without the event stream dropping, or settle after it reconnects.
+    const timer = setTimeout(() => dispatch({ type: "sync.retry", attempt: state.attempt }), delay)
+    onCleanup(() => clearTimeout(timer))
+  })
   onCleanup(() => dispatch(DISPOSED_TIMELINE_SYNC_EVENT))
 
   // Enrich the partial leading group without withholding the already loaded tail. Undelivered inbox rows

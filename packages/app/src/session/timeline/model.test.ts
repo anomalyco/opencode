@@ -14,6 +14,7 @@ import {
   leadingTurnNeedsParent,
   resolveLeadingAssistant,
   timelineSyncError,
+  timelineSyncRetryDelay,
   transitionTimelineSync,
   type TimelineSyncEffect,
   type TimelineSyncEvent,
@@ -206,8 +207,62 @@ describe("timeline sync", () => {
 
       expect(next.state).toBe(failed)
       expect(next.effects).toEqual([])
+      expect(timelineSyncRetryDelay(failed)).toBeUndefined()
+      expect(transitionTimelineSync(failed, { type: "sync.retry", attempt: failed.attempt }).state).toBe(failed)
     },
   )
+
+  test("bounds transport retries with backoff and replenishes them on a new connection", () => {
+    const error = new ClientError("Transport", { cause: new TypeError("Load failed") })
+    let state = syncing()
+
+    for (const delay of [500, 1_000, 2_000] as const) {
+      state = transitionTimelineSync(state, { type: "sync.failed", attempt: state.attempt, error }).state
+      expect(timelineSyncRetryDelay(state)).toBe(delay)
+      const event = { type: "sync.retry" as const, attempt: state.attempt }
+      const next = transitionTimelineSync(state, event)
+      expect(next.effects).toEqual([{ type: "sync.start", target, attempt: next.state.attempt }])
+      expect(timelineSyncError(next.state, target)).toBeUndefined()
+      expect(timelineSyncRetryDelay(next.state)).toBeUndefined()
+      expect(transitionTimelineSync(next.state, event).state).toBe(next.state)
+      state = next.state
+    }
+
+    const failed = transitionTimelineSync(state, { type: "sync.failed", attempt: state.attempt, error }).state
+    expect(timelineSyncRetryDelay(failed)).toBeUndefined()
+    expect(timelineSyncError(failed, target)).toBe(error)
+    expect(transitionTimelineSync(failed, { type: "sync.retry", attempt: failed.attempt }).state).toBe(failed)
+
+    const reconnected = transitionTimelineSync(failed, { type: "connection.restored" }).state
+
+    const again = transitionTimelineSync(reconnected, {
+      type: "sync.failed",
+      attempt: reconnected.attempt,
+      error,
+    }).state
+
+    expect(timelineSyncRetryDelay(again)).toBe(500)
+  })
+
+  test.each<TimelineSyncEvent>([
+    { type: "target.changed", target: other },
+    { type: "target.changed", target: undefined },
+    DISPOSED_TIMELINE_SYNC_EVENT,
+  ])("a pending retry cannot revive history after leaving it: %j", (event) => {
+    const loading = syncing()
+
+    const failed = transitionTimelineSync(loading, {
+      type: "sync.failed",
+      attempt: loading.attempt,
+      error: new ClientError("Transport"),
+    }).state
+
+    const left = transitionTimelineSync(failed, event).state
+    const stale = transitionTimelineSync(left, { type: "sync.retry", attempt: failed.attempt })
+    expect(stale.state).toBe(left)
+    expect(stale.effects).toEqual([])
+    expect(timelineSyncRetryDelay(left)).toBeUndefined()
+  })
 
   test("a first sync that never settles reveals the timeline and ignores its late result", () => {
     const loading = syncing()

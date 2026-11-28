@@ -3,6 +3,8 @@ import { ClientError, type SessionMessageInfo } from "@opencode/client/promise"
 // A first sync that never settles reveals the timeline instead of hiding it forever.
 export const TIMELINE_SYNC_TIMEOUT_MS = 30_000
 
+const RETRY_DELAYS_MS = [500, 1_000, 2_000] as const
+
 export const LEADING_TURN_PAGE_DELAY_MS = 200
 
 export const LEADING_TURN_PAGE_LIMIT = 3
@@ -24,7 +26,12 @@ export type TimelineSyncTarget = {
  */
 export type TimelineSyncState =
   | { readonly status: "idle"; readonly attempt: number }
-  | { readonly status: "syncing"; readonly target: TimelineSyncTarget; readonly attempt: number }
+  | {
+      readonly status: "syncing"
+      readonly target: TimelineSyncTarget
+      readonly attempt: number
+      readonly retries: number
+    }
   | {
       readonly status: "enriching"
       readonly target: TimelineSyncTarget
@@ -35,7 +42,13 @@ export type TimelineSyncState =
       readonly waits: number
     }
   | { readonly status: "ready"; readonly target: TimelineSyncTarget; readonly attempt: number }
-  | { readonly status: "failed"; readonly target: TimelineSyncTarget; readonly attempt: number; readonly error: object }
+  | {
+      readonly status: "failed"
+      readonly target: TimelineSyncTarget
+      readonly attempt: number
+      readonly retries: number
+      readonly error: object
+    }
 
 export type TimelineSyncEvent =
   | { readonly type: "target.changed"; readonly target: TimelineSyncTarget | undefined }
@@ -50,6 +63,7 @@ export type TimelineSyncEvent =
     }
   | { readonly type: "sync.failed"; readonly attempt: number; readonly error: object }
   | { readonly type: "sync.timed-out"; readonly attempt: number }
+  | { readonly type: "sync.retry"; readonly attempt: number }
   | {
       readonly type: "enrich.paused"
       readonly attempt: number
@@ -114,7 +128,7 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
     const attempt = state.attempt + 1
 
     return {
-      state: { status: "syncing", target: state.target, attempt },
+      state: { status: "syncing", target: state.target, attempt, retries: 0 },
       effects: [{ type: "sync.start", target: state.target, attempt }],
     }
   }
@@ -129,7 +143,7 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
     const attempt = state.attempt + 1
 
     return {
-      state: { status: "syncing", target, attempt },
+      state: { status: "syncing", target, attempt, retries: 0 },
       effects: [...cancel(state), { type: "sync.start", target, attempt }],
     }
   }
@@ -137,10 +151,19 @@ export function transitionTimelineSync(state: TimelineSyncState, event: Timeline
   if (state.status === "idle" || state.attempt !== event.attempt) return unchanged(state)
   const attempt = state.attempt + 1
 
+  if (state.status === "failed") {
+    if (event.type !== "sync.retry" || timelineSyncRetryDelay(state) === undefined) return unchanged(state)
+
+    return {
+      state: { status: "syncing", target: state.target, attempt, retries: state.retries + 1 },
+      effects: [{ type: "sync.start", target: state.target, attempt }],
+    }
+  }
+
   if (state.status === "syncing") {
     if (event.type === "sync.failed")
       return {
-        state: { status: "failed", target: state.target, attempt, error: event.error },
+        state: { status: "failed", target: state.target, attempt, retries: state.retries, error: event.error },
         effects: NO_EFFECTS,
       }
 
@@ -199,6 +222,14 @@ export function timelineSyncError(state: TimelineSyncState, target: TimelineSync
   if (!target || state.status !== "failed" || !sameTarget(state.target, target)) return undefined
 
   return state.error
+}
+
+/** A bounded retry burst for a failed read while the event stream is still connected. */
+export function timelineSyncRetryDelay(state: TimelineSyncState) {
+  if (state.status !== "failed" || !(state.error instanceof ClientError) || state.error.reason !== "Transport")
+    return undefined
+
+  return RETRY_DELAYS_MS[state.retries]
 }
 
 /** Whether the timeline can show. A loaded tail shows at once; enrichment never withholds it. */
