@@ -4,7 +4,7 @@ import { retry } from "@opencode/util/retry"
 import type { SetStoreFunction } from "solid-js/store"
 import type { GlobalStore } from "./types"
 import { normalizeProjectInfo } from "./utils"
-import { QueryClient, queryOptions } from "@tanstack/solid-query"
+import { QueryClient, queryOptions, useQueries } from "@tanstack/solid-query"
 import type { ServerScope } from "@/runtime/server/scope"
 import { withWorktreeInventory, worktreeInventoryKey } from "@/workspaces/inventory"
 
@@ -94,3 +94,35 @@ export const loadPathQuery = (scope: ServerScope, directory: string | null, api:
         home: inferHomeDirectory(location.directory) || inferHomeDirectory(location.project.directory),
       })),
   })
+
+/**
+ * A server's global config and path, loaded once the server is connected. Each is read from the query list when it is
+ * asked for: `useQueries` replaces its results whenever its options change, as they do when the connection status
+ * does, so a result taken out of the list once keeps the state from before the server connected.
+ */
+export function createGlobalQueries(input: { scope: ServerScope; location: LocationApi; connected: () => boolean }) {
+  const queries = useQueries(() => ({
+    queries: [
+      { ...loadGlobalConfigQuery(input.scope), enabled: input.connected() },
+      { ...loadPathQuery(input.scope, null, input.location), enabled: input.connected() },
+    ],
+  }))
+
+  return {
+    config(): Config {
+      const query = queries[0]
+
+      if (query.isPending) return {}
+
+      return query.data ?? {}
+    },
+    path(): Path {
+      const empty = { state: "", config: "", worktree: "", directory: "", home: "" }
+      const query = queries[1]
+
+      if (query.isPending) return empty
+
+      return query.data ?? empty
+    },
+  }
+}
