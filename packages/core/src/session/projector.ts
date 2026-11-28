@@ -936,6 +936,7 @@ const layer = Layer.effectDiscard(
             directory: SessionTable.directory,
             projectID: SessionTable.project_id,
             canonical: ProjectTable.worktree,
+            vcs: ProjectTable.vcs,
           })
           .from(SessionTable)
           .innerJoin(ProjectTable, eq(SessionTable.project_id, ProjectTable.id))
@@ -944,7 +945,9 @@ const layer = Layer.effectDiscard(
               inArray(SessionTable.project_id, candidates),
               isNull(SessionTable.workspace_id),
               or(
-                event.data.adopted?.length ? inArray(SessionTable.project_id, event.data.adopted) : undefined,
+                event.data.adopted?.length
+                  ? and(isNull(ProjectTable.vcs), inArray(SessionTable.project_id, event.data.adopted))
+                  : undefined,
                 and(
                   gte(SessionTable.directory, event.data.directory),
                   lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
@@ -957,7 +960,9 @@ const layer = Layer.effectDiscard(
         yield* Effect.forEach(
           rows,
           (row) => {
-            const directory = event.data.adopted?.includes(row.projectID)
+            // Markerless projects identify an exact directory. Git projects can span
+            // several clones, so their sessions must follow their own directory.
+            const directory = !row.vcs && event.data.adopted?.includes(row.projectID)
               ? row.canonical
               : AbsolutePath.make(path.resolve(row.directory))
             if (!FSUtil.contains(event.data.directory, directory)) return Effect.void

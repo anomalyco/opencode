@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path, { type PlatformPath } from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -19,6 +19,8 @@ import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
+import { SessionTable } from "./session/sql.js"
+import { KV } from "./kv.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -41,6 +43,8 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Project.
 
 export interface Resolved {
   readonly previous?: ID
+  /** Git root commit used to verify checkout continuity during adoption. */
+  readonly root?: ID
   readonly id: ID
   readonly directory: AbsolutePath
   // This checkout's main directory; the stored project canonical may be another clone.
@@ -68,6 +72,7 @@ export const root = Effect.fn("Project.root")(
 
 export const ACTIVATE_INTERVAL = 60_000
 const SWEEP_INTERVAL = Duration.hours(1)
+const Checkout = Schema.Struct({ root: ID, projectID: ID })
 
 export interface Options {
   readonly now?: () => number
@@ -140,11 +145,31 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
+    const kv = yield* KV.Service
     const scope = yield* Scope.Scope
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const hostLocal = spawner !== EnvironmentUnavailable.spawner
 
     const announcing = new Set<string>()
+    const hasSessionsToAdopt = (projectIDs: ReadonlyArray<ID>, directory: AbsolutePath) =>
+      projectIDs.length === 0
+        ? Effect.succeed(false)
+        : db
+            .select({ directory: SessionTable.directory })
+            .from(SessionTable)
+            .where(
+              and(
+                inArray(SessionTable.project_id, [...projectIDs]),
+                isNull(SessionTable.workspace_id),
+                gte(SessionTable.directory, directory),
+                lte(SessionTable.directory, AbsolutePath.make(directory + "\uffff")),
+              ),
+            )
+            .all()
+            .pipe(
+              Effect.orDie,
+              Effect.map((rows) => rows.some((row) => FSUtil.contains(directory, row.directory))),
+            )
     const persist = Effect.fnUntraced(function* (project: Resolved, local = true) {
       const previous = local
         ? yield* db
@@ -211,49 +236,86 @@ const layer = Layer.effect(
             .where(and(eq(WorktreeTable.project_id, item.projectID), eq(WorktreeTable.directory, item.directory)))
             .get()
             .pipe(Effect.orDie)
-          if (stored) return
-          const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
-          const markerless = yield* db
-            .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
-            .from(ProjectTable)
-            .where(
-              and(
-                isNull(ProjectTable.vcs),
-                gte(ProjectTable.worktree, directory),
-                lte(ProjectTable.worktree, AbsolutePath.make(directory + "\uffff")),
-              ),
+          const key = `project.checkout:${item.directory}`
+          const value = project.root ? yield* kv.get(key) : undefined
+          const checkout = Schema.is(Checkout)(value) ? value : undefined
+          if (stored && checkout?.root === project.root && checkout?.projectID === item.projectID) return
+          // A path can be reused by an unrelated repository. Only a recorded
+          // matching root, or the root-derived ID itself, proves continuity.
+          const identities = project.root
+            ? [...new Set([project.root, ...(checkout?.root === project.root ? [checkout.projectID] : [])])].filter(
+                (id) => id !== item.projectID && id !== ID.global,
+              )
+            : []
+          const history = identities.length
+            ? yield* db
+                .select({ id: ProjectTable.id })
+                .from(ProjectTable)
+                .where(
+                  and(
+                    inArray(ProjectTable.id, identities),
+                    eq(ProjectTable.vcs, "git"),
+                    isNull(ProjectTable.time_archived),
+                  ),
+                )
+                .all()
+                .pipe(
+                  Effect.orDie,
+                  Effect.map((rows) => rows.map((row) => row.id)),
+                )
+            : []
+          const candidates = [...new Set([project.previous ?? ID.global, ...history])].filter(
+            (id) => id !== item.projectID,
+          )
+          const changed = history.length > 0 || (project.previous !== undefined && project.previous !== item.projectID)
+          if (!stored || (changed && (yield* hasSessionsToAdopt(candidates, item.directory)))) {
+            const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
+            const markerless = yield* db
+              .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
+              .from(ProjectTable)
+              .where(
+                and(
+                  isNull(ProjectTable.vcs),
+                  gte(ProjectTable.worktree, directory),
+                  lte(ProjectTable.worktree, AbsolutePath.make(directory + "\uffff")),
+                ),
+              )
+              .all()
+              .pipe(Effect.orDie)
+            const adopted = yield* Effect.filter(markerless, (candidate) =>
+              Effect.gen(function* () {
+                if (candidate.id === item.projectID) return false
+                if (!FSUtil.contains(directory, candidate.directory)) return false
+                const found = yield* fs
+                  .up({ targets: [".git", ".hg"], start: candidate.directory, stop: directory, mode: "first" })
+                  .pipe(Effect.orElseSucceed(() => []))
+                if (!found[0]) return false
+                return (yield* fs.resolve(path.dirname(found[0]))) === directory
+              }),
             )
-            .all()
-            .pipe(Effect.orDie)
-          const adopted = yield* Effect.filter(markerless, (candidate) =>
-            Effect.gen(function* () {
-              if (candidate.id === item.projectID) return false
-              if (!FSUtil.contains(directory, candidate.directory)) return false
-              const found = yield* fs
-                .up({ targets: [".git", ".hg"], start: candidate.directory, stop: directory, mode: "first" })
-                .pipe(Effect.orElseSucceed(() => []))
-              if (!found[0]) return false
-              return (yield* fs.resolve(path.dirname(found[0]))) === directory
-            }),
-          )
-          yield* bus.publish(
-            Worktree.Event.Resolved,
-            {
-              projectID: item.projectID,
-              directory: item.directory,
-              previous: project.previous ?? ID.global,
-              ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
-            },
-            {
-              commit: () =>
-                db
-                  .insert(WorktreeTable)
-                  .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
-                  .onConflictDoNothing()
-                  .run()
-                  .pipe(Effect.orDie, Effect.asVoid),
-            },
-          )
+            const adoptedIDs = [...new Set([...history, ...adopted.map((candidate) => candidate.id)])].filter(
+              (id) => id !== item.projectID && id !== ID.global,
+            )
+            yield* bus.publish(
+              Worktree.Event.Resolved,
+              {
+                projectID: item.projectID,
+                directory: item.directory,
+                previous: project.previous ?? ID.global,
+                ...(adoptedIDs.length ? { adopted: adoptedIDs } : {}),
+              },
+              {
+                commit: () =>
+                  db
+                    .insert(WorktreeTable)
+                    .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
+                    .onConflictDoNothing()
+                    .run()
+                    .pipe(Effect.orDie, Effect.asVoid),
+              },
+            )
+          }
+          if (project.root) yield* kv.set(key, { root: project.root, projectID: item.projectID })
         }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
       }
       return project
@@ -373,10 +435,8 @@ const layer = Layer.effect(
           return value
         })
       const previous = yield* cached(repo.commonDirectory)
-      const id =
-        (yield* remote(repo).pipe(fallback(undefined))) ??
-        previous ??
-        (yield* rootCommit(repo).pipe(fallback(undefined)))
+      const root = yield* rootCommit(repo).pipe(fallback(undefined))
+      const id = (yield* remote(repo).pipe(fallback(undefined))) ?? previous ?? root
       const canonical =
         repo.gitDirectory === repo.commonDirectory
           ? repo.worktree
@@ -386,6 +446,7 @@ const layer = Layer.effect(
             )
       const resolved: Resolved = {
         previous,
+        root,
         id: id ?? ID.global,
         directory: repo.worktree,
         canonical,
@@ -535,7 +596,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: options?.now ? layer.pipe(Layer.provide(Layer.succeed(Now, options.now))) : layer,
-    deps: [Bus.node, CrossSpawnSpawner.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
+    deps: [Bus.node, CrossSpawnSpawner.node, Database.node, KV.node, FSUtil.node, Git.node, AppProcess.node],
   })
 }
 

@@ -3,6 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer, Stream } from "effect"
+import { Statement } from "effect/sql"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -564,6 +565,22 @@ describe("Project.resolve", () => {
     }),
   )
 
+  it.live("returns to the root-derived identity after removing origin", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      expect((yield* project.resolve(abs(tmp.path))).id).toBe(remoteID("github.com/owner/repo"))
+
+      yield* Effect.promise(() => $`git remote remove origin`.cwd(tmp.path).quiet())
+
+      expect((yield* project.resolve(abs(tmp.path))).id).toBe(
+        Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
+      )
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).exists())).toBe(false)
+    }),
+  )
+
   it.live("prefers git when both git and mercurial metadata exist", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
@@ -698,7 +715,22 @@ describe("Project.resolve", () => {
         expect(spawns()).toBeGreaterThan(0)
 
         const before = spawns()
-        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        const queries: string[] = []
+        expect(
+          (yield* project.resolve(abs(nested)).pipe(
+            Effect.provideService(Statement.CurrentTransformer, (statement) => {
+              queries.push(statement.compile()[0])
+              return Effect.succeed(statement)
+            }),
+          )).id,
+        ).toBe(rootSha)
+        expect(queries.some((query) => query.includes('from "worktree"'))).toBe(true)
+        expect(
+          queries.some(
+            (query) =>
+              query.startsWith("select") && (query.includes('from "session_v2"') || query.includes('"vcs" is null')),
+          ),
+        ).toBe(false)
         expect((yield* project.resolve(abs(tmp.path))).id).toBe(rootSha)
         expect(spawns()).toBe(before)
 
