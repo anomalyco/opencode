@@ -207,6 +207,8 @@ test.each([
   { keybind: "mod+alt+.", init: { key: "≥", code: "Period", ctrlKey: true, altKey: true } },
   { keybind: "mod+shift+[", init: { key: "{", code: "BracketLeft", ctrlKey: true, shiftKey: true } },
   { keybind: "alt+arrowup", init: { key: "ArrowUp", altKey: true } },
+  { keybind: "shift+mod+.", init: { key: ">", code: "Period", ctrlKey: true, shiftKey: true } },
+  { keybind: "mod+shift+comma", init: { key: "<", code: "Comma", ctrlKey: true, shiftKey: true } },
   { keybind: "mod+comma", init: { key: ",", ctrlKey: true } },
   { keybind: "shift+enter", init: { key: "Enter", shiftKey: true } },
 ])("$keybind matches the key the layout types", (row) => {

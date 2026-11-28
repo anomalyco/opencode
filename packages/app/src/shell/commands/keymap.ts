@@ -211,6 +211,11 @@ function normalizeKey(key: string) {
 function physicalKey(event: Pick<KeyboardEvent, "key" | "code">) {
   if (event.key === "{" || event.key === "}") return event.key === "{" ? "[" : "]"
 
+  // ⇧. types > and ⇧, types < on US layouts, so ⇧⌘. (Cycle agent backwards) matches the key it is printed on.
+  if (event.key === ">" && event.code === "Period") return "."
+
+  if (event.key === "<" && event.code === "Comma") return ","
+
   if (!/^[^\x00-\x7f]$/u.test(event.key)) return event.key
 
   if (event.code === "BracketLeft") return "["
