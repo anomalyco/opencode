@@ -6,6 +6,8 @@ import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
+import { commentContextItem, readPromptPresentation } from "@/composer/comment-note"
+import { contextItemKey } from "@/composer/schema"
 import { type BlobReference, blobDataUrl } from "@/runtime/persistence/drafts"
 import { pinPromptMedia } from "@/composer/media"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
@@ -523,7 +525,7 @@ function storedFileUri(file: PromptAttachment) {
 // to the original's model-visible text survive. Ambient composer context (open
 // review comments) stays out: it belongs to the next fresh prompt, not to a
 // queued edit.
-async function editedPromptInput(
+export async function editedPromptInput(
   sessionID: string,
   directory: string,
   item: QueuedPrompt | undefined,
@@ -536,10 +538,22 @@ async function editedPromptInput(
       .map(async (part) => ({ ...part, dataUrl: await blobDataUrl(part.blob, part.mime) })),
   )
 
-  const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
-  const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
+  // Only a hidden suffix behind non-empty display text is generated content. With no display text the editor already
+  // shows the notes as editable text, so rebuilding them would duplicate comments the user may have removed.
+  const suffix = display && payload?.text.startsWith(display) ? payload.text.slice(display.length) : ""
+  const presentation = suffix ? readPromptPresentation(payload?.metadata) : undefined
+  const context = presentation
+    ? presentation.comments.map((comment) => {
+        const entry = commentContextItem(comment)
+        return { ...entry, key: contextItemKey(entry) }
+      })
+    : []
+  // Build the replacement with the presentation's comments as context, so quotes keep their leading position and
+  // path references come only from the current composer. Opaque suffixes from other clients stay verbatim.
+  const request = buildPromptRequest({ prompt, context, images, text, sessionDirectory: directory })
+  const notes = presentation ? "" : suffix
 
   const mention = (value: { start: number; end: number; text: string } | undefined) => {
     if (!value) return undefined
@@ -602,7 +616,7 @@ async function editedPromptInput(
     // notes as text (a prompt with no display text), the edit owns them and the comments go.
     metadata: {
       ...payload?.metadata,
-      comments: notes ? (payload?.metadata?.["comments"] ?? []) : [],
+      comments: presentation || notes ? (payload?.metadata?.["comments"] ?? []) : [],
       displayText: request.displayText,
       attachments: request.attachments,
     },
