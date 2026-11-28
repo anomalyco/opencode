@@ -546,6 +546,18 @@ export interface UI {
   readonly slot: (claim: SlotClaim) => () => void
 }
 
+export interface MarkdownPreprocessorInput {
+  readonly streaming: boolean
+  readonly sessionID?: string
+  readonly messageID?: string
+  readonly partID?: string
+}
+
+export type MarkdownPreprocessor = (
+  text: string,
+  input: MarkdownPreprocessorInput,
+) => string | undefined | void
+
 export interface Context {
   readonly options: Readonly<Record<string, any>>
   readonly location: LocationRef | undefined
@@ -558,6 +570,7 @@ export interface Context {
   readonly themeMode: "dark" | "light"
   readonly markdown: {
     registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
+    registerPreprocessor(preprocess: MarkdownPreprocessor): () => void
   }
   readonly keymap: Keymap
   readonly storage: Storage

@@ -70,7 +70,12 @@ export default Plugin.define({
                   .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
                   .then((result) => {
                     context.ui.dialog.show(() => (
-                      <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
+                      <Answer
+                        question={question}
+                        answer={result.text.trim()}
+                        markdown={plugins.markdown}
+                        preprocess={plugins.preprocessMarkdown}
+                      />
                     ))
                     context.ui.dialog.set({ size: "large", centered: true })
                   })
@@ -90,6 +95,7 @@ export function Answer(props: {
   question: string
   answer: string
   markdown: ReturnType<typeof usePlugin>["markdown"]
+  preprocess?: ReturnType<typeof usePlugin>["preprocessMarkdown"]
 }) {
   const toast = useToast()
   const clipboard = useClipboard()
@@ -176,7 +182,7 @@ export function Answer(props: {
               ref={useSessionLinks()}
               syntaxStyle={syntax()}
               renderBlock={props.markdown()}
-              content={props.answer}
+              content={props.preprocess ? props.preprocess(props.answer, { streaming: false }) : props.answer}
               conceal
               tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: overlay.border.base }}
               fg={overlay.markdown.text}

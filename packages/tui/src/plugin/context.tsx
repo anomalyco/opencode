@@ -32,7 +32,7 @@ import { createSourceWatcher } from "./watch"
 import { discoverPluginTargets, localSource, mergePluginTargets } from "./discovery"
 import { createPluginSources } from "./source"
 import { isMissingPath } from "../util/config-directories"
-import { createMarkdownRenderer } from "./markdown"
+import { createMarkdownPreprocessor, createMarkdownRenderer } from "./markdown"
 import { useLog, type LogTags } from "../context/log"
 
 export interface PackageSource {
@@ -62,6 +62,7 @@ type Value = {
     readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
   }
   readonly markdown: () => MarkdownOptions["renderBlock"]
+  readonly preprocessMarkdown: ReturnType<typeof createMarkdownPreprocessor>
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -76,6 +77,7 @@ type Registration = {
   routes: Record<string, Page>
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
+  preprocessors: Record<string, import("@opencode/plugin/tui/context").MarkdownPreprocessor>
   cleanups: Dispose[]
 }
 
@@ -141,10 +143,16 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const markdown = createMarkdownRenderer(() =>
     Object.values(store.registrations).flatMap((registration) => (registration.active ? [registration.markdown] : [])),
   )
+  const preprocessMarkdown = createMarkdownPreprocessor(() =>
+    Object.values(store.registrations).flatMap((registration) =>
+      registration.active ? [Object.values(registration.preprocessors)] : [],
+    ),
+  )
   const clearContributions = (id: string) => {
     setStore("registrations", id, "routes", reconcileStore({}))
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
+    setStore("registrations", id, "preprocessors", reconcileStore({}))
   }
 
   const activate = async (id: string) => {
@@ -164,9 +172,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
         set: (
-          kind: "routes" | "slots" | "markdown",
+          kind: "routes" | "slots" | "markdown" | "preprocessors",
           name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | import("@opencode/plugin/tui/context").MarkdownPreprocessor,
         ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -608,6 +616,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slots: { register: registerSlot, resolved },
         markdown,
+        preprocessMarkdown,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -708,6 +717,7 @@ function toRegistration(item: Desired): Registration {
     routes: {},
     slots: {},
     markdown: {},
+    preprocessors: {},
     cleanups: [],
   }
 }
