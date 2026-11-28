@@ -749,7 +749,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "users.lookup",
         description: "Look up a user",
-        signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  login: string,\n  id: number,\n}>",
+        signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  id: number,\n  login: string,\n}>",
       },
     ])
 

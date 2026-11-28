@@ -120,4 +120,60 @@ describe("CodeModeInstructions", () => {
       expect(reordered.text).toBe("")
     }).pipe(Effect.provide(layer))
   })
+
+  it.effect("ignores JSON member order in tool input schemas", () => {
+    const orderedInput = Schema.Struct({
+      category: Schema.String,
+      refresh: Schema.Boolean,
+      includeEngines: Schema.Boolean,
+    })
+    const reorderedInput = Schema.Struct({
+      includeEngines: Schema.Boolean,
+      category: Schema.String,
+      refresh: Schema.Boolean,
+    })
+    const info = (input: typeof orderedInput) => ({
+      name: "info",
+      description: "Example info tool",
+      input,
+      output: Schema.String,
+      execute: () => Effect.succeed({ output: "ok" }),
+    })
+    const layer = AppNodeBuilder.build(Tool.node, [
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    ])
+
+    return Effect.gen(function* () {
+      const tools = yield* Tool.Service
+      const initialized = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "tools", description: "Project utilities" })
+            editor.add({
+              ...info(orderedInput),
+              options: { namespace: "tools" },
+            })
+          })
+          const snapshot = yield* tools.snapshot()
+          return yield* readInitial(CodeModeInstructions.make(snapshot.codeModeCatalog))
+        }),
+      )
+      const reordered = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "tools", description: "Project utilities" })
+            editor.add({
+              ...info(reorderedInput),
+              options: { namespace: "tools" },
+            })
+          })
+          const snapshot = yield* tools.snapshot()
+          return yield* readUpdate(CodeModeInstructions.make(snapshot.codeModeCatalog), initialized)
+        }),
+      )
+
+      expect(reordered.changed).toBe(false)
+      expect(reordered.text).toBe("")
+    }).pipe(Effect.provide(layer))
+  })
 })
