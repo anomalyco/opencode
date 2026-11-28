@@ -191,7 +191,11 @@ export const Plugin = {
               Effect.map((result) => ({
                 output: toOutput(result.output),
                 content: toModelContent(result.path, input.offset, result.output),
-                metadata: { truncated: result.output.type !== "media" && result.output.next !== undefined },
+                metadata: {
+                  truncated:
+                    result.output.type === "line-too-large" ||
+                    (result.output.type !== "media" && result.output.next !== undefined),
+                },
               })),
               Effect.mapError((error) => {
                 if (error instanceof ToolFailure) return error
@@ -357,20 +361,20 @@ const editDistance = (a: string, b: string) => {
   return previous[b.length]
 }
 
-const toOutput = (
-  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
-): ReadToolFileSystem.Output => {
+type Page =
+  | ReadToolFileSystem.TextPage
+  | ReadToolFileSystem.LineTooLarge
+  | ReadToolFileSystem.DirectoryContent
+  | ReadToolFileSystem.Media
+
+const toOutput = (output: Page): ReadToolFileSystem.Output => {
   if (output.type === "media") return { type: output.type, uri: output.uri, mime: output.mime, name: output.name }
-  if (output.type === "directory") return output
+  if (output.type === "directory" || output.type === "line-too-large") return output
   const { lineCount: _, ...text } = output
   return text
 }
 
-export const toModelContent = (
-  path: string,
-  offset: number | undefined,
-  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
-) => {
+export const toModelContent = (path: string, offset: number | undefined, output: Page) => {
   if (output.type === "media")
     return [
       { type: "text", text: output.mime === "application/pdf" ? "PDF read successfully" : "Image read successfully" },
@@ -389,6 +393,22 @@ export const toModelContent = (
         ? `Read directory ${path}, 0 entries`
         : `Read directory ${path}, entries ${start}-${start + output.entries.length - 1}`,
       ...output.entries,
+    ]
+    if (output.next !== undefined) content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+    return content.join("\n")
+  }
+
+  if (output.type === "line-too-large") {
+    const size =
+      output.bytes >= 1024 * 1024
+        ? `${(output.bytes / 1024 / 1024).toFixed(1)} MB`
+        : `${Math.ceil(output.bytes / 1024)} KB`
+    const content = [
+      `Read file ${path}, line ${output.line}` +
+        (offset !== undefined && output.line < offset
+          ? ` (offset ${offset} is past the end; the file has ${output.line} ${output.line === 1 ? "line" : "lines"})`
+          : ""),
+      `Line ${output.line} is ${size}, more than the ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB one read returns, so it isn't shown.`,
     ]
     if (output.next !== undefined) content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
     return content.join("\n")

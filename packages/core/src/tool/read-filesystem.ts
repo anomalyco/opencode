@@ -2,7 +2,6 @@ export * as ReadToolFileSystem from "./read-filesystem.js"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { TextBoundary } from "@opencode/util/text-boundary"
 import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
@@ -15,10 +14,8 @@ export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
 const MAX_SCAN_CHUNK = 4 * 1024 * 1024
 const TAIL_LINES = 100
-const MAX_LINE_LENGTH = 2_000
-// Enough UTF-8 bytes for the clamped prefix, including a BOM and a partial code point at the end.
-const LINE_BYTES = 4 * (MAX_LINE_LENGTH + 1)
-const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
+// Decoding drops at most a BOM and a carriage return, so a line with more bytes can't fit a page.
+const MAX_LINE_BYTES = MAX_READ_BYTES + 4
 export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
 export class BinaryFileError extends Schema.TaggedError<BinaryFileError>()("ReadTool.BinaryFileError", {
@@ -84,6 +81,16 @@ export type TextContent = typeof TextContent.Type
 // The line count stays out of the tool output, which reads like a file length; formatting needs it to place a trailing newline.
 export type TextPage = TextContent & { readonly lineCount: number }
 
+export const LineTooLarge = Schema.Struct({
+  type: Schema.Literal("line-too-large"),
+  line: PositiveInt,
+  bytes: PositiveInt,
+  next: Schema.optionalKey(PositiveInt).annotate({
+    description: "The line to continue reading from. Absent when this is the last line of the file.",
+  }),
+}).annotate({ identifier: "ReadTool.LineTooLarge" })
+export type LineTooLarge = typeof LineTooLarge.Type
+
 export const DirectoryContent = Schema.Struct({
   type: Schema.Literal("directory"),
   next: Schema.optionalKey(PositiveInt).annotate({
@@ -101,7 +108,7 @@ export const MediaContent = Schema.Struct({
 }).annotate({ identifier: "ReadTool.MediaContent" })
 export type MediaContent = typeof MediaContent.Type
 
-export const Output = Schema.Union([TextContent, DirectoryContent, MediaContent])
+export const Output = Schema.Union([TextContent, LineTooLarge, DirectoryContent, MediaContent])
 export type Output = typeof Output.Type
 
 // Media bytes travel beside the reference so the tool can attach them without storing them in its output.
@@ -147,14 +154,12 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
-    const lines = new TextDecoder().decode(first.bytes).split("\n")
+    const content = new TextDecoder().decode(first.bytes)
+    const lines = content.split("\n")
     // A final separator ends the last physical line; keep it in whole-file content.
     const count = lines.at(-1) === "" ? lines.length - 1 : lines.length
-    if (count <= MAX_READ_LINES) {
-      const content = lines.map(clampLine).join("\n")
-      if (Buffer.byteLength(content) <= MAX_READ_BYTES)
-        return { type: "text" as const, content, offset: 1, lineCount: count }
-    }
+    if (count <= MAX_READ_LINES && Buffer.byteLength(content) <= MAX_READ_BYTES)
+      return { type: "text" as const, content, offset: 1, lineCount: count }
   }
 
   return yield* textPage(files, input, resource, first, page)
@@ -192,6 +197,7 @@ const textPage = Effect.fnUntraced(function* (
   let consumed = 0
   let next: number | undefined
   let firstNul = Infinity
+  let tooLarge: { line: number; bytes: number } | undefined
   const decoder = new TextDecoder("utf-8", { ignoreBOM: true })
 
   const range = (offset: number, length: number) => readFile(files, input, resource, { offset, length })
@@ -210,7 +216,7 @@ const textPage = Effect.fnUntraced(function* (
     return result.subarray(0, filled)
   })
 
-  // Select complete lines in this chunk. Only a split line's displayable prefix ever needs a separate read.
+  // Select complete lines in this chunk. Only a line that began in an earlier chunk needs a separate read.
   const collect = Effect.fnUntraced(function* (point: Checkpoint, chunk: Uint8Array) {
     let start = point.start
     let local = Math.max(0, start - point.byte)
@@ -226,23 +232,45 @@ const textPage = Effect.fnUntraced(function* (
       }
       const lf = chunk.indexOf(10, local)
       const end = point.byte + (lf < 0 ? chunk.length : lf)
-      const length = Math.min(LINE_BYTES, end - start)
-      const bytes =
-        start >= point.byte
-          ? chunk.subarray(start - point.byte, start - point.byte + length)
-          : start + length <= first.bytes.length
-            ? first.bytes.subarray(start, start + length)
-            : yield* reread(start, length)
-      let text = decoder.decode(bytes)
-      // Single-chunk pages decode from byte zero. Streamed pages decode from the selected line,
-      // except a past-end tail, whose embedded BOM remains content.
-      if (
-        text.startsWith("\uFEFF") &&
-        (start === 0 || (!tail && line === from && first.bytes.length < first.info.size))
-      )
-        text = text.slice(1)
-      text = clampLine(text.endsWith("\r") ? text.slice(0, -1) : text)
-      const cost = Buffer.byteLength(text) + (entries.length > 0 ? 1 : 0)
+      const length = end - start
+      let text: string | undefined
+      if (length <= MAX_LINE_BYTES) {
+        const raw =
+          start >= point.byte
+            ? chunk.subarray(start - point.byte, start - point.byte + length)
+            : start + length <= first.bytes.length
+              ? first.bytes.subarray(start, start + length)
+              : yield* reread(start, length)
+        text = decoder.decode(raw)
+        // Single-chunk pages decode from byte zero. Streamed pages decode from the selected line,
+        // except a past-end tail, whose embedded BOM remains content.
+        if (
+          text.startsWith("\uFEFF") &&
+          (start === 0 || (!tail && line === from && first.bytes.length < first.info.size))
+        )
+          text = text.slice(1)
+        if (text.endsWith("\r")) text = text.slice(0, -1)
+      }
+      const bytes = text === undefined ? length : Buffer.byteLength(text)
+      if (text === undefined || bytes > MAX_READ_BYTES) {
+        if (!tail && entries.length > 0) {
+          next = line
+          return
+        }
+        // A page holds whole lines, so this line is reported instead. A tail keeps only the lines after it.
+        entries.length = 0
+        size = 0
+        tooLarge = { line, bytes }
+        consumed = end + Number(lf >= 0)
+        if (!tail) {
+          if (consumed < first.info.size) next = line + 1
+          return
+        }
+        local = lf + 1
+        start = end + 1
+        continue
+      }
+      const cost = bytes + (entries.length > 0 ? 1 : 0)
       if (!tail && size + cost > MAX_READ_BYTES) {
         next = line
         return
@@ -277,12 +305,17 @@ const textPage = Effect.fnUntraced(function* (
     }
     byte += chunk.length
     // Any byte after a full page starts another line, even if that line has no newline for megabytes.
-    if (next === undefined && (entries.length >= limit || size >= MAX_READ_BYTES) && consumed < byte)
+    // An unfinished line too big for a page ends this page too, without reading the rest of it.
+    if (
+      next === undefined &&
+      (entries.length >= limit || size >= MAX_READ_BYTES || (entries.length > 0 && byte - start > MAX_LINE_BYTES)) &&
+      consumed < byte
+    )
       next = requested + entries.length
     if (next !== undefined || byte >= first.info.size) break
     // Grow only while skipping lines; keep page reads (including an unfinished selected line) small.
     const length =
-      entries.length > 0 || (requested > 0 && total >= requested - 1)
+      entries.length > 0 || (requested > 0 && total >= requested - 1 && byte - start <= MAX_LINE_BYTES)
         ? FIRST_CHUNK
         : Math.max(FIRST_CHUNK, Math.min(chunk.length * 4, MAX_SCAN_CHUNK))
     const more = yield* range(byte, Math.min(length, first.info.size - byte))
@@ -310,6 +343,7 @@ const textPage = Effect.fnUntraced(function* (
       if (next !== undefined) break
     }
     if (tail) {
+      if (tooLarge) from = tooLarge.line + 1
       while (size > MAX_READ_BYTES) {
         size -= Buffer.byteLength(entries.shift() ?? "") + 1
         from++
@@ -319,6 +353,13 @@ const textPage = Effect.fnUntraced(function* (
   }
 
   if (firstNul < consumed) return yield* new BinaryFileError({ resource })
+  if (tooLarge && entries.length === 0)
+    return {
+      type: "line-too-large" as const,
+      line: tooLarge.line,
+      bytes: tooLarge.bytes,
+      ...(next === undefined ? {} : { next }),
+    }
   return {
     type: "text" as const,
     content: entries.join("\n"),
@@ -345,6 +386,3 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
     ...(offset - 1 + selected.length < visible.length ? { next: offset + selected.length } : {}),
   }
 }
-
-const clampLine = (line: string) =>
-  line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
