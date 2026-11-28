@@ -115,48 +115,8 @@ const sizeError = (resource: string, bytes: number, limits: Readonly<Limits>) =>
 
 const ALLOWED_OUTPUT_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
-const normalizeWithResizer = (resizer: Resizer) =>
-  Effect.fn("Image.normalize")(function* (
-    resource: string,
-    content: FileSystem.Content & { readonly encoding: "base64" },
-    limits: Readonly<Limits>,
-  ) {
-    if (!limits.autoResize) {
-      if (content.content.length > limits.maxBase64Bytes)
-        return yield* sizeError(resource, content.content.length, limits)
-      return content
-    }
-    const bytes = yield* Effect.try({
-      try: () => base64ToBytes(content.content),
-      catch: () => new DecodeError({ resource }),
-    })
-    const result = yield* Effect.tryPromise({
-      try: async () => resizer({ bytes, mime: content.mime, limits: { ...limits } }),
-      catch: (cause) => cause,
-    }).pipe(
-      Effect.catch((cause) =>
-        Effect.logWarning("image.resizer_failed").pipe(
-          Effect.annotateLogs({ resource, error: String(cause) }),
-          Effect.andThen(Effect.fail(new ResizerUnavailableError())),
-        ),
-      ),
-    )
-    if (result === undefined) {
-      if (content.content.length > limits.maxBase64Bytes)
-        return yield* sizeError(resource, content.content.length, limits)
-      return content
-    }
-    const mime = result.mime.toLowerCase()
-    if (result.bytes.length === 0 || !ALLOWED_OUTPUT_MIMES.has(mime)) {
-      yield* Effect.logWarning("image.resizer_invalid_output").pipe(
-        Effect.annotateLogs({ resource, mime: result.mime, bytes: result.bytes.length }),
-      )
-      return yield* new ResizerUnavailableError()
-    }
-    const encodedBytes = Math.ceil(result.bytes.length / 3) * 4
-    if (encodedBytes > limits.maxBase64Bytes) return yield* sizeError(resource, encodedBytes, limits)
-    return { ...content, content: bytesToBase64(result.bytes), encoding: "base64" as const, mime }
-  })
+const fallbackError = (resource: string, encodedBytes: number, limits: Readonly<Limits>) =>
+  encodedBytes > limits.maxBase64Bytes ? sizeError(resource, encodedBytes, limits) : new ResizerUnavailableError()
 
 const layer = (resizer?: Resizer) =>
   Layer.effect(
@@ -164,8 +124,48 @@ const layer = (resizer?: Resizer) =>
     Effect.gen(function* () {
       const state = makeState()
       if (resizer !== undefined) {
-        const run = normalizeWithResizer(resizer)
-        const normalize: Interface["normalize"] = (resource, content) => run(resource, content, state.get())
+        const normalize = Effect.fn("Image.normalize")(function* (
+          resource: string,
+          content: FileSystem.Content & { readonly encoding: "base64" },
+        ) {
+          const limits = state.get()
+          if (!limits.autoResize) {
+            if (content.content.length > limits.maxBase64Bytes)
+              return yield* sizeError(resource, content.content.length, limits)
+            return content
+          }
+          const bytes = yield* Effect.try({
+            try: () => base64ToBytes(content.content),
+            catch: () => new DecodeError({ resource }),
+          })
+          if (bytes.length === 0) return yield* new DecodeError({ resource })
+          const result = yield* Effect.tryPromise({
+            try: async () => resizer({ bytes, mime: content.mime, limits: { ...limits } }),
+            catch: (cause) => cause,
+          }).pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning("image.resizer_failed").pipe(
+                Effect.annotateLogs({ resource, error: String(cause) }),
+                Effect.andThen(Effect.fail(fallbackError(resource, content.content.length, limits))),
+              ),
+            ),
+          )
+          if (result === undefined) {
+            if (content.content.length > limits.maxBase64Bytes)
+              return yield* sizeError(resource, content.content.length, limits)
+            return content
+          }
+          const mime = result.mime.toLowerCase()
+          if (result.bytes.length === 0 || !ALLOWED_OUTPUT_MIMES.has(mime)) {
+            yield* Effect.logWarning("image.resizer_invalid_output").pipe(
+              Effect.annotateLogs({ resource, mime: result.mime, bytes: result.bytes.length }),
+            )
+            return yield* fallbackError(resource, content.content.length, limits)
+          }
+          const encodedBytes = Math.ceil(result.bytes.length / 3) * 4
+          if (encodedBytes > limits.maxBase64Bytes) return yield* sizeError(resource, encodedBytes, limits)
+          return { ...content, content: bytesToBase64(result.bytes), encoding: "base64" as const, mime }
+        })
         return Service.of({ transform: state.transform, reload: state.reload, normalize })
       }
       const loadAdapter = yield* Effect.cached(

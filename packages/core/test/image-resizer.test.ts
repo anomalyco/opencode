@@ -207,6 +207,9 @@ describe("Image.configured", () => {
         expect(
           yield* invalid.normalize("bad.png", { ...sample, content: "%%%not-base64%%%" }).pipe(Effect.flip),
         ).toEqual(new Image.DecodeError({ resource: "bad.png" }))
+        expect(yield* invalid.normalize("empty-input.png", { ...sample, content: "" }).pipe(Effect.flip)).toEqual(
+          new Image.DecodeError({ resource: "empty-input.png" }),
+        )
 
         const syncThrow = yield* Image.Service.pipe(
           Effect.provide(
@@ -242,6 +245,16 @@ describe("Image.configured", () => {
         )
         expect(yield* emptyBytes.normalize("empty.png", sample).pipe(Effect.flip)).toEqual(
           new Image.ResizerUnavailableError(),
+        )
+
+        yield* syncThrow.transform((editor) => editor.configure({ maxBase64Bytes: sample.content.length - 1 }))
+        expect(yield* syncThrow.normalize("oversized-throw.png", sample).pipe(Effect.flip)).toBeInstanceOf(
+          Image.SizeError,
+        )
+
+        yield* unsupportedMime.transform((editor) => editor.configure({ maxBase64Bytes: sample.content.length - 1 }))
+        expect(yield* unsupportedMime.normalize("oversized-avif.png", sample).pipe(Effect.flip)).toBeInstanceOf(
+          Image.SizeError,
         )
       }),
   )
