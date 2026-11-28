@@ -199,6 +199,27 @@ test("import sends the file unchanged to the resolved location", async () => {
   }
 })
 
+test("import reports a missing file without a stack trace", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-missing-"))
+
+  try {
+    const [stdout, stderr, exitCode] = await run([
+      "session",
+      "import",
+      path.join(root, "missing.json"),
+      "--server",
+      "http://127.0.0.1:1",
+    ])
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe("")
+    expect(stderr).toStartWith("Failed to read session data: ")
+    expect(stderr).not.toContain("    at ")
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("import reports an existing session without a stack trace", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-conflict-"))
   const file = path.join(root, "session.json")
