@@ -20,13 +20,22 @@ test.each(cases)("rich_media is %s", (_, experimental, channel, overrides, expec
   expect(flagEnabled({ key: "rich_media", experimental, channel, overrides })).toBe(expected)
 })
 
-// An opt-in-only flag, full_codemode, turns on only by name.
+// An opt-in-only flag, todo, turns on only by name.
 test.each([
   ["off in a local build", undefined, "local", undefined, false],
   ["not turned on by all_flags", { all_flags: true }, "local", undefined, false],
   ["not turned on by OPENCODE_FLAGS=all", undefined, "local", "all", false],
-  ["on by name in config", { full_codemode: true }, "latest", undefined, true],
-  ["on by name in OPENCODE_FLAGS", undefined, "latest", "all,full_codemode", true],
-] as const)("full_codemode is %s", (_, experimental, channel, overrides, expected) => {
-  expect(flagEnabled({ key: "full_codemode", experimental, channel, overrides })).toBe(expected)
+  ["on by name in config", { todo: true }, "latest", undefined, true],
+  ["on by name in OPENCODE_FLAGS", undefined, "latest", "all,todo", true],
+] as const)("todo is %s", (_, experimental, channel, overrides, expected) => {
+  expect(flagEnabled({ key: "todo", experimental, channel, overrides })).toBe(expected)
+})
+
+// A local-only flag, opencode_api, stays off in a release whatever turns it on.
+test.each([
+  ["on in a local build", undefined, "local", undefined, true],
+  ["off in a release named in OPENCODE_FLAGS", undefined, "latest", "opencode_api", false],
+  ["off in a release set in config", { opencode_api: true }, "latest", undefined, false],
+] as const)("opencode_api is %s", (_, experimental, channel, overrides, expected) => {
+  expect(flagEnabled({ key: "opencode_api", experimental, channel, overrides })).toBe(expected)
 })
