@@ -428,8 +428,8 @@ export interface KeymapCommand {
   readonly slash?: {
     readonly name: string
     readonly aliases?: string[]
-    /** Keeps the slash command in the prompt and passes its raw input to run. */
-    readonly arguments?: true
+    /** Passes raw text after the slash command to run. `"optional"` still runs immediately when chosen from autocomplete. */
+    readonly arguments?: true | "optional"
   }
   /** Promotes the command in discovery UI. */
   readonly suggested?: boolean | (() => boolean)

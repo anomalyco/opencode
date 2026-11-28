@@ -786,8 +786,14 @@ function App() {
         title: "Switch session",
         category: "Session",
         suggested: data.session.list().length > 0,
-        slash: { name: "sessions", aliases: ["resume", "continue"] },
-        run: () => {
+        slash: { name: "sessions", aliases: ["resume", "continue"], arguments: "optional" as const },
+        run: (input?: string) => {
+          const sessionID = input?.trim()
+          if (sessionID) {
+            route.navigate({ type: "session", sessionID })
+            dialog.clear()
+            return
+          }
           dialog.replace(() => <DialogSessionList />)
         },
       },
