@@ -162,6 +162,19 @@ describe("directoryAutocompleteSearch", () => {
       query: "pro",
     })
   })
+
+  test.if(path.sep === "\\")("splits Windows paths typed with backslashes", () => {
+    expect(directoryAutocompleteSearch("c:\\code", "c:\\project", "c:\\users\\me")).toEqual({
+      directory: "c:\\",
+      prefix: "c:\\",
+      query: "code",
+    })
+    expect(directoryAutocompleteSearch("packages\\core", "c:\\project", "c:\\users\\me")).toEqual({
+      directory: "c:\\project\\packages",
+      prefix: "packages\\",
+      query: "core",
+    })
+  })
 })
 
 describe("directoryAutocompleteResultValue", () => {
