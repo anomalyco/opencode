@@ -10,6 +10,7 @@ import { filetype } from "../../util/filetype"
 import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig, useCursorStyle } from "../../config"
+import { I18n } from "../../i18n"
 import { Keymap } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
 import { usePathFormatter } from "../../context/path-format"
@@ -79,7 +80,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
           when={props.patch}
           fallback={
             <box paddingLeft={1}>
-              <text fg={theme.text.muted}>No diff provided</text>
+              <text fg={theme.text.muted}>{I18n.t("permission.nodiff")}</text>
             </box>
           }
         >
@@ -171,7 +172,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             ) : props.request.action === "external_directory" ? (
               <Show when={current.lines.length > 0}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.text.muted}>Patterns</text>
+                  <text fg={theme.text.muted}>{I18n.t("permission.patterns")}</text>
                   <box>
                     <For each={current.lines}>{(line) => <text fg={theme.text.base}>{line}</text>}</For>
                   </box>
@@ -201,7 +202,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text.feedback.warning.base}>{"△"}</text>
-                <text fg={theme.text.base}>Permission required</text>
+                <text fg={theme.text.base}>{I18n.t("permission.required")}</text>
               </box>
               <Show when={props.request.action !== "shell" && current.title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
@@ -216,7 +217,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
           const body = (
             <SessionQuestion
-              title="Permission required"
+              title={I18n.t("permission.required")}
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
@@ -266,7 +267,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 }
 
 export function permissionSemanticLabel(action: string, title?: string) {
-  return `Permission required: ${title ?? action}`
+  return I18n.t("permission.semantic", { title: title ?? action })
 }
 
 function RejectPrompt(props: {
@@ -322,10 +323,10 @@ function RejectPrompt(props: {
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
           <text fg={theme.text.feedback.error.base}>{"△"}</text>
-          <text fg={theme.text.base}>Reject permission</text>
+          <text fg={theme.text.base}>{I18n.t("permission.reject")}</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.text.muted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.text.muted}>{I18n.t("permission.reject.hint")}</text>
         </box>
       </box>
       <box

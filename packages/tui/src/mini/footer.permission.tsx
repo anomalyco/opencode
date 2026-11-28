@@ -29,6 +29,7 @@ import {
   type PermissionOption,
 } from "./permission.shared"
 import { stringWidth } from "../util/string-width"
+import { I18n } from "../i18n"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
@@ -111,7 +112,7 @@ export function RejectField(props: {
       minHeight={1}
       maxHeight={3}
       wrapMode="word"
-      placeholder="Tell OpenCode what to do differently"
+      placeholder={I18n.t("permission.reject.hint")}
       placeholderColor={props.theme.muted}
       textColor={props.theme.formfieldText}
       focusedTextColor={props.theme.formfieldFocusedText}
@@ -171,19 +172,21 @@ export function RunPermissionBody(props: {
   const controlsWidth = () => opts().reduce((total, option) => total + stringWidth(permissionLabel(option)) + 3, -1)
   const hint = () =>
     compact() && width() < 56
-      ? "pgup/pgdn scroll"
-      : `${props.mono ? "left/right" : "⇆"} select  enter confirm  esc ${stage() === "always" ? "cancel" : "reject"}`
+      ? `pgup/pgdn ${I18n.t("hint.scroll")}`
+      : `${props.mono ? "left/right" : "⇆"} ${I18n.t("hint.select")}  enter ${I18n.t("hint.confirm")}  esc ${
+          stage() === "always" ? I18n.t("hint.cancel") : I18n.t("hint.reject")
+        }`
   const inlineControls = () => controlsWidth() + stringWidth(hint()) + 1 <= width() - (compact() ? 0 : 5)
   const title = createMemo(() => {
     if (stage() === "always") {
-      return "Always allow"
+      return I18n.t("permission.option.always")
     }
 
     if (stage() === "reject") {
-      return width() < 24 ? "Reject" : "Reject permission"
+      return width() < 24 ? I18n.t("permission.reject.short") : I18n.t("permission.reject")
     }
 
-    return width() < 24 ? "Permission" : "Permission required"
+    return width() < 24 ? I18n.t("permission.required.short") : I18n.t("permission.required")
   })
 
   createEffect(() => {
@@ -323,7 +326,7 @@ export function RunPermissionBody(props: {
           {title()}
         </text>
         <Show when={!compact() && stage() === "reject"}>
-          <text fg={props.theme.muted}>Tell OpenCode what to do differently</text>
+          <text fg={props.theme.muted}>{I18n.t("permission.reject.hint")}</text>
         </Show>
       </box>
 
@@ -362,16 +365,16 @@ export function RunPermissionBody(props: {
                 when={!busy()}
                 fallback={
                   <text fg={props.theme.running} height={1} wrapMode="none" truncate flexShrink={0}>
-                    {compact() ? "Waiting…" : "Waiting for permission event…"}
+                    {compact() ? I18n.t("permission.waiting") : I18n.t("permission.waiting.long")}
                   </text>
                 }
               >
                 <box flexDirection="row" flexWrap="wrap" columnGap={compact() ? 1 : 2} flexShrink={0}>
                   <text fg={props.theme.text} height={1} wrapMode="none" flexShrink={0}>
-                    enter <span style={{ fg: props.theme.muted }}>{compact() ? "reject" : "confirm"}</span>
+                    enter <span style={{ fg: props.theme.muted }}>{compact() ? I18n.t("hint.reject") : I18n.t("hint.confirm")}</span>
                   </text>
                   <text fg={props.theme.text} height={1} wrapMode="none" flexShrink={0}>
-                    esc <span style={{ fg: props.theme.muted }}>{compact() ? "back" : "cancel"}</span>
+                    esc <span style={{ fg: props.theme.muted }}>{compact() ? I18n.t("hint.back") : I18n.t("hint.cancel")}</span>
                   </text>
                 </box>
               </Show>
@@ -486,7 +489,7 @@ export function RunPermissionBody(props: {
                   </Show>
                   <Show when={!info().diff && !info().patch && info().lines.length === 0}>
                     <text width="100%" fg={props.theme.muted} flexShrink={0}>
-                      No diff provided
+                      {I18n.t("permission.nodiff")}
                     </text>
                   </Show>
                 </box>
@@ -535,7 +538,7 @@ export function RunPermissionBody(props: {
             when={!busy()}
             fallback={
               <text fg={props.theme.running} height={1} wrapMode="none" truncate flexShrink={0}>
-                {compact() ? "Waiting…" : "Waiting for permission event…"}
+                {compact() ? I18n.t("permission.waiting") : I18n.t("permission.waiting.long")}
               </text>
             }
           >
@@ -545,13 +548,13 @@ export function RunPermissionBody(props: {
                 fallback={
                   <>
                     {props.mono ? "left/right" : "⇆"}
-                    <span style={{ fg: props.theme.muted }}>{" select  "}</span>
-                    enter<span style={{ fg: props.theme.muted }}>{" confirm  "}</span>
-                    esc<span style={{ fg: props.theme.muted }}> {stage() === "always" ? "cancel" : "reject"}</span>
+                    <span style={{ fg: props.theme.muted }}>{` ${I18n.t("hint.select")}  `}</span>
+                    enter<span style={{ fg: props.theme.muted }}>{` ${I18n.t("hint.confirm")}  `}</span>
+                    esc<span style={{ fg: props.theme.muted }}> {stage() === "always" ? I18n.t("hint.cancel") : I18n.t("hint.reject")}</span>
                   </>
                 }
               >
-                pgup/pgdn<span style={{ fg: props.theme.muted }}> scroll</span>
+                pgup/pgdn<span style={{ fg: props.theme.muted }}> {I18n.t("hint.scroll")}</span>
               </Show>
             </text>
           </Show>
