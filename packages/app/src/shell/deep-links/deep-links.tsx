@@ -5,8 +5,10 @@ import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/
 import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { isSessionNotFoundError } from "@/runtime/server/errors"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
+import { showToast } from "@/shell/notifications/toast"
 import { useCurrentRoute } from "@/shell/state/layout"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import {
@@ -84,6 +86,7 @@ export function useDeepLinks() {
   const global = useGlobal()
   const tabs = useTabs()
   const dialog = useDialog()
+  const language = useLanguage()
   const currentRoute = useCurrentRoute()
 
   const own = createMemo(() => servers.list.find(ServerConnection.builtin))
@@ -154,26 +157,34 @@ export function useDeepLinks() {
       await tabs.newDraft({ server, directory: project.worktree }, prompt)
     },
     openSession: async (link) => {
-      await openSessionDeepLink(
+      const outcome = await openSessionDeepLink(
         link,
         {
           servers: untrack(() => servers.list),
           activeServer: activeServer(),
           cached: (server, sessionID) => untrack(() => global.serverCtx(server)?.data.session.get(sessionID)),
-          fetch: async (server, sessionID) => {
+          fetch: async (server, sessionID, signal) => {
             const ctx = untrack(() => global.serverCtx(server))
 
-            if (!ctx || untrack(() => ctx.sdk.connection.status()) !== "connected") return
+            if (!ctx || untrack(() => ctx.sdk.connection.status()) !== "connected") return { status: "unavailable" }
 
-            const info = await ctx.sdk.api.session.get({ sessionID }).catch(() => undefined)
+            return ctx.sdk.api.session.get({ sessionID }, { signal }).then(
+              (session) => {
+                ctx.data.session.remember(session)
 
-            if (info) ctx.data.session.remember(info)
-
-            return info
+                return { status: "found" as const, session }
+              },
+              (cause: unknown) =>
+                isSessionNotFoundError(cause, sessionID)
+                  ? { status: "not-found" as const }
+                  : { status: "unavailable" as const },
+            )
           },
         },
         tabs,
       )
+
+      if (outcome === "not-found") showToast({ title: language.t("session.error.notFound") })
     },
   })
 }

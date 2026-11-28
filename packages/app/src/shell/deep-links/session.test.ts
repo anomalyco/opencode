@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, jest, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { SessionTab, Tab } from "@/shell/tabs/tabs"
@@ -9,7 +9,12 @@ import {
   resolveSessionDeepLink,
   type DeepLinkSessionInfo,
   type SessionDeepLinkTabs,
+  type SessionFetchResult,
 } from "./session"
+
+afterEach(() => {
+  jest.useRealTimers()
+})
 
 const sidecar: ServerConnection.Sidecar = {
   type: "sidecar",
@@ -75,6 +80,10 @@ function createTabsRecorder(initial: SessionTab[] = []) {
   return { tabs, store, selected }
 }
 
+function foundOrNotFound(session: DeepLinkSessionInfo | undefined): SessionFetchResult {
+  return session ? { status: "found", session } : { status: "not-found" }
+}
+
 describe("session deep link server resolution", () => {
   const servers: ServerConnection.Any[] = [sidecar, remote, pluginReady, pluginStopped]
 
@@ -97,7 +106,7 @@ describe("session deep link server resolution", () => {
     const recorder = createTabsRecorder()
     let fetched = 0
 
-    const opened = await openSessionDeepLink(
+    const outcome = await openSessionDeepLink(
       { type: "session", sessionID: "ses_1", server: "https://untrusted.example.com" },
       {
         servers: [sidecar, remote],
@@ -106,19 +115,62 @@ describe("session deep link server resolution", () => {
         fetch: async () => {
           fetched += 1
 
-          return undefined
+          return { status: "not-found" }
         },
       },
       recorder.tabs,
     )
 
-    expect(opened).toBe(false)
+    expect(outcome).toBe("unknown-server")
     expect(fetched).toBe(0)
     expect(recorder.store).toEqual([])
     expect(recorder.selected).toEqual([])
   })
 
-  test("resolves omitted ?server= by checking connected servers and falling back to active server", async () => {
+  test("does not open a broken tab when explicit ?server= reports not-found, but opens when transiently unavailable", async () => {
+    const notFoundRecorder = createTabsRecorder()
+
+    const notFound = await openSessionDeepLink(
+      { type: "session", sessionID: "ses_missing", server: "http://100.73.96.98:4097" },
+      {
+        servers: [sidecar, remote],
+        activeServer: sidecarKey,
+        cached: () => undefined,
+        fetch: async () => ({ status: "not-found" }),
+      },
+      notFoundRecorder.tabs,
+    )
+
+    expect(notFound).toBe("not-found")
+    expect(notFoundRecorder.store).toEqual([])
+    expect(notFoundRecorder.selected).toEqual([])
+
+    const unavailableRecorder = createTabsRecorder()
+
+    const unavailable = await openSessionDeepLink(
+      { type: "session", sessionID: "ses_offline", server: "http://100.73.96.98:4097" },
+      {
+        servers: [sidecar, remote],
+        activeServer: sidecarKey,
+        cached: () => undefined,
+        fetch: async () => ({ status: "unavailable" }),
+      },
+      unavailableRecorder.tabs,
+    )
+
+    expect(unavailable).toBe("opened")
+    expect(unavailableRecorder.selected).toEqual([
+      {
+        type: "session",
+        server: remoteKey,
+        sessionId: "ses_offline",
+        routeSessionId: undefined,
+        routeParentId: undefined,
+      },
+    ])
+  })
+
+  test("resolves omitted ?server= by checking connected servers and does not open a tab when none own it", async () => {
     const sessions = new Map<string, DeepLinkSessionInfo>([[`${remoteKey}:ses_remote`, { id: "ses_remote" }]])
 
     const resolvedRemote = await resolveSessionDeepLink(
@@ -127,23 +179,70 @@ describe("session deep link server resolution", () => {
         servers: [sidecar, remote],
         activeServer: sidecarKey,
         cached: () => undefined,
-        fetch: async (server, sessionID) => sessions.get(`${server}:${sessionID}`),
+        fetch: async (server, sessionID) => foundOrNotFound(sessions.get(`${server}:${sessionID}`)),
       },
     )
 
-    expect(resolvedRemote).toEqual({ server: remoteKey, session: { id: "ses_remote" } })
+    expect(resolvedRemote).toEqual({ status: "found", server: remoteKey, session: { id: "ses_remote" } })
 
-    const fallback = await resolveSessionDeepLink(
+    const recorder = createTabsRecorder()
+
+    const missing = await openSessionDeepLink(
       { type: "session", sessionID: "ses_unknown", server: undefined },
       {
         servers: [sidecar, remote],
         activeServer: remoteKey,
         cached: () => undefined,
-        fetch: async () => undefined,
+        fetch: async () => ({ status: "not-found" }),
       },
+      recorder.tabs,
     )
 
-    expect(fallback).toEqual({ server: remoteKey, session: undefined })
+    expect(missing).toBe("not-found")
+    expect(recorder.store).toEqual([])
+    expect(recorder.selected).toEqual([])
+  })
+
+  test("aborts a hanging server lookup on timeout so another server's match still opens", async () => {
+    jest.useFakeTimers()
+    const recorder = createTabsRecorder()
+    let hangingSignal: AbortSignal | undefined
+
+    const pending = openSessionDeepLink(
+      { type: "session", sessionID: "ses_fast", server: undefined },
+      {
+        servers: [sidecar, remote],
+        activeServer: sidecarKey,
+        cached: () => undefined,
+        fetch: (server, sessionID, signal) => {
+          if (server === sidecarKey) {
+            hangingSignal = signal
+
+            return new Promise(() => {})
+          }
+
+          return Promise.resolve(foundOrNotFound(sessionID === "ses_fast" ? { id: "ses_fast" } : undefined))
+        },
+      },
+      recorder.tabs,
+    )
+
+    expect(hangingSignal?.aborted).toBe(false)
+    jest.advanceTimersToNextTimer()
+
+    const outcome = await pending
+
+    expect(hangingSignal?.aborted).toBe(true)
+    expect(outcome).toBe("opened")
+    expect(recorder.selected).toEqual([
+      {
+        type: "session",
+        server: remoteKey,
+        sessionId: "ses_fast",
+        routeSessionId: undefined,
+        routeParentId: undefined,
+      },
+    ])
   })
 
   test("opens a subagent session nested under its root session tab", async () => {
@@ -155,18 +254,18 @@ describe("session deep link server resolution", () => {
       ["ses_child", { id: "ses_child", parentID: "ses_parent" }],
     ])
 
-    const opened = await openSessionDeepLink(
+    const outcome = await openSessionDeepLink(
       { type: "session", sessionID: "ses_child", server: "http://100.73.96.98:4097/" },
       {
         servers: [sidecar, remote],
         activeServer: sidecarKey,
         cached: () => undefined,
-        fetch: async (server, sessionID) => (server === remoteKey ? sessions.get(sessionID) : undefined),
+        fetch: async (server, sessionID) => foundOrNotFound(server === remoteKey ? sessions.get(sessionID) : undefined),
       },
       recorder.tabs,
     )
 
-    expect(opened).toBe(true)
+    expect(outcome).toBe("opened")
     expect(recorder.store).toEqual([
       {
         type: "session",
@@ -198,18 +297,18 @@ describe("session deep link server resolution", () => {
       },
     ])
 
-    const opened = await openSessionDeepLink(
+    const outcome = await openSessionDeepLink(
       { type: "session", sessionID: "ses_root", server: undefined },
       {
         servers: [sidecar],
         activeServer: sidecarKey,
         cached: (_server, sessionID) => (sessionID === "ses_root" ? { id: "ses_root" } : undefined),
-        fetch: async () => undefined,
+        fetch: async () => ({ status: "not-found" }),
       },
       recorder.tabs,
     )
 
-    expect(opened).toBe(true)
+    expect(outcome).toBe("opened")
     expect(recorder.store).toEqual([
       {
         type: "session",
@@ -266,8 +365,15 @@ describe("deep link driver integration", () => {
               servers: [sidecar, remote],
               activeServer: sidecarKey,
               cached: () => undefined,
-              fetch: async (server, sessionID) =>
-                server === sidecarKey && sessionID === "ses_live" ? { id: "ses_live" } : undefined,
+              fetch: async (server, sessionID) => {
+                if (server === remoteKey && sessionID === "ses_queued")
+                  return { status: "found", session: { id: "ses_queued" } }
+
+                if (server === sidecarKey && sessionID === "ses_live")
+                  return { status: "found", session: { id: "ses_live" } }
+
+                return { status: "not-found" }
+              },
             },
             recorder.tabs,
           )
@@ -301,6 +407,7 @@ describe("deep link driver integration", () => {
       listener([
         "opencode://console/authorized?window=a",
         "opencode://session/ses_bad?server=https%3A%2F%2Fevil.example.com",
+        "opencode://session/ses_missing",
         "opencode://session/ses_live",
       ]),
     )
