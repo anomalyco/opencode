@@ -52,6 +52,7 @@ import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream, Tracer } from
 import { TestClock } from "effect/testing"
 import { asc, eq, inArray, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { disabledWatcher } from "./fixture/watcher"
 
 let requests: LLMRequest[] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
@@ -128,6 +129,7 @@ const layer = AppNodeBuilder.build(
     Bus.node.replace(Bus.configured({ persist: true })),
     llmClient.replace(client),
     Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    disabledWatcher,
   ],
 )
 // Tests channels keep flags off; the subagent tests turn theirs on.

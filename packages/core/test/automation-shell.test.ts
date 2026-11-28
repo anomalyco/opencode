@@ -25,10 +25,12 @@ import { offlineModels } from "./fixture/models"
 import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { disabledWatcher } from "./fixture/watcher"
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Automation.node, Bus.node, Database.node, Instance.node, Session.node]), [
     offlineModels,
+    disabledWatcher,
     PersistentPty.node.replace(disabledPersistentPtyLayer),
     SessionExecution.node.replace(
       Layer.mock(SessionExecution.Service, { wake: () => Effect.die("Shell actions must not wake a session") }),

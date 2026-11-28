@@ -9,6 +9,7 @@ import { buildLocationServiceMap } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { tmpdir } from "../../fixture/tmpdir"
+import { disabledWatcher } from "../../fixture/watcher"
 import { testEffect } from "../../lib/effect"
 
 class Value extends Context.Service<Value, { readonly value: string }>()("test/TagValue") {}
@@ -109,6 +110,7 @@ describe("node build", () => {
     const ref = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
     const layer = AppNodeBuilder.build(LayerNode.group([LocationServiceMap.node, Project.node]), [
       Project.node.replace(projectLayer),
+      disabledWatcher,
     ])
     const program = Effect.gen(function* () {
       yield* Project.Service

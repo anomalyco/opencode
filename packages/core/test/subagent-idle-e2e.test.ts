@@ -47,6 +47,7 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Ref, Schedule, S
 import { TestClock } from "effect/testing"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
@@ -174,6 +175,7 @@ const boot = (
         Database.node.replace(Database.configured({ path: input.database })),
         Global.node.replace(Layer.succeedContext(input.global)),
         offlineModels,
+        disabledWatcher,
         PluginSupervisor.node.replace(pluginSupervisor),
         LayerNodePlatform.llmClient.replace(Layer.succeedContext(input.llm)),
         SessionRunnerModel.node.replace(modelLayer),

@@ -19,6 +19,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, Exit, Layer, Schedule, Scope, Stream } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tempLocationLayer } from "./fixture/location"
+import { disabledWatcher } from "./fixture/watcher"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
@@ -51,6 +52,7 @@ const it = testEffect(
     Credential.node.replace(Layer.mock(Credential.Service, {})),
     Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
     Image.node.replace(imagePassthrough),
+    disabledWatcher,
   ]),
 )
 

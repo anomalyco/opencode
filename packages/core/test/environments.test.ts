@@ -40,6 +40,7 @@ import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
+import { disabledWatcher } from "./fixture/watcher"
 
 const bytes = (value: string) => new TextEncoder().encode(value)
 const text = (value: Uint8Array) => new TextDecoder().decode(value)
@@ -131,6 +132,7 @@ const buildLayer = (options: {
         }),
       ),
       PersistentPty.node.replace(disabledPersistentPtyLayer),
+      disabledWatcher,
       Flag.node.replace(Flag.testLayer([], { overrides: options.machinesFlag === false ? "-machines" : "machines" })),
       InstructionDiscovery.node.replace(
         Layer.mock(InstructionDiscovery.Service, { project: true, global: true, claude: true }),

@@ -13,6 +13,7 @@ import { tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
+import { disabledWatcher } from "./fixture/watcher"
 
 function provide(directory: string, projectDirectory = directory, environment?: Environment.Driver) {
   return Effect.provide(
@@ -26,6 +27,7 @@ function provide(directory: string, projectDirectory = directory, environment?: 
             ]
           : []),
         Permission.node.replace(permissionLayer()),
+        disabledWatcher,
         Location.node.replace(
           Layer.succeed(
             Location.Service,

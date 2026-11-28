@@ -26,6 +26,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
 import { testEffect } from "./lib/effect"
+import { disabledWatcher } from "./fixture/watcher"
 
 const decode = (checkpoint: { readonly native: { readonly messages: unknown } }) =>
   Schema.decodeUnknownSync(SessionHistory.NativeWindow)(checkpoint.native.messages)
@@ -46,6 +47,7 @@ const it = testEffect(
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      disabledWatcher,
     ],
   ),
 )
