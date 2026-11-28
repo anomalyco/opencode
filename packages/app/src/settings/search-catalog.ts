@@ -154,7 +154,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "new timeline redesign activity explored edited ran grouping status",
   },
   // Matches questionComposerAvailable in settings/model.tsx; that module is too heavy to import here.
-  ...(import.meta.env.VITE_OPENCODE_CHANNEL === "local" || import.meta.env.VITE_OPENCODE_CHANNEL === "dev"
+  ...(import.meta.env?.VITE_OPENCODE_CHANNEL === "local" || import.meta.env?.VITE_OPENCODE_CHANNEL === "dev"
     ? [
         {
           tab: "experimental",
