@@ -292,6 +292,35 @@ test.skipIf(process.platform === "win32")("port owner is unknown for a free port
   ).toBeUndefined()
 })
 
+test("port owner finds the Windows excluded range containing a port", () => {
+  const netsh = [
+    "Start Port    End Port",
+    "----------    --------",
+    "      5357        5357",
+    "     18905       19004",
+    "     19405       19504",
+    "     50000       50059     *",
+    "* - Administered port exclusions.",
+    "",
+  ].join("\n")
+  expect(PortOwner.excludedRange(netsh, 19478)).toEqual({ start: 19405, end: 19504 })
+  expect(PortOwner.excludedRange(netsh, 19405)).toEqual({ start: 19405, end: 19504 })
+  expect(PortOwner.excludedRange(netsh, 19504)).toEqual({ start: 19405, end: 19504 })
+  expect(PortOwner.excludedRange(netsh, 50000)).toEqual({ start: 50000, end: 50059 })
+  expect(PortOwner.excludedRange(netsh, 5357)).toEqual({ start: 5357, end: 5357 })
+  expect(PortOwner.excludedRange(netsh, 19620)).toBeUndefined()
+  expect(PortOwner.excludedRange(netsh, 19005)).toBeUndefined()
+  expect(PortOwner.excludedRange("", 19478)).toBeUndefined()
+})
+
+test.skipIf(process.platform === "win32")("port owner reserved range lookup is Windows only", async () => {
+  expect(
+    await Effect.runPromise(
+      PortOwner.reservedRange(19478).pipe(Effect.provide(LayerNode.compile(AppProcess.node))),
+    ),
+  ).toBeUndefined()
+})
+
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
   expect(ServiceConfig.filename("dev")).toBe("service.json")

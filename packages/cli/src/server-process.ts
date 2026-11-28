@@ -171,6 +171,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         Effect.catch((error) => {
           if (findIncumbent === undefined || !addressInUse(error)) return Effect.fail(error)
           return Effect.gen(function* () {
+            const reserved = port === undefined ? undefined : yield* PortOwner.reservedRange(port)
+            if (reserved !== undefined)
+              return yield* Effect.fail(
+                new Error(
+                  `Managed service port ${port} on ${hostname} is reserved by Windows (excluded port range ${reserved}). ` +
+                    "No process is using it. Configure another port with `opencode service set port <port>` and start the service again.",
+                  { cause: error },
+                ),
+              )
             const deadline = Date.now() + 15_000
             while (Date.now() < deadline) {
               const found = yield* findIncumbent.pipe(Effect.timeoutOption(deadline - Date.now()))
