@@ -1,5 +1,6 @@
 export * as SessionRestart from "./restart.js"
 
+import { and, eq, sql } from "drizzle-orm"
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -22,6 +23,7 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
 import { SessionSchema } from "../schema.js"
+import { SessionInboxTable } from "../sql.js"
 import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
@@ -536,6 +538,34 @@ export const layer = (options?: Options) =>
             }),
             { concurrency: "unbounded", discard: true },
           )
+
+          // A nested parent whose wake was deferred while siblings ran may already have
+          // admitted subagent reports in its inbox. Wake it on boot so no report is stranded
+          // if the remaining sibling was dropped or finishes without a report after restart.
+          const pendingSubagentParents = yield* db
+            .selectDistinct({ sessionID: SessionInboxTable.session_id })
+            .from(SessionInboxTable)
+            .where(
+              and(
+                eq(SessionInboxTable.type, "synthetic"),
+                sql`json_extract(${SessionInboxTable.payload}, '$.metadata.source') = 'subagent'`,
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
+          const directSet = new Set(direct)
+          const currentlyActive = yield* execution.active
+          for (const { sessionID } of pendingSubagentParents) {
+            if (
+              active.has(sessionID) ||
+              currentlyActive.has(sessionID) ||
+              directSet.has(sessionID) ||
+              suspended.has(sessionID)
+            )
+              continue
+            const session = yield* store.get(sessionID)
+            if (session?.parentID && !session.revert) wakes.add(sessionID)
+          }
 
           // Start children only now: their settlement reports wake parents, so the parent's
           // restart budget must already be charged. SessionExecution's settle hook owns the

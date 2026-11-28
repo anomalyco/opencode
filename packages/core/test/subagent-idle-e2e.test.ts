@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { LanguageModel } from "@opencode/ai/effect"
+import { LLMEvent, LanguageModel } from "@opencode/ai/effect"
 import type { LLMClientService } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -148,7 +148,7 @@ const crashInbox = (crashed: Deferred.Deferred<void>) =>
 
 type InboxNode = ReturnType<typeof crashInbox>
 
-type Response = ReturnType<typeof TestLLM.text>
+type Response = TestLLM.Response
 
 const script = (responses: Record<string, ReadonlyArray<Response>>) => {
   const queues = new Map(Object.entries(responses).map(([agent, queue]) => [agent, [...queue]]))
@@ -623,6 +623,108 @@ describe("subagent idle reports end to end", () => {
             report.text.includes(`<background-result kind="subagent" sessionID="${grandchildID}"`),
           ),
         ).toBe(false)
+        expect(yield* h.jobs.pendingBackground).toEqual([])
+      }),
+    30_000,
+  )
+
+  e2e.live(
+    "coalesces sibling grandchild completions into a single wake turn for a nested subagent",
+    () =>
+      Effect.gen(function* () {
+        const h = yield* harness({
+          config: {
+            experimental: { subagent_depth: 2 },
+            permissions: [{ action: "*", resource: "*", effect: "allow" }],
+          },
+        })
+        const gates = yield* Effect.all(
+          [0, 1, 2].map(() =>
+            Effect.all({
+              started: Deferred.make<void>(),
+              release: Deferred.make<void>(),
+            }),
+          ),
+        )
+        const gatedText = (index: number, value: string, id: string): TestLLM.Response =>
+          Stream.unwrap(
+            Deferred.succeed(gates[index]!.started, undefined).pipe(
+              Effect.andThen(Deferred.await(gates[index]!.release)),
+              Effect.as(Stream.fromIterable(TestLLM.text(value, id))),
+            ),
+          )
+        yield* h.llm.serve(
+          script({
+            reviewer: [
+              TestLLM.toolCalls(
+                LLMEvent.toolCall({
+                  id: "call-gc-1",
+                  name: SubagentTool.name,
+                  input: { agent: "fallback", description: "leaf 1", prompt: "work 1" },
+                }),
+                LLMEvent.toolCall({
+                  id: "call-gc-2",
+                  name: SubagentTool.name,
+                  input: { agent: "fallback", description: "leaf 2", prompt: "work 2" },
+                }),
+                LLMEvent.toolCall({
+                  id: "call-gc-3",
+                  name: SubagentTool.name,
+                  input: { agent: "fallback", description: "leaf 3", prompt: "work 3" },
+                }),
+              ),
+              TestLLM.text("launched three leaves", "mid-turn-1"),
+              TestLLM.text("synthesized all three leaves", "mid-turn-2"),
+            ],
+            fallback: [
+              gatedText(0, "leaf-1-done", "gc-1"),
+              gatedText(1, "leaf-2-done", "gc-2"),
+              gatedText(2, "leaf-3-done", "gc-3"),
+            ],
+            build: [TestLLM.text("parent ack 1", "parent-1"), TestLLM.text("parent ack 2", "parent-2")],
+          }),
+        )
+
+        const launched = yield* h.call("call-mid", { description: "coordinator" })
+        const midID = outputSessionID(launched.metadata)
+
+        yield* Effect.all(gates.map((gate) => Deferred.await(gate.started)))
+        yield* waitForReports(h, h.parent.id, 1)
+        const grandchildren = yield* h.store.list({ parentID: midID })
+        expect(grandchildren).toHaveLength(3)
+
+        // Release leaves 1 and 2 sequentially while leaf 3 is still running.
+        for (const index of [0, 1]) {
+          yield* Deferred.succeed(gates[index]!.release, undefined)
+          // Wait until another admitted synthetic notice lands in mid's inbox.
+          yield* Effect.suspend(() => SessionInbox.list(h.database.db, midID)).pipe(
+            Effect.filterOrFail(
+              (items) => items.length >= index + 1,
+              () => "waiting",
+            ),
+            Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 200 }),
+          )
+        }
+        // Mid has both reports queued in its inbox, yet has not woken for an extra turn.
+        expect(yield* h.execution.isActive(midID)).toBe(false)
+        expect((yield* h.llm.requests()).filter((request) => request.model.id === "reviewer")).toHaveLength(2)
+        expect(yield* deliveredReports(h, h.parent.id)).toHaveLength(1)
+
+        // Release the final leaf: mid wakes once, ingests all three reports together, and sends
+        // one final completed report to root.
+        yield* Deferred.succeed(gates[2]!.release, undefined)
+        yield* waitForReports(h, h.parent.id, 2)
+        const reviewerRequests = (yield* h.llm.requests()).filter((request) => request.model.id === "reviewer")
+        expect(reviewerRequests).toHaveLength(3)
+        const wakePrompt = JSON.stringify(reviewerRequests[2]!.messages)
+        expect(wakePrompt).toContain("leaf-1-done")
+        expect(wakePrompt).toContain("leaf-2-done")
+        expect(wakePrompt).toContain("leaf-3-done")
+
+        const rootReports = yield* deliveredReports(h, h.parent.id)
+        expect(rootReports).toHaveLength(2)
+        expect(rootReports[1]!.text).toContain("synthesized all three leaves")
+        expect(rootReports[1]!.text).not.toContain("Background work still running:")
         expect(yield* h.jobs.pendingBackground).toEqual([])
       }),
     30_000,
