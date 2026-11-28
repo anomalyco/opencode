@@ -836,4 +836,46 @@ describe("OpenAI-compatible Chat route", () => {
       })
     }),
   )
+
+  it.effect("sends null content for an assistant turn whose only text part is empty", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([
+              { type: "text", text: "" },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toMatchObject({ role: "assistant", content: null })
+    }),
+  )
+
+  it.effect("sends null content for an empty assistant text part that carries a cache hint", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: OpenAICompatibleChat.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+            .model({ id: "claude-sonnet-5", compatibility: { cacheFormat: "anthropic" } }),
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([
+              { type: "text", text: "", cache: { type: "ephemeral" } },
+              ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toMatchObject({ role: "assistant", content: null })
+    }),
+  )
 })
