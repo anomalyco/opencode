@@ -2283,6 +2283,24 @@ describe("Gemini response continuation", () => {
     }),
   )
 
+  it.effect("does not continue when blocked by a policy promptFeedback reason after a checkpoint token", () =>
+    Effect.gen(function* () {
+      const server = scripted([
+        sseEvents(
+          text("Partial", { continuationToken: "token-1" }),
+          {
+            promptFeedback: { blockReason: "PROHIBITED_CONTENT" },
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 11 },
+          },
+        ),
+      ])
+      const response = yield* LLMClient.generate(continuedRequest).pipe(Effect.provide(server.layer))
+
+      expect(response.finishReason).toEqual({ normalized: "content-filter", raw: "PROHIBITED_CONTENT" })
+      expect(server.bodies).toHaveLength(1)
+    }),
+  )
+
   it.effect("reports the first request's input with all output", () =>
     Effect.gen(function* () {
       const usage = [
