@@ -1719,6 +1719,30 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("preserves streamed tool input across an identical repeated start", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "call_1", name: "lookup" } },
+              { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":' } },
+              { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "call_1", name: "lookup" } },
+              { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '"weather"}' } },
+              { type: "content_block_stop", index: 0 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
+      expect(response.events.filter((event) => event.type === "tool-input-start")).toHaveLength(1)
+    }),
+  )
+
   it.effect("retains complete tool input from content_block_start", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

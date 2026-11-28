@@ -1208,6 +1208,14 @@ const onContentBlockStart = (
 
   if (block.type === "tool_use" || block.type === "server_tool_use") {
     if (event.index === undefined || !block.id) return [state, NO_EVENTS]
+    const existing = state.tools[event.index]
+    if (
+      existing &&
+      existing.id === block.id &&
+      existing.name === (block.name ?? "") &&
+      (existing.providerExecuted === true) === (block.type === "server_tool_use")
+    )
+      return [state, NO_EVENTS]
     const events: LLMEvent[] = []
     const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
     return [
