@@ -248,28 +248,90 @@ test.describe("timeline history", () => {
       assistantMessage([textPart("prt_active", "Checking the route")]),
     ]
 
-    // Scroll writes on the timeline, counted for each synchronous run: a batch of measured rows is one run.
+    // For each delivery of row sizes that resizes rows above the reader: how many such rows, every write to the
+    // timeline's scroll position until the sizes are applied, and how far the first row in view moved on screen.
     await page.addInitScript(() => {
-      const scrollTo = Element.prototype.scrollTo
-      const runs: number[] = (window.__scrollWrites = [])
-      const run = { open: false }
+      const batches: SizeBatch[] = (window.__sizeBatches = [])
+      // The deliveries whose sizes are not applied yet.
+      const open = new Set<SizeBatch>()
 
-      Element.prototype.scrollTo = function (
-        this: Element,
-        ...args: [options?: ScrollToOptions] | [x: number, y: number]
-      ) {
-        if (this.matches(".scroll-view__viewport") && !run.open) {
-          run.open = true
-          runs.push(0)
-          queueMicrotask(() => (run.open = false))
+      const written = (element: Element) => {
+        if (element === window.__timeline) open.forEach((batch) => batch.writes++)
+      }
+
+      ;(["scrollTo", "scroll", "scrollBy"] as const).forEach((method) => {
+        const native = Element.prototype[method]
+
+        Element.prototype[method] = function (
+          this: Element,
+          ...args: [options?: ScrollToOptions] | [x: number, y: number]
+        ) {
+          written(this)
+          const scroll = native.bind(this)
+
+          if (args.length === 2) return scroll(args[0], args[1])
+
+          return scroll(args[0])
         }
+      })
 
-        if (this.matches(".scroll-view__viewport")) runs[runs.length - 1]!++
-        const scroll = scrollTo.bind(this)
+      const offset = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")
 
-        if (args.length === 2) return scroll(args[0], args[1])
+      Object.defineProperty(Element.prototype, "scrollTop", {
+        ...offset,
+        set(this: Element, value: number) {
+          written(this)
+          offset?.set?.call(this, value)
+        },
+      })
 
-        return scroll(args[0])
+      const Native = window.ResizeObserver
+
+      window.ResizeObserver = class extends Native {
+        constructor(callback: ResizeObserverCallback) {
+          super((entries, observer) => {
+            const timeline = window.__timeline
+
+            if (!timeline) return callback(entries, observer)
+            // The session header covers the top of the timeline, so the reader's view starts below it. Rows do not
+            // overlap, so a pixel of rounding either way does not change which side of the fold a row is on.
+            const header = document.querySelector("[data-session-title]")
+            const fold = Math.max(timeline.getBoundingClientRect().top, header?.getBoundingClientRect().bottom ?? 0)
+
+            // The virtualizer gives each row a slot of the height it knows. A row of another height is resized by this
+            // delivery, and one that ends above the view moves what the reader sees.
+            const rows = entries.filter((entry) => {
+              const slot = entry.target.parentElement
+
+              if (!(slot instanceof HTMLElement) || !slot.hasAttribute("data-timeline-key")) return false
+
+              return (
+                timeline.contains(slot) &&
+                Math.round(entry.borderBoxSize[0]!.blockSize) !== parseFloat(slot.style.height) &&
+                slot.getBoundingClientRect().bottom <= fold + 1
+              )
+            }).length
+
+            if (!rows) return callback(entries, observer)
+
+            const anchor = [...timeline.querySelectorAll("[data-timeline-key]")]
+              .filter((slot) => slot.getBoundingClientRect().top >= fold - 1)
+              .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0]
+
+            const before = anchor?.getBoundingClientRect().top
+            const batch = { rows, writes: 0, moved: -1 }
+            batches.push(batch)
+            open.add(batch)
+            callback(entries, observer)
+            // The sizes are applied in a microtask that the delivery queued, so this one runs after it.
+            queueMicrotask(() => {
+              open.delete(batch)
+
+              if (!anchor?.isConnected || before === undefined) return
+              batch.moved = Math.round(Math.abs(anchor.getBoundingClientRect().top - before))
+            })
+          })
+        }
       }
     })
     await setupTimeline(page, {
@@ -284,16 +346,21 @@ test.describe("timeline history", () => {
 
     const scroller = timelineScroller(page)
     await expect(scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
-    await page.evaluate(() => window.__scrollWrites?.splice(0))
+    await scroller.evaluate((element) => {
+      window.__timeline = element
+    })
     // Each scroll to the top loads an older page, whose rows are measured above the reader.
     await scroller.hover()
     await expect(async () => {
       await page.mouse.wheel(0, -100_000)
       await expect(scroller.getByText(/^Historical response 0\. /)).toBeInViewport({ timeout: 1_000 })
     }).toPass()
-    const writes = await page.evaluate(() => window.__scrollWrites ?? [])
-    expect(writes.length).toBeGreaterThan(0)
-    expect(Math.max(...writes)).toBe(1)
+    const batches = await page.evaluate(() => window.__sizeBatches ?? [])
+    const several = batches.filter((batch) => batch.rows > 1)
+    // The case is real: one delivery resized more than one row above the reader.
+    expect(several.length).toBeGreaterThan(0)
+    // One write for all of its rows, and the first row in view stays where it was.
+    expect(several).toEqual(several.map((batch) => ({ rows: batch.rows, writes: 1, moved: 0 })))
   })
 
   // The New timeline spaces rows by what the row before each one is. A page lands above a row the reader is looking
@@ -897,10 +964,13 @@ test.describe("timeline history", () => {
   })
 })
 
+type SizeBatch = { rows: number; writes: number; moved: number }
+
 declare global {
   interface Window {
     __historyRootProbe?: { arm(): string[]; hidden: boolean; settle(final: ProbeFinal): void; settled: boolean }
-    __scrollWrites?: number[]
+    __sizeBatches?: SizeBatch[]
+    __timeline?: Element
   }
 }
 
