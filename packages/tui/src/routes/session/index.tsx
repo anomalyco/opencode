@@ -130,6 +130,7 @@ import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
+import { findBoundaryCollapseGroup, type BoundaryCollapseMode } from "./boundary-collapse"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 import { findMatches, findParts, findPattern, sameFindMatch, type FindMatch } from "./find"
 import { FindBar, FindText, useFindHighlight } from "./find-view"
@@ -255,6 +256,7 @@ export function Session(props: {
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
+  const boundaryCollapseMode = createMemo<BoundaryCollapseMode>(() => config.session?.boundary_collapse ?? "overflow")
   // High opens exploration and instruction summaries by default; everything else starts collapsed.
   const groupExpanded = (groupID: string, kind: GroupKind) =>
     sessionTabs.groupExpanded(sessionID, groupID) ??
@@ -311,9 +313,14 @@ export function Session(props: {
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
+  const [boundaryCollapseID, setBoundaryCollapseID] = createSignal<string>()
+  const [collapseHovered, setCollapseHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
   createEffect(() => {
     if (!awayFromBottom()) setLatestHovered(false)
+  })
+  createEffect(() => {
+    if (!boundaryCollapseID()) setCollapseHovered(false)
   })
 
   const clearMessageNavigation = () => {
@@ -523,6 +530,47 @@ export function Session(props: {
     })
   }
 
+  function updateBoundaryCollapse() {
+    if (!scroll || scroll.isDestroyed) {
+      setBoundaryCollapseID(undefined)
+      return
+    }
+    const target = findBoundaryCollapseGroup({
+      mode: boundaryCollapseMode(),
+      viewportTop: scroll.viewport.y,
+      viewportHeight: scroll.viewport.height,
+      anchors: anchors.list(),
+      isExpanded: groupExpanded,
+    })
+    setBoundaryCollapseID(target?.groupID)
+  }
+
+  function collapseBoundaryGroup() {
+    if (renderer.getSelection()?.getSelectedText()) return
+    const id = boundaryCollapseID()
+    if (!id || !scroll || scroll.isDestroyed) return
+    const current = anchors.get({ type: "group", groupID: id })
+    const headerVisible = current !== undefined && current.node.y >= scroll.viewport.y
+    const previousScreenY = current ? current.node.y - scroll.viewport.y : undefined
+    sessionTabs.setGroupExpanded(sessionID, id, false)
+    afterLayout(() => {
+      const next = anchors.get({ type: "group", groupID: id })
+      if (next) {
+        const contentY = scroll.scrollTop + next.node.y - scroll.viewport.y
+        const desiredScreenY = headerVisible && previousScreenY !== undefined ? previousScreenY : 1
+        scroll.scrollTo(Math.max(0, contentY - desiredScreenY))
+      }
+      updateBoundaryCollapse()
+      updateAwayFromBottom()
+      saveScrollAnchor()
+    })
+  }
+
+  createEffect(() => {
+    boundaryCollapseMode()
+    if (scroll && !scroll.isDestroyed) afterLayout(updateBoundaryCollapse)
+  })
+
   function isAwayFromBottom() {
     if (
       revealingOlderRows ||
@@ -554,6 +602,7 @@ export function Session(props: {
         if (!renderer.getSelection()) setHiddenRows(undefined)
         scroll.stickyScroll = true
       }
+      updateBoundaryCollapse()
       saveScrollAnchor()
     })
   }
@@ -1025,6 +1074,7 @@ export function Session(props: {
       if (!scroll || scroll.isDestroyed) return
       scroll.stickyScroll = true
       scroll.scrollTo(scroll.scrollHeight)
+      afterLayout(updateBoundaryCollapse)
     }, 50)
   }
 
@@ -1620,7 +1670,10 @@ export function Session(props: {
           // Keeps the toggled disclosure's header on its viewport row through the next layout.
           if (anchor && !(ending && !isAwayFromBottom())) afterLayout(scroll.anchor(anchor))
           sessionTabs.setGroupExpanded(sessionID, id, expanded)
-          afterLayout(saveScrollAnchor)
+          afterLayout(() => {
+            updateBoundaryCollapse()
+            saveScrollAnchor()
+          })
         },
         get width() {
           return contentWidth()
@@ -1682,6 +1735,7 @@ export function Session(props: {
                 }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
+                  onSizeChange: updateBoundaryCollapse,
                 }}
                 verticalScrollbarOptions={{
                   paddingLeft: 1,
@@ -1694,7 +1748,7 @@ export function Session(props: {
                 stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
                 // Rows never grow or shrink, so a change to one row lays out only that row.
-                contentOptions={{ layoutMode: "list" }}
+                contentOptions={{ layoutMode: "list", onSizeChange: updateBoundaryCollapse }}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
@@ -1725,25 +1779,47 @@ export function Session(props: {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
-              <Show when={firstJump()}>
-                <text fg={theme.text.feedback.info.base}>Loading session history…</text>
-              </Show>
-              <Show when={!firstJump() && awayFromBottom()}>
-                <box
-                  id="session-jump-to-latest"
-                  paddingLeft={1}
-                  onMouseOver={() => setLatestHovered(true)}
-                  onMouseOut={() => setLatestHovered(false)}
-                  onMouseUp={toBottom}
-                >
-                  <text
-                    fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
+              <box flexDirection="row" flexShrink={0}>
+                <Show when={!firstJump() && boundaryCollapseID()}>
+                  <box
+                    id="session-boundary-collapse"
+                    paddingLeft={3}
+                    paddingRight={1}
+                    onMouseOver={() => setCollapseHovered(true)}
+                    onMouseOut={() => setCollapseHovered(false)}
+                    onMouseUp={collapseBoundaryGroup}
                   >
-                    Jump to latest ↓
-                  </text>
-                </box>
-              </Show>
+                    <text
+                      fg={collapseHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
+                      selectable={false}
+                    >
+                      − Collapse
+                    </text>
+                  </box>
+                </Show>
+              </box>
+              <box flexDirection="row" flexShrink={0}>
+                <Show when={firstJump()}>
+                  <text fg={theme.text.feedback.info.base}>Loading session history…</text>
+                </Show>
+                <Show when={!firstJump() && awayFromBottom()}>
+                  <box
+                    id="session-jump-to-latest"
+                    paddingLeft={1}
+                    onMouseOver={() => setLatestHovered(true)}
+                    onMouseOut={() => setLatestHovered(false)}
+                    onMouseUp={toBottom}
+                  >
+                    <text
+                      fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
+                      selectable={false}
+                    >
+                      Jump to latest ↓
+                    </text>
+                  </box>
+                </Show>
+              </box>
             </box>
             <box flexShrink={0}>
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>

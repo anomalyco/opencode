@@ -169,6 +169,10 @@ export const Info = Schema.Struct({
         description:
           "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
       }),
+      boundary_collapse: Schema.optional(Schema.Literals(["off", "overflow", "always"])).annotate({
+        description:
+          "Show a collapse control at the bottom boundary of the transcript when viewing inside an expanded group",
+      }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
       }),

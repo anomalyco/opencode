@@ -122,6 +122,16 @@ export const settings: Setting[] = [
     keywords: ["detail", "activity", "summary", "transcript"],
   },
   {
+    title: "Collapse at bottom",
+    category: "Session",
+    path: ["session", "boundary_collapse"],
+    description: "When to show a collapse button at the bottom of the chat for an expanded group",
+    default: "overflow",
+    values: ["off", "overflow", "always"],
+    labels: ["off", "when header off-screen", "always"],
+    keywords: ["collapse", "fold", "activity", "expanded", "bottom", "boundary"],
+  },
+  {
     title: "Transcript images",
     category: "Session",
     path: ["session", "image_preview"],
