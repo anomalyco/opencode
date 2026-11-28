@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import { OpenCode, type LocationGetInput } from "@opencode/client/promise"
+import { OpenCode, type LocationGetInput, type ProjectListOutput } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { bootstrapGlobal, inferHomeDirectory, loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import { bootstrapGlobal, inferHomeDirectory, loadPathQuery, loadProjects, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import { createServerTransport } from "@/runtime/server/client"
@@ -62,6 +62,54 @@ test("bootstraps projects through the native store setter and preserves subseque
     expect(store.project[0]?.worktrees).toEqual([
       { directory: "/repo" },
       { directory: "/repo/feature", strategy: "git" },
+    ])
+  } finally {
+    queryClient.clear()
+  }
+})
+
+test("refreshes the project list after registration even when a prior listing is in flight", async () => {
+  const previous = {
+    id: "previous",
+    canonical: "/previous",
+    time: { created: 1, updated: 1, active: 1 },
+    sandboxes: [],
+  }
+  const picked = { id: "picked", canonical: "/picked", time: { created: 2, updated: 2, active: 2 }, sandboxes: [] }
+  const stale = Promise.withResolvers<ProjectListOutput>()
+  const started = Promise.withResolvers<void>()
+  const [store, setGlobalStore] = createStore<ServerSync["data"]>({
+    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    project: [],
+    provider_auth: {},
+    config: {},
+  })
+  const queryClient = new QueryClient()
+  let registered = false
+  const input = {
+    scope: ServerScope.local,
+    project: {
+      list: async () => {
+        if (registered) return [picked, previous]
+        started.resolve()
+        return stale.promise
+      },
+    },
+    setGlobalStore,
+    queryClient,
+  }
+
+  try {
+    const pending = loadProjects(input)
+    await started.promise
+    registered = true
+    const refresh = loadProjects(input, { afterRegistration: true })
+    stale.resolve([previous])
+    await Promise.all([pending, refresh])
+
+    expect(store.project.map((project) => [project.id, project.worktree])).toEqual([
+      ["picked", "/picked"],
+      ["previous", "/previous"],
     ])
   } finally {
     queryClient.clear()
