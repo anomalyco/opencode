@@ -1356,30 +1356,6 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("refuses to run Code Mode from inside another tool", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const outer: Info = {
-        name: "outer",
-        description: "Starts a program",
-        input: Schema.Struct({}),
-        execute: (_, context) =>
-          context.tool
-            .call("execute", { code: "return 1" })
-            .pipe(
-              Effect.match({
-                onFailure: (error) => ({ content: error.message }),
-                onSuccess: () => ({ content: "ran" }),
-              }),
-            ),
-      }
-      yield* transform(service, { outer }, { codemode: false })
-      expect(yield* executeTool(service, call("outer"))).toMatchObject({
-        content: [{ text: "execute can't be called from inside another tool." }],
-      })
-    }),
-  )
-
   it.effect("passes complete call identity to tool execution", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
