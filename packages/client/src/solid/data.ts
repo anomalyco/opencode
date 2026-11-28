@@ -805,6 +805,7 @@ export function createData(config: CreateDataInput) {
     removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    messageLoads.delete(sessionID)
     anchored.delete(sessionID)
     stranded.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -2230,6 +2231,7 @@ export function createData(config: CreateDataInput) {
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || signal?.aborted) return
           setStore("session", "messageLoading", sessionID, true)
+          const current = () => messageLoads.get(sessionID) === request
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
             let next: string | undefined = cursor
@@ -2242,13 +2244,12 @@ export function createData(config: CreateDataInput) {
                 },
                 { signal },
               )
-              if (signal?.aborted) return
+              // The session or its history may have been replaced while this page was in flight.
+              if (signal?.aborted || !current() || store.session.messageCursor[sessionID] !== cursor) return
               fetched.push(...response.data.map(stored))
               next = response.cursor.next ?? undefined
               if (!options?.all) break
             } while (next)
-            // A newer read replaced the transcript this page continues, so the page no longer adjoins it.
-            if (store.session.messageCursor[sessionID] !== cursor) return
             // A jump through history publishes once, not once per page of offscreen messages.
             const existing = store.session.message[sessionID] ?? []
             const ids = new Set(existing.map((item) => item.id))
@@ -2264,7 +2265,9 @@ export function createData(config: CreateDataInput) {
             .catch((error) => {
               if (!signal?.aborted) throw error
             })
-            .finally(() => setStore("session", "messageLoading", sessionID, false))
+            .finally(() => {
+              if (current()) setStore("session", "messageLoading", sessionID, false)
+            })
           track(messageLoads, sessionID, request)
           await request
         },
