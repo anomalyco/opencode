@@ -14,13 +14,49 @@ const Options = Schema.Struct({
 })
 
 /**
+ * How many extension notifications are shown at once, across extensions. More would let one extension bury the app's
+ * own notifications in the system's notification centre.
+ */
+export const NOTIFICATION_LIMIT = 10
+
+/** A shown extension notification: the extension's id and the notification's id there. */
+export type ShownNotification = { readonly extension: string; readonly id: string }
+
+/** The shown notifications, oldest first; only `showNotification`'s result and a close replace them. */
+type NotificationOrder = { shown: readonly ShownNotification[] }
+
+/**
+ * The notifications shown, oldest first, once `next` is shown, and those to close for it: the oldest beyond `limit`.
+ * Showing an id again replaces its notification, which then counts as the newest.
+ */
+export function showNotification(shown: readonly ShownNotification[], next: ShownNotification, limit = NOTIFICATION_LIMIT) {
+  const kept = [...shown.filter((item) => item.extension !== next.extension || item.id !== next.id), next]
+  const over = Math.max(0, kept.length - limit)
+
+  return { shown: kept.slice(over), closed: kept.slice(0, over) }
+}
+
+/**
  * `chrome.notifications`, shown as the system's notifications from the app, titled with the extension's name and
  * shown with its icon, with the extension's own title as the first line. Clicking one tells the extension through
- * `onClicked`; closing it, `onClosed`. Buttons, images and progress are not shown.
+ * `onClicked`; closing it, `onClosed`. Buttons, images and progress are not shown. At most `NOTIFICATION_LIMIT` are
+ * shown at once: the oldest closes for a new one, and its extension hears `onClosed`.
  */
 export function createNotifications(input: { emit: Emit; manifest: Manifests; title: (name: string) => string }): ApiModule {
-  // Shown notifications by extension, then by id.
+  // Shown notifications by extension, then by id, and all of them oldest first.
   const shown = new Map<string, Map<string, Electron.Notification>>()
+  const order: NotificationOrder = { shown: [] }
+
+  // Closes a notification to make room for a newer one; its extension hears `onClosed`, as when the person closes it.
+  const evict = (item: ShownNotification) => {
+    const list = shown.get(item.extension)
+    const notification = list?.get(item.id)
+
+    if (!notification) return
+    list?.delete(item.id)
+    input.emit("notifications.onClosed", [item.id, false], item.extension)
+    notification.close()
+  }
 
   const show = async (context: ExtensionContext, id: string, options: typeof Options.Type) => {
     const extension = context.extension.id
@@ -43,10 +79,14 @@ export function createNotifications(input: { emit: Emit; manifest: Manifests; ti
     notification.on("close", () => {
       if (list.get(id) !== notification) return
       list.delete(id)
+      order.shown = order.shown.filter((item) => item.extension !== extension || item.id !== id)
       input.emit("notifications.onClosed", [id, false], extension)
     })
     list.set(id, notification)
     shown.set(extension, list)
+    const next = showNotification(order.shown, { extension, id })
+    order.shown = next.shown
+    next.closed.forEach(evict)
     notification.show()
 
     return id
@@ -93,6 +133,7 @@ export function createNotifications(input: { emit: Emit; manifest: Manifests; ti
     forget: (extension) => {
       const list = shown.get(extension)
       shown.delete(extension)
+      order.shown = order.shown.filter((item) => item.extension !== extension)
       list?.forEach((notification) => notification.close())
     },
     dispose: () => shown.forEach((list) => list.forEach((notification) => notification.close())),
