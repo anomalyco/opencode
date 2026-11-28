@@ -13,6 +13,9 @@ export type Current = typeof Current.Type
 export const Info = Project.Info
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
+export const Commands = Project.Commands
+export type Commands = typeof Commands.Type
+
 export const UpdateInput = Project.UpdateInput
 export type UpdateInput = typeof UpdateInput.Type
 

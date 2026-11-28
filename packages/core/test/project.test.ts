@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
 import { $ } from "bun"
+import { sql } from "drizzle-orm"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -119,6 +120,44 @@ describe("Project.update", () => {
         time: { created: 1, updated: expect.any(Number), active: 1 },
         sandboxes: [],
       })
+    }),
+  )
+})
+
+describe("Project.list legacy commands", () => {
+  it.effect("treats stored commands that are not objects as absent", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      // Older builds and the unchecked V1 import can persist commands as a JSON array (issue #63076).
+      yield* db.run(sql`
+        INSERT INTO project (id, worktree, sandboxes, commands, time_created, time_updated, time_active)
+        VALUES ('legacy-commands', '/legacy-commands', '[]', '[]', 1, 1, 1)
+      `)
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: Project.ID.make("valid-commands"),
+          worktree: abs("/valid-commands"),
+          sandboxes: [],
+          commands: { start: "bun dev" },
+          time_created: 1,
+          time_updated: 1,
+          time_active: 1,
+        })
+        .run()
+
+      const listed = yield* project.list()
+      const legacy = listed.find((item) => item.id === Project.ID.make("legacy-commands"))
+      expect(legacy).toBeDefined()
+      expect(legacy?.commands).toBeUndefined()
+      expect(listed.find((item) => item.id === Project.ID.make("valid-commands"))?.commands).toEqual({
+        start: "bun dev",
+      })
+      // The API encodes every listed project against the Project schema, so commands must stay decodable.
+      for (const item of listed) {
+        expect(Schema.is(ProjectSchema.Info.fields.commands)(item.commands)).toBe(true)
+      }
     }),
   )
 })
