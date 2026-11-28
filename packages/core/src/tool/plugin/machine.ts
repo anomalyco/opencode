@@ -7,6 +7,7 @@ import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { FileWrite } from "../../file-write.js"
 import { Flag } from "../../flag.js"
+import { Machine } from "../../machine/index.js"
 import { Machines } from "../../machine/machines.js"
 import { Permission } from "../../permission.js"
 
@@ -34,6 +35,13 @@ const UnforwardInput = Schema.Struct({
   id: Schema.String.annotate({ description: "The id `machine.forward` returned" }),
 })
 const UnforwardOutput = Schema.Struct({ removed: Schema.Boolean })
+const UpdateInput = Schema.Struct({
+  machine: Environment.ID,
+  version: Machine.Update.fields.version.pipe(Schema.optional).annotate({
+    description: `The worker version, such as \`${Machine.WORKER_VERSION}\`. Defaults to the one this server is built with.`,
+  }),
+})
+const UpdateOutput = Schema.Struct({ machine: Environment.ID, version: Schema.String })
 
 export const Plugin = {
   id: "opencode.tool.machine",
@@ -133,6 +141,31 @@ export const Plugin = {
               const id = yield* machines.forward(input.from, input.to)
               return { output: { id }, content: `Forwarding ${from} to ${to} (${id}).` }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to forward the port", error }))),
+        })
+        editor.add({
+          name: "update",
+          description:
+            "Ask a machine's worker to update itself to a version. The worker fetches it from the source it was set up with, restarts into it, and rolls back unless the new version connects again; its running commands, peer links and forwards end. `machine.list` shows each worker's `version`.",
+          input: UpdateInput,
+          output: UpdateOutput,
+          options: { namespace: "machine", codemode: true },
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const version = input.version ?? Machine.WORKER_VERSION
+              yield* permission.assert({
+                action: "machine_update",
+                resources: [input.machine],
+                save: [input.machine],
+                ...Permission.invocation(context),
+              })
+              yield* machines.update(input.machine, version)
+              return {
+                output: { machine: input.machine, version },
+                content: `Asked ${input.machine} to update its worker to ${version}.`,
+              }
+            }).pipe(
+              Effect.mapError((error) => new ToolFailure({ message: `Unable to update ${input.machine}`, error })),
+            ),
         })
         editor.add({
           name: "unforward",

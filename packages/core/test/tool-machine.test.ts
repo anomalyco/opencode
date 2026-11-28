@@ -9,6 +9,7 @@ import { FileWrite } from "@opencode/core/file-write"
 import { Flag } from "@opencode/core/flag"
 import { Join } from "@opencode/core/machine/join"
 import { Location } from "@opencode/core/location"
+import { Machine } from "@opencode/core/machine/index"
 import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -97,6 +98,7 @@ describe("MachineTools", () => {
         "machine.list",
         "machine.move",
         "machine.unforward",
+        "machine.update",
       ])
       expect(yield* list(registry)).toEqual({ machines: [] })
     }),
@@ -202,6 +204,30 @@ describe("MachineTools", () => {
         yield* run(registry, `return await tools.machine.copy({ from: "gpu:/a.bin", to: "/tmp/a.bin" })`),
       ).toContain("Both paths must be on machines")
       expect(assertions).toEqual([])
+    }).pipe(Effect.provide(graph)),
+  )
+
+  on.effect("asks a worker to update to this server's worker version, or the one named", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup("machines")
+      const machines = yield* Machines.Service
+      const gpu = yield* paired(machines, "gpu", makePeers())
+      assertions.length = 0
+      yield* run(registry, `return await tools.machine.update({ machine: "gpu" })`)
+      yield* run(registry, `return await tools.machine.update({ machine: "gpu", version: "9.1.0" })`)
+      expect(gpu.worker.received.filter((message) => message.type === "update")).toEqual([
+        { type: "update", version: Machine.WORKER_VERSION },
+        { type: "update", version: "9.1.0" },
+      ])
+      expect(assertions.map((input) => `${input.action} ${input.resources.join(" ")}`)).toEqual([
+        "machine_update gpu",
+        "machine_update gpu",
+      ])
+      // Only a version: anything else is refused before it reaches the worker.
+      expect(
+        yield* run(registry, `return await tools.machine.update({ machine: "gpu", version: "../evil" })`),
+      ).not.toContain("Asked")
+      expect(gpu.worker.received.filter((message) => message.type === "update")).toHaveLength(2)
     }).pipe(Effect.provide(graph)),
   )
 })

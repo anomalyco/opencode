@@ -246,6 +246,7 @@ export const makeWorker = (
       received.push(message)
       if (message.type === "start") return start(message)
       if (Schema.is(Machine.PeerCall)(message)) return peer(message)
+      if (message.type === "update") return
       if (message.type === "fs")
         return emit(
           // The memory driver answers synchronously.

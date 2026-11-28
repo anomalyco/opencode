@@ -82,6 +82,10 @@
       "type": "peer-close",
       "req": 10,
       "link": "l1"
+    },
+    {
+      "type": "update",
+      "version": "0.2.0"
     }
   ],
   "from_worker": [
@@ -135,7 +139,8 @@
       "home": "/home/worker",
       "instance": "i1",
       "processes": [],
-      "links": ["l1"]
+      "links": ["l1"],
+      "version": "0.2.0"
     }
   ]
 }

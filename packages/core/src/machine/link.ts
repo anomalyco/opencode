@@ -1,13 +1,13 @@
 export * as Link from "./link.js"
 
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Environment } from "../environment/index.js"
 import { Frames } from "./frames.js"
 import { Identity } from "./identity.js"
 import type { Machine } from "./index.js"
 import { Machines } from "./machines.js"
 import { Noise } from "./noise.js"
-import { FromWorker, Hello, ToWorker } from "./wire.js"
+import { FromWorker, Hello, ToWorker, WORKER_VERSION } from "./wire.js"
 
 // The handshake that opens a link between the home (the OpenCode server) and a machine that connects to it: a worker
 // today, any client later. The side that opens the connection calls `dial`; the home calls `accept`. Both end holding
@@ -156,7 +156,19 @@ export const decodeHello = Effect.fnUntraced(function* (machine: Environment.ID,
 const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: Authenticate, fixed: Fixed) {
   const link = yield* Effect.gen(function* () {
     const accepted = yield* handshake(carrier, authenticate, fixed)
-    const hello = yield* decodeHello(accepted.machine, yield* Frames.read(carrier, accepted.receive))
+    const bytes = yield* Frames.read(carrier, accepted.receive)
+    // An outdated worker is asked to update before it is refused: `update` is the one message every protocol shares.
+    const version = yield* helloMessage
+      .decode(bytes)
+      .pipe(Effect.flatMap(Schema.decodeUnknownEffect(helloProtocol)), Effect.option)
+    if (Option.isSome(version) && version.value.protocol < PROTOCOL) {
+      yield* Effect.logWarning(`Asking machine ${accepted.machine} to update its worker to ${WORKER_VERSION}.`)
+      yield* toWorker.encode({ type: "update", version: WORKER_VERSION }).pipe(
+        Effect.flatMap((message) => Frames.write(carrier, accepted.send, message)),
+        Effect.ignore,
+      )
+    }
+    const hello = yield* decodeHello(accepted.machine, bytes)
     return { ...accepted, hello }
   }).pipe(
     Effect.timeout(DEADLINE),

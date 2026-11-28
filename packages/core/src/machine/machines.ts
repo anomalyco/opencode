@@ -30,6 +30,8 @@ export class Info extends Schema.Class<Info>("Machines.Info")({
   /** Last reported by the worker's hello, while it is online. */
   os: Schema.optionalKey(Schema.String),
   arch: Schema.optionalKey(Schema.String),
+  /** The worker's version, from its hello. */
+  version: Schema.optionalKey(Schema.String),
   connection: Schema.optionalKey(Machine.ConnectionInfo),
 }) {}
 
@@ -137,6 +139,11 @@ export interface Interface {
   readonly forward: (from: Port, to: Port) => Effect.Effect<string, PeerError>
   /** Ends a forward. False when there was no such forward. */
   readonly unforward: (id: string) => Effect.Effect<boolean>
+  /**
+   * Asks the machine's worker to update itself to `version`. The worker fetches it from the source it was set up with,
+   * and rolls back unless the new version connects again.
+   */
+  readonly update: (id: Environment.ID, version: string) => Effect.Effect<void, NotFound | Machine.NotSent>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Machines") {}
@@ -283,6 +290,7 @@ const layer = Layer.effect(
                   paired: keys.has(id),
                   os: hello.os,
                   arch: hello.arch,
+                  ...(hello.version ? { version: hello.version } : {}),
                   ...(connection ? { connection } : {}),
                 })
               : new Info({ id, online: false, paired: keys.has(id) })
@@ -382,6 +390,11 @@ const layer = Layer.effect(
         const id = crypto.randomUUID()
         forwards.set(id, { from: shared.from, to: shared.to, token: grant })
         return id
+      }),
+      update: Effect.fn("Machines.update")(function* (id, version) {
+        const machine = instances.get(id)
+        if (!machine) return yield* new NotFound({ machine: id })
+        yield* machine.update(version)
       }),
       unforward: Effect.fn("Machines.unforward")(function* (id) {
         const forward = forwards.get(id)
