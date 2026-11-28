@@ -251,6 +251,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.sounds.enabled.title",
+    target: "settings-sounds-enabled",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.enabled.description",
+    keywords: "sound audio mute silence disable",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.sounds.agent.title",
     target: "settings-sounds-agent",
     section: "settings.general.section.sounds",

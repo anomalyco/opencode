@@ -168,6 +168,7 @@ test("Questions settings default independently of old Permissions settings and s
     "Permissions",
     "Questions",
     "Errors",
+    "Sounds",
     "Agent",
     "Permissions",
     "Questions",
@@ -290,6 +291,53 @@ test("request events use real Questions settings without disabling Permissions a
   await expect
     .poll(() => recorded.sounds)
     .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
+})
+
+test("master mute silences every sound channel and keeps the per-channel choices", async ({ page }) => {
+  const recorded = await recordNotifications(page)
+
+  const transport = await installSseTransport(page, { server: SERVER })
+
+  const workspace = await openSession(page, {
+    name: "Master mute",
+    seed: { settings: { sounds: { enabled: false, permissions: "alert-01" } } },
+  })
+
+  await transport.waitForConnection()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await page.getByRole("button", { name: "Settings", exact: true }).click()
+  const settings = page.getByTestId("settings-screen")
+
+  await settings.getByRole("tab", { name: "Notifications", exact: true }).click()
+  const master = settings.locator('[data-action="settings-sounds-enabled"]').getByRole("switch")
+  const permissionSound = settings.locator('[data-action="settings-sounds-permissions"]')
+
+  await expect(master).not.toBeChecked()
+  await expect(permissionSound).toHaveText("Alert 01")
+
+  const request = (index: number): OpenCodeEvent => ({
+    id: `evt_mute_${index}`,
+    created: 1700000002000 + index,
+    location: { directory: workspace.directory },
+    type: "permission.asked",
+    data: {
+      id: `per_mute_${index}`,
+      sessionID: workspace.session.id,
+      action: "shell",
+      resources: ["echo hello"],
+      metadata: {},
+    },
+  })
+
+  await transport.send(request(1))
+  await expect.poll(() => recorded.notifications.map((item) => item.title)).toEqual(["Permission required"])
+  expect(recorded.sounds).toEqual([])
+
+  await master.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(master).toBeChecked()
+
+  await transport.send(request(2))
+  await expect.poll(() => recorded.sounds).toEqual([expect.stringContaining("alert-01")])
 })
 
 for (const [locale, dict] of [

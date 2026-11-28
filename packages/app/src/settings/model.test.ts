@@ -120,6 +120,7 @@ describe("settings schema", () => {
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
       notifications: { agent: false, permissions: true, questions: true, errors: false },
       sounds: {
+        enabled: true,
         agentEnabled: true,
         agent: "staplebops-01",
         permissionsEnabled: true,

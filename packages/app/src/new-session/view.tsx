@@ -107,7 +107,7 @@ export function NewSessionView(props: {
               state={wordmark}
               onEvent={dispatchWordmark}
               play
-              sound={settings.sounds.interfaceEnabled}
+              sound={() => settings.sounds.enabled() && settings.sounds.interfaceEnabled()}
             />
             <div class="mt-8 flex flex-col gap-3">
               <div data-slot="new-session-composer" class="flex flex-col gap-1">
@@ -137,7 +137,7 @@ export function NewSessionView(props: {
           {(board) => (
             <NewSessionPinBoard
               logo={board().logo}
-              sound={settings.sounds.interfaceEnabled}
+              sound={() => settings.sounds.enabled() && settings.sounds.interfaceEnabled()}
               entrance={board().entrance}
               closing={board().closing}
               ref={(handle) => dispatchWordmark({ type: "board.mounted", board: handle })}
@@ -150,7 +150,7 @@ export function NewSessionView(props: {
               panel={panel}
               board={game().board}
               ball={game().ball}
-              sound={settings.sounds.interfaceEnabled}
+              sound={() => settings.sounds.enabled() && settings.sounds.interfaceEnabled()}
               onDone={() => dispatchWordmark({ type: "game.done" })}
             />
           )}

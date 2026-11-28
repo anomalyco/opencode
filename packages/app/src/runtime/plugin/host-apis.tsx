@@ -1135,7 +1135,10 @@ export function createPluginAttachment(apis: HostApis) {
 
     const allowed = untrack(() => ({
       notification: error ? settings.notifications.errors() : settings.notifications.agent(),
-      sound: options.sound !== false && (error ? settings.sounds.errorsEnabled() : settings.sounds.agentEnabled()),
+      sound:
+        options.sound !== false &&
+        settings.sounds.enabled() &&
+        (error ? settings.sounds.errorsEnabled() : settings.sounds.agentEnabled()),
       id: error ? settings.sounds.errors() : settings.sounds.agent(),
     }))
 

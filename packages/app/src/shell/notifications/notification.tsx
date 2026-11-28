@@ -352,7 +352,7 @@ export function createServerNotificationState(input: {
 
       const hasOpenTab = sessionIDHasOpenTab(tabs.store, input.key, sessionID)
 
-      if (hasOpenTab && settings.sounds.agentEnabled()) {
+      if (hasOpenTab && settings.sounds.enabled() && settings.sounds.agentEnabled()) {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.agent()))
       }
 
@@ -377,7 +377,7 @@ export function createServerNotificationState(input: {
 
       const hasOpenTab = sessionIDHasOpenTab(tabs.store, input.key, sessionID)
 
-      if (hasOpenTab && settings.sounds.errorsEnabled()) {
+      if (hasOpenTab && settings.sounds.enabled() && settings.sounds.errorsEnabled()) {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.errors()))
       }
 
@@ -423,7 +423,7 @@ export function createServerNotificationState(input: {
 
     const key = `${input.key}\0${kind}:${requestID}`
 
-    if (settings.sounds[`${category}Enabled`]()) {
+    if (settings.sounds.enabled() && settings.sounds[`${category}Enabled`]()) {
       void input.coordinator.sound(key, () => {
         if (pending()) return playSoundById(settings.sounds[category]())
       })
