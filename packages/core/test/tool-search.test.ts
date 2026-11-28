@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
+import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -44,6 +45,7 @@ const withTools = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
   assertions?: Permission.AssertInput[],
+  rules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }],
 ) =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
@@ -61,6 +63,12 @@ const withTools = <A, E, R>(
               Effect.sync(() => {
                 assertions?.push(input)
               }),
+            allows: (input) =>
+              Effect.succeed(
+                input.resources.every(
+                  (resource) => Permission.evaluate(input.action, resource, rules).effect === "allow",
+                ),
+              ),
           }),
         ),
       ]),
@@ -238,6 +246,69 @@ describe("search tools", () => {
               content: [{ type: "text", text: "No matches found" }],
               metadata: { matches: 0, truncated: false },
             })
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.live("omits grep matches from files whose read is not allowed", () =>
+    withTempDir((tmp) =>
+      Effect.promise(() =>
+        Promise.all([
+          fs.writeFile(path.join(tmp.path, "notes.txt"), "token=needle\n"),
+          fs.writeFile(path.join(tmp.path, ".env"), "SECRET_ONE=needle\n"),
+          fs.writeFile(path.join(tmp.path, "local.env.production"), "SECRET_TWO=needle\n"),
+          fs.writeFile(path.join(tmp.path, "sample.env.example"), "EXAMPLE=needle\n"),
+        ]),
+      ).pipe(
+        Effect.andThen(
+          withTools(
+            tmp.path,
+            (registry) => executeTool(registry, call("grep", { pattern: "needle" })),
+            undefined,
+            Agent.Info.default(Agent.defaultID).permissions,
+          ),
+        ),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            expect(result).toMatchObject({ status: "completed", metadata: { matches: 2, truncated: false } })
+            if (result.status !== "completed") return
+            expect(result.output).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({ entry: expect.objectContaining({ path: "notes.txt" }) }),
+                expect.objectContaining({ entry: expect.objectContaining({ path: "sample.env.example" }) }),
+              ]),
+            )
+            expect(JSON.stringify(result.content)).not.toContain("SECRET_")
+            expect(JSON.stringify(result.content)).toContain(
+              "(Matches in 2 files omitted: reading them is denied or needs approval.)",
+            )
+          }),
+        ),
+      ),
+    ),
+  )
+
+  it.live("counts omitted grep matches toward a truncated search", () =>
+    withTempDir((tmp) =>
+      Effect.promise(() => fs.writeFile(path.join(tmp.path, ".env"), "ONE=needle\nTWO=needle\nTHREE=needle\n")).pipe(
+        Effect.andThen(
+          withTools(
+            tmp.path,
+            (registry) => executeTool(registry, call("grep", { path: ".env", pattern: "needle", limit: 2 })),
+            undefined,
+            Agent.Info.default(Agent.defaultID).permissions,
+          ),
+        ),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            expect(result).toMatchObject({ status: "completed", metadata: { matches: 0, truncated: true } })
+            if (result.status !== "completed") return
+            expect(JSON.stringify(result.content)).toContain(
+              "(Results are truncated: showing 0 of the first 2 results.",
+            )
+            expect(JSON.stringify(result.content)).toContain("(Matches in 1 file omitted")
           }),
         ),
       ),

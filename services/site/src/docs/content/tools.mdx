@@ -62,7 +62,8 @@ Use grep for the literal text "request timed out" in src, including only *.ts fi
 
 The default limit is 100 matching lines and the search timeout is 30 seconds.
 Permission: `grep` with the requested pattern, not the search path, as its
-resource.
+resource. Matches come only from files whose `read` rule allows them without
+asking; the result says how many files were left out.
 
 ### Edit
 
