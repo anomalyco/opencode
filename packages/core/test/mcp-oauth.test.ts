@@ -594,6 +594,58 @@ describe("MCP OAuth", () => {
       expect(tokenRequests[0]?.get("redirect_uri")).toBe(`http://localhost:${sent.port}/callback`)
     })
 
+    test("redeems a pasted code with the localhost redirect a server sent the browser back to", async () => {
+      const { server, tokenRequests } = authorizationServer({})
+      const sent = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url } = yield* start(server)
+            const redirect = new URL(url.searchParams.get("redirect_uri")!)
+            redirect.hostname = "localhost"
+            redirect.searchParams.set("code", "accepted")
+            redirect.searchParams.set("state", url.searchParams.get("state")!)
+            yield* authorization.submit(redirect.href)
+            yield* authorization.callback
+            return redirect
+          }),
+        ),
+      ).finally(() => server.stop(true))
+      expect(tokenRequests[0]?.get("redirect_uri")).toBe(`http://localhost:${sent.port}/callback`)
+    })
+
+    test("stores the token expiry on the effect clock", async () => {
+      const server = Bun.serve({
+        port: 0,
+        fetch: (request) =>
+          new URL(request.url).pathname === "/token"
+            ? Response.json({ access_token: "access", token_type: "Bearer", expires_in: 3600 })
+            : new Response(null, { status: 404 }),
+      })
+      const credential = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* TestClock.setTime(1_000)
+            const { authorization, url } = yield* start(server, { client_id: "client" })
+            yield* authorization.submit(
+              `${url.searchParams.get("redirect_uri")}?code=accepted&state=${url.searchParams.get("state")}`,
+            )
+            return yield* authorization.callback
+          }),
+        ).pipe(Effect.provide(TestClock.layer())),
+      ).finally(() => server.stop(true))
+      expect(credential.expires).toBe(1_000 + 3_600_000)
+    })
+
+    test("ignores a corrupt client saved by an earlier login", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client: "corrupt" } } }),
+      ])
+      await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() => server.stop(true))
+      expect(registrations).toHaveLength(1)
+    })
+
     test("reuses the client registered by an earlier login", async () => {
       const { server, registrations } = authorizationServer({})
       const previous = credential({ access: "a", refresh: "r", url: server.url.href })
