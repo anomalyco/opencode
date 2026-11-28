@@ -104,7 +104,9 @@ export function renderStats(stats: SessionStatsInfo, options: RenderOptions) {
   const toolSummary = !toolTotals
     ? "tool stats unavailable"
     : toolRate === undefined
-      ? "no tool calls"
+      ? toolTotals.unfinished > 0
+        ? `${formatNumber(toolTotals.unfinished)} unfinished`
+        : "no tool calls"
       : `${style(formatPercent(toolRate), primary, options.color)} tool success`
   const details = options.models || options.tools || options.cost
   const empty = stats.sessions === 0 && stats.prompts === 0 && stats.steps === 0
