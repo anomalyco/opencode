@@ -1,0 +1,112 @@
+---
+title: "Android (Termux)"
+description: "Run the Linux ARM64 build on Android with Termux, glibc, and a patched ELF interpreter."
+---
+
+OpenCode has no Android build. The Linux ARM64 build runs under Termux once its ELF interpreter points at Termux's glibc and a small launcher clears the Bionic `LD_PRELOAD` that Termux sets.
+
+<Callout type="note">
+  This page is community-maintained. The steps are verified on Termux aarch64 with the `linux-arm64` release.
+</Callout>
+
+## Install the glibc runtime
+
+Termux uses Bionic, so the glibc runtime and `patchelf` come from separate packages:
+
+```bash
+pkg update
+pkg install glibc-repo
+pkg update
+pkg install glibc-runner patchelf
+```
+
+Check that the loader is present before continuing:
+
+```bash
+ls "$PREFIX/glibc/lib/ld-linux-aarch64.so.1"
+```
+
+## Install and patch the binary
+
+Download the standalone Linux ARM64 archive:
+
+```bash
+mkdir -p "$HOME/.local/lib/opencode"
+curl -fsSL https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz \
+  -o "$TMPDIR/opencode.tar.gz"
+tar -xzf "$TMPDIR/opencode.tar.gz" -C "$HOME/.local/lib/opencode"
+```
+
+Point the interpreter at Termux's glibc:
+
+```bash
+patchelf --set-interpreter "$PREFIX/glibc/lib/ld-linux-aarch64.so.1" \
+  "$HOME/.local/lib/opencode/opencode"
+```
+
+Confirm the result:
+
+```bash
+patchelf --print-interpreter "$HOME/.local/lib/opencode/opencode"
+```
+
+```
+/data/data/com.termux/files/usr/glibc/lib/ld-linux-aarch64.so.1
+```
+
+<Callout type="warning" title="Patch the interpreter only">
+  Termux's glibc already searches `$PREFIX/glibc/lib` by default, so an RPATH is unnecessary. Setting one rewrites the
+  whole executable and can corrupt its bundled payload, which surfaces as `SIGSEGV` or `libc.so: invalid ELF header`.
+  Skip `grun -c` for the same reason.
+</Callout>
+
+## Add a launcher
+
+Termux exports `LD_PRELOAD=$PREFIX/lib/libtermux-exec-ld-preload.so`. That library is built for Bionic and crashes the
+glibc loader, so clear it in the launcher:
+
+```bash
+cat > "$PREFIX/bin/opencode" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+unset LD_PRELOAD
+exec "$HOME/.local/lib/opencode/opencode" "$@"
+EOF
+chmod 755 "$PREFIX/bin/opencode"
+```
+
+<Callout type="caution">
+  Run the patched binary directly. Starting it through `grun` or `ld.so` makes `/proc/self/exe` the loader, so the
+  background service's re-exec fails with `serve: error while loading shared libraries: serve`.
+</Callout>
+
+## Verify
+
+```bash
+opencode --version
+opencode service status
+```
+
+`service status` prints the background service URL, for example `http://127.0.0.1:49374`.
+
+## Update
+
+Download the new archive over the existing binary and patch it again. The launcher stays the same.
+
+```bash
+curl -fsSL https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz \
+  -o "$TMPDIR/opencode.tar.gz"
+tar -xzf "$TMPDIR/opencode.tar.gz" -C "$HOME/.local/lib/opencode"
+patchelf --set-interpreter "$PREFIX/glibc/lib/ld-linux-aarch64.so.1" \
+  "$HOME/.local/lib/opencode/opencode"
+opencode --version
+```
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `serve: error while loading shared libraries: serve` | Started through `grun` or `ld.so`, so the service cannot re-exec itself | Run the launcher from [Add a launcher](#add-a-launcher) |
+| `libc.so: invalid ELF header` | The binary was patched with `--set-rpath` (for example by `grun -c`), or `LD_PRELOAD` still loads Termux's Bionic shim | Re-extract the archive and patch the interpreter only, and make sure the launcher clears `LD_PRELOAD` |
+| `Segmentation fault` on `opencode --version` | The binary was patched with `--set-rpath`, for example by `grun -c` | Re-extract the archive and patch the interpreter only |
+| `Permission denied` | The extracted file is not executable | `chmod 755 ~/.local/lib/opencode/opencode` |
+| `error while loading shared libraries: ld-linux-aarch64.so.1` | The glibc runtime is missing | `pkg install glibc-repo glibc-runner` |
