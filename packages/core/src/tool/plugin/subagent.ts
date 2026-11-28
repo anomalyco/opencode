@@ -214,12 +214,14 @@ export const Plugin = {
         if (!tool) return
         const selected = yield* agents.resolve(event.agent)
         if (!selected) return
+        const session = yield* sessions.get(event.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+        const rules = Permission.merge(selected.permissions, session?.permissions ?? [])
         const available = (yield* agents.list())
           .filter(
             (agent) =>
               agent.mode !== "primary" &&
               !agent.hidden &&
-              Permission.evaluate(name, agent.id, selected.permissions).effect !== "deny",
+              Permission.evaluate(name, agent.id, rules).effect !== "deny",
           )
           .toSorted((a, b) => a.id.localeCompare(b.id))
         if (available.length === 0) return

@@ -83,12 +83,29 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* get(sessionID)
     yield* bus.publish(SessionEvent.MetadataUpdated, { sessionID, metadata: input.metadata })
   })
+  const cascadePermissions = (
+    parentID: SessionSchema.ID,
+    previous: Permission.Ruleset | undefined,
+    permissions: Permission.Ruleset,
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const children = yield* store.list({ parentID })
+      for (const child of children) {
+        if (!samePermissions(child.permissions, previous)) continue
+        yield* bus.publish(SessionEvent.Permissions, { sessionID: child.id, permissions })
+        yield* cascadePermissions(child.id, previous, permissions)
+      }
+    })
+
   const setPermissions = Effect.fn("Session.setPermissions")(function* (
     sessionID: SessionSchema.ID,
     input: { permissions: Permission.Ruleset },
   ) {
-    yield* get(sessionID)
+    const session = yield* get(sessionID)
+    const previous = session.permissions
     yield* bus.publish(SessionEvent.Permissions, { sessionID, permissions: input.permissions })
+    if (samePermissions(previous, input.permissions)) return
+    yield* cascadePermissions(sessionID, previous, input.permissions)
   })
   const switchAgent = Effect.fn("Session.switchAgent")(function* (
     sessionID: SessionSchema.ID,
@@ -401,6 +418,17 @@ export const make = Effect.fn("Session.make")(function* () {
   }
   return { forSession }
 })
+
+function sameRule(left: Permission.Rule, right: Permission.Rule | undefined) {
+  return left.action === right?.action && left.resource === right?.resource && left.effect === right?.effect
+}
+
+function samePermissions(left: Permission.Ruleset | undefined, right: Permission.Ruleset | undefined) {
+  const a = left ?? []
+  const b = right ?? []
+  if (a.length !== b.length) return false
+  return a.every((rule, index) => sameRule(rule, b[index]))
+}
 
 export type Handle = ReturnType<Effect.Success<ReturnType<typeof make>>["forSession"]>
 
