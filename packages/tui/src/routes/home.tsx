@@ -159,16 +159,18 @@ function UpdateNotification(props: { width: number }) {
               }}
             >
               <FadeInText fg={theme.text.muted} backdrop={backdrop()}>
-                <Show when={!remote}>
+                <Show when={!remote && state.type !== "external"}>
                   <span style={{ fg: theme.text.action.primary.selected }}>
                     {state.type === "installed" ? "/exit" : "/update"}
                   </span>
                 </Show>
                 {remote
                   ? "remote server update available"
-                  : state.type === "installed"
-                    ? ` restart to use v${state.version}`
-                    : ` to install v${state.version}`}
+                  : state.type === "external"
+                    ? `update available: v${state.version}`
+                    : state.type === "installed"
+                      ? ` restart to use v${state.version}`
+                      : ` to install v${state.version}`}
               </FadeInText>
             </box>
           </Show>

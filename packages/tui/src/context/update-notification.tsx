@@ -9,7 +9,8 @@ import { useEpilogue } from "./epilogue"
 import { useDialog } from "../ui/dialog"
 import { DialogUpdate } from "../component/dialog-update"
 
-type ClientNotice = { readonly type: "available" | "installed"; readonly version: string }
+// "external": a newer release exists, but the package manager that installed OpenCode has to update it.
+type ClientNotice = { readonly type: "available" | "installed" | "external"; readonly version: string }
 type Notice = ClientNotice & ({ readonly source: "client" } | { readonly source: "server"; readonly remote: boolean })
 export type UpdateState =
   | ClientNotice

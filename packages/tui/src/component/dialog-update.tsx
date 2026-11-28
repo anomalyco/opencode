@@ -86,7 +86,7 @@ export function DialogUpdate(props: {
           title={
             state().type === "installing"
               ? "Updating OpenCode"
-              : state().type === "available" || state().type === "failed"
+              : state().type === "available" || state().type === "external" || state().type === "failed"
                 ? "Update available"
                 : "Update"
           }
@@ -111,6 +111,13 @@ export function DialogUpdate(props: {
             <Match when={current.type === "available"}>
               <text fg={theme.text.muted}>
                 An update is available. After installing, you'll be prompted to restart OpenCode.
+              </text>
+            </Match>
+            <Match when={current.type === "external"}>
+              <text fg={theme.text.muted} wrapMode="word">
+                {current.type === "external"
+                  ? `OpenCode ${current.version} is available. Update it with the package manager that installed it, or download the latest release.`
+                  : ""}
               </text>
             </Match>
             <Match when={current.type === "installing"}>
