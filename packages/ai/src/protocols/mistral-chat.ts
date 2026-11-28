@@ -158,6 +158,11 @@ const MistralUsage = Schema.StructWithRest(
     num_cached_tokens: optionalNull(Schema.Number),
     prompt_token_details: optionalNull(MistralUsageDetails),
     prompt_tokens_details: optionalNull(MistralUsageDetails),
+    completion_tokens_details: optionalNull(
+      Schema.StructWithRest(Schema.Struct({ reasoning_tokens: optionalNull(Schema.Number) }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]),
+    ),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -456,6 +461,7 @@ const mapUsage = (usage: MistralEvent["usage"]): Usage | undefined => {
     outputTokens: output,
     nonCachedInputTokens: ProviderShared.subtractTokens(input, cached),
     cacheReadInputTokens: cached,
+    reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? undefined,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
     providerMetadata: { mistral: usage },
   })
