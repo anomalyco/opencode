@@ -837,8 +837,8 @@ describe("OpencodePlugin", () => {
           yield* drain
           yield* TestClock.adjust("10 seconds")
           yield* drain
-          // The failed fetch and its 3 retries.
-          expect(state.requests).toBe(7)
+          // A warm refresh does not retry transient failures in-flight.
+          expect(state.requests).toBe(4)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.providers()).toContainEqual(consoleSearch)
 
@@ -846,7 +846,7 @@ describe("OpencodePlugin", () => {
           state.advertised = false
           yield* TestClock.adjust("6 minutes")
           yield* drain
-          expect(state.requests).toBe(8)
+          expect(state.requests).toBe(5)
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
           expect(yield* websearch.providers()).toEqual([])
         }),
@@ -1120,12 +1120,10 @@ describe("OpencodePlugin", () => {
       state.status = 503
       yield* TestClock.adjust("6 minutes")
       yield* drain
-      yield* TestClock.adjust("10 seconds")
-      yield* drain
 
       // An unreleased response is only aborted when garbage collected, which fails outside a request on workerd.
-      // The 404, then the 503 and its 3 retries.
-      expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true, true, true])
+      // The 404 (cached), then the single warm-refresh 503.
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
     }),
   )
 
@@ -1207,10 +1205,10 @@ describe("OpencodePlugin", () => {
         value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.example" } }),
       })
       const activation = yield* addPlugin().pipe(inProcess(hanging), Effect.forkChild({ startImmediately: true }))
-      // Four attempts of 5 seconds each, with 1, 2 and 4 seconds of backoff between them.
-      yield* TestClock.adjust("1 second").pipe(Effect.repeat({ times: 29 }))
+      // Three cold-start attempts of 5 seconds each, with jittered 1s and 2s backoff between them.
+      yield* TestClock.adjust("1 second").pipe(Effect.repeat({ times: 22 }))
       yield* Fiber.join(activation)
-      expect(state.requests).toBe(4)
+      expect(state.requests).toBe(3)
       expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections).toHaveLength(1)
     }),
   )
@@ -1294,6 +1292,39 @@ describe("OpencodePlugin", () => {
       yield* TestClock.adjust("30 seconds")
       yield* drain
       expect(state.requests).toBe(2)
+    }),
+  )
+
+  it.effect("does not amplify requests during a Console stall after startup", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Service
+      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+      const state = { requests: 0, stalled: false }
+      const server = {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+          state.requests++
+          if (state.stalled) return new Promise<Response>(() => {})
+          return Response.json({ providers: {}, policies: [sudo] })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(state.requests).toBe(1)
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+
+      // During a stall, a warm refresh sends one request (no 3x retries) and keeps policies intact.
+      state.stalled = true
+      yield* TestClock.adjust("6 minutes")
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
+      expect(state.requests).toBe(2)
+      expect(yield* consolePolicies(config)).toEqual([sudo])
     }),
   )
 
@@ -1839,11 +1870,9 @@ describe("OpencodePlugin", () => {
       yield* drain
       expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
 
-      // A Console error keeps both, through the retries.
+      // A Console error keeps both without dropping them.
       state.lists = 503
       yield* TestClock.adjust("6 minutes")
-      yield* drain
-      yield* TestClock.adjust("10 seconds")
       yield* drain
       expect(yield* loaded).toEqual({ instructions: ["Use spaces."], skill: "Deploys the service." })
 
