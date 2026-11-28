@@ -8,7 +8,8 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit, ManagedRuntime } from "effect"
+import { McpTarget } from "@opencode/core/mcp/target"
+import { Cause, Effect, Exit, ManagedRuntime, Result } from "effect"
 import { TestClock } from "effect/testing"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tmpdir } from "./fixture/tmpdir"
@@ -20,6 +21,7 @@ const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
+const target = (config: ConfigMCP.Remote) => Result.getOrThrow(McpTarget.remote("test", config))
 
 const credential = (input: { access: string; refresh: string; expires?: number; url: string }) =>
   new Credential.Info({
@@ -90,18 +92,20 @@ const authorizationServer = (metadata: Record<string, unknown>) => {
 }
 
 const start = (
-  target: string | ReturnType<typeof Bun.serve>,
+  server: string | ReturnType<typeof Bun.serve>,
   oauth?: ConfigMCP.OAuth,
   store: ReturnType<typeof memoryCredentials> = memoryCredentials([]),
 ) =>
   Effect.gen(function* () {
     const authorization = yield* McpOAuth.authorize({
       name: "test",
-      config: new ConfigMCP.Remote({
-        type: "remote",
-        url: typeof target === "string" ? target : target.url.href,
-        ...(oauth ? { oauth } : {}),
-      }),
+      target: target(
+        new ConfigMCP.Remote({
+          type: "remote",
+          url: typeof server === "string" ? server : server.url.href,
+          ...(oauth ? { oauth } : {}),
+        }),
+      ),
       integrationID,
       methodID,
     })
@@ -279,10 +283,6 @@ describe("MCP OAuth", () => {
     reservation.stop(true)
 
     expect(await authorize(redirect)).toBe(redirect)
-  })
-
-  test("rejects an invalid redirect URL", async () => {
-    await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 
   test("rejects an authorization endpoint that is not http or https", async () => {
@@ -594,6 +594,58 @@ describe("MCP OAuth", () => {
       expect(tokenRequests[0]?.get("redirect_uri")).toBe(`http://localhost:${sent.port}/callback`)
     })
 
+    test("redeems a pasted code with the localhost redirect a server sent the browser back to", async () => {
+      const { server, tokenRequests } = authorizationServer({})
+      const sent = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url } = yield* start(server)
+            const redirect = new URL(url.searchParams.get("redirect_uri")!)
+            redirect.hostname = "localhost"
+            redirect.searchParams.set("code", "accepted")
+            redirect.searchParams.set("state", url.searchParams.get("state")!)
+            yield* authorization.submit(redirect.href)
+            yield* authorization.callback
+            return redirect
+          }),
+        ),
+      ).finally(() => server.stop(true))
+      expect(tokenRequests[0]?.get("redirect_uri")).toBe(`http://localhost:${sent.port}/callback`)
+    })
+
+    test("stores the token expiry on the effect clock", async () => {
+      const server = Bun.serve({
+        port: 0,
+        fetch: (request) =>
+          new URL(request.url).pathname === "/token"
+            ? Response.json({ access_token: "access", token_type: "Bearer", expires_in: 3600 })
+            : new Response(null, { status: 404 }),
+      })
+      const credential = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* TestClock.setTime(1_000)
+            const { authorization, url } = yield* start(server, { client_id: "client" })
+            yield* authorization.submit(
+              `${url.searchParams.get("redirect_uri")}?code=accepted&state=${url.searchParams.get("state")}`,
+            )
+            return yield* authorization.callback
+          }),
+        ).pipe(Effect.provide(TestClock.layer())),
+      ).finally(() => server.stop(true))
+      expect(credential.expires).toBe(1_000 + 3_600_000)
+    })
+
+    test("ignores a corrupt client saved by an earlier login", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client: "corrupt" } } }),
+      ])
+      await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() => server.stop(true))
+      expect(registrations).toHaveLength(1)
+    })
+
     test("reuses the client registered by an earlier login", async () => {
       const { server, registrations } = authorizationServer({})
       const previous = credential({ access: "a", refresh: "r", url: server.url.href })
@@ -654,7 +706,11 @@ describe("MCP OAuth connections", () => {
         Credential.Service.use((credentials) =>
           credentials
             .get(id)
-            .pipe(Effect.flatMap((credential) => McpOAuth.connectProvider({ server: "test", config, credential }))),
+            .pipe(
+              Effect.flatMap((credential) =>
+                McpOAuth.connectProvider({ server: "test", target: target(config), credential }),
+              ),
+            ),
         ),
       )
     return {
@@ -679,7 +735,12 @@ describe("MCP OAuth connections", () => {
   const connect = (provider: AuthProvider, url: string, config = remote(url)) =>
     Effect.runPromise(
       Effect.scoped(
-        McpClient.connect({ server: "test", config, directory: import.meta.dir, authProvider: provider }),
+        McpClient.connect({
+          server: "test",
+          target: target(config),
+          directory: import.meta.dir,
+          authProvider: provider,
+        }),
       ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
     )
 
@@ -862,7 +923,7 @@ describe("MCP OAuth connections", () => {
     })
     const url = `${server.url.origin}/mcp`
     const provider = await Effect.runPromise(
-      McpOAuth.connectProvider({ server: "test", config: remote(url), credential: undefined }).pipe(
+      McpOAuth.connectProvider({ server: "test", target: target(remote(url)), credential: undefined }).pipe(
         Effect.provideService(Credential.Service, memoryCredentials([]).service),
       ),
     )
@@ -1236,7 +1297,7 @@ describe("MCP OAuth connections", () => {
             const credentials = yield* Credential.Service
             const provider = yield* McpOAuth.connectProvider({
               server: "test",
-              config: remote(url),
+              target: target(remote(url)),
               credential: yield* credentials.get(id),
             })
             yield* Effect.promise(() => provider.token())

@@ -1,0 +1,638 @@
+---
+title: "ย้ายจาก V1"
+description: "อัปเกรดจาก OpenCode 1 เป็น OpenCode 2 ซึ่งมีการเปลี่ยนแปลงที่ไม่เข้ากันในปลั๊กอิน API เซิร์ฟเวอร์ และการกำหนดค่าไคลเอนต์เทอร์มินัล"
+---
+
+OpenCode 1 และ OpenCode 2 ใช้คำสั่ง `opencode` เหมือนกันและไม่ติดตั้งเคียงกันโดยค่าเริ่มต้นอีกต่อไป ให้ลบ
+การติดตั้ง V1 ที่จัดการผ่านแพ็กเกจก่อนติดตั้ง V2 ตัวติดตั้ง curl ของ V2 จะแทนที่ไบนารี V1
+
+## การเปลี่ยนแปลงที่ไม่เข้ากัน
+
+V2 มีการเปลี่ยนแปลงที่ไม่เข้ากันโดยเจตนาสามอย่าง
+
+- [ปลั๊กอิน](/build/plugins/migrate-v1)ใช้ API ปลั๊กอินใหม่
+- [API เซิร์ฟเวอร์และไคลเอนต์](#server-api-and-clients)มีสัญญาใหม่
+- [การกำหนดค่าไคลเอนต์เทอร์มินัล](/cli/config)ย้ายจากไฟล์ `tui.json(c)` แบบหลายชั้นเป็นไฟล์ `cli.json`
+  ส่วนกลางไฟล์เดียว (ย้ายอัตโนมัติ)
+
+ฟังก์ชัน V1 ที่รองรับนอกเหนือจากสามส่วนนี้ออกแบบให้ยังใช้กับ V1 ได้ ฟิลด์บางฟิลด์ที่ schema ของ V1 รองรับ
+ไม่เคยมีค่าเทียบเท่าใน V2 และถูกเพิกเฉยโดยเจตนา ซึ่งระบุไว้ใน
+[ฟิลด์ที่รับแต่ไม่รองรับ](#accepted-but-unsupported-fields)
+
+ฟิลด์การกำหนดค่าเซิร์ฟเวอร์ที่รองรับซึ่งมีอยู่ คำจำกัดความเอเจนต์ คำจำกัดความคำสั่ง สกิล และไฟล์อื่นใน `.opencode/`
+ควรทำงานต่อโดยไม่ต้องเปลี่ยน หากพฤติกรรมที่รองรับซึ่งอธิบายในคู่มือนี้หยุดทำงานใน V2 ให้ถือว่าเป็น
+ข้อบกพร่องด้านความเข้ากันได้ ไม่ใช่ข้อกำหนดการย้ายที่คาดไว้
+
+<Callout type="tip">
+  หากฟังก์ชัน V1 ที่รองรับไม่ทำงานใน V2 ให้ทำตามแนวทางการรายงานปัญหาใน
+  [การแก้ปัญหา](/troubleshooting)และแจ้งปัญหาความเข้ากันได้
+</Callout>
+
+## ติดตั้ง V2
+
+ติดตั้งไคลเอนต์เทอร์มินัล V2 ด้วย[คำแนะนำการติดตั้ง](/#cli)
+
+คุณไม่ต้องเขียนทุกอย่างใหม่ก่อนเริ่ม V2 การย้ายที่ปฏิบัติได้คือ
+
+1. เก็บการกำหนดค่าและคำจำกัดความแบบไฟล์ที่มีอยู่
+2. เริ่ม V2 และตรวจสอบโมเดล ข้อมูลรับรอง เอเจนต์ สิทธิ์ และเซิร์ฟเวอร์ MCP
+3. พอร์ตปลั๊กอิน เพราะการใช้งานปลั๊กอิน V1 ไม่ทำงานใน V2
+4. พอร์ตการเชื่อมต่อที่เรียก API เซิร์ฟเวอร์
+5. แปลงการกำหนดค่าเป็นรูปแบบเนทีฟ V2 เมื่อพร้อม ขั้นตอนนี้เป็นทางเลือก
+
+เก็บสำเนาการตั้งค่า V1 ไว้ขณะตรวจสอบการย้าย V1 และ V2 ใช้ตำแหน่งการกำหนดค่าเดียวกัน จึงอย่า
+ชี้ V1 ไปยังไฟล์หลังแปลงเป็นรูปแบบเฉพาะ V2 เนทีฟแล้ว
+
+## การกำหนดค่า
+
+ส่วนนี้ครอบคลุมทั้งการกำหนดค่า JSON/JSONC และคำจำกัดความแบบไฟล์ใต้ `.opencode/`
+
+### ใช้การกำหนดค่าที่มีอยู่
+
+V2 อ่านการกำหนดค่าระบบ ส่วนกลาง และโปรเจกต์ที่มีอยู่จากตำแหน่งเดียวกับ V1
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 ปรับฟิลด์ V1 ที่รองรับและฟิลด์เนทีฟ V2 ให้เป็นมาตรฐานในหน่วยความจำโดยไม่เขียนไฟล์ต้นฉบับใหม่
+การกำหนดค่า V1 ที่รองรับซึ่งมีอยู่ตั้งใจให้ทำงานต่อ คุณจึงไม่ต้องแปลงเพื่อลองหรือใช้
+V2
+
+เช่นเดียวกับ V1 การกำหนดค่าระบบและค่ากำหนดแบบมีการจัดการของ macOS มีลำดับสูงสุด การตั้งค่าจึงแทนที่
+ไฟล์ส่วนกลางและโปรเจกต์ [นโยบาย](/policies#precedence)ของมัน รวมถึง `enabled_providers` และ
+`disabled_providers` ที่ย้ายแล้ว ยังมีลำดับเหนือกว่านโยบายส่วนกลางและโปรเจกต์ การแทนที่การตั้งค่าหยุดผู้ใช้จากการเพิ่ม
+ผู้ให้บริการ เซิร์ฟเวอร์ MCP เอเจนต์ หรือปลั๊กอินไม่ได้ จึงควรแสดงข้อจำกัดที่ผู้ดูแลบังคับใช้เป็น `policies` แทน
+การตั้งค่าธรรมดาอย่าง `permissions`
+
+### ขอให้ OpenCode ย้ายให้
+
+รูปแบบการกำหนดค่า V1 ยังรองรับ รูปแบบเนทีฟ V2 เป็นทางเลือกและทำให้หลายการตั้งค่าชัดเจนและ
+ใช้งานง่ายขึ้น
+
+เส้นทางการย้ายที่แนะนำคือขอให้ OpenCode อัปเดตการกำหนดค่าให้คุณ
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode ตรวจไฟล์ทั้งหมด ใช้การเปลี่ยนแปลงที่เกี่ยวข้องด้านล่าง และหลีกเลี่ยงการเขียนการตั้งค่าที่ไม่ต้อง
+เปลี่ยนได้ การแปลงไม่จำเป็นต้องทำทั้งหมดในครั้งเดียว ฟิลด์ V1 ที่รองรับและฟิลด์เนทีฟ V2 อยู่ร่วมกันที่ระดับบนสุดได้
+เมื่อทั้งสองรูปแบบตั้งค่า canonical เดียวกัน ค่าเนทีฟ V2 ที่ถูกต้องจะมีลำดับเหนือกว่าโดยไม่สนลำดับคีย์ JSON
+
+การผสมแบบซ้อนถูกจำกัดโดยเจตนา OpenCode รู้จักสมาชิก V1 และ V2 ที่ผสมกันภายใน `mcp`, `compaction` และ
+`experimental` แต่ไม่อนุมานรูปแบบซ้ำภายในเอเจนต์ ผู้ให้บริการ คำสั่ง หรือโมเดลแต่ละรายการ ให้เก็บ
+รายการที่ซ้อนกันแต่ละรายการในรูปแบบเดียวทั้งหมด ไวยากรณ์ V1 ที่รองรับจะเงียบเอง ค่าที่ผิดรูป
+ฟิลด์เดิมที่ไม่รองรับ และค่าขัดแย้ง V1/V2 จะสร้างคำเตือนขณะการตั้งค่าที่ถูกต้องอื่นโหลดต่อ
+
+### สิทธิ์และเครื่องมือ
+
+V1 จัดกลุ่มผลการตรวจสิทธิ์ตามเครื่องมือ ส่วน V2 ใช้อาร์เรย์ `permissions` ชุดเดียวที่ประเมินตามลำดับ จึงเห็นลำดับความสำคัญและข้อยกเว้นได้ชัดเจน
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+การกระทำสิทธิ์เปลี่ยนด้วย: `bash` เป็น `shell`, `task` เป็น `subagent` และ `write` กับ `patch` เป็น `edit`
+ดู[สิทธิ์](/permissions)สำหรับรูปแบบกฎ V2 ตามลำดับ
+
+Todos ปิดโดยค่าเริ่มต้นใน V2 หากต้องการเปิด ให้ใช้แฟล็กทดลอง ซึ่งอาจเปลี่ยนหรือถูกนำออกใน
+รุ่นอนาคต ดู[การทดลอง](/config#experimental)
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
+<Callout type="warning">
+  V1 ถามก่อนเข้าถึงพาธนอกโปรเจกต์ V2 ไม่ถาม: `external_directory` อนุญาตโดยค่าเริ่มต้น หากต้องการคง
+  พฤติกรรม V1 ให้เพิ่ม `{ "action": "external_directory", "resource": "*", "effect": "ask" }` ใน `permissions`
+</Callout>
+
+### เอเจนต์และโหมด
+
+แมป `agent` เอกพจน์และ `mode` ที่เลิกใช้กลายเป็น `agents` ฟิลด์เอเจนต์สอดคล้องกับส่วนอื่นของ
+การกำหนดค่า V2 มากขึ้น
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` กลายเป็น `system`, `disable` กลายเป็น `disabled` และ `variant` แยกจะรวมในการอ้างอิงโมเดลหลัง `#`
+`maxSteps` กลายเป็น `steps` รายการจากแมป `mode` เดิมกลายเป็นเอเจนต์หลัก
+
+[`request.body`](/agents#request)ของเอเจนต์ถูกเก็บแต่ไม่ส่งถึงโมเดล `temperature`, `top_p` และ `options`
+ของ V1 จึงไม่มีผลในส่วนนี้ ให้ตั้งในตัวเลือกย่อยของโมเดลแทน DeepSeek ใช้ `temperature` เฉพาะเมื่อปิดการคิด
+ตัวเลือกย่อยนี้จึงปิดการคิดด้วย
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+ใช้ `body` สำหรับฟิลด์ JSON ของผู้ให้บริการและ `settings` สำหรับตัวเลือกแพ็กเกจผู้ให้บริการ ดู[ตัวเลือกโมเดล](/models#options)
+
+### สแนปช็อต
+
+เปลี่ยนชื่อฟิลด์ `snapshot` เอกพจน์เป็น `snapshots` ค่าบูลีนไม่เปลี่ยน
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### สื่อ
+
+เปลี่ยนชื่อออบเจกต์ `attachment` เอกพจน์เป็น `media` การตั้งค่าภาพที่ซ้อนกันใช้ชื่อเดิม
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### เซิร์ฟเวอร์ MCP
+
+V2 จัดกลุ่มเซิร์ฟเวอร์ใต้ `mcp.servers` แทน `enabled` ด้วย `disabled` ที่ตรงข้าม และแยกวัตถุประสงค์ของเวลาหมดอายุ
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+ฟิลด์ OAuth ระยะไกลใช้ snake case: `clientId` เป็น `client_id`, `clientSecret` เป็น `client_secret`,
+`callbackPort` เป็น `callback_port` และ `redirectUri` เป็น `redirect_uri` ค่า `experimental.mcp_timeout` ของ V1
+ยังกลายเป็นค่าเริ่มต้น `mcp.timeout.catalog` และ `mcp.timeout.execution` ดู[เซิร์ฟเวอร์ MCP](/mcp-servers)
+
+### การบีบอัด
+
+V2 รวมการกำหนดจำนวนโทเคนสำหรับบริบทที่เก็บไว้ไว้ใน `keep` และตั้งชื่อส่วนที่กันไว้ให้ชัดเจนขึ้น
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+จำนวนโทเคนที่ตั้งไว้ใน V1 ใช้ต่อได้โดยไม่ต้องแปลง V2 ยังรองรับการระบุเป็นเปอร์เซ็นต์ของหน้าต่างบริบทของโมเดล เช่น `"buffer": "15%"`
+ซึ่งเหมาะกับโมเดลที่มีขนาดหน้าต่างต่างกัน
+
+`auto` คงชื่อ V2 ไม่มีฟิลด์ `tail_turns` หรือ `prune` เนทีฟ ฟิลด์เดิมทั้งสองถูกเพิกเฉยพร้อมคำเตือน
+ระบบจะเก็บบริบทล่าสุดตามจำนวนโทเคนที่กำหนดแทน ดู [การบีบอัด](/compaction)
+
+### สกิล
+
+V1 แยกพาธและ URL ของสกิลเพิ่มเติม ส่วน V2 รวมทั้งสองแบบไว้ในอาร์เรย์เดียวและประมวลผลตามลำดับ
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+ไฟล์สกิลที่มีอยู่และการค้นพบ `.opencode/skills/` อัตโนมัติไม่เปลี่ยน ดู[สกิล](/skills)
+
+### คำสั่ง
+
+เปลี่ยนชื่อแมป `command` เอกพจน์เป็น `commands` และ `subtask` เป็น `subagent` รวม `variant` ของโมเดลแยกเข้ากับการอ้างอิงโมเดล
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`, `description` และ `agent` คงชื่อเดิม `subtask` แบบเดิมยังรับ คำสั่งที่มอบหมายตอนนี้รัน
+อัตโนมัติในเบื้องหลังและรายงานผลให้เซสชันแม่ คำจำกัดความคำสั่ง Markdown ที่มีอยู่ยังรองรับ
+ดู[คำสั่ง](/commands)
+
+### การอ้างอิง
+
+เปลี่ยนชื่อแมป `reference` เอกพจน์ที่เลิกใช้เป็น `references`
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 รับ `references` อยู่แล้ว จึงไม่ต้องเปลี่ยนเมื่อไฟล์ใช้ รายการอ้างอิงคง
+รูปร่างเดิม ดู[การอ้างอิง](/references)
+
+### ผู้ให้บริการ
+
+เปลี่ยนชื่อแมป `provider` เอกพจน์เป็น `providers` V2 แยกแพ็กเกจรันไทม์ เอนด์พอยต์ และการตั้งค่าคำขอ
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+`npm` ของ V1 กลายเป็น `package` และแพ็กเกจ AI SDK ได้คำนำหน้า `aisdk:` `api` กลายเป็น `settings.baseURL`
+`options` ของผู้ให้บริการถูกแยกเป็น `settings`, `headers` และ `body` ตามบทบาทในคำขอ `options.setCacheKey`
+กลายเป็น `compatibility.supportsPromptCacheKey` ในผู้ให้บริการ ดู[ผู้ให้บริการ](/providers)
+
+V2 รวมเนมสเปซผู้ให้บริการเดิมสองรายการ
+
+| ID ผู้ให้บริการ V1             | ID ผู้ให้บริการ V2 ตามมาตรฐาน |
+| -------------------------- | ------------------------ |
+| `azure-cognitive-services` | `azure`                  |
+| `google-vertex-anthropic`  | `google-vertex`          |
+
+การย้ายฟิลด์ผู้ให้บริการ เอเจนต์ คำสั่ง และตัวกรองผู้ให้บริการของ V1 ที่ไม่กำกวมใช้ ID มาตรฐานเหล่านี้ ฟิลด์
+`model` ระดับบนสุดที่ใช้ร่วมกันคง ID ผู้ให้บริการเดิมเพราะไวยากรณ์เดียวกันใช้ได้ใน config เนทีฟ V2 ให้อัปเดตฟิลด์นั้น
+เป็น ID มาตรฐานเมื่อย้ายผู้ให้บริการในตัวแบบเดิม
+
+### โมเดลและตัวเลือกย่อย
+
+โมเดลยังซ้อนใต้ผู้ให้บริการ แต่หลายฟิลด์ชัดเจนขึ้น
+
+- `id` กลายเป็น `modelID`
+- `tool_call` และ `modalities` กลายเป็น `capabilities.tools`, `capabilities.input` และ `capabilities.output`
+- `status` เป็น `"deprecated"` กลายเป็น `disabled: true`
+- ค่าใช้จ่ายแคชย้ายจาก `cache_read` และ `cache_write` เป็น `cache.read` และ `cache.write`
+- `options` เฉพาะผู้ให้บริการกลายเป็น `settings`
+- ออบเจกต์ตัวเลือกย่อยของโมเดลใน V1 เปลี่ยนเป็นอาร์เรย์ใน V2 ที่แต่ละรายการมี `id`
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+ดู[โมเดล](/models)สำหรับรูปร่างโมเดลเนทีฟทั้งหมด
+
+### ฟิลด์ที่รองรับโดยไม่มีค่าเทียบเท่าเนทีฟโดยตรง
+
+ฟิลด์ส่วนใหญ่ที่คงรูปร่างเดิม รวมถึง `shell`, `model`, `default_agent`, `watcher`, `formatter`,
+`instructions`, `enterprise` และ `tool_output` ไม่ต้องย้าย
+
+V2 รับและเก็บการกำหนดค่า `lsp` แต่ไม่รัน language server ไม่เปิดเครื่องมือ LSP และไม่สร้าง
+การวินิจฉัย LSP แทนเวิร์กโฟลว์ที่พึ่งความสามารถเหล่านั้นด้วยคำสั่ง lint, typecheck หรือคอมไพเลอร์ของโปรเจกต์
+
+ตัวกรองผู้ให้บริการ V1 ไม่มีฟิลด์กำหนดค่าเนทีฟ V2 แบบหนึ่งต่อหนึ่ง แต่พฤติกรรมยังรองรับผ่าน
+[นโยบาย](/policies)
+
+- `enabled_providers` กลายเป็นนโยบายผู้ให้บริการภายในแบบปฏิเสธโดยค่าเริ่มต้นตามด้วยการอนุญาตสำหรับผู้ให้บริการที่ระบุ
+- `disabled_providers` กลายเป็นนโยบายปฏิเสธภายในสำหรับผู้ให้บริการที่ระบุ
+- `autoupdate` กลายเป็น `update`: `false` แมปเป็น `"disable"`, `"notify"` แมปเป็น `"notify"` และ `true` แมปเป็น `"auto"`
+- `small_model` กลายเป็นการเลือก `model` สำหรับเอเจนต์ `title` ในตัว การกำหนดค่าเนทีฟ V2 ควรใช้
+  `agents.title.model` แทน
+
+คุณเก็บฟิลด์เหล่านี้ในไวยากรณ์ V1 ได้ OpenCode ปรับให้เป็นมาตรฐานโดยไม่เตือน
+
+### ฟิลด์ที่รับแต่ไม่รองรับ
+
+schema ของ V1 ยังรองรับฟิลด์ที่ไม่มีการทำงานเทียบเท่าใน V2 ระบบจะข้ามค่าเหล่านี้และแจ้งเตือนเพื่อ
+ไม่ให้เข้าใจผิดว่าเป็นการกำหนดค่าที่ใช้งาน
+
+- `logLevel`: ใช้ `OPENCODE_LOG_LEVEL` เมื่อเริ่ม OpenCode
+- `server`: ใช้บริการ V2 และตัวเลือกเซิร์ฟเวอร์อย่างชัดเจน API เซิร์ฟเวอร์เป็นการเปลี่ยนแปลงที่ไม่เข้ากันโดยเจตนา
+- `subagent_depth` ระดับบนสุด: ใช้ `experimental.subagent_depth` แทน
+- `compaction.tail_turns` และ `compaction.prune`: V2 ใช้ `compaction.keep.tokens` และการบีบอัดแบบเช็กพอยต์แทน
+- `name` ของเอเจนต์ในการกำหนดค่าแบบ JSON ของ V1
+- รายการ MCP V1 ที่เปิดอย่างเดียวโดยไม่มี `type`
+- ฟิลด์ทดลอง V1 `batch_tool`, `openTelemetry`, `primary_tools` และ `continue_loop_on_deny`
+- ฟิลด์ผู้ให้บริการ V1 `id`, `whitelist` และ `blacklist`
+- ฟิลด์โมเดลผู้ให้บริการ V1 `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, `status`
+  ที่ไม่ใช่ `deprecated` และ `interleaved` แบบบูลีน
+
+การเพิกเฉยฟิลด์เหล่านี้เป็นเจตนาและไม่ใช่การถดถอยด้านความเข้ากันได้ หาก V2 ไม่รักษาพฤติกรรมที่ระบุว่า
+รองรับที่อื่นในคู่มือนี้ ให้ทำตามแนวทางการรายงานปัญหาใน[การแก้ปัญหา](/troubleshooting)
+
+### ไฟล์เอเจนต์
+
+ไฟล์เอเจนต์ V1 ใช้ `agent/`, `agents/`, `mode/` หรือ `modes/` ได้ V2 ยังค้นพบทั้งสี่ไดเรกทอรี ตำแหน่ง V2
+ที่แนะนำคือ
+
+```text
+.opencode/agents/<name>.md
+```
+
+ไฟล์ใต้ไดเรกทอรี `mode/` หรือ `modes/` ของ V1 แทนเอเจนต์หลัก เมื่อย้ายเข้า `agents/` ให้เพิ่ม
+`mode: primary` ใน frontmatter ไฟล์ใต้ `agent/` ย้ายไป `agents/` ได้โดยไม่เปลี่ยน ID ที่มาจากพาธ
+
+เมื่อแปลง frontmatter เป็นฟิลด์เนทีฟ V2
+
+- เก็บเนื้อหา Markdown เป็นคำแนะนำระบบของเอเจนต์
+- ในการกำหนดค่าแบบ JSON ให้เปลี่ยน `prompt` เป็น `system` ส่วนเนื้อหาไฟล์ไม่ต้องมีฟิลด์ `system`
+- เปลี่ยน `disable` เป็น `disabled` และ `permission` เป็น `permissions`
+- รวม `model` และ `variant` เป็น `provider/model#variant`
+- ตั้งตัวเลือกการสุ่มตัวอย่างและตัวเลือกของผู้ให้บริการในตัวเลือกย่อยของโมเดล ตาม[ตัวอย่างด้านบน](#agents-and-modes)
+
+frontmatter เอเจนต์ V1 เลิกใช้แต่ยังถูกแปลอัตโนมัติ แต่ละไฟล์อ่านเป็นรูปแบบเดียว ไฟล์ที่
+ใช้ `permissions`, `request`, `system` หรือ `disabled` ใดๆ จะอ่านเป็น V2 และฟิลด์ V1 ในไฟล์ เช่น `name`,
+`tools`, `permission` หรือ `temperature` จะถูกเพิกเฉยพร้อมคำเตือนในบันทึก ไฟล์อื่นที่ใช้ฟิลด์ V1 จะอ่าน
+เป็น V1 ให้แปลง frontmatter ของไฟล์ทั้งหมดในครั้งเดียวแทนการผสมสองรูปแบบ ดู[เอเจนต์](/agents)
+
+### ไฟล์คำสั่ง
+
+ไฟล์คำสั่ง V1 ใช้ `command/` หรือ `commands/` ได้ V2 ค้นพบทั้งสอง ตำแหน่งที่แนะนำคือ
+
+```text
+.opencode/commands/<name>.md
+```
+
+ย้ายไฟล์จาก `command/` ไปยังพาธสัมพัทธ์เดียวกันใต้ `commands/` เพื่อรักษาชื่อคำสั่ง เนื้อหา Markdown ยังเป็น
+เทมเพลตคำสั่ง และ frontmatter `description` กับ `agent` คงชื่อเดิม เปลี่ยน `subtask` เป็น `subagent` เพื่อใช้
+ชื่อเนทีฟสำหรับการมอบหมายเบื้องหลัง หาก frontmatter มีฟิลด์ `model`
+และ `variant` แยกกัน ให้ต่อท้ายชื่อของตัวเลือกย่อยในค่าที่ระบุโมเดล แล้วลบ `variant`
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-5-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-5-5#high
+subagent: true
+```
+
+ดู[คำสั่ง](/commands)
+
+### ไฟล์สกิล
+
+V2 ค้นพบสกิลจากทั้ง `.opencode/skill/` และ `.opencode/skills/` โครงสร้างที่แนะนำคือ
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+ย้ายไดเรกทอรีสกิลทั้งหมด ไม่ใช่เฉพาะ `SKILL.md` เพื่อให้สคริปต์ การอ้างอิง และไฟล์ประกอบอื่นที่สัมพันธ์กันยัง
+ใช้ได้ เก็บชื่อไดเรกทอรีให้คงที่เพื่อรักษา ID สกิล frontmatter สกิลและเนื้อหา Markdown ที่มีอยู่ไม่
+ต้องเขียนใหม่เป็น V2 ดู[สกิล](/skills)
+
+### ไฟล์คำแนะนำ
+
+ไฟล์ `AGENTS.md` ที่มีอยู่คงอยู่ V2 ค้นพบ `~/.config/opencode/AGENTS.md` ส่วนกลางและไฟล์ `AGENTS.md`
+โดยรอบจากไดเรกทอรีปัจจุบันขึ้นไปถึงบ้าน สำหรับโปรเจกต์นอกบ้าน การค้นพบหยุดที่รากโปรเจกต์
+
+V2 คงการถอยไปใช้ `CLAUDE.md` ของ V1: ไดเรกทอรีที่ไม่มี `AGENTS.md` ใช้ `CLAUDE.md` ของมัน และ `~/.claude/CLAUDE.md`
+แทน `AGENTS.md` ส่วนกลางที่ขาด `OPENCODE_DISABLE_CLAUDE_CODE` ข้าม `CLAUDE.md` ทั้งหมด และ
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` ก็เช่นกัน ซึ่งใน V1 ข้ามเฉพาะ `~/.claude/CLAUDE.md` ต่างจาก V1 ที่หยุดที่
+ชื่อไฟล์แรกที่พบที่ใดก็ตามขึ้นไปในต้นไม้ V2 เลือกตามไดเรกทอรี `AGENTS.md` ที่รากจึงไม่ซ่อน
+`CLAUDE.md` ที่ซ้อนอยู่ ดู[คำแนะนำ](/instructions)
+
+## การกำหนดค่าไคลเอนต์เทอร์มินัล
+
+V2 แทนไฟล์ `tui.json(c)` หลายชั้นของ V1 ด้วยไฟล์กำหนดค่าไคลเอนต์เทอร์มินัลส่วนกลางหนึ่งไฟล์
+
+```text
+~/.config/opencode/cli.json
+```
+
+ไคลเอนต์เทอร์มินัลเป็นเจ้าของไฟล์นี้ บริการเบื้องหลังไม่โหลด เมื่อไม่มี `cli.json` การเริ่ม
+ไคลเอนต์เทอร์มินัล V2 ครั้งแรกจะย้ายการตั้งค่า `tui.json` ส่วนกลางที่รองรับและค่ากำหนดที่บันทึกไว้ โดยคงไฟล์ V1
+ไว้ไม่เปลี่ยน การกำหนดค่าไคลเอนต์ระดับโปรเจกต์ไม่ถูกย้ายเพราะการกำหนดค่าไคลเอนต์ V2 เป็นส่วนกลาง ดู
+[การตั้งค่า CLI](/cli/config)สำหรับเอกสารอ้างอิงการตั้งค่าไคลเอนต์ปัจจุบัน
+
+เมื่อมี `cli.json` แล้ว การแก้ไข `tui.json` จะไม่มีผล ดูหัวข้อ [`tui.json` จาก V1](/cli/config#legacy-tuijson)
+
+## ปลั๊กอิน
+
+เปลี่ยนชื่อ `plugin` เป็น `plugins` แทนทูเพิลแพ็กเกจและตัวเลือกด้วยออบเจกต์
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 ค้นพบปลั๊กอินในเครื่องจากทั้ง `.opencode/plugin/` และ `.opencode/plugins/` ให้ใช้ `.opencode/plugins/` สำหรับไฟล์ V2
+พาธในเครื่องที่กำหนดค่าไว้ต้องเป็นไดเรกทอรี จึงย้ายปลั๊กอินที่พอร์ตแล้วไปที่ `./plugin/local/index.ts`
+
+<Callout type="warning">
+  การใช้งานปลั๊กอิน V1 ไม่ทำงานใน V2 การย้ายไฟล์หรือเปลี่ยนชื่อรายการกำหนดค่าไม่เพียงพอ
+</Callout>
+
+พอร์ตจุดเข้า ฮุก เครื่องมือ อีเวนต์ และการส่งออกแพ็กเกจด้วย
+[คู่มือย้ายปลั๊กอิน](/build/plugins/migrate-v1)โดยเฉพาะ
+
+## API เซิร์ฟเวอร์และไคลเอนต์
+
+OpenCode 2 มี API เซิร์ฟเวอร์ที่ปรับปรุงและใช้งานง่ายขึ้น และชุดไคลเอนต์ใหม่ การเชื่อมต่อที่เรียก API เซิร์ฟเวอร์ V1
+ต้องย้ายไปยัง API V2
+
+ใช้แพ็กเกจ `@opencode/client` เพื่อเข้าถึง API V2 ที่เผยแพร่ ดู[เอกสารอ้างอิง API](/api)ที่สร้างขึ้นสำหรับ
+เอนด์พอยต์ ชนิดคำขอ และการตอบกลับ
+
+### การตรวจสอบสิทธิ์เซิร์ฟเวอร์
+
+เซิร์ฟเวอร์ V2 ยังใช้การยืนยันตัวตนแบบ HTTP Basic แต่มีการเปลี่ยนแปลงดังนี้
+
+- `OPENCODE_PASSWORD` ตั้งรหัสผ่าน `OPENCODE_SERVER_PASSWORD` ยังใช้ได้
+- `OPENCODE_SERVER_USERNAME` ไม่รองรับอีกต่อไป ชื่อผู้ใช้คือ `opencode` เสมอ
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+ดู[เว็บ](/cli/web#authentication)
+
+## ตรวจสอบการตั้งค่า
+
+ตรวจสอบโมเดล ข้อมูลรับรองผู้ให้บริการ เอเจนต์ สิทธิ์ เซิร์ฟเวอร์ MCP และปลั๊กอินในโปรเจกต์ก่อนพึ่ง V2
+สำหรับงานประจำ เก็บการตั้งค่า V1 ไว้จนยืนยันพฤติกรรม V2 ที่ต้องการได้ และอย่าชี้ V1 ไปยัง
+การกำหนดค่าที่คุณแปลงเป็นรูปแบบเนทีฟ V2 แล้ว

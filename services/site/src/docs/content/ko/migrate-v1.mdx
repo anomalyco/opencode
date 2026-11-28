@@ -1,0 +1,633 @@
+---
+title: "V1에서 마이그레이션"
+description: "OpenCode 1에서 OpenCode 2로 업그레이드하세요. 플러그인, 서버 API, 터미널 클라이언트 구성에 V1과 호환되지 않는 변경 사항이 있습니다."
+---
+
+OpenCode 1과 OpenCode 2는 모두 `opencode` 명령을 사용하며 이제 기본 설치 방식으로는 두 버전을 함께 설치할 수 없습니다. V2를
+설치하기 전에 패키지로 관리되는 V1 설치를 제거하세요. V2 curl 설치 프로그램은 V1 바이너리를 교체합니다.
+
+## 호환성이 깨지는 변경
+
+V2에서는 다음 세 가지 변경으로 인해 V1과의 호환성이 깨집니다. 모두 의도한 변경입니다.
+
+- [플러그인](/build/plugins/migrate-v1)이 새 플러그인 API를 사용합니다.
+- [서버 API와 클라이언트](#server-api-and-clients)에 새 계약이 있습니다.
+- [터미널 클라이언트 구성](/cli/config)이 계층형 `tui.json(c)` 파일에서 하나의 전역 `cli.json` 파일로 이동합니다
+  (자동 마이그레이션).
+
+이 세 영역을 제외하면, V1에서 지원하던 기능은 V2에서도 호환성을 유지하는 것이 목표입니다. V1 스키마가 받아들이던 일부 필드는 V2 대응이
+없어 의도적으로 무시되며, [허용되지만 지원되지 않는 필드](#accepted-but-unsupported-fields)에 나열되어 있습니다.
+
+기존에 지원되는 서버 구성 필드, 에이전트 정의, 명령어 정의, 스킬 및 `.opencode/`의 다른 파일은 변경 없이 계속
+동작해야 합니다. 이 가이드에 설명된 지원 동작이 V2에서 동작하지 않으면 예상된 마이그레이션 요구가 아니라 호환성
+버그로 취급하세요.
+
+<Callout type="tip">
+  지원되는 V1 기능이 V2에서 동작하지 않으면 [문제 해결](/troubleshooting)의 이슈 보고 안내를 따르고 호환성 이슈를
+  등록하세요.
+</Callout>
+
+## V2 설치
+
+[설치 안내](/#cli)로 V2 터미널 클라이언트를 설치하세요.
+
+V2를 시작하기 전에 모든 것을 다시 작성할 필요는 없습니다. 실용적인 마이그레이션은 다음과 같습니다.
+
+1. 기존 구성과 파일 기반 정의를 유지합니다.
+2. V2를 시작하고 모델, 자격 증명, 에이전트, 권한, MCP 서버를 확인합니다.
+3. V1 플러그인 구현은 V2에서 실행되지 않으므로 플러그인을 이식합니다.
+4. 서버 API를 호출하는 통합을 이식합니다.
+5. 준비되면 구성을 네이티브 V2 형태로 변환합니다. 이 단계는 선택 사항입니다.
+
+마이그레이션을 검증하는 동안 V1 설정 사본을 보관하세요. V1과 V2는 같은 구성 위치를 사용하므로, 파일을 V2 전용
+형태로 변환한 뒤에는 V1이 그 파일을 가리키지 않게 하세요.
+
+## 구성
+
+이 섹션은 JSON/JSONC 구성과 `.opencode/`의 파일 기반 정의를 모두 다룹니다.
+
+### 기존 구성 사용
+
+V2는 기존 시스템, 전역, 프로젝트 구성을 V1과 같은 위치에서 읽습니다.
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2는 지원되는 V1 및 네이티브 V2 필드를 메모리에서 정규화하며 소스 파일을 다시 쓰지 않습니다. 기존에 지원되는 V1
+구성은 계속 동작하도록 되어 있으므로 V2를 사용해 보거나 도입하기 위해 변환할 필요가 없습니다.
+
+V1과 마찬가지로 시스템 구성과 macOS 관리형 기본 설정이 가장 높은 우선순위를 가지므로 전역 및 프로젝트 파일을
+재정의합니다. 마이그레이션된 `enabled_providers`, `disabled_providers`를 포함한 그 [정책](/policies#precedence)도
+전역 및 프로젝트 정책보다 우선합니다. 설정을 재정의해도 사용자가 제공자, MCP 서버, 에이전트, 플러그인을 추가하는
+것을 막을 수 없으므로, 관리자가 강제하는 제한은 `policies`로 표현하고 `permissions` 같은 일반 설정으로 표현하지 마세요.
+
+### OpenCode에 마이그레이션 요청
+
+V1 구성 형식은 계속 지원됩니다. 네이티브 V2 형식은 선택 사항이며 여러 설정을 더 명시적이고 편하게 만듭니다.
+
+권장 마이그레이션 방법은 OpenCode에 구성을 업데이트해 달라고 요청하는 것입니다.
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode는 파일 전체를 검사하고 아래 관련 변경을 적용하며 변경할 필요가 없는 설정은 다시 쓰지 않습니다. 변환은 한
+번에 할 필요가 없으며 지원되는 V1과 네이티브 V2 필드가 최상위에서 공존할 수 있습니다. 두 형식이 같은 표준 값을
+설정하면 JSON 키 순서와 관계없이 유효한 네이티브 V2 값이 우선합니다.
+
+중첩 혼합은 의도적으로 제한됩니다. OpenCode는 `mcp`, `compaction`, `experimental` 안에서 V1과 V2 멤버가 섞인 것을
+인식하지만, 개별 에이전트, 제공자, 명령어, 모델 안에서 형식을 재귀적으로 추론하지 않습니다. 그 중첩 항목은 모두 한
+형식으로 유지하세요. 지원되는 V1 구문만 사용하면 경고가 표시되지 않습니다. 잘못된 값, 지원되지 않는 이전 필드, V1/V2 값
+충돌은 경고를 내고 관련 없는 유효 설정은 계속 로드됩니다.
+
+### 권한과 도구
+
+V1은 권한 규칙의 적용 결과를 도구별로 묶습니다. V2는 하나의 순서 있는 `permissions` 배열을 사용해 우선순위와 예외를 명시합니다.
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+권한 액션도 바뀌었습니다. `bash`는 이제 `shell`, `task`는 `subagent`, `write`와 `patch`는 `edit`입니다. V2의 순서
+있는 규칙 형식은 [권한](/permissions)을 참고하세요.
+
+V2에서 Todos는 기본적으로 꺼져 있습니다. 켜려면 실험 플래그를 사용하세요. 향후 릴리스에서 바뀌거나 제거될 수
+있으며 [실험](/config#experimental)을 참고하세요.
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
+<Callout type="warning">
+  V1은 프로젝트 밖 경로에 접근하기 전에 확인합니다. V2는 그렇지 않으며 `external_directory`가 기본으로 허용됩니다.
+  V1 동작을 유지하려면 `{ "action": "external_directory", "resource": "*", "effect": "ask" }`를 `permissions`에
+  추가하세요.
+</Callout>
+
+### 에이전트와 모드
+
+단수 `agent`와 폐기된 `mode` 맵은 `agents`가 됩니다. 에이전트 필드도 나머지 V2 구성과 형식을 맞췄습니다.
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt`는 `system`, `disable`은 `disabled`가 되고, 별도 `variant`는 `#` 뒤에서 모델 참조에 합쳐집니다.
+`maxSteps`는 `steps`가 됩니다. 이전 `mode` 맵의 항목은 기본 에이전트가 됩니다.
+
+에이전트 [`request.body`](/agents#request)는 유지되지만 모델로 전송되지 않으므로 V1 `temperature`, `top_p`,
+`options`는 효과가 없습니다. 대신 모델 변형에 설정하세요. DeepSeek은 사고가 꺼진 상태에서만 `temperature`를
+적용하므로 다음 변형은 사고도 끕니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+제공자 JSON 필드에는 `body`를, 제공자 패키지 옵션에는 `settings`를 사용하세요. [모델 옵션](/models#options)을
+참고하세요.
+
+### 스냅샷
+
+단수 `snapshot` 필드를 `snapshots`로 바꾸세요. 불리언 값은 바뀌지 않습니다.
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### 미디어
+
+단수 `attachment` 객체를 `media`로 바꾸세요. 중첩 이미지 설정은 같은 이름을 유지합니다.
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### MCP 서버
+
+V2는 서버를 `mcp.servers` 아래에 묶고, `enabled`를 반대 의미의 `disabled`로 바꾸며, 타임아웃 용도를 분리합니다.
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+원격 OAuth 필드 이름은 스네이크 케이스로 표기합니다. `clientId`는 `client_id`, `clientSecret`은 `client_secret`,
+`callbackPort`는 `callback_port`, `redirectUri`는 `redirect_uri`가 됩니다. V1 `experimental.mcp_timeout` 값은
+기본 `mcp.timeout.catalog`과 `mcp.timeout.execution` 값도 됩니다. [MCP 서버](/mcp-servers)를 참고하세요.
+
+### 압축
+
+V2는 보존할 컨텍스트의 토큰 한도를 `keep` 아래에 두고, 비워 둘 공간의 이름을 더 명확하게 바꿉니다.
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+V1 토큰 수는 그대로 이어집니다. V2는 `"buffer": "15%"`처럼 모델 윈도의 백분율도 받으며, 윈도 크기가 다른 모델에
+맞습니다.
+
+`auto`는 이름을 유지합니다. V2에는 네이티브 `tail_turns`나 `prune` 필드가 없으며 두 이전 필드는 경고와 함께
+무시됩니다. 최근 컨텍스트는 대신 토큰 예산으로 유지됩니다. [압축](/compaction)을 참고하세요.
+
+### 스킬
+
+V1은 추가 스킬 경로와 URL을 분리합니다. V2는 둘을 하나의 순서 있는 배열로 합칩니다.
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+기존 스킬 파일과 `.opencode/skills/` 자동 탐색은 바뀌지 않습니다. [스킬](/skills)을 참고하세요.
+
+### 명령어
+
+단수 `command` 맵을 `commands`로, `subtask`를 `subagent`로 바꾸세요. 별도 모델 `variant`는 모델 참조에 합칩니다.
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`, `description`, `agent`는 이름을 유지합니다. 이전 `subtask`도 계속 받아들이며, 위임된 명령어는 이제
+자동으로 백그라운드에서 실행되고 결과를 상위 세션에 보고합니다. 기존 Markdown 명령어 정의도 계속 지원됩니다.
+[명령어](/commands)를 참고하세요.
+
+### 참조
+
+폐기된 단수 `reference` 맵을 `references`로 바꾸세요.
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1은 이미 `references`를 받아들이므로 파일이 이를 사용하면 변경이 필요 없습니다. 참조 항목은 같은 형태를
+유지합니다. [참조](/references)를 참고하세요.
+
+### 제공자
+
+단수 `provider` 맵을 `providers`로 바꾸세요. V2는 런타임 패키지, 엔드포인트, 요청 설정을 분리합니다.
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1 `npm`은 `package`가 되고 AI SDK 패키지는 `aisdk:` 접두사를 받습니다. `api`는 `settings.baseURL`이 됩니다.
+제공자 `options`는 요청 역할에 따라 `settings`, `headers`, `body`로 나뉩니다. `options.setCacheKey`는 제공자의
+`compatibility.supportsPromptCacheKey`가 됩니다. [제공자](/providers)를 참고하세요.
+
+V2는 두 이전 제공자 네임스페이스를 통합했습니다.
+
+| V1 제공자 ID               | 표준 V2 제공자 ID        |
+| -------------------------- | ------------------------ |
+| `azure-cognitive-services` | `azure`                  |
+| `google-vertex-anthropic`  | `google-vertex`          |
+
+모호하지 않은 V1 제공자, 에이전트, 명령어, 제공자 필터 필드의 마이그레이션은 이 표준 ID를 사용합니다. 공유 최상위
+`model` 필드는 네이티브 V2 구성에서도 같은 구문이 유효하므로 정확한 제공자 ID를 유지합니다. 이전 내장 제공자를
+마이그레이션할 때는 그 필드를 표준 ID로 업데이트하세요.
+
+### 모델과 변형
+
+모델은 제공자 아래에 중첩된 채로 남지만 여러 모델 필드가 더 명시적으로 바뀝니다.
+
+- `id`는 `modelID`가 됩니다.
+- `tool_call`과 `modalities`는 `capabilities.tools`, `capabilities.input`, `capabilities.output`이 됩니다.
+- `status`가 `"deprecated"`이면 `disabled: true`가 됩니다.
+- 캐시 비용은 `cache_read`, `cache_write`에서 `cache.read`, `cache.write`로 이동합니다.
+- 제공자별 `options`는 `settings`가 됩니다.
+- V1 변형 객체는 각 항목에 `id`가 있는 V2 배열이 됩니다.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+전체 네이티브 모델 형태는 [모델](/models)을 참고하세요.
+
+### 직접적인 네이티브 대응이 없는 지원 필드
+
+`shell`, `model`, `default_agent`, `watcher`, `formatter`, `instructions`, `enterprise`, `tool_output`처럼 형태가 같은
+대부분의 필드는 마이그레이션이 필요 없습니다.
+
+V2는 `lsp` 구성을 받아들이고 보존하지만 언어 서버를 실행하거나 LSP 도구를 제공하거나 LSP 진단을 만들지 않습니다.
+그 기능에 의존하는 워크플로는 프로젝트의 린트, 타입 검사, 컴파일러 명령으로 바꾸세요.
+
+V1 제공자 필터에는 일대일 네이티브 V2 구성 필드가 없지만 동작은 [정책](/policies)을 통해 계속 지원됩니다.
+
+- `enabled_providers`는 기본 거부 제공자 정책과 나열된 제공자에 대한 허용으로 내부 변환됩니다.
+- `disabled_providers`는 나열된 제공자에 대한 내부 거부 정책이 됩니다.
+- `autoupdate`는 `update`가 됩니다. `false`는 `"disable"`, `"notify"`는 `"notify"`, `true`는 `"auto"`로 매핑됩니다.
+- `small_model`은 `model` 선택이 됩니다. 내장 `title` 에이전트의 경우이며, 네이티브 V2 구성에서는
+  `agents.title.model`을 사용하세요.
+
+이 필드는 V1 구문으로 유지해도 됩니다. OpenCode는 경고 없이 정규화합니다.
+
+### 허용되지만 지원되지 않는 필드
+
+V1 스키마는 지원되는 V2 동작이 없는 필드도 받아들였습니다. V2는 이 값을 무시하고 경고를 내서 활성 구성으로 오해하지
+않게 합니다.
+
+- `logLevel`: OpenCode를 시작할 때 `OPENCODE_LOG_LEVEL`을 사용하세요.
+- `server`: V2 서비스와 명시적 서버 옵션을 사용하세요. 서버 API는 의도적으로 V1과 호환되지 않도록 변경되었습니다.
+- 최상위 `subagent_depth`: 대신 `experimental.subagent_depth`를 사용하세요.
+- `compaction.tail_turns`와 `compaction.prune`: V2는 대신 `compaction.keep.tokens`와 체크포인트 기반 압축을 사용합니다.
+- V1 JSON 구성 안의 에이전트 `name`.
+- `type`이 없는 활성화 전용 V1 MCP 항목.
+- V1 실험 필드 `batch_tool`, `openTelemetry`, `primary_tools`, `continue_loop_on_deny`.
+- V1 제공자 필드 `id`, `whitelist`, `blacklist`.
+- V1 제공자 모델 필드 `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, `deprecated`가 아닌
+  `status`, 불리언 `interleaved`.
+
+이 필드를 무시하는 것은 의도된 것이며 호환성 회귀가 아닙니다. 이 가이드의 다른 곳에서 지원된다고 밝힌 동작을 V2가
+유지하지 않으면 [문제 해결](/troubleshooting)의 이슈 보고 안내를 따르세요.
+
+### 에이전트 파일
+
+V1 에이전트 파일은 `agent/`, `agents/`, `mode/`, `modes/`를 사용할 수 있습니다. V2는 네 디렉터리를 모두 찾습니다.
+권장 V2 위치는 다음과 같습니다.
+
+```text
+.opencode/agents/<name>.md
+```
+
+V1 `mode/`나 `modes/` 디렉터리의 파일은 기본 에이전트를 나타냅니다. `agents/`로 옮길 때 프런트매터에
+`mode: primary`를 추가하세요. `agent/`의 파일은 경로에서 파생된 ID를 바꾸지 않고 `agents/`로 옮길 수 있습니다.
+
+프런트매터를 네이티브 V2 필드로 변환할 때는 다음과 같이 합니다.
+
+- Markdown 본문은 에이전트의 시스템 지침으로 유지합니다.
+- JSON 구성에 있는 `prompt`는 `system`으로 바꾸세요. 파일 본문에는 `system` 필드가 필요하지 않습니다.
+- `disable`은 `disabled`, `permission`은 `permissions`로 바꾸세요.
+- `model`과 `variant`를 `provider/model#variant`로 합치세요.
+- 샘플링과 제공자 옵션은 [위](#agents-and-modes)에 설명된 대로 모델 변형에 설정하세요.
+
+V1 에이전트 프런트매터는 더 이상 권장하지 않지만 여전히 자동 변환됩니다. 각 파일은 하나의 형식으로 읽힙니다. `permissions`,
+`request`, `system`, `disabled` 중 하나라도 사용하는 파일은 V2로 읽히며 그 안의 `name`, `tools`, `permission`,
+`temperature` 같은 V1 필드는 로그 경고와 함께 무시됩니다. V1 필드를 사용하는 다른 파일은 V1로 읽힙니다. 두 형식을
+섞지 말고 파일의 프런트매터를 한 번에 변환하세요. [에이전트](/agents)를 참고하세요.
+
+### 명령어 파일
+
+V1 명령어 파일은 `command/`나 `commands/`를 사용할 수 있습니다. V2는 둘을 모두 찾습니다. 권장 위치는 다음과 같습니다.
+
+```text
+.opencode/commands/<name>.md
+```
+
+명령어 이름을 유지하려면 `command/`의 파일을 `commands/` 아래 같은 상대 경로로 옮기세요. Markdown 본문은 명령어
+템플릿으로 남고 `description`과 `agent` 프런트매터는 같은 이름을 유지합니다. 백그라운드 위임의 네이티브 이름을
+쓰려면 `subtask`를 `subagent`로 바꾸세요. 프런트매터에 별도 `model`과 `variant` 필드가 있으면 변형을 모델에 붙이고
+`variant`를 제거하세요.
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-5-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-5-5#high
+subagent: true
+```
+
+[명령어](/commands)를 참고하세요.
+
+### 스킬 파일
+
+V2는 `.opencode/skill/`과 `.opencode/skills/` 모두에서 스킬을 찾습니다. 권장 레이아웃은 다음과 같습니다.
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+`SKILL.md`만이 아니라 스킬 디렉터리 전체를 옮겨 상대 스크립트, 참고 자료, 기타 보조 파일을 계속 사용할 수 있게
+하세요. 스킬 ID를 유지하려면 디렉터리 이름을 그대로 두세요. 기존 스킬 프런트매터와 Markdown 본문은 V2로 다시 쓸
+필요가 없습니다. [스킬](/skills)을 참고하세요.
+
+### 지침 파일
+
+기존 `AGENTS.md` 파일은 그대로 둡니다. V2는 전역 `~/.config/opencode/AGENTS.md`와 현재 디렉터리에서 홈 디렉터리까지 올라가며 자동으로 적용할 `AGENTS.md` 파일을 찾습니다. 홈 밖 프로젝트에서는 탐색이 프로젝트 루트에서 멈춥니다.
+
+V2는 V1의 `CLAUDE.md` 대체 동작을 유지합니다. `AGENTS.md`가 없는 디렉터리는 `CLAUDE.md`를 사용하고,
+`~/.claude/CLAUDE.md`는 전역 `AGENTS.md`가 없을 때 이를 대신합니다. `OPENCODE_DISABLE_CLAUDE_CODE`는 모든
+`CLAUDE.md`를 건너뛰며, `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT`도 마찬가지입니다. V1에서는
+`~/.claude/CLAUDE.md`만 건너뛰었습니다. 트리 어디에서든 처음 찾은 파일 이름에서 멈추던 V1과 달리 V2는 디렉터리별로 선택하므로, 루트의
+`AGENTS.md`가 중첩된 `CLAUDE.md`를 더 이상 숨기지 않습니다. [지침](/instructions)을 참고하세요.
+
+## 터미널 클라이언트 구성
+
+V2는 계층형 V1 `tui.json(c)` 파일을 하나의 전역 터미널 클라이언트 구성 파일로 대체합니다.
+
+```text
+~/.config/opencode/cli.json
+```
+
+이 파일은 터미널 클라이언트에서 관리하며 백그라운드 서비스는 로드하지 않습니다. `cli.json`이 없으면 첫 V2 터미널
+클라이언트 시작 시 지원되는 전역 `tui.json` 설정과 저장된 기본 설정을 마이그레이션하고 V1 파일은 그대로 둡니다.
+V2 클라이언트 구성은 전역이므로 프로젝트 로컬 클라이언트 구성은 마이그레이션하지 않습니다. 현재 클라이언트 설정
+참조는 [CLI 설정](/cli/config)을 참고하세요.
+
+`cli.json` 파일이 있으면 이후 `tui.json` 파일을 수정해도 반영되지 않습니다. [이전 버전의 `tui.json`](/cli/config#legacy-tuijson)을 참고하세요.
+
+## 플러그인
+
+`plugin`을 `plugins`로 바꾸세요. 패키지와 옵션 튜플은 객체로 바꿉니다.
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2는 `.opencode/plugin/`과 `.opencode/plugins/` 모두에서 로컬 플러그인을 찾습니다. V2 파일에는 `.opencode/plugins/`를
+사용하세요. 구성된 로컬 경로는 디렉터리여야 하므로 이식한 플러그인을 `./plugin/local/index.ts`로 옮기세요.
+
+<Callout type="warning">
+  V1 플러그인 구현은 V2에서 실행되지 않습니다. 파일을 옮기거나 구성 항목 이름만 바꾸는 것으로는 부족합니다.
+</Callout>
+
+진입점, 훅, 도구, 이벤트, 패키지 export는 전용 [플러그인 마이그레이션 가이드](/build/plugins/migrate-v1)로
+이식하세요.
+
+## 서버 API와 클라이언트
+
+OpenCode 2에는 더 편리하게 개정된 서버 API와 새 클라이언트가 있습니다. V1 서버 API를 호출하는 통합은 V2 API로
+마이그레이션해야 합니다.
+
+릴리스된 V2 API에 접근하려면 `@opencode/client` 패키지를 사용하세요. 엔드포인트, 요청 타입, 응답은 생성된
+[API 참조](/api)를 참고하세요.
+
+### 서버 인증
+
+V2 서버는 계속 HTTP Basic 인증을 사용하며 다음이 바뀌었습니다.
+
+- `OPENCODE_PASSWORD`가 비밀번호를 설정합니다. `OPENCODE_SERVER_PASSWORD`도 계속 동작합니다.
+- `OPENCODE_SERVER_USERNAME`은 더 이상 지원되지 않습니다. 사용자 이름은 항상 `opencode`입니다.
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+[웹](/cli/web#authentication)을 참고하세요.
+
+## 설정 확인
+
+정기 작업에 V2를 사용하기 전에 프로젝트에서 모델, 제공자 자격 증명, 에이전트, 권한, MCP 서버, 플러그인을
+확인하세요. 필요한 V2 동작을 확인할 때까지 V1 설정을 유지하고, 네이티브 V2 형태로 변환한 구성은 V1이 가리키지 않게
+하세요.

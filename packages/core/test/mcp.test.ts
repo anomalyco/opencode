@@ -31,6 +31,7 @@ import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpPool } from "@opencode/core/mcp/pool"
+import { McpTarget } from "@opencode/core/mcp/target"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -56,6 +57,7 @@ import {
   PubSub,
   Queue,
   Ref,
+  Result,
   Schedule,
   Schema,
   Scope,
@@ -369,6 +371,7 @@ function resourceMcpLayer(
     /** The configured server's name; "resources" unless given. */
     name?: string
     credentials?: Partial<Credential.Interface>
+    integration?: Partial<Integration.Interface>
     bus?: Layer.Layer<Bus.Service>
     /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
@@ -462,6 +465,7 @@ function resourceMcpLayer(
             status: unusedIntegration,
             cancel: unusedIntegration,
           },
+          ...overrides?.integration,
         }),
         Layer.mock(Credential.Service, { list: () => Effect.succeed([]), ...overrides?.credentials }),
         overrides?.environment ?? hostEnvironmentLayer,
@@ -470,8 +474,10 @@ function resourceMcpLayer(
   )
 }
 
+const target = (config: typeof ConfigMCP.Server.Type) => Result.getOrThrow(McpTarget.parse("test", config))
+
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
-  McpClient.connect({ server, config, directory }).pipe(Effect.provide(hostEnvironmentLayer))
+  McpClient.connect({ server, target: target(config), directory }).pipe(Effect.provide(hostEnvironmentLayer))
 
 // Reads no longer wait for startup, so tests that assert on a connected server settle it first.
 const settled = (service: Mcp.Interface, name = "resources") =>
@@ -744,7 +750,11 @@ test("spawns local MCP servers through the location environment", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* McpClient.connect({ server: "environment", config, directory: import.meta.dir })
+        const connection = yield* McpClient.connect({
+          server: "environment",
+          target: target(config),
+          directory: import.meta.dir,
+        })
         yield* connection.tools()
       }),
     ).pipe(Effect.provide(recordingEnvironmentLayer(spawns))),
@@ -807,6 +817,32 @@ test("rejects sends before the stdio transport is started", async () => {
     ),
   )
 })
+
+testEffect(Layer.empty).effect("stops waiting for a server whose registration failed", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    // The failed registration fails the add too.
+    yield* mcp.add("remote", new ConfigMCP.Remote({ type: "remote", url: "https://mcp.example.com" })).pipe(Effect.exit)
+    yield* mcp.servers().pipe(
+      Effect.filterOrFail((servers) => servers.some((server) => server.name === "remote")),
+      Effect.retry({ times: 100 }),
+    )
+    const startup = yield* mcp.awaitStartup().pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Effect.yieldNow
+    expect(startup.pollUnsafe()).toBeDefined()
+  }).pipe(
+    Effect.provide(
+      resourceMcpLayer(
+        new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }),
+        undefined,
+        undefined,
+        {
+          integration: { transform: () => Effect.die("integration unavailable") },
+        },
+      ),
+    ),
+  ),
+)
 
 test("joins concurrent stdio transport closes", async () => {
   await Effect.runPromise(
@@ -1914,7 +1950,7 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
-test("marks a remote MCP server with an invalid URL as failed", async () => {
+test("marks an MCP server with an invalid config as failed", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -1928,6 +1964,16 @@ test("marks a remote MCP server with an invalid URL as failed", async () => {
 
           yield* service.add("broken", new ConfigMCP.Remote({ type: "remote", url: "not a url" }))
           expect(yield* status("broken")).toEqual({ status: "failed", error: "Invalid MCP server URL: not a url" })
+          expect((yield* service.servers()).find((server) => server.name === "broken")?.integrationID).toBeUndefined()
+          yield* service.add("empty", new ConfigMCP.Local({ type: "local", command: [] }))
+          expect(yield* status("empty")).toEqual({ status: "failed", error: "MCP server command is empty" })
+          yield* service.add("redirect", new ConfigMCP.Remote({ ...config, oauth: { redirect_uri: "not a url" } }))
+          expect(yield* status("redirect")).toEqual({
+            status: "failed",
+            error: "Invalid MCP OAuth redirect_uri: not a url",
+          })
+          yield* service.add("unset", new ConfigMCP.Remote({ ...config, oauth: { redirect_uri: "" } }))
+          expect(yield* status("unset")).toEqual({ status: "connected" })
           expect(yield* status("resources")).toEqual({ status: "connected" })
 
           yield* service.add("broken", new ConfigMCP.Remote(config))
@@ -3497,15 +3543,16 @@ describe("MCP pool", () => {
     const remote = new ConfigMCP.Remote({
       type: "remote",
       url: "https://mcp.example.com",
-      headers: { authorization: "secret" },
+      headers: { authorization: "hunter2" },
     })
-    const local = new ConfigMCP.Local({ type: "local", command: ["server"], environment: { TOKEN: "secret" } })
-    const key = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) => McpPool.key({ config: remote, ...input })
-    const localKey = (input: Partial<Parameters<typeof McpPool.key>[0]> = {}) =>
+    const local = new ConfigMCP.Local({ type: "local", command: ["server"], environment: { TOKEN: "hunter2" } })
+    const key = (input: Partial<Extract<Parameters<typeof McpPool.key>[0], { credential: unknown }>> = {}) =>
+      McpPool.key({ config: remote, credential: undefined, ...input })
+    const localKey = (input: Partial<Extract<Parameters<typeof McpPool.key>[0], { cwd: unknown }>> = {}) =>
       McpPool.key({ config: local, cwd: "/a", ...input })
 
-    expect(key()).not.toContain("secret")
-    expect(localKey()).not.toContain("secret")
+    expect(key()).not.toContain("hunter2")
+    expect(localKey()).not.toContain("hunter2")
     expect(key({ credential: "cred_a" })).not.toBe(key({ credential: "cred_b" }))
     expect(key({ config: new ConfigMCP.Remote({ ...remote, headers: { authorization: "other" } }) })).not.toBe(key())
     expect(key({ config: new ConfigMCP.Remote({ ...remote, codemode: false }) })).not.toBe(key())
@@ -3516,6 +3563,21 @@ describe("MCP pool", () => {
     )
     expect(localKey({ clientInfo: { name: "other", version: "1" } })).not.toBe(localKey())
     expect(key({ skills: true })).not.toBe(key({ skills: false }))
+  })
+
+  test("keys equivalent configs alike", () => {
+    const remote = (config: Partial<ConfigMCP.Remote> = {}) =>
+      McpPool.key({ config: { type: "remote", url: "https://mcp.example.com", ...config }, credential: undefined })
+    const local = (input: Partial<ConfigMCP.Local> = {}, clientInfo?: { name: string; version: string }) =>
+      McpPool.key({ config: { type: "local", command: ["server"], ...input }, cwd: "/a", clientInfo })
+    // Config files give every server a timeout, and leaving an option out means its default.
+    expect(remote({ timeout: {}, protocol: "auto", oauth: {}, headers: {}, codemode: true })).toBe(remote())
+    expect(remote({ timeout: { startup: 1, catalog: 2 }, oauth: { scope: "a", client_id: "b" } })).toBe(
+      remote({ timeout: { catalog: 2, startup: 1 }, oauth: { client_id: "b", scope: "a" } }),
+    )
+    expect(remote({ oauth: false })).not.toBe(remote())
+    expect(local({ environment: {}, timeout: {}, protocol: "auto" })).toBe(local())
+    expect(local({}, { name: "a", version: "1" })).toBe(local({}, { version: "1", name: "a" }))
   })
 
   live("keeps a server that negotiates legacy private to each Location", () => {
@@ -3753,6 +3815,54 @@ describe("MCP pool", () => {
     }),
   )
 
+  live("reports needs_auth in every Location when a shared connection's credential is refused", () =>
+    Effect.gen(function* () {
+      const refusing = { tools: false }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: async (request) =>
+          refusing.tools && (await toolCall(request)) ? new Response(null, { status: 401 }) : undefined,
+      })
+      // A signed-in credential with no refresh token: a 401 can only end in a new login.
+      const row = (integrationID: Integration.ID) =>
+        new Credential.Info({
+          id: Credential.ID.make("cred_signed"),
+          integrationID,
+          label: "signed",
+          value: {
+            type: "oauth",
+            methodID: Integration.MethodID.make("signed"),
+            access: "signed-in",
+            refresh: "",
+            expires: Date.now() + 3_600_000,
+            metadata: { serverUrl: server.url, tokenType: "Bearer" },
+          },
+        })
+      const credentials: Partial<Credential.Interface> = {
+        list: (integrationID) => Effect.succeed([row(integrationID)]),
+        get: () => Effect.succeed(row(Integration.ID.make("unused"))),
+      }
+      const pool = yield* makePool
+      const config = pooled(server.url, { oauth: undefined })
+      const a = yield* open(config, pool, directories[0], { credentials })
+      const b = yield* open(config, pool, directories[1], { credentials })
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+      expect(server.state.toolLists).toBe(1)
+      refusing.tools = true
+
+      yield* a.mcp.callTool({ server: "resources", name: "echo" }).pipe(Effect.flip)
+
+      for (const location of [a, b])
+        expect(
+          yield* status(location.mcp).pipe(
+            Effect.filterOrFail((status) => status?.status !== "connected" && status?.status !== "pending"),
+            Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+          ),
+        ).toMatchObject({ status: "needs_auth" })
+    }),
+  )
+
   live("connects with the credential its key was made from, even when a sign-in lands mid-start", () =>
     Effect.gen(function* () {
       // The authorization header of every tool call, in order.
@@ -3913,7 +4023,7 @@ describe("MCP pool", () => {
           const scope = yield* Effect.scope
           const run = yield* FiberSet.makeRuntime<never, void, never>()
           const connection = pool.connection({
-            spec: { name, config, directory },
+            spec: { name, target: target(config), directory },
             authProvider: Effect.undefined,
             elicitation: {
               create: (request) =>
@@ -3939,7 +4049,10 @@ describe("MCP pool", () => {
               closed: () => Effect.void,
               changed: () => Effect.void,
             },
-            select: Effect.succeed({ key: McpPool.key({ config }), authProvider: Effect.undefined }),
+            select: Effect.succeed({
+              key: McpPool.key({ config, credential: undefined }),
+              authProvider: Effect.undefined,
+            }),
           })
           yield* connection.start
           return { connection, forms, asked }
@@ -4494,6 +4607,40 @@ describe("MCP events", () => {
     }),
   )
 
+  testEffect(Layer.empty).live("resumes an ended subscription from its cursor unless subscribed again from now", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      const bus = yield* workingBus
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        const ended = bus.until(only(mcp), (sub) => sub?.status.status === "ended")
+        const terminated = { error: { code: -32024, message: "Revoked" } }
+        yield* mcp.subscribe("resources", { name: "job.finished" })
+        const first = yield* server.opened
+        first.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+        first.send("notifications/events/event", finishedEvent("e1", "c2"))
+        yield* bus.delivered(1)
+        first.send("notifications/events/terminated", terminated)
+        yield* ended
+
+        yield* mcp.subscribe("resources", { name: "job.finished" })
+        const resumed = yield* server.opened
+        expect(resumed.params).toMatchObject({ cursor: "c2" })
+        resumed.send("notifications/events/terminated", terminated)
+        yield* ended
+
+        // Starting over from now forgets the events delivered before, so a server replaying one delivers it again.
+        yield* mcp.subscribe("resources", { name: "job.finished", cursor: null })
+        const fresh = yield* server.opened
+        expect(fresh.params).toMatchObject({ cursor: null })
+        fresh.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+        fresh.send("notifications/events/event", finishedEvent("e1", "c2"))
+        expect(yield* bus.delivered(2)).toMatchObject([{ data: { eventId: "e1" } }, { data: { eventId: "e1" } }])
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
+    }),
+  )
+
   testEffect(Layer.empty).live("reopens without a replay gap when cursorless, and ends when disabled", () =>
     Effect.gen(function* () {
       const server = yield* streamServer()
@@ -4538,6 +4685,50 @@ describe("MCP events", () => {
           status: { status: "ended", reason: "unavailable" },
         })
       }).pipe(Effect.provide(subscriptionLayer(plain.url, bus.layer)))
+    }),
+  )
+
+  testEffect(Layer.empty).live("keeps following events while a reconnect tears the old connection down", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      // Once armed, the next tool list announcement, which the old connection's teardown makes, waits for release.
+      const armed = { value: false }
+      const reached = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const statuses = yield* Queue.unbounded<void>()
+      const bus = Layer.mock(Bus.Service, {
+        subscribe: () => Stream.never,
+        publish: (definition, data) =>
+          Effect.gen(function* () {
+            if (definition.type === McpEvent.StatusChanged.type) yield* Queue.offer(statuses, undefined)
+            if (armed.value && definition.type === McpEvent.ToolsChanged.type) {
+              armed.value = false
+              yield* Deferred.succeed(reached, undefined)
+              yield* Deferred.await(release)
+            }
+            return { id: ID.create(), type: definition.type, data } as Payload<typeof definition>
+          }),
+      })
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        // Startup announces the handshake, then the connection, after the lists it can read.
+        yield* Queue.take(statuses).pipe(Effect.repeat({ times: 1 }))
+        armed.value = true
+        const reconnect = yield* mcp.connect("resources").pipe(Effect.forkScoped)
+        yield* Deferred.await(reached)
+        const during = yield* Effect.all({
+          status: mcp.servers().pipe(Effect.map((servers) => servers[0]?.status)),
+          // Following waits for the server to come back instead of ending.
+          follow: mcp
+            .follow("resources", { name: "job.finished" })
+            .pipe(Stream.take(1), Stream.runCollect, Effect.exit),
+        }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+        expect(during.follow).toEqual(Exit.succeed([{ type: "pending" }]))
+        expect(during.status).toEqual({ status: "pending" })
+
+        yield* Fiber.join(reconnect)
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus)))
     }),
   )
 

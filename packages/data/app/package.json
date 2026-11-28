@@ -23,6 +23,7 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode/nav-menus": "workspace:*",
+    "@opencode/locale": "workspace:*",
     "@opencode/data-core": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@resvg/resvg-wasm": "2.6.2",

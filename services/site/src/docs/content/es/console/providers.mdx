@@ -1,0 +1,209 @@
+---
+title: "Proveedores de Console"
+description: "Conecta tus propias cuentas de proveedor de modelos a un espacio de trabajo de OpenCode Console y elige qué modelos pueden usar los miembros."
+---
+
+Conecta las cuentas que ya pagas en proveedores como Anthropic, OpenAI o AWS Bedrock y comparte sus modelos
+con todos los miembros del espacio de trabajo. Console guarda la credencial y da acceso a cada proveedor mediante su gateway, de modo que
+los miembros pueden usar los modelos sin ver nunca la clave del proveedor. El mismo gateway está disponible para tus herramientas mediante la
+[API de proveedores](/console/api/providers).
+
+Los propietarios y administradores gestionan los proveedores desde la pestaña **Providers**. Los miembros reciben los modelos habilitados en OpenCode después
+de ejecutar `/connect`.
+
+## Conectar un proveedor
+
+1. Abre **Providers** y haz clic en **Connect Provider**.
+2. Elige un proveedor del catálogo y escribe su clave de API.
+3. De forma opcional, haz clic en **Test connection** y luego en **Save**.
+
+El catálogo incluye Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter y muchos más. Los proveedores del catálogo
+vienen con sus modelos preconfigurados.
+
+### Proveedores en la nube
+
+Los proveedores en la nube necesitan algunos datos adicionales.
+
+| Proveedor             | Datos                                 |
+| --------------------- | ------------------------------------- |
+| Azure                 | Nombre del recurso y clave de API     |
+| AWS Bedrock           | Región y clave de API                 |
+| Google Vertex AI      | Región y JSON de la cuenta de servicio |
+| Cloudflare AI Gateway | ID de cuenta, ID de gateway y token de API |
+| Databricks            | URL del espacio de trabajo y token    |
+
+### Proveedores personalizados
+
+Haz clic en **Add Custom Provider** para conectar cualquier otro endpoint y luego agrega sus modelos con **Add Model**.
+
+| Campo      | Descripción                                                                     |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Adónde reenvía Console las solicitudes, por ejemplo `https://api.deepseek.com/v1`. |
+| Format     | Chat Completions, Responses API, Anthropic Compatible o Google Generative AI.   |
+| Auth mode  | Bearer, API key header o Custom header.                                         |
+| Credential | La clave que Console envía al proveedor.                                        |
+
+## Elegir modelos
+
+Abre un proveedor para ver sus modelos. Solo los modelos habilitados están disponibles para los miembros.
+
+- Usa el interruptor **Enabled** para activar o desactivar un modelo.
+- Activa **New models** para habilitar los modelos que el proveedor agregue en el futuro.
+
+## Editar modelos
+
+Haz clic en un modelo para editarlo. Los cambios se guardan cuando cierras el panel.
+
+| Sección       | Qué puedes cambiar                                              |
+| ------------- | --------------------------------------------------------------- |
+| General       | Nombre visible, ID de API, compatibilidad con herramientas, tipos de entrada y salida |
+| Variants      | Variantes con sus propios encabezados o cuerpo                  |
+| Configuration | Variante predeterminada, encabezados y cuerpo de la solicitud, límites de tokens |
+| Cost Tiers    | Precios de entrada, salida, lectura de caché y escritura de caché por 1M de tokens |
+
+### Precios personalizados
+
+Los modelos del catálogo empiezan con el precio de lista del proveedor. Si tienes precios negociados, por ejemplo un descuento en tu
+contrato con OpenAI, sobrescribe los precios en **Cost Tiers** para que los informes de uso y los [presupuestos](/console/budgets) coincidan con lo que
+pagas realmente.
+
+| Campo            | Precio de lista | Tu precio |
+| ---------------- | --------------- | --------- |
+| Precio de entrada | $2.50          | $2.00     |
+| Precio de salida  | $15.00         | $12.00    |
+| Precio de lectura de caché | $0.25 | $0.20    |
+
+Los precios que cambias se resaltan en la página del proveedor. Usa **Restore default value** en un campo, o **⋯ › Restore...**
+en el modelo, para volver al precio de lista.
+
+Agrega un nivel **Context** si el precio del modelo aumenta al superar un tamaño de contexto determinado, por ejemplo, con prompts de más de 200K tokens.
+
+### Modelos personalizados
+
+Haz clic en **Add Model** para agregar un modelo que el catálogo no incluye, con su **Display name** y su **Model ID**. Usa
+**⋯ › Duplicate...** en un modelo existente para partir de sus ajustes.
+
+## Modelos de OpenCode
+
+La pestaña **Models** gestiona los [modelos](/console/models) que ofrece Console, que se pagan con créditos del espacio de trabajo. Funciona
+como una página de proveedor:
+
+- Activa o desactiva modelos individuales.
+- Desactiva **Free models** para bloquear los modelos gratis en el espacio de trabajo.
+- Activa **New models** para habilitar automáticamente los modelos nuevos de Console.
+
+Deshabilita todo el proveedor desde **⋯ › Disable** para usar solo tus propios proveedores.
+
+## Usar en OpenCode
+
+Los miembros ejecutan `/connect` y eligen el espacio de trabajo. Cada proveedor habilitado aparece como el nombre del espacio de trabajo seguido del
+nombre del proveedor, y `/models` enumera sus modelos habilitados.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Activa **Managed providers only** en **Settings › General** para que todos los miembros solo puedan usar los proveedores del espacio de trabajo en OpenCode.
+
+## Enviar identidad
+
+Si el proveedor es un gateway que administras, activa **Send identity** en su página. Console agrega un encabezado `x-opencode-actor`
+a cada solicitud de modelo que envía a ese gateway. El encabezado identifica al miembro o la cuenta de servicio que hizo la solicitud para que
+tu gateway pueda registrar o restringir solicitudes por remitente.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- Está desactivado de forma predeterminada, y cambiar la URL base lo desactiva.
+- El ajuste no aparece si la conexión usa la API del propio proveedor, como `https://api.openai.com/v1`, ya que esa API ignora el encabezado.
+- Console elimina cualquier encabezado `x-opencode-*` que envíe un cliente, así que el único `x-opencode-actor` que recibe tu gateway es el
+  que Console firmó.
+- **Test connection** y el listado de modelos llaman a `GET <base URL>/models` solo con la credencial, así que no exijas el
+  encabezado en esa ruta.
+
+### Token
+
+El encabezado es un JWT que Console firma para cada solicitud.
+
+| Campo        | Valor                                            |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | La URL base del proveedor sin barras finales     |
+| `iat`, `exp` | `exp` es 120 segundos después de `iat`           |
+
+| Declaración          | Valor                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | `user_id` para un miembro, `service_account_id` en caso contrario      |
+| `workspace_id`       | El espacio de trabajo en el que se ejecutó la solicitud                |
+| `user_id`, `email`   | El miembro, cuando un miembro envió la solicitud                       |
+| `service_account_id` | La cuenta de servicio, cuando la envió una cuenta de servicio (agentes incluidos) |
+| `session_id`         | El ID de sesión del cliente, cuando lo envió                           |
+| `request_id`         | El ID que el cliente recibe en el encabezado de respuesta `x-opencode-log-id` |
+
+La solicitud de un miembro lleva un payload como este:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Verificar el token
+
+Console publica sus claves públicas en `https://opencode.ai/inference/.well-known/jwks.json`, servidas con
+`Cache-Control: public, max-age=300`. Comprueba la firma, el emisor, la audiencia, el tipo y la antigüedad, y luego el espacio de trabajo. Este
+ejemplo usa [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Define `audience` con la URL base del proveedor tal como se guardó en Console, sin barras finales, y reemplaza `org_...` por el
+ID del espacio de trabajo de tu URL de Console. Console publica una nueva clave de firma antes de firmar con ella, así que un verificador que
+busca claves por `kid`, como hace `createRemoteJWKSet`, sigue funcionando durante una rotación.
+
+## Deshabilitar o eliminar
+
+Abre el menú **⋯** del proveedor:
+
+- **Disable** oculta el proveedor y sus modelos a los miembros, pero conserva sus ajustes.
+- **Remove...** elimina el proveedor y sus modelos. El cuadro de diálogo muestra quién lo usó recientemente y ofrece
+  **Disable instead**.
+
+Para rotar una clave, haz clic en la credencial en la página del proveedor y escribe la nueva.
+
+## Facturación
+
+El proveedor te factura los tokens; Console no descuenta créditos por ellos. Console sigue registrando cada solicitud y
+su costo según los precios del modelo, por lo que ambos se reflejan en los informes de uso y los [presupuestos](/console/budgets).
+
+Para llamar a un proveedor desde tus propias herramientas en lugar de OpenCode, usa la [API de proveedores](/console/api/providers).

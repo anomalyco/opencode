@@ -1,0 +1,38 @@
+---
+title: "Introducción a Console"
+description: "OpenCode Console es un servicio opcional que añade espacios de trabajo para equipos, inferencia de modelos, presupuestos, políticas y búsqueda web alojada."
+---
+
+[OpenCode Console](https://opencode.ai/console) es un servicio opcional que aporta ventajas adicionales al usar OpenCode,
+por tu cuenta o en equipo.
+
+- [Espacios de trabajo](/console/workspaces) para compartir el acceso con tu [equipo](/console/members)
+- [Inferencia](/console/models) para modelos propietarios y de código abierto
+- [Proveedores](/console/providers) para conectar tus propias cuentas de proveedor a través del gateway de Console
+- Seguimiento del uso y controles de [presupuesto](/console/budgets)
+- Políticas para controlar el comportamiento de OpenCode en todo el equipo
+- [Búsqueda web](/console/websearch)
+- [Harnesses](/console/harnesses) para usar los modelos de Console desde Claude Code, Codex y otros agentes
+- [OpenCode Go, Go Plus y Go Teams](/console/go), suscripciones mensuales de $10, $40 y $20 por miembro para acceder a modelos de código abierto
+
+## Primeros pasos
+
+No necesitas un equipo para usar Console. Todas las cuentas empiezan con un espacio de trabajo **Personal** en el que solo estás tú.
+
+1. Inicia sesión en [Console](https://opencode.ai/console).
+2. Suscríbete a [Go](/console/go), agrega [créditos](/console/billing#add-credits) o conecta un [proveedor](/console/providers).
+3. Ejecuta `/connect` en OpenCode y elige el espacio de trabajo.
+4. De forma opcional, [invita](/console/members#invite-members) a tu equipo.
+
+```text
+/connect
+```
+
+## Políticas
+
+Las reglas de Providers y Tools de la página Policies se aplican a todos los clientes
+de OpenCode conectados al espacio de trabajo. Llegan en forma de reglas de
+[política](/policies#console) que tienen prioridad sobre la configuración de usuario y
+de proyecto del miembro, y surten efecto en aproximadamente un minuto. Las preferencias
+gestionadas y el archivo de configuración del sistema siguen teniendo prioridad sobre
+las políticas del espacio de trabajo; consulta el [orden de prioridad](/policies#precedence).

@@ -1,0 +1,169 @@
+---
+title: "RPC ملحقات Effect"
+description: "أتِح طرق ملحق Effect وأحداثه في صورة Effects وStreams محدّدة الأنواع."
+---
+
+يمكن لملحقات Effect إتاحة طرق وأحداث تعيد Effects وStreams
+محدّدة الأنواع.
+
+## التعريف
+
+استخدم `Rpc.define` مع Effect Schema لتعريف RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### التحقق
+
+يتحقق Effect Schema من القيم ويستنتج أنواعها في TypeScript.
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+ويُدعم JSON Schema وStandard Schema أيضًا.
+
+### الإدخال والإخراج
+
+استخدم `input` لوسيط الطريقة و`output` للقيمة التي تعيدها. كلاهما إلزامي. إذا كانت الطريقة لا تأخذ وسيطًا أو لا تعيد قيمة، فاستخدم `Schema.Struct({})` في الحالة المعنية: مرّر `{}` بدل الوسيط أو أعد `{}` بدل القيمة.
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### الأخطاء
+
+أضف الإخفاقات المتوقعة إلى `errors`. ويصبح كل مفتاح هو `type` الخطأ.
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### الأحداث
+
+أضف الأحداث إلى خريطة `events` في المستوى الأعلى من التعريف. يجب أن تكون بيانات الحدث كائنًا. هذه الخريطة إلزامية؛ استخدم `events: {}` إذا لم يعرّف RPC أيّ أحداث.
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## التنفيذ
+
+سجّل التنفيذ من Effect الخاص بالملحق:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+تحدّد خريطة الأخطاء نوع الخطأ في Effect الذي تعيده كل طريقة. استخدم
+`context.error(...)` لإنشاء خطأ معلن.
+
+## الاستدعاء
+
+وبعد تسجيل RPC، يمكن استدعاؤه عبر HTTP أو من ملحق آخر.
+
+### HTTP
+
+أنشئ عميل Effect، ثم أنشئ العميل الفرعي لـRPC:
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### الملحق
+
+ويمكن لملحق Effect آخر إنشاء عميل فرعي محلي من سياقه:
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### الاشتراك
+
+تأتي أحداث RPC في صورة Streams. اشترك باسم الحدث وشغّل Stream في وحدة تنفيذ خفيفة (fiber)
+مرتبطة بنطاق:
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)
+```
+
+لا تنقل الاشتراكات إلا الأحداث المباشرة، وتُغلق عند التوقّف عن قراءة البثّ.

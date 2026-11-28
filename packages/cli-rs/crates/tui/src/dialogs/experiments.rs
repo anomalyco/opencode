@@ -13,11 +13,18 @@ pub struct Experiment {
 }
 
 /// Experiments available in the settings dialog.
-pub const EXPERIMENTS: &[Experiment] = &[Experiment {
-    id: "client-mcp",
-    title: "TUI tools",
-    description: "Let the agent open terminals in this TUI (requires server support)",
-}];
+pub const EXPERIMENTS: &[Experiment] = &[
+    Experiment {
+        id: "client-mcp",
+        title: "TUI tools",
+        description: "Let the agent open terminals in this TUI (requires server support)",
+    },
+    Experiment {
+        id: "session-find",
+        title: "Find in session",
+        description: "Search the open session's messages with /find or <leader>f",
+    },
+];
 
 fn options(tui: &Tui) -> Vec<SelectOption<&'static str>> {
     EXPERIMENTS

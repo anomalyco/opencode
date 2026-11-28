@@ -1,0 +1,163 @@
+---
+title: "웹"
+description: "브라우저에서 OpenCode를 실행하세요."
+---
+
+OpenCode의 웹 UI는 TUI가 사용하는 서버에서 함께 제공됩니다. 기본으로 사용할 수 있으며 비밀번호로
+보호됩니다.
+
+## 접속
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+브라우저에서 링크를 열면 세션 쿠키로 로그인되고 웹 UI가 로드됩니다. OpenCode 앱에서 QR 코드를 스캔하거나 앱의 서버
+주소 입력란에 링크를 붙여 넣어도 같은 방식으로 연결됩니다. 세션은 30일 동안 유지되며, 서버 비밀번호를 바꾸면 모든
+세션이 로그아웃됩니다.
+
+### SSH 사용 시
+
+서버가 localhost에서만 수신 대기하는 경우, 로컬 컴퓨터에서 서버 포트로 포트 포워딩을 설정한 뒤 출력된 링크를 로컬에서 여세요.
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+기본적으로 서버는 localhost에서만 수신 대기합니다. 포트는 플랫폼에 따라 다릅니다.
+
+| 플랫폼                | 기본 포트 |
+| --------------------- | --------- |
+| macOS, Linux, WSL     | 49374     |
+| Windows               | 28894     |
+
+Windows는 49152 이상의 포트를 예약하고, WSL 미러 네트워킹은 그보다 낮은 별도의 포트 범위를 예약합니다. 현재 주소는
+`opencode service status`로 출력합니다.
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+이 구성은 `opencode service` 명령으로 변경할 수 있습니다.
+
+### 원격 접속
+
+어디서나 연결하려면 [OpenTunnel](https://github.com/anomalyco/opentunnel) 원격 주소로 페어링하세요.
+
+```bash
+$ opencode pair --remote
+```
+
+원격 접속을 처음 켤 때는 진행 전에 확인을 요청합니다.
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+대화형 터미널이 없으면 `--yes`를 전달해 수락하지 않는 한 명령이 실패합니다. 한 번 수락하면 이후 실행에서는 확인을
+건너뛰며, `opencode service set remote false`로 원격 접속을 꺼 둔 뒤에도 마찬가지입니다.
+
+## 구성
+
+모든 옵션은 `opencode service set`으로 설정합니다.
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+설정을 바꾸면 백그라운드 서버가 중지됩니다. 새 구성을 적용하려면 서버를 다시 시작하세요.
+
+```bash
+$ opencode service start
+```
+
+## 독립 실행
+
+`opencode serve`는 공유 백그라운드 서비스를 거치지 않고 같은 서버를 포그라운드에서 실행합니다.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+다음과 같은 경우에 사용하세요.
+
+- 공유되거나 항상 켜져 있는 호스트, 또는 원격 호스트에서 OpenCode를 실행한 뒤 `opencode --server <url>`로 클라이언트를
+  연결할 때.
+- 단일 프로세스의 호스트 이름, 포트, CORS 오리진을 직접 제어할 때.
+- systemd, Docker처럼 포그라운드 프로세스를 관리하는 환경에서 실행할 때.
+- 공유 백그라운드 서비스 대신 전용 서버를 유지할 때.
+
+클라이언트는 `--server`로 연결하세요.
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### 인증
+
+생성된 비밀번호 대신 고정 비밀번호를 사용하려면 `OPENCODE_PASSWORD`를 설정하세요. 같은 변수로 `opencode --server`에
+비밀번호를 전달할 수 있습니다.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+다른 HTTP 클라이언트는 Basic 인증을 사용합니다. 사용자 이름은 항상 `opencode`이며 비밀번호만 바꿀 수 있습니다.
+
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+`opencode service set password`는 관리형 백그라운드 서비스에만 적용됩니다. `opencode serve`는 `OPENCODE_PASSWORD`의
+값을 사용합니다. 이 변수가 설정되지 않으면 시작할 때마다 새 비밀번호를 생성합니다.
+
+### Docker
+
+릴리스마다 해당 버전을 태그로 지정한 이미지를 `ghcr.io/anomalyco/opencode`에 게시합니다. 이미지의 진입점인
+`opencode`는 TUI를 시작하므로 서버를 실행하려면 `serve`를 전달하세요. 기본 주소인 `127.0.0.1`로는 컨테이너
+내부에서만 접근할 수 있으므로 `0.0.0.0`에 바인딩하세요.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 다시 시작해도 같은 비밀번호를 사용하려면 `OPENCODE_PASSWORD`를 설정하세요.
+- 데이터 디렉터리 `/root/.local/share/opencode`를 마운트하세요. 세션 데이터베이스가 이 디렉터리에 있으므로
+  마운트하지 않으면 컨테이너를 삭제할 때 세션도 사라집니다. 전역 설정을 유지하려면 설정 디렉터리
+  `/root/.config/opencode`도 마운트하세요.
+- `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`로 서버가 요청을 받을 준비가 되었는지 확인하세요.

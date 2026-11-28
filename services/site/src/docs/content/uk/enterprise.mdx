@@ -1,0 +1,130 @@
+---
+title: "Enterprise"
+description: "Керуйте тим, які моделі, провайдери й інтеграції люди у вашій організації можуть використовувати в OpenCode."
+---
+
+Використовуйте [політики](/policies), щоб керувати тим, що OpenCode може використовувати на машинах вашої
+організації. Розміщуйте їх у керованій конфігурації, щоб користувачі й проєкти не могли їх змінити.
+
+## Розгортання
+
+Розмістіть політики в системному файлі конфігурації:
+
+| Платформа | Файл                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+На macOS їх також можна розгорнути через MDM як керовані налаштування для домену `ai.opencode.managed`. Дивіться
+[розташування конфігурації](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Політики в цих файлах мають вищий пріоритет за конфігурацію користувача й проєкту, тому користувач чи репозиторій не
+може дозволити те, що ви забороняєте. Дивіться [пріоритет](/policies#precedence).
+
+## Блокування безкоштовних моделей
+
+Забороніть безкоштовний тариф без входу. Усе інше далі працює, і люди можуть підключати власних провайдерів та
+облікові записи.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Безкоштовний тариф — це інтеграція `opencode` без облікового запису. Облікові записи Console зі входом мають вигляд
+`opencode#<account>`, тому це правило їх не стосується.
+
+Робочий простір Console також може пропонувати безкоштовні моделі. Щоб заблокувати їх:
+
+- У своєму робочому просторі вимкніть **Free models** на вкладці Models у Console. Дивіться
+  [Моделі OpenCode](/console/providers#opencode-models).
+- Щоб приховати безкоштовні моделі в кожному обліковому записі, задайте `OPENCODE_DISABLE_FREE_MODELS=1` у службі
+  OpenCode. Дивіться [безкоштовні моделі](/models#free-models).
+
+## Доступ лише до робочого простору вашої організації в Console
+
+Дозвольте лише робочий простір Console вашої організації. Нічого іншого не можна підключити чи використовувати.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` показує лише OpenCode Console, щоб люди могли увійти.
+- Працює лише ваш робочий простір. Безкоштовний тариф, особисті облікові записи Console, інші організації, API-ключі
+  зі змінних середовища й провайдери з `opencode.json` заблоковані.
+- Моделі, MCP-сервери й вебпошук вашого робочого простору працюють. Змінюйте їх у Console без повторного розгортання
+  політики.
+
+Замініть `org_01M3CAP8H43Z49CER6NT0Y3ZF1` на ID організації вашого робочого простору. Щоб заблокувати безкоштовні
+моделі також у робочому просторі, вимкніть **Free models** у Console.
+
+## Дозвіл лише схвалених провайдерів
+
+Забороніть усіх провайдерів, а потім дозвольте схвалених. Цей приклад дозволяє лише внутрішній шлюз, сумісний з
+OpenAI.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Заборонений провайдер видаляється, навіть якщо в когось є облікові дані для нього. Дивіться
+[провайдери](/policies#providers).
+
+## Обмеження MCP-серверів та інструментів
+
+Дозвольте лише схвалені MCP-сервери й заблокуйте інструменти, які агенти не повинні запускати.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+Дивіться [MCP-сервери, навички й плагіни](/policies#mcp-servers-skills-and-plugins) та [інструменти](/policies#tools).
+
+## Перевірка роботи
+
+- Запустіть `/connect` і `/models` як користувач і переконайтеся, що з'являється лише дозволене.
+- Перевірте журнал сервера на попередження. Правило, що не проходить перевірку, відкидається, а решта все одно діє.
+- Заблокований виклик інструмента завершується помилкою `Blocked by configuration policy`.
+
+## Версії
+
+| Дія                                                                    | Потрібно |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+Старіші клієнти ігнорують ці правила.

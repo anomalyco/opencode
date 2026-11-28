@@ -122,6 +122,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 
 - Each session has one long-running `claude` process. It stops after 5 minutes idle, and the next message picks up the saved Claude session.
 - Deleting a session stops its process right away and removes what opencode saved for it.
+- A subagent's process stops as soon as its session goes idle with no background work left, its own or a descendant's. A later message picks up the saved Claude session.
 - While opencode runs Claude's tool calls, the process is not idle, however long the tools take. Subagents, permission prompts and questions can easily take more than 5 minutes, and stopping the process then would record the call as cancelled by the user. If opencode stops running the session before sending the results, for example because the user interrupted a tool, the 5 minutes start then.
 - Why: the SDK starts one process per conversation and cannot share a process between sessions. Claude Code in a terminal works the same way.
 - The process restarts when the system prompt, tools, connection settings or output limit change.

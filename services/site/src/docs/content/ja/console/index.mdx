@@ -1,0 +1,32 @@
+---
+title: "Console の概要"
+description: "OpenCode Console は、チームワークスペース、モデル推論、予算、ポリシー、ホスト型 Web 検索を追加する任意のサービスです。"
+---
+
+[OpenCode Console](https://opencode.ai/console) は、個人でもチームでも OpenCode をより便利に使えるようにする任意のサービスです。
+
+- [チーム](/console/members)とアクセスを共有するための[ワークスペース](/console/workspaces)
+- プロプライエタリモデルとオープンソースモデルの両方を扱える[推論](/console/models)
+- Console のゲートウェイ経由で自分のプロバイダーアカウントを接続するための[プロバイダー](/console/providers)
+- 使用量の追跡と[予算](/console/budgets)の管理
+- チーム全体にポリシーを配信して OpenCode の動作を制御
+- [Web 検索](/console/websearch)
+- Claude Code、Codex などのエージェントから Console のモデルを使うための [harness](/console/harnesses)
+- オープンソースモデルを利用するための月額サブスクリプション、[OpenCode Go、Go Plus、Go Teams](/console/go)（$10、$40、メンバーあたり $20）
+
+## はじめに
+
+Console を使うのにチームは必要ありません。すべてのアカウントは、自分だけがメンバーの **Personal** ワークスペースから始まります。
+
+1. [Console](https://opencode.ai/console) にサインインします。
+2. [Go](/console/go) を契約するか、[クレジット](/console/billing#add-credits)を追加するか、[プロバイダー](/console/providers)を接続します。
+3. OpenCode で `/connect` を実行し、ワークスペースを選択します。
+4. 必要に応じて[チームを招待](/console/members#invite-members)します。
+
+```text
+/connect
+```
+
+## ポリシー
+
+ポリシーページのプロバイダーとツールのルールは、ワークスペースに接続しているすべての OpenCode クライアントに適用されます。ルールは[ポリシー](/policies#console)ステートメントとして配信され、メンバーのユーザー設定やプロジェクト設定より優先され、約 1 分以内に反映されます。管理対象の環境設定とシステム設定ファイルは引き続きワークスペースより優先されます。詳しくは[優先順位](/policies#precedence)を参照してください。

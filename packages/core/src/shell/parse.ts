@@ -546,7 +546,16 @@ function directoryArgument(
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
 
   // PowerShell exposes environment variables through $env:NAME and provides these
-  // automatic directory variables. Expand only values we can determine without executing code.
+  // automatic directory variables. Expand only values we can determine without executing code: on a machine, whose
+  // variables this server does not know, only $PWD. What is left unexpanded keeps its `$` and stays unresolved.
+  if (home === undefined)
+    return expandKnownDirectory(
+      text.replace(/\$(?:\{PWD\}|PWD(?=$|[\\/]))/gi, () => cwd),
+      true,
+      cwd,
+      false,
+      home,
+    )
   return expandKnownDirectory(
     text
       .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")

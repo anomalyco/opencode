@@ -1,0 +1,98 @@
+---
+title: "Descripción general del SDK"
+description: "Aloja OpenCode en tu aplicación con @opencode/sdk, que atiende las llamadas a la API en memoria sin abrir un puerto HTTP a la escucha."
+---
+
+`@opencode/sdk` aloja OpenCode directamente dentro de tu aplicación. A diferencia del
+[cliente de red](/build/client), ensambla el servidor de OpenCode y enruta las llamadas a la API
+a través de su router HTTP en memoria. No abre un puerto HTTP a la escucha ni añade ningún salto de red
+entre el cliente y el servidor.
+
+Para Cloudflare Durable Objects, consulta la [guía de Cloudflare](/build/sdk/cloudflare).
+
+Instala el SDK:
+
+```sh
+bun add @opencode/sdk
+```
+
+## Crear un host
+
+`OpenCode.create()` devuelve un host cuyo ciclo de vida debes gestionar explícitamente. Usa `await using` para
+liberar su router, los servicios de Location, las fibras y los registros de plugins asociados al ámbito:
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+Llama a `await opencode.close()` explícitamente cuando la gestión explícita de recursos no esté
+disponible.
+
+El host integrado usa los mismos valores Promise, errores declarados, opciones de solicitud y streams `AsyncIterable` que `@opencode/client`. Expone el
+cliente generado completo y añade los alias `sessions` y `events` como accesos directos
+para los grupos de sesión y de eventos.
+
+## Worktrees
+
+Las operaciones con worktrees requieren un `projectID`. Las de creación y actualización cargan la configuración y los
+plugins desde el checkout canónico guardado del proyecto. La operación de listado solo lee el inventario guardado.
+La de eliminación activa los plugins canónicos y usa la estrategia registrada; si no está disponible, falla.
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+La actualización descubre worktrees en las raíces de checkout conocidas usando todas las estrategias disponibles. Registra una estrategia personalizada
+mediante la [transformación de worktrees de un plugin](/build/plugins/server#worktrees).
+
+## Transmitir eventos
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Pasa un `AbortSignal` a través de las opciones de solicitud generadas, o abandona una
+iteración para cancelar el cuerpo de su respuesta.
+
+## Personalizar
+
+Personaliza tu instancia de OpenCode registrando plugins. Pasa plugins a
+`OpenCode.create()` para personalizar agentes, modelos, herramientas y otro comportamiento cuando
+arranca el host integrado:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+Llama a `await opencode.plugin(plugin)` para registrar otro plugin después del arranque.
+
+Consulta la [documentación completa de plugins](/build/plugins/server) para los hooks, las transformaciones, las herramientas y el contexto completo de plugins.

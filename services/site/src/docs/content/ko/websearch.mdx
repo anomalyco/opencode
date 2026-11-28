@@ -1,0 +1,114 @@
+---
+title: "웹 검색"
+description: "Exa, Firecrawl, Parallel, Tavily, TinyFish 또는 Claude 요금제로 OpenCode가 웹을 검색하게 하고, 검색 제공자와 권한을 선택하세요."
+---
+
+OpenCode에 최신 정보를 요청하면 웹을 검색하고 결과를 읽어 응답에 출처 링크를 포함할 수 있습니다.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+첫 검색 시 웹 검색을 허용하고 제공자를 선택하라는 요청이 표시됩니다. OpenCode는 이후 세션에서도 선택을 기억합니다.
+
+## 제공자
+
+OpenCode에는 다섯 가지 검색 제공자가 포함되어 있습니다.
+
+| 제공자 | ID | 환경 변수 |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY`(선택) |
+
+TUI에서 `/connect`로 계정을 연결하거나, OpenCode를 시작하기 전에 제공자의 환경 변수를 설정하세요.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+[Claude Agent](/claude-agent)를 연결하면 ID가 `claude-agent`인 검색 제공자도 사용할 수 있습니다. Claude Code의 WebSearch를 실행하므로 검색은 Claude 요금제 사용량에 포함되며 별도의 검색 API 키가 필요하지 않습니다. Claude뿐 아니라 모든 모델이 이 제공자를 사용할 수 있습니다.
+
+Claude Agent는 자동으로 선택되지 않습니다. `opencode.jsonc`에서 선택하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch는 페이지 내용을 암호화해 반환하므로 각 검색은 Claude 모델이 실행해야 합니다. Haiku가 이를 실행하며, 결과에 대한 짧은 요약이 먼저 나오고 링크가 이어집니다. 검색은 Claude Agent 제공자의 연결 설정과 대화에서 마지막으로 사용한 계정을 사용합니다.
+
+## 선택
+
+`opencode.jsonc`에 제공자를 설정하면 검색할 때 제공자를 따로 선택하지 않아도 됩니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+`"random"`을 사용하면 사용 가능한 제공자를 자동으로 선택합니다. 각 세션은 선택된 제공자가 요청 한도에 걸릴 때까지 계속 그 제공자를 사용합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## 제한
+
+무작위 선택을 사용 중에 제공자가 HTTP 429를 반환하면, OpenCode는 사용 가능한 다른 제공자로 검색을 다시 시도합니다. 요청 한도에 걸린 제공자는 `Retry-After` 기간만큼, 응답에 유효한 대기 시간이 없으면 60초 동안 기다립니다.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+모든 제공자가 대기 중이면 검색이 즉시 실패합니다. 세션을 이동하거나 서버를 다시 시작하면 기억된 제공자가 지워지며, 대기 시간은 같은 워크스페이스의 세션이 공유합니다.
+
+## 권한
+
+웹 검색은 `websearch` 권한 액션을 사용하고 검색 쿼리를 리소스로 사용합니다. 명시적으로 허용되지 않은 검색은 실행 전에 확인을 요청합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+규칙 순서와 일치 방식은 [권한](/permissions)을 참고하세요.
+
+## 비활성화
+
+`websearch`를 `false`로 설정하면 모델 요청에서 웹 검색 도구가 제거됩니다.
+
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

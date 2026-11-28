@@ -26,12 +26,12 @@ import { Cause, Clock, Data, Deferred, Duration, Effect, Exit, Option, Schema } 
 import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
-import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import { OauthRedirect } from "../oauth/redirect.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
+import { McpTarget } from "./target.js"
 
 /** Client ID Metadata Document: servers that support CIMD accept this URL as the client_id without registration. */
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
@@ -109,19 +109,18 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
 // A configured authorization server document stands in for RFC 9728 discovery: the SDK reuses this
 // state instead of probing the resource server, whose well-known path may not exist.
 const configuredDiscovery = async (input: {
-  readonly config: typeof ConfigMCP.Remote.Type
+  readonly target: McpTarget.Remote
   readonly fetchFn: FetchLike
 }): Promise<OAuthDiscoveryState | undefined> => {
-  const url = input.config.oauth ? input.config.oauth.auth_server_metadata_url : undefined
-  if (!url) return undefined
-  const response = await input.fetchFn(url, { headers: { accept: "application/json" } })
+  if (!input.target.metadata) return undefined
+  const response = await input.fetchFn(input.target.metadata, { headers: { accept: "application/json" } })
   if (!response.ok) throw new Error(`HTTP ${response.status} trying to load OAuth authorization server metadata`)
   const body = await response.json()
   const metadata = OAuthMetadataSchema.safeParse(body).data ?? OpenIdProviderDiscoveryMetadataSchema.parse(body)
   return {
     authorizationServerUrl: metadata.issuer,
     authorizationServerMetadata: metadata,
-    resourceMetadata: { resource: resourceUrlFromServerUrl(input.config.url).toString() },
+    resourceMetadata: { resource: resourceUrlFromServerUrl(input.target.url).toString() },
   }
 }
 
@@ -135,7 +134,7 @@ const slashOnly = (error: unknown): error is IssuerMismatchError =>
   error.expected.replace(/\/$/, "") === error.received.replace(/\/$/, "")
 
 // Without validation any issuer passes, so the retry holds it to the one the failed check reported.
-const discover = (serverUrl: string, options: { readonly resourceMetadataUrl?: URL; readonly fetchFn: FetchLike }) =>
+const discover = (serverUrl: URL, options: { readonly resourceMetadataUrl?: URL; readonly fetchFn: FetchLike }) =>
   discoverOAuthServerInfo(serverUrl, options).catch(async (error: unknown) => {
     if (!slashOnly(error)) throw error
     const info = await discoverOAuthServerInfo(serverUrl, { ...options, skipIssuerMetadataValidation: true })
@@ -164,7 +163,7 @@ interface Store {
 }
 
 interface Options {
-  readonly config: typeof ConfigMCP.Remote.Type
+  readonly target: McpTarget.Remote
   readonly store: Store
   readonly redirect: {
     readonly url: () => string
@@ -177,7 +176,7 @@ interface Options {
 }
 
 const provider = (options: Options): OAuthClientProvider => {
-  const oauth = options.config.oauth || undefined
+  const oauth = options.target.config.oauth || undefined
   const client = oauth?.client_id ? { client_id: oauth.client_id, client_secret: oauth.client_secret } : undefined
   const redirect = options.redirect
   let discovery = options.discovery
@@ -189,7 +188,7 @@ const provider = (options: Options): OAuthClientProvider => {
     saveDiscoveryState: (state) => {
       discovery = state
     },
-    validateResourceURL: async (_serverUrl, resource) => selectResource(options.config, resource),
+    validateResourceURL: async (_serverUrl, resource) => selectResource(options.target, resource),
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
     state: () => redirect.state,
     clientMetadata: {
@@ -209,7 +208,7 @@ const provider = (options: Options): OAuthClientProvider => {
     redirectToAuthorization: (url) => {
       if (url.protocol !== "http:" && url.protocol !== "https:")
         throw new Error(
-          `MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`,
+          `MCP server "${options.target.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`,
         )
       // Google issues a refresh token only when asked with its own access_type, not the offline_access scope.
       if (url.hostname === "accounts.google.com" && !url.searchParams.has("access_type"))
@@ -227,24 +226,13 @@ const provider = (options: Options): OAuthClientProvider => {
 
 // The SDK sends no RFC 8707 resource when the server publishes no resource metadata; some
 // authorization servers require one, so fall back to the configured URL.
-const selectResource = (config: typeof ConfigMCP.Remote.Type, resource: string | undefined) => {
-  const identity = new URL(config.url)
+const selectResource = (target: McpTarget.Remote, resource: string | undefined) => {
+  const identity = new URL(target.url)
   identity.hash = ""
   if (!resource) return identity
   if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
     throw new Error(`Protected resource ${resource} does not cover ${identity}`)
-  const canonical = new URL(resource)
-  // The transport adds ?codemode=false when dialing and some servers echo that query back as
-  // the protected resource. Strip only that transport parameter so refresh names the same
-  // resource login did, without overwriting a queryless canonical resource with config.url.
-  if (
-    canonical.origin === identity.origin &&
-    canonical.pathname === identity.pathname &&
-    canonical.searchParams.has("codemode") &&
-    !identity.searchParams.has("codemode")
-  )
-    canonical.searchParams.delete("codemode")
-  return canonical
+  return McpTarget.withoutDialParams(new URL(resource), identity)
 }
 
 const memoryStore = (): Store => {
@@ -267,32 +255,46 @@ const memoryStore = (): Store => {
   }
 }
 
-export const clientFromCredential = (credential: Credential.OAuth) =>
-  credential.metadata?.client as StoredOAuthClientInformation | undefined
+// Where the login found its authorization server and which resource it named, so a refresh need not discover them.
+const Discovery = Schema.Struct({ authorizationServer: Schema.String, resource: Schema.String })
 
-const redirectUris = (client: StoredOAuthClientInformation) =>
-  "redirect_uris" in client && Array.isArray(client.redirect_uris)
-    ? client.redirect_uris.filter((uri): uri is string => typeof uri === "string")
-    : undefined
+// The client the login registered or was given. Fields beyond these are kept for the SDK, which reads more of them.
+const Client = Schema.StructWithRest(
+  Schema.Struct({
+    client_id: Schema.String,
+    client_secret: Schema.optional(Schema.String),
+    redirect_uris: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+
+// A field that is corrupt or was stored by an older version reads as absent, and the others still apply.
+const lenient = <S extends Schema.Top>(schema: S) =>
+  Schema.optional(schema.pipe(Schema.catchDecoding(() => Effect.succeedNone)))
+
+/** What a login stores with its credential, as far as a refresh or the next login reads it. */
+const Metadata = Schema.Struct({
+  scope: lenient(Schema.String),
+  issuer: lenient(Schema.String),
+  discovery: lenient(Discovery),
+  client: lenient(Client),
+})
+const decodeMetadata = Schema.decodeUnknownOption(Metadata)
+const metadataOf = (credential: Credential.OAuth): typeof Metadata.Type =>
+  Option.getOrElse(decodeMetadata(credential.metadata ?? {}), () => ({}))
+
+export const clientFromCredential = (credential: Credential.OAuth) => metadataOf(credential).client
 
 // A client without registered redirect URIs (a client ID metadata document) is not tied to one port.
-const coversRedirects = (client: StoredOAuthClientInformation, registered: ReadonlyArray<string>) => {
-  const uris = redirectUris(client)
-  return uris === undefined || registered.every((uri) => uris.includes(uri))
-}
+const coversRedirects = (client: typeof Client.Type, registered: ReadonlyArray<string>) =>
+  client.redirect_uris === undefined || registered.every((uri) => client.redirect_uris?.includes(uri))
 
-const registeredPort = (client: StoredOAuthClientInformation | undefined, path: string) => {
-  const uri = (client ? (redirectUris(client) ?? []) : [])
-    .flatMap((value) => (URL.canParse(value) ? [new URL(value)] : []))
+const registeredPort = (client: typeof Client.Type | undefined, path: string) => {
+  const uri = (client?.redirect_uris ?? [])
+    .flatMap((value) => URL.parse(value) ?? [])
     .find((url) => url.hostname === "127.0.0.1" && url.pathname === path && url.port)
   return uri ? Number(uri.port) : undefined
 }
-
-// Where the login found its authorization server and which resource it named, so a refresh need not discover them.
-const Discovery = Schema.Struct({ authorizationServer: Schema.String, resource: Schema.String })
-const decodeDiscovery = Schema.decodeUnknownOption(Discovery)
-const discoveryFromCredential = (credential: Credential.OAuth) =>
-  Option.getOrUndefined(decodeDiscovery(credential.metadata?.discovery))
 
 const toCredential = (input: {
   readonly methodID: Integration.MethodID
@@ -302,6 +304,7 @@ const toCredential = (input: {
   readonly discovery: typeof Discovery.Type | undefined
   /** The scope requested, kept when the token response leaves `scope` out (RFC 6749 §5.1: then it was granted). */
   readonly scope?: string
+  readonly now: number
 }) =>
   Credential.OAuth.make({
     type: "oauth",
@@ -309,7 +312,7 @@ const toCredential = (input: {
     access: input.tokens.access_token,
     refresh: input.tokens.refresh_token ?? "",
     // 0 means the server gave no lifetime, so the token is only refreshed after a 401.
-    expires: input.tokens.expires_in ? Date.now() + input.tokens.expires_in * 1000 : 0,
+    expires: input.tokens.expires_in ? input.now + input.tokens.expires_in * 1000 : 0,
     metadata: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
@@ -327,7 +330,7 @@ const toCredential = (input: {
  */
 export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly server: string
-  readonly config: typeof ConfigMCP.Remote.Type
+  readonly target: McpTarget.Remote
   readonly credential: Credential.Info | undefined
 }): Effect.fn.Return<AuthProvider, never, Credential.Service> {
   const found = input.credential
@@ -342,7 +345,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
     credentials.refresh(id, {
       stale,
       refresh: (current) =>
-        exchange({ config: input.config, fetchFn, current, resourceMetadataUrl }).pipe(
+        exchange({ target: input.target, fetchFn, current, resourceMetadataUrl }).pipe(
           Effect.tapError((error) =>
             error instanceof RefreshRejected
               ? Effect.logWarning("mcp oauth credential invalidated", { credentialID: id, reason: error.message }).pipe(
@@ -353,7 +356,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
         ),
     })
   const due = (current: Credential.OAuth, now: number) => Credential.expiring(current, now, REFRESH_AHEAD)
-  const refused = () => new UnauthorizedError(`MCP server "${input.config.url}" requires user authorization`)
+  const refused = () => new UnauthorizedError(`MCP server "${input.target.config.url}" requires user authorization`)
   // The token last sent. A 401 refreshes only while the row still holds it: another connection or process may
   // have refreshed it already.
   let presented: string | undefined
@@ -365,7 +368,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
           // Refreshing ahead needs the discovery the login saved. If it fails, the current token goes out and a
           // 401 decides.
           const ahead =
-            current?.refresh && discoveryFromCredential(current) && due(current, yield* Clock.currentTimeMillis)
+            current?.refresh && metadataOf(current).discovery && due(current, yield* Clock.currentTimeMillis)
           const value = ahead ? yield* refresh(due).pipe(Effect.orElseSucceed(() => current)) : current
           presented = value?.access
           return presented
@@ -407,7 +410,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
 
 // Refreshes with the discovery the login saved, or discovers as the login did and saves the result.
 const exchange = (input: {
-  readonly config: typeof ConfigMCP.Remote.Type
+  readonly target: McpTarget.Remote
   readonly fetchFn: FetchLike
   readonly current: Credential.OAuth
   readonly resourceMetadataUrl: URL | undefined
@@ -421,13 +424,14 @@ const exchange = (input: {
           throw new Error(`HTTP ${response.status}`)
         return response
       }
-      const oauth = input.config.oauth || undefined
+      const oauth = input.target.config.oauth || undefined
+      const metadata = metadataOf(input.current)
       const client = oauth?.client_id
         ? { client_id: oauth.client_id, client_secret: oauth.client_secret }
-        : clientFromCredential(input.current)
+        : metadata.client
       if (!client) throw new RefreshRejected({ message: "no OAuth client information" })
-      const saved = discoveryFromCredential(input.current)
-      const configured = await configuredDiscovery({ config: input.config, fetchFn })
+      const saved = metadata.discovery
+      const configured = await configuredDiscovery({ target: input.target, fetchFn })
       const server =
         configured ??
         (saved
@@ -436,14 +440,14 @@ const exchange = (input: {
               authorizationServerMetadata: await discoverMetadata(saved.authorizationServer, fetchFn),
               resourceMetadata: undefined,
             }
-          : await discover(input.config.url, { resourceMetadataUrl: input.resourceMetadataUrl, fetchFn }))
+          : await discover(input.target.url, { resourceMetadataUrl: input.resourceMetadataUrl, fetchFn }))
       const found = server.authorizationServerMetadata?.issuer ?? server.authorizationServerUrl
-      const issuer = input.current.metadata?.issuer
-      if (typeof issuer === "string" && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
+      const issuer = metadata.issuer
+      if (issuer !== undefined && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
         throw new IssuerChanged({ message: `issued by ${issuer}, but discovery names ${found}` })
-      const resource = saved?.resource ?? selectResource(input.config, server.resourceMetadata?.resource).toString()
+      const resource = saved?.resource ?? selectResource(input.target, server.resourceMetadata?.resource).toString()
       // Some authorization servers (Microsoft Entra ID) refuse a refresh that names no scope.
-      const scope = typeof input.current.metadata?.scope === "string" ? input.current.metadata.scope : oauth?.scope
+      const scope = metadata.scope ?? oauth?.scope
       const tokens = await refreshAuthorization(server.authorizationServerUrl, {
         metadata: server.authorizationServerMetadata,
         clientInformation: client,
@@ -452,19 +456,19 @@ const exchange = (input: {
         resource,
         fetchFn,
       })
-      return toCredential({
+      return {
         methodID: input.current.methodID,
-        serverUrl: input.config.url,
+        serverUrl: input.target.config.url,
         tokens: {
           refresh_token: input.current.refresh,
           ...tokens,
           issuer: found,
         },
-        client: clientFromCredential(input.current),
+        client: metadata.client,
         scope,
         // A configured metadata URL is read on every refresh, so changing it applies at once.
         discovery: configured ? undefined : { authorizationServer: server.authorizationServerUrl, resource },
-      })
+      }
     },
     catch: (error) =>
       error instanceof RefreshRejected || error instanceof IssuerChanged
@@ -472,11 +476,11 @@ const exchange = (input: {
         : error instanceof OAuthError && rejections.has(error.code)
           ? new RefreshRejected({ message: error.message })
           : error,
-  })
+  }).pipe(Effect.flatMap((fields) => Effect.map(Clock.currentTimeMillis, (now) => toCredential({ ...fields, now }))))
 
 export const authorize = (input: {
   readonly name: string
-  readonly config: typeof ConfigMCP.Remote.Type
+  readonly target: McpTarget.Remote
   readonly integrationID: Integration.ID
   readonly methodID: Integration.MethodID
 }) =>
@@ -488,7 +492,7 @@ export const authorize = (input: {
     const credentials = yield* Credential.Service
     const fetchFn = yield* loggedFetch({ server: input.name }).pipe(Effect.annotateLogs(fields))
     yield* Effect.logInfo("mcp oauth authorization started", fields)
-    const oauth = input.config.oauth || undefined
+    const oauth = input.target.config.oauth || undefined
     const store = memoryStore()
     const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
     const registeredClient = previous?.type === "oauth" ? clientFromCredential(previous) : undefined
@@ -496,7 +500,7 @@ export const authorize = (input: {
       { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
       Error
     >()
-    const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
+    const redirect = input.target.redirect
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
 
@@ -565,10 +569,10 @@ export const authorize = (input: {
     // The server's 401 names where its resource metadata lives and which scopes it wants; without it
     // discovery can only guess the well-known path, which not every server layout answers.
     const challenge = yield* Effect.tryPromise((signal) =>
-      fetchFn(input.config.url, {
+      fetchFn(input.target.url, {
         method: "POST",
         headers: {
-          ...input.config.headers,
+          ...input.target.config.headers,
           "content-type": "application/json",
           accept: "application/json, text/event-stream",
         },
@@ -590,8 +594,8 @@ export const authorize = (input: {
     // lists the loopback redirect; a configured client_id always wins.
     const discovery = yield* Effect.tryPromise({
       try: async () =>
-        (await configuredDiscovery({ config: input.config, fetchFn })) ??
-        discover(input.config.url, { resourceMetadataUrl, fetchFn }),
+        (await configuredDiscovery({ target: input.target, fetchFn })) ??
+        discover(input.target.url, { resourceMetadataUrl, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
     const cimd =
@@ -615,7 +619,7 @@ export const authorize = (input: {
     let reached = "127.0.0.1"
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
-      config: input.config,
+      target: input.target,
       store,
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
@@ -641,21 +645,22 @@ export const authorize = (input: {
       })
       return toCredential({
         methodID: input.methodID,
-        serverUrl: input.config.url,
+        serverUrl: input.target.config.url,
         tokens,
         client,
+        now: yield* Clock.currentTimeMillis,
         scope: authorizationUrl?.searchParams.get("scope") ?? undefined,
-        discovery: oauth?.auth_server_metadata_url
+        discovery: input.target.metadata
           ? undefined
           : {
               authorizationServer: discovery.authorizationServerUrl,
-              resource: selectResource(input.config, discovery.resourceMetadata?.resource).toString(),
+              resource: selectResource(input.target, discovery.resourceMetadata?.resource).toString(),
             },
       })
     })
 
     yield* Effect.tryPromise({
-      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope ?? challenge.scope, fetchFn }),
+      try: () => auth(oauthProvider, { serverUrl: input.target.url, scope: oauth?.scope ?? challenge.scope, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
@@ -679,7 +684,7 @@ export const authorize = (input: {
         return Effect.tryPromise({
           try: () =>
             auth(oauthProvider, {
-              serverUrl: input.config.url,
+              serverUrl: input.target.url,
               authorizationCode: value.code,
               iss: value.iss,
               scope: oauth?.scope ?? challenge.scope,
@@ -714,7 +719,8 @@ export const authorize = (input: {
         OauthRedirect.submit({
           state,
           callback: code,
-          received: (value, params) => ({ code: value, iss: params.get("iss") ?? undefined }),
+          // The host tells which registered redirect the server sent the browser to, as in the callback above.
+          received: (value, params, url) => ({ code: value, iss: params.get("iss") ?? undefined, host: url.host }),
         })(pasted).pipe(Effect.tap(() => Effect.logInfo("mcp oauth redirect pasted", fields))),
     }
   }).pipe(

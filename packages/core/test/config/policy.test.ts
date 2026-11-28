@@ -106,6 +106,14 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("matches tool.use Windows machine file policies without case on any server", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([organizationPolicy([tool("deny", "read:win:C:/Secrets/*")], "Acme")])
+      expect((yield* evaluate("read", ["win:c:/secrets/token.txt"])).effect).toBe("deny")
+      expect((yield* evaluate("read", ["win:C:/Public/readme.md"])).effect).toBe("allow")
+    }),
+  )
+
   it.effect("filters plugin-provided providers with ordered wildcard policies", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service

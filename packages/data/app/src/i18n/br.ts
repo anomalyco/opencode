@@ -1,3 +1,5 @@
+import type { Key } from "../i18n"
+
 export const dict = {
   "app.title": "Ranking de uso de modelos de IA | OpenCode Data",
   "app.description":
@@ -125,6 +127,29 @@ export const dict = {
   "home.noSessionCostTitle": "Sem dados de custo da sessão",
   "home.noSessionCostDescription": "Nenhuma linha de modelo com sessões correspondeu a este produto.",
   "home.costSession": "Custo/sessão",
+  "home.newModelsTitle": "Novos modelos",
+  "home.newModelsDescription": "O maior lançamento dos últimos 30 dias.",
+  "home.retentionDescription": "Usuários que voltam na semana seguinte.",
+  "home.noRetentionTitle": "Sem dados de retenção",
+  "home.noRetentionDescription": "A retenção aparece quando há uma semana completa de retorno disponível.",
+  "home.comparisonsTitle": "Comparações de modelos",
+  "home.comparisonsDescription": "Pares de modelos populares da classificação.",
+  "table.rank": "Posição",
+  "newModels.releasedBy": "{{author}}, lançado em {{date}}",
+  "newModels.released": "Lançado em {{date}}",
+  "newModels.free": "Grátis no OpenCode",
+  "newModels.tokensSinceLaunch": "tokens desde o lançamento",
+  "newModels.usersTried": "usuários testaram",
+  "newModels.alsoNew": "Também novos",
+  "newModels.dailyUsage": "Uso diário de {{model}}",
+  "retention.marker": "Retenção",
+  "retention.rate": "Taxa",
+  "retention.eligible": "Elegíveis",
+  "retention.aria": "{{model}}, {{rate}} de retenção semanal, {{users}} semanas de usuário elegíveis",
+  "compare.detail.topTwo": "Dois primeiros por uso recente",
+  "compare.detail.leaderChallenger": "Líder vs. desafiante",
+  "compare.detail.adjacent": "Par adjacente na classificação",
+  "compare.detail.topAlternative": "Alternativa ao modelo principal",
   "lab.title": "Uso e ranking de modelos de IA da {{lab}} | OpenCode Data",
   "lab.description":
     "Compare modelos da {{lab}} usados no OpenCode, incluindo uso de tokens, ranking de modelos, janelas de contexto, datas de lançamento, custos e dados específicos de cada modelo.",
@@ -303,7 +328,7 @@ export const dict = {
   "share.comparison.cache": "Entrada do cache",
   "share.card.outro": "A maior inferência\ndo mundo",
   "share.card.tokens": "Tokens",
-  "share.card.versus": "vs",
+  "share.card.versus": "vs.",
   "share.card.updated": "Atualizado em {{date}}",
   "share.embed.missing": "Este embed não existe.",
   "share.embed.open": "{{title}} no OpenCode Data",
@@ -374,4 +399,4 @@ export const dict = {
   "share.calendar.previous": "Mês anterior",
   "share.calendar.next": "Próximo mês",
   "share.calendar.wholeRange": "Período inteiro",
-} as const
+} satisfies Record<Key, string>

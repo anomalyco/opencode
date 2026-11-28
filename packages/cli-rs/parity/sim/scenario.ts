@@ -46,8 +46,9 @@ export type SimScenario = {
   sessions?: { title?: string; prompts: string[] }[]
   // Rules after the allow-all rule; the last matching rule wins.
   permissions?: { action: string; resource: string; effect: "allow" | "deny" | "ask" }[]
-  // The instant, in milliseconds since the epoch, at which the server's and both clients' clocks start
-  // (`sim/clock.ts`), for screens that show today's date.
+  // The instant, in milliseconds since the epoch, at which a side's simulated clock starts (`sim/clock.ts`); its
+  // server and client share that timeline. The runner's fixed default keeps a run's date from choosing what a screen
+  // shows; set it only for a screen that must show a particular date.
   now?: number
   // Files under the working directory, written before the server starts.
   files?: Record<string, string>

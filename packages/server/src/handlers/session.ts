@@ -420,7 +420,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           yield* unarchiveOnUserInput(ctx.params.sessionID)
           yield* session
             .shell({ sessionID: ctx.params.sessionID, id: ctx.payload.id, command: ctx.payload.command })
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("Session.ShellStartError", (error) =>
+                Effect.fail(new ServiceUnavailableError({ message: error.message, service: "shell" })),
+              ),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )

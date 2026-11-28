@@ -1,0 +1,361 @@
+---
+title: "Go"
+description: "穩定使用開放編碼模型。三種方案可供個人或整個團隊選擇。"
+---
+
+OpenCode Go 讓你穩定使用熱門的開放編碼模型，並提供三種按月訂閱的方案：
+
+| 方案 | 價格 | 包含的用量 |
+| --- | --- | --- |
+| **Go** | **每月 $10** | 以較低成本使用下列模型 |
+| **Go Plus** | **每月 $40** | 使用下列模型時享有更高的用量上限 |
+| **Go Teams** | **每位成員每月 $20**，至少 2 位成員 | 每位成員各有自己的用量上限，每個模型的每月上限比 Go 高 $5 |
+
+在 OpenCode 中，Go 和其他供應商的用法相同：訂閱 OpenCode Go 後，就會取得 API 金鑰。你**不必訂閱 Go** 也能使用 OpenCode。
+
+這項服務主要為國際使用者設計，讓世界各地的使用者都能穩定連線。
+
+## 運作方式
+
+1. 登入 [OpenCode 控制台](https://opencode.ai/console)，訂閱 Go、Go Plus 或 Go Teams，填寫帳單資料，再複製 API 金鑰。
+2. 在 TUI 中執行 `/connect`，選擇 **OpenCode Go**，再貼上 API 金鑰。
+
+   ```text
+   /connect
+   ```
+
+3. 執行 `/models` 選擇可透過 Go 使用的模型。
+
+   ```text
+   /models
+   ```
+
+<Callout>
+  Go 和 Go Plus 適用於訂閱者本人及工作區的 API 金鑰。你邀請的其他成員可使用免費模型，或從工作區餘額支付用量。
+  兩種方案都可隨時升級至 Go Teams，當月未使用的額度可用來折抵。Go Teams 適用於工作區的所有成員，
+  每位成員每月 $20，至少 2 位成員（每月 $40）。下一位加入的成員會使用已計費的第二個席次，不另收費。
+  此後若有成員在計費週期中途加入，系統會收取 $20，並提供該成員完整的當月額度。Go Teams 不涵蓋服務帳號。
+</Callout>
+
+請參閱[目前的模型清單](https://opencode.ai/console/go#models)。隨著我們測試並新增模型，清單可能變更。
+
+### 啟用受限模型
+
+Go 會套用工作區的隱私設定。預設會封鎖使用請求資料訓練模型的付費端點，允許的地區為
+**Europe & United States**。如果工作區從未儲存隱私設定，來自中國的請求也可使用 **Global** 地區的端點。
+
+在 **Settings › Privacy** 中，擁有者或管理員可以啟用：
+
+- **DeepSeek V4.1 Flash 與 V4 Pro：** 在 **Regions** 下選擇 **Global**。
+- **LongCat 2.5：** 在 **Regions** 下選擇 **Global**。
+- **Muse Spark 1.3 Contributor 與 Muse Spark 1.2 Contributor：** 開啟 **Allow paid endpoints that train on request data**。
+
+各模型的訓練與保留條款請參閱[隱私](#privacy)。
+
+## 以額度支付
+
+擁有者與管理員可以使用工作區額度支付 Go，包括續訂與升級。訂閱時請選擇 **Credit** 作為
+付款方式，或之後在 **Manage subscription** 中選擇。這與
+[額外用量](#usage-beyond-limits)不同，後者是為超出限制的用量付費。
+
+- 全額會從你的額度餘額扣除。若餘額不足，你可以先新增額度。
+- 續訂費用會在計費週期結束時從額度扣除。若額度不足，Go 仍可使用；系統會在週期結束後的
+  第 1、3、7 天重試扣款，額度補足後也會立即重試。若最後一次重試仍失敗，Go 訂閱就會終止。
+- 使用[按發票結算](/console/billing#invoiced-billing)的工作區無法以額度支付 Go。
+- 以額度支付的 Go 款項若退款，款項會退回額度餘額，該期 Go 訂閱也會結束。
+
+## 可以在哪裡使用？
+
+OpenCode Go 專為 [OpenCode](https://opencode.ai) 及其他會送出類似請求的編碼 agent 設計。我們會監控流量，以免濫用影響其他使用者。
+
+你的用戶端應該：
+
+1. 傳送編碼 agent 通常會發出的請求。
+2. 使用專屬的 User-Agent 識別用戶端，例如 `my-coding-agent/1.0`，
+   而不是通用的 SDK 或 HTTP 程式庫名稱。
+3. 同一段對話的每個請求都在 `x-opencode-session` 中傳送相同的工作階段 ID，讓我們能最佳化路由與
+   提示詞快取。
+
+[決策](#decision-models)與[嵌入](#embedding-models)請求不需要 `x-opencode-session`，因此任何
+用戶端（例如 RAG 程式庫、記憶供應商或指令碼）都可以使用你的 Go 金鑰呼叫它們。
+
+在 Claude Code、Codex、Hermes、OpenClaw、Pi 與 Raycast 中設定 Go 請參閱 [Harness](/console/harnesses)。
+
+### 已驗證的用戶端
+
+除了 OpenCode，下列用戶端也已驗證可正常搭配
+OpenCode Go，但我們不保證它們未來會繼續運作。
+
+| 用戶端 | 工作階段支援 |
+| --- | --- |
+| **Hermes** | 請更新至 **v0.21.6 或更新版本**，它會在主要與輔助 OpenCode 請求中傳送此標頭（[PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864)）。 |
+| **Claude Code** | Go 能辨識其原生工作階段標頭。不需要自訂標頭包裝器。 |
+| **Codex** | Go 能辨識其原生工作階段標頭。部分版本與代理設定仍會省略它；轉送請求時請保留工作階段標頭。 |
+| **ZCode** | Go 能辨識其原生工作階段標頭。我們對 `x-opencode-session` 的[請求](https://github.com/zai-org/feedback/issues/492)仍未結案，但已不再需要傳送該特定標頭。 |
+| **Pi** | 目前的版本會隨 OpenCode 請求傳送工作階段資訊。如果你仍在使用舊版，請先更新。 |
+| **jcode** | 請更新至 **v0.81.6 或更新版本**，其中包含[工作階段標頭修正](https://github.com/1jehuang/jcode/issues/1167)。 |
+| **OpenClaw** | 目前的版本會在 Go 請求中傳送 `x-opencode-session`。瀏覽器登入需要 **2026.11.7 或更新版本**。 |
+| **Kilo Code CLI** | 包含 [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) 的版本會還原 OpenCode 工作階段標頭。此修正涵蓋 CLI，不包含 VS Code 擴充功能。請參閱[問題 #13723](https://github.com/Kilo-Org/kilocode/issues/13723)。 |
+| **MiMo Code** | 請更新至 **v0.1.16 或更新版本**。這些版本會在 Go 請求中傳送 `x-opencode-session`（[PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)）。 |
+
+### 已知有問題的用戶端
+
+我們檢查過的版本不支援工作階段，或支援不完整。可透過下列連結追蹤修正進度及替代做法。
+
+| 用戶端 | 狀態與追蹤 |
+| --- | --- |
+| **DeepSeek Harness** | 只有部分模型路徑會收到工作階段資訊。我們已能辨識其原生標頭，但仍需讓所有轉接器都傳送該標頭。參閱[討論 #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495)。 |
+| **GitHub Copilot Chat** | 已在 [VS Code 問題 #334186](https://github.com/microsoft/vscode/issues/334186) 要求自動支援工作階段標頭。 |
+| **Kimi Code** | [問題 #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) 中要求支援工作階段標頭的提案已結案，沒有實作計畫。 |
+
+## 用量上限
+
+在 Go 上，所有付費模型共用一份額度。在 Go Teams 上，每位成員都有自己的一份額度，可用於各個模型。
+
+- **5 小時用量上限**為每月額度的 20%。首次使用額度時開始計時，持續五小時。
+- **每週用量上限**為每月額度的 50%，於週一 00:00 UTC 重設。
+- 你的**每月額度**會在新的付費期間開始時重設。
+
+切換模型後，用量仍會計入同一份額度。達到上限後，你可以使用免費模型，或開啟
+[額外用量](#usage-beyond-limits)，改用控制台額度，直到 Go 再有可用額度。
+
+每個模型的[每月限制](https://opencode.ai/console/go#limits)代表整個月只用該模型時，方案所含的用量。
+例如，上限為 $15 的模型用掉 $1.50，或上限為 $60 的模型用掉 $6，都會用掉每月額度的 10%。Go 會在回應的
+[`opencode.allowance`](/console/api/inference#cost) 欄位回報該次請求用掉多少額度。
+
+[Token 價格](https://opencode.ai/console/go#pricing)以每 100 萬 token 計算，Go、Go Plus 和 Go Teams 的單價相同。
+
+[決策](#decision-models)和[嵌入](#embedding-models)模型按原價計費，不適用 Go 折扣。Go 和 Go Plus 的每月上限等於訂閱費，
+分別為 $10 和 $40。Go Teams 則為 $15，和其他模型一樣，比 Go 高 $5。
+
+**Beam Free：** 限時免費。安哥拉、白俄羅斯、柬埔寨、中國（包括香港與澳門）、古巴、剛果民主共和國、赤道幾內亞、伊朗、伊拉克、寮國、利比亞、奈及利亞、北韓、俄羅斯、敘利亞、土庫曼、烏茲別克、委內瑞拉，以及烏克蘭的克里米亞、頓內茨克與盧甘斯克地區無法使用。
+
+**Gemini 4 Argon：** 50% 折扣適用至 2026 年 11 月 30 日。
+
+**HungerG Free：** 限時免費。
+
+### 預估請求數
+
+控制台的 Go 頁面會依典型的 Go 使用模式，[預估每個模型每 5 小時的請求數](https://opencode.ai/console/go#limits)。實際用量會有所不同。
+
+你可以在[控制台](https://opencode.ai/console)或透過[用量端點](#usage)追蹤目前用量。
+
+<Callout type="tip">達到用量上限後，仍可繼續使用免費模型。</Callout>
+
+我們可能根據初期的使用情況與意見回饋調整用量上限。
+
+---
+
+### 超出限制的用量
+
+如果控制台還有可用餘額，可以在
+**Go** 頁面開啟 **Extra Usage**。啟用後，達到用量上限時，Go 會改從[按用量計費的餘額](/console/models#pricing)扣款，
+而不是擋下請求。
+
+Go Teams 預設會開啟 **Extra Usage**，你可以在 **Go** 頁面將其關閉或再次開啟。
+
+### 為什麼有些模型的用量較低
+
+使用 Go 時，包含的每月用量依模型而異。
+
+對大多數模型，我們透過大量採購取得折扣，並預留 GPU 算力，再把省下的成本轉為更多每月用量回饋給你。
+
+有些模型剛推出，或公開定價已含折扣，因此我們還沒有機會談到折扣或以更低的成本託管。
+
+因此，這些模型每月包含的用量較少，但還是比你直接付費給模型供應商多一些。
+
+## 端點
+
+你也可以透過 `https://opencode.ai/inference/go` 的 API 存取 Go 模型。請參閱每個模型的
+[ID、路徑與 AI SDK 套件](https://opencode.ai/console/go#api)。每個模型都會列出其原生 API，但每個
+文字模型也可透過其他 API 使用，由控制台轉譯。完整清單請參閱
+[基礎 URL](/console/harnesses#base-urls)。
+
+這些 AI SDK 套件供直接呼叫 Go 的應用程式使用。若要在 OpenCode 中使用 Go，請以 `/connect` 連接，並以
+`opencode-go/<model-id>` 格式設定[模型](/models)：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+
+### 模型
+
+從模型端點擷取可用模型的完整清單及其中繼資料：
+
+```bash
+curl https://opencode.ai/inference/go/v1/models
+```
+
+回應中的各個欄位（包括 Go 的每月用量上限）請參閱[模型清單 API](/console/api/models)。
+
+### 決策模型
+
+決策模型不是產生文字，而是依照指定的型別回答與 `state` 有關的問題。請使用你的 Go 金鑰，
+將[控制台模型](/console/models#jev)頁面所示的 System One 請求送到 `https://opencode.ai/inference/go/systemone/v1/systemone`：
+
+```bash
+curl https://opencode.ai/inference/go/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My payments have failed for three days and I am losing sales.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+| 模型 | 模型 ID | 輸入 | 輸出 | 快取讀取 | 快取寫入 |
+| --- | --- | --- | --- | --- | --- |
+| Jev 1.14 | jev-1.14 | $0.042 | 免費 | - | - |
+| Gemini Decision 1 | gemini-decision-1 | $0.10 | 免費 | - | - |
+| GPT 6 Luna Decision (≤ 272K tokens) | gpt-6-luna-decision | $0.10 | 免費 | $0.01 | $0.125 |
+| GPT 6 Luna Decision (> 272K tokens) | gpt-6-luna-decision | $0.20 | 免費 | $0.02 | $0.25 |
+
+- 價格為每 100 萬 token。
+- 使用 OpenAI Decisions 格式的請求可在 `https://opencode.ai/inference/go/openai/v1/decisions` 使用。
+- 問題類型請參閱 [Jev](/console/models#jev)，`state` 中的圖片、
+  音訊、影片與 PDF 請參閱
+  [GPT 6 Luna Decision 與 Gemini Decision 1](/console/models#gpt-6-luna-decision-and-gemini-decision-1)。
+
+### 嵌入模型
+
+嵌入模型會將文字轉為向量。請使用你的 Go 金鑰，透過 OpenAI 的 Embeddings API 呼叫這些模型：
+`https://opencode.ai/inference/go/openai/v1/embeddings`：
+
+```bash
+curl https://opencode.ai/inference/go/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+| 模型 | 模型 ID | 輸入 |
+| --- | --- | --- |
+| text-embedding-3-small | text-embedding-3-small | $0.02 |
+| Qwen3 Embedding 8B | qwen3-embedding-8b | $0.01 |
+| Gemini Embedding 2 | gemini-embedding-2 | $0.20 |
+
+- 價格為每 100 萬輸入 token。
+- 請求也接受 `dimensions` 與 `encoding_format`。請參閱[嵌入模型](/console/models#embedding-models)。
+
+### 用量
+
+你可以查詢目前用量占[用量上限](#usage-limits)的比例，例如用來在自己的用戶端顯示用量：
+
+```bash
+curl https://opencode.ai/inference/go/v1/usage \
+  -H "Authorization: Bearer <token>"
+```
+
+請使用你平常呼叫 Go 時使用的金鑰。Go 和 Go Plus 使用訂閱者的
+[個人 API 金鑰](/console/api#personal-api-keys)或[服務帳號金鑰](/console/api#service-accounts)。在 Go
+Teams 上，則是任何成員的個人 API 金鑰。
+
+回應會列出各項用量：5 小時為 `rolling`，每週為 `weekly`，每月為 `monthly`。
+
+```json
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 30, "resetsAt": "2026-11-21T15:00:00.000Z" },
+    "weekly": { "status": "rate-limited", "percent": 100, "resetsAt": "2026-11-23T00:00:00.000Z" },
+    "monthly": { "status": "ok", "percent": 50, "resetsAt": "2026-12-01T00:00:00.000Z" }
+  }
+}
+```
+
+| 欄位 | 意義 |
+| --- | --- |
+| `status` | 未達上限時為 `ok`，達到上限後為 `rate-limited`。 |
+| `percent` | 已使用的百分比，以 `0` 到 `100` 的整數表示。 |
+| `resetsAt` | 上限重設的時間，格式為 ISO 8601。5 小時計時尚未開始時，`rolling` 的重設時間為查詢時刻的 5 小時後。 |
+
+未提供有效金鑰的請求會收到 HTTP `401`。若金鑰不適用於 Go，則會收到 HTTP `403`，並附上原因，例如工作區目前沒有有效的 Go 訂閱。
+
+```json
+{ "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
+```
+
+## 隱私
+
+查看每個模型是否[以你的資料進行訓練](https://opencode.ai/console/go#privacy)。
+
+| 模型 | 資料保留 |
+| --- | --- |
+| Grok 4.7 | 30 天 |
+| GPT 6 Luna | 30 天 |
+| GPT 5.6 Luna | 30 天 |
+| Claude Haiku 5.5 | 30 天 |
+| Gemini 4 Argon | 55 天 |
+| GLM-5.3-Flash | 0 天 |
+| GLM-5.3 | 0 天 |
+| Kimi K3.1 Pro | 0 天 |
+| Kimi K3 | 0 天 |
+| Kimi K2.7 Code | 0 天 |
+| LongCat 2.5 | 0 天 |
+| MiMo-V2.6-Pro | 0 天 |
+| MiMo-V2.6-Flash | 0 天 |
+| Qwen4 Max | 0 天 |
+| Qwen3.8 Max | 0 天 |
+| Qwen3.8 Flash | 0 天 |
+| Qwen3.7 Plus | 0 天 |
+| MiniMax M3.1 Flash | 0 天 |
+| MiniMax M3 | 0 天 |
+| Muse Spark 1.3 Contributor | 非 ZDR |
+| Muse Spark 1.2 Contributor | 非 ZDR |
+| DeepSeek V4.1 Flash | 0 天\* |
+| DeepSeek V4 Pro | 0 天\* |
+| Hy4 | 0 天 |
+| Hy4 preview | 0 天 |
+| Hy3 | 0 天 |
+| Step 5 Preview | 0 天 |
+| Beam Free | 30 天 |
+| Iceman Contributor Free | 非 ZDR |
+| Hy4 flash Free | 0 天 |
+
+- **Grok 4.7：** ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections，以及 Batch API。[了解更多](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
+- **GPT 6 Luna / GPT 5.6 Luna：** 所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。[了解更多](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **Claude Haiku 5.5：** 請求會依 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 保留 30 天。
+- **Gemini 4 Argon：** 請求會依 [Google 的 Gemini API 條款](https://ai.google.dev/gemini-api/terms)保留最多 55 天，以供濫用監控。
+- **Muse Spark 1.3 Contributor：** 同意 Meta 使用你的提示詞和模型生成內容來訓練未來的模型，即可享有大幅折扣的 token 價格。僅在 Meta [地理使用政策](https://ai.developer.meta.com/legal/geographic-use-policy)允許的地區提供。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
+- **Muse Spark 1.2 Contributor：** 同意 Meta 使用你的提示詞和模型生成內容來訓練未來的模型，即可享有大幅折扣的 token 價格。僅在 Meta [地理使用政策](https://ai.developer.meta.com/legal/geographic-use-policy)允許的地區提供。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
+- **Iceman Contributor Free：** 同意將你的提示詞和模型生成內容用於改善模型，即可限時免費使用。
+- **HungerG Free：** 限時免費。你的提示詞和模型生成內容不會用於訓練模型。
+- **LongCat 2.5：** 託管於中國。需要工作區隱私設定中的 **Global** 地區。
+- **DeepSeek：** ZDR 協議每月續約。目前協議有效期至 2026 年 12 月 31 日。
+
+## 背景
+
+開放模型的表現進步很多，如今在編碼工作上已接近專有模型。由於許多供應商都能以有競爭力的價格提供這些模型，使用成本通常低得多。
+
+不過，要穩定又低延遲地使用這些模型並不容易。各家供應商的品質與可用性都有差異。
+
+<Callout type="tip">我們測試了一組精選的模型與供應商，確認它們能與 OpenCode 良好搭配。</Callout>
+
+為了解決這個問題，我們做了幾件事：
+
+1. 我們測試一組精選的開放模型，並與其團隊討論最佳的執行方式。
+2. 我們與幾家供應商合作，確保它們能正確提供這些模型。
+3. 我們為模型與供應商的各種組合做了基準測試，整理出一份我們有信心推薦的清單。
+
+Go、Go Plus 與 Go Teams 都提供這些模型的存取權；請選擇符合你使用量的方案，或選擇 Go
+Teams 以涵蓋整個團隊。
+
+## 目標
+
+我們建立 OpenCode Go 是為了：
+
+1. 以低價訂閱方案，讓更多人**輕鬆使用** AI 編碼工具。
+2. 提供**可靠**的管道，存取最好的開放編碼模型。
+3. 精選**經過測試與基準測試**、適合編碼 agent 使用的模型。
+4. **不綁定**，讓你也能在 OpenCode 中使用任何其他供應商。

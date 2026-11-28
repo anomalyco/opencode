@@ -1,0 +1,150 @@
+---
+title: "Веб-интерфейс"
+description: "Запустите OpenCode в браузере."
+---
+
+OpenCode поставляется с веб-интерфейсом, который обслуживает тот же сервер, что и TUI. Он доступен по умолчанию и защищён паролем.
+
+## Доступ
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Когда вы открываете ссылку, браузер выполняет вход с помощью cookie сессии и загружает веб-интерфейс. Приложение OpenCode подключается таким же способом, если отсканировать в нём QR-код или вставить ссылку в поле адреса сервера. Сессии действуют 30 дней. При смене пароля сервера вход во всех сессиях сбрасывается.
+
+### По SSH
+
+Когда сервер слушает только localhost, перенаправьте его порт со своей машины и откройте выведенную ссылку локально:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+По умолчанию сервер слушает только localhost. Его порт зависит от платформы:
+
+| Платформа             | Порт по умолчанию |
+| --------------------- | ----------------- |
+| macOS, Linux и WSL    | 49374             |
+| Windows               | 28894             |
+
+Windows резервирует порты начиная с 49152, а зеркальная сеть WSL резервирует ещё один блок ниже. Выведите текущий адрес командой `opencode service status`:
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+Изменить эту конфигурацию можно командой `opencode service`.
+
+### Удалённый доступ
+
+Чтобы подключаться из любой сети, выполните сопряжение через удалённый адрес [OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+При первом включении удалённого доступа команда запрашивает подтверждение:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Без интерактивного терминала команда завершается ошибкой, если не передать `--yes` для согласия. После согласия последующие запуски пропускают запрос, даже если удалённый доступ был отключён через `opencode service set remote false`.
+
+## Настройка
+
+Задайте любой параметр через `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Изменение настройки останавливает фоновый сервер. Запустите его снова, чтобы применить новую конфигурацию:
+
+```bash
+$ opencode service start
+```
+
+## Standalone
+
+`opencode serve` запускает тот же сервер в активном терминале, а не через общий фоновый сервис.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Используйте его, когда нужно:
+
+- Запустить OpenCode на общем, постоянно включённом или удалённом хосте, а затем подключать клиентов через `opencode --server <url>`.
+- Задать имя хоста, порт и разрешённые источники CORS для одного процесса.
+- Запустить сервер под управлением systemd, Docker или другой среды, которой нужен процесс, работающий не в фоне.
+- Держать выделенный сервер вместо общего фонового сервиса.
+
+Подключите к нему клиент через `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### Аутентификация
+
+Установите `OPENCODE_PASSWORD`, чтобы использовать фиксированный пароль вместо сгенерированного. Та же переменная передаёт пароль `opencode --server`.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Другие HTTP-клиенты используют аутентификацию по схеме Basic. Имя пользователя всегда `opencode`, менять можно только пароль.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+Команда `opencode service set password` действует только на управляемый фоновый сервис. `opencode serve` берёт пароль из `OPENCODE_PASSWORD`, а если переменная не задана, генерирует новый при каждом запуске.
+
+### Docker
+
+Для каждого релиза в `ghcr.io/anomalyco/opencode` публикуется образ с тегом версии. Точка входа образа — `opencode`, а без аргументов эта команда запускает TUI, поэтому передайте `serve`. Укажите адрес `0.0.0.0`: адрес по умолчанию `127.0.0.1` доступен только внутри контейнера.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Задайте `OPENCODE_PASSWORD`, чтобы пароль не менялся при перезапуске.
+- Смонтируйте каталог данных `/root/.local/share/opencode`. В нём находится база данных с вашими сессиями: без монтирования они пропадут при удалении контейнера. Чтобы сохранить глобальную конфигурацию, смонтируйте каталог `/root/.config/opencode`.
+- Проверьте готовность сервера командой `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

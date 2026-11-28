@@ -659,6 +659,9 @@ fn switch_theme(harness: &impl Mounted, remount: bool) {
     harness.app().advance(Duration::from_millis(1));
 }
 
+/// Compares a screen restyled in place with one mounted in the new theme. `ready` must name the state to compare,
+/// including what a mount's last request draws: a dialog closing is not enough while the content behind it loads.
+/// Both screens are waited on together, so neither can drift after its own wait while the other catches up.
 #[track_caller]
 pub fn assert_restyles_in_place<H: Mounted>(open: impl Fn() -> H, prepare: impl Fn(&H), ready: impl Fn(&str) -> bool) {
     let in_place = open();
@@ -667,11 +670,8 @@ pub fn assert_restyles_in_place<H: Mounted>(open: impl Fn() -> H, prepare: impl 
     let mounted = open();
     switch_theme(&mounted, true);
     prepare(&mounted);
-    for harness in [&in_place, &mounted] {
-        let app = harness.app();
-        let shown = app.wait_until(WAIT, || ready(&app.text()));
-        assert!(shown, "the state never showed:\n{}", app.text());
-    }
+    let shown = in_place.app().wait_until(WAIT, || ready(&in_place.app().text()) && ready(&mounted.app().text()));
+    assert!(shown, "the state never showed in place:\n{}\nmounted:\n{}", in_place.app().text(), mounted.app().text());
     let (switched, expected) = (in_place.app().render(), mounted.app().render());
     let differ: Vec<_> = (0..expected.height)
         .flat_map(|y| (0..expected.width).map(move |x| (x, y)))

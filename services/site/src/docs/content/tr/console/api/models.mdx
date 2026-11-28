@@ -1,0 +1,205 @@
+---
+title: "Model listesi API'si"
+description: "Bir çalışma alanının kullanabileceği modelleri limitleri, fiyatları, yetenekleri ve her birini çağıracağınız Console URL'siyle listeleyin."
+---
+
+İki tür model listesi vardır. [Console listesi](#console-model-list), bağladığı sağlayıcılar dahil bir çalışma alanının
+kullanabileceği her şeyi döndürür. [Inference listeleri](#inference-model-lists), genel OpenCode Models ve Go kataloglarını
+OpenAI'nin liste biçiminde döndürür.
+
+| Liste                                               | Döndürdüğü                                                                                     | Anahtar  |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| [`/console/api/v1/models`](#console-model-list)     | Çağıranın kullanabileceği her sağlayıcı ve model, çalışma alanının düzenlemeleri uygulanmış olarak. | Gerekli |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models. Anahtarsız her genel model; anahtarla, çalışma alanının kullanabileceği modeller. | İsteğe bağlı |
+| [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go) modelleri, aynı biçimlerde.                                                   | İsteğe bağlı |
+
+İstemcinizin OpenCode ile aynı modelleri, bağlı sağlayıcılar dahil sunması gerektiğinde Console listesini kullanın.
+Yalnızca OpenCode Models veya Go gerektiğinde ya da henüz anahtarınız yokken genel kataloğu istediğinizde bir inference
+listesi kullanın.
+
+## Console model listesi
+
+`GET https://opencode.ai/console/api/v1/models`, çağıranın kullanabileceği her sağlayıcıyı ve her birinin altında
+çağırabileceği modelleri döndürür.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+Herhangi bir çalışma alanı üyesi onu çağırabilir: bir tarayıcı oturumundan, bir OpenCode oturumundan, bir
+[kişisel API anahtarından](/console/api#personal-api-keys) veya **Models › Read** izni olan bir
+[hizmet hesabı anahtarından](/console/api#service-accounts). OpenCode'un oluşturduğu Console yapılandırmasıyla aynı
+kuralları kullanır; bu nedenle liste OpenCode'daki `/models` ile eşleşir. Yanıt asla önbelleğe alınmaz
+(`Cache-Control: private, no-store`).
+
+### Sağlayıcılar
+
+Yanıt, OpenCode'un kullandığı sağlayıcı kimliğine göre anahtarlanmış bir nesnedir.
+
+| Sağlayıcı kimliği           | Sağlayıcı                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | Çalışma alanı kredilerinden ödenen [OpenCode Models](/console/models).                                                           |
+| `opencode-go`               | [Go](/console/go) modelleri. Yalnızca Go aboneliğiyle bulunur.                                                                   |
+| `console-<connection slug>` | Çalışma alanının eklediği bir [bağlantı](/console/providers), örneğin `console-openai`, `console-anthropic` veya `console-aws-bedrock`. |
+
+Her sağlayıcının `id`, `name` ve `models` alanı vardır. `name`, OpenCode'un gösterdiği addır; genellikle çalışma alanı
+adının ardından sağlayıcı adı gelir. `models`, model kimliğine göre anahtarlanmış bir nesnedir.
+
+### Örnek
+
+Bir sağlayıcı ve bir modelle sınırlandırılmış:
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Alanlar
+
+Her model, çalışma alanının düzenlemeleri uygulanmış [models.dev](https://models.dev) v2 girdisidir; bu nedenle alanlar
+[models.dev'in yayımladığı](https://models.dev/experimental/v2.0/api.json) alanlardır. Devre dışı modeller ve models.dev'in
+kullanımdan kaldırılmış olarak işaretlediği modeller dışarıda bırakılır.
+
+| Alan           | Anlamı                                                                                                                                                                                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | Modelin türü, örneğin `chat`, `embedding`, `image` veya `decision`.                                                                                                                                                                                                             |
+| `id`           | İsteklerde gönderilecek model kimliği. Aynı zamanda `models` içindeki anahtardır.                                                                                                                                                                                                   |
+| `name`         | Görünen ad.                                                                                                                                                                                                                                                                       |
+| `limit`        | `context` bağlam penceresidir. `input`, model bir tane belirlediğinde isteğin girdisini sınırlar. `output` yanıtı sınırlar.                                                                                                                                                         |
+| `cost`         | 1M token başına ABD doları: `text.input.price`, `text.input.cache.read`, `text.input.cache.write` ve `text.output.price`. `0` ücretsiz anlamına gelir. Eksik önbellek alanları modelin önbellek fiyatı olmadığı anlamına gelir. Bazı modeller, belirttikleri saatlerde fiyatı yükselten `cost.multipliers` ekler. |
+| `capabilities` | Modelin yetenekleri; örneğin araç çağrıları ve akıl yürütme düzeyi. |
+| `modalities`   | Kabul edilen girdi türleri, örneğin `text`, `image/png` veya `application/pdf`, ve çıktı türleri.                                                                                                                                                                                    |
+| `api`          | Bu model için kullanılacak Console URL'si ve SDK. Bkz. [Model API](#model-api).                                                                                                                                                                                                     |
+
+### Model API
+
+`api`, modelin konuştuğu protokole göre anahtarlanmış tek bir girdi içerir: OpenAI Chat Completions için `chat-completions`,
+OpenAI Responses için `responses`, Anthropic Messages için `messages`, Gemini için `generate-content` ve
+[OpenAI Embeddings](/console/models#embedding-models) için `embeddings`. Protokolün models.dev girdisidir; satıcının
+URL'si Console'unkiyle değiştirilmiş ve diğer protokoller dışarıda bırakılmıştır.
+
+| Alan             | Anlamı                                                                                                                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | Bu model için isteklerin gönderileceği yer. OpenCode Models `https://opencode.ai/inference/...`, Go `https://opencode.ai/inference/go/...` ve bir bağlantı kendi Console API URL'sini, `https://opencode.ai/inference/custom/<connection_id>`, kullanır. |
+| `sdk.aisdk`      | Protokolün AI SDK paketi. [Model endpoint'leri](/console/models#endpoints) tablosundaki paketle aynıdır. |
+| `sdk.opencodeai` | OpenCode'un yüklediği eşleşen sağlayıcı modülü.                                                                                                                                                                                                     |
+
+Eklediğiniz bir bağlantıdaki model şöyle görünür. [Providers API](/console/api/providers#endpoints) bölümünde açıklandığı
+gibi protokolün yolunu, örneğin `/chat/completions` veya `/responses`, sonuna ekleyin.
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## Inference model listeleri
+
+`GET https://opencode.ai/inference/v1/models` OpenCode Models modellerini, `GET https://opencode.ai/inference/go/v1/models`
+Go modellerini listeler. İkisi de OpenAI'nin liste biçimini döndürür.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+Bir model ve yaygın alanlarıyla sınırlandırılmış:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+Anahtar olmadan bir liste her genel modeli içerir. Anahtarla, yalnızca o anahtarın çalışma alanının kullanabileceği
+modelleri içerir; bu nedenle bir hizmet hesabı anahtarı **Models › Read** gerektirir. Bunu `Authorization: Bearer` veya
+`x-api-key` ile gönderin. Özel veya kullanımdan kaldırılmış modeller dışarıda bırakılır.
+
+Her öğe OpenAI'nin `id`, `object`, `created` ve `owned_by` alanlarıyla başlar, ardından [Console listesinin](#fields)
+kullandığı aynı models.dev alanları gelir: `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`, `api`, `family`,
+`release_date` ve diğerleri. Console listesinden farklı olarak inference listeleri çalışma alanının bağlantılarını içermez.
+models.dev verisi geçici olarak kullanılamıyorsa öğeler yine yalnızca OpenAI alanlarıyla görünür ve `name` kimliğe eşit
+olur.
+
+Her Go modelinde ayrıca bir `go` alanı bulunur: plana göre aylık kullanım limiti (`monthly_usage`), istek verilerinin eğitimde kullanılıp kullanılmadığı (`training`), sıfır veri saklama durumu (`zdr`) ve modele erişimin bazı ülkelerde kısıtlanıp kısıtlanmadığı (`limited_regions`).
+
+## Hatalar
+
+| Durum | Anlamı                                                                                 |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | Kimlik bilgisi yok ya da anahtar süresi dolmuş veya iptal edilmiş.                     |
+| `403`  | Anahtar modelleri listeleyemiyor. Hizmet hesabı ve kısıtlı anahtarlar **Models › Read** gerektirir. |

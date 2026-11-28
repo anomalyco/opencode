@@ -212,6 +212,127 @@ fn resize() {
     probe.finish("resize", 5 * sizes.len() as u64);
 }
 
+/// Find-in-session over a long session with unmounted rows: opens Find, types a query character by
+/// character, steps 20 matches forwards and 5 backwards across the bounded window, and closes Find.
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn find_long() {
+    let info = opencode_local::cli_config::Info {
+        experimental: Some([("session-find".to_owned(), true)].into_iter().collect()),
+        ..support::still()
+    };
+    let deps = Deps {
+        config: support::config(info),
+        route: support::session_route(LONG),
+        ..support::deps(Arc::new(Server::new().long()))
+    };
+    let h = support::mount(120, 40, deps);
+    h.app.set_verify(false);
+    wait_tail(&h, LONG, TURNS);
+    first(&h);
+    h.dispatch("session.last");
+    settle(&h.app);
+    let probe = Probe::start();
+    h.dispatch("session.find");
+    frame(&h.app);
+    let query = "Answer";
+    for ch in query.chars() {
+        h.app.type_text(&ch.to_string());
+        frame(&h.app);
+    }
+    settle(&h.app);
+    for _ in 0..20 {
+        h.app.press("enter");
+        frame(&h.app);
+    }
+    for _ in 0..5 {
+        h.app.press("up");
+        frame(&h.app);
+    }
+    h.app.press("escape");
+    settle(&h.app);
+    let units = 1 + query.len() as u64 + 25 + 1;
+    probe.finish("find_long", units);
+    assert!(!h.app.text().contains("Find in session..."));
+}
+
+/// Worst-case Find-in-session over a long session with `TURNS` (200) third-party plugin-claimed fences
+/// and a one-letter query (`"a"`) that matches every fence, mounting all off-window parts for real
+/// while the query is active and releasing them with `fence-gone` when Find closes.
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn find_plugin_fences() {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+
+    use opencode_plugin_abi::{Fenced, Plugin, Setup, Span as AbiSpan};
+
+    static LIVE: std::sync::OnceLock<Mutex<HashSet<u64>>> = std::sync::OnceLock::new();
+    let live = LIVE.get_or_init(|| Mutex::new(HashSet::new()));
+    live.lock().unwrap().clear();
+
+    fn setup(setup: &mut Setup) -> Result<(), String> {
+        let live = LIVE.get().unwrap();
+        setup.on_fence_gone(move |key| {
+            live.lock().unwrap().remove(&key);
+        });
+        setup.code_block("customfence", move |_, fence| {
+            live.lock().unwrap().insert(fence.key);
+            Fenced::Lines {
+                lines: vec![
+                    vec![AbiSpan::new("╭──────────────╮")],
+                    vec![AbiSpan::new("│ custom block │")],
+                    vec![AbiSpan::new("╰──────────────╯")],
+                ],
+                fg: None,
+                drag: false,
+            }
+        });
+        Ok(())
+    }
+
+    let info = opencode_local::cli_config::Info {
+        experimental: Some([("session-find".to_owned(), true)].into_iter().collect()),
+        ..support::still()
+    };
+    let deps = Deps {
+        config: support::config(info),
+        route: support::session_route(LONG),
+        builtins: vec![
+            opencode_mermaid::plugin().into(),
+            opencode_latex::plugin().into(),
+            Plugin { id: "perf.customfence", setup }.into(),
+        ],
+        ..support::deps(Arc::new(Server::new().plugin_fences()))
+    };
+    let h = support::mount(120, 40, deps);
+    h.app.set_verify(false);
+    wait_tail(&h, LONG, TURNS);
+    first(&h);
+    h.dispatch("session.last");
+    settle(&h.app);
+    let live_before = live.lock().unwrap().len();
+    assert!(live_before < TURNS, "expected most plugin fences off-window before Find (live={live_before})");
+
+    let malloc = Malloc::start();
+    let probe = Probe::start();
+    h.dispatch("session.find");
+    frame(&h.app);
+    h.app.type_text("a");
+    frame(&h.app);
+    settle(&h.app);
+    malloc.sample();
+    let live_peak = live.lock().unwrap().len();
+    assert_eq!(live_peak, TURNS, "expected all {TURNS} matching plugin fences mounted while query is active");
+    h.app.press("escape");
+    settle(&h.app);
+    let live_after = live.lock().unwrap().len();
+    assert_eq!(live_after, live_before, "expected all extra plugin fences released on close");
+    let malloc = malloc.finish();
+    probe.finish_with("find_plugin_fences", 3, malloc);
+    assert!(!h.app.text().contains("Find ·"));
+}
+
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn session_list() {
@@ -552,6 +673,38 @@ impl Server {
     fn short(mut self) -> Self {
         let messages = long_messages(20, 4).iter().map(Value::to_string).collect();
         self.messages.insert(SHORT.into(), messages);
+        self
+    }
+
+    fn plugin_fences(mut self) -> Self {
+        let mut messages = Vec::with_capacity(2 * TURNS);
+        for turn in 1..=TURNS {
+            let created = turn as u64 * 100_000;
+            messages.push(
+                json!({
+                    "id": format!("msg_{turn:04}a"),
+                    "type": "user",
+                    "text": format!("Question {turn} prompt"),
+                    "time": { "created": created },
+                })
+                .to_string(),
+            );
+            let body = format!("Reply {turn}\n\n```customfence\nblock {turn} alpha payload\n```");
+            messages.push(
+                json!({
+                    "id": format!("msg_{turn:04}b"),
+                    "type": "assistant",
+                    "agent": "build",
+                    "model": { "providerID": "provider-0", "id": "model-0-0" },
+                    "time": { "created": created + 1000, "completed": created + 3000 },
+                    "finish": "stop",
+                    "tokens": { "input": 10, "output": 10, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                    "content": [{ "type": "text", "text": body }],
+                })
+                .to_string(),
+            );
+        }
+        self.messages.insert(LONG.into(), messages);
         self
     }
 

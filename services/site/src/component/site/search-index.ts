@@ -185,7 +185,7 @@ export function buildSearchIndex(
       content.products.mobile.name,
       "/mobile#download",
       t("download.action.download"),
-      "iOS iPhone TestFlight beta Android Google Play",
+      "iOS iPhone App Store Android Google Play",
     ),
     section(
       names.product,

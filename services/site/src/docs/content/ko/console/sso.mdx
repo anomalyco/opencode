@@ -1,0 +1,91 @@
+---
+title: "SSO"
+description: "OIDC 또는 SAML을 사용해 ID 공급자를 통해 OpenCode Console 워크스페이스에 로그인하세요."
+---
+
+싱글 사인온(SSO)을 사용하면 워크스페이스 멤버가 회사의 ID 공급자를 통해 로그인합니다. 소유자가
+**Settings › Security**에서 설정할 수 있으며, 모든 워크스페이스에서 지원됩니다.
+
+| 프로토콜       | ID 공급자                                                                              |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity 등 OIDC를 지원하는 모든 ID 공급자 |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta 등 SAML을 지원하는 모든 ID 공급자 |
+
+워크스페이스마다 SSO 연결을 하나 설정할 수 있습니다.
+
+## OIDC 설정
+
+1. **Settings › Security**를 열고 **Configure SSO**를 클릭한 뒤 **OpenID Connect**와 ID 공급자를 선택하세요.
+2. 화면 안내에 따라 ID 공급자에서 앱을 만들고 `openid`, `email`, `profile` 스코프를 사용하세요.
+3. **Issuer URL** 또는 테넌트나 도메인, **Client ID**, **Client Secret**, **Display Name**을 입력한 뒤
+   **Save**를 클릭하세요.
+4. 연결의 **Callback URL**을 ID 공급자의 허용 리디렉션 URI에 추가하세요.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Console은 저장할 때 발급자에 연결할 수 있는지 확인합니다. SSO는 연결을 저장하는 즉시 활성화됩니다.
+
+## SAML 설정
+
+1. **Settings › Security**를 열고 **Configure SSO**를 클릭한 뒤 **SAML 2.0**과 ID 공급자를 선택하세요.
+2. **ACS URL**과 **SP Entity ID**를 ID 공급자의 설정에 복사하세요. 커스텀 ID 공급자는 **SP Metadata URL**을 사용하거나
+   XML을 내려받아 사용할 수 있습니다.
+3. ID 공급자의 메타데이터를 URL, XML 업로드 또는 붙여 넣기로 추가하세요. **IdP Entity ID**, **IdP SSO
+   URL**, **IdP Certificate**를 직접 입력할 수도 있습니다.
+4. 세부 정보를 검토하고 **Activate SSO**를 클릭하세요.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+ID 공급자는 응답이나 어설션에 서명해야 하며, 사용자의 이메일을 `email` 속성이나 NameID로 보내야 합니다.
+
+## 이메일 도메인 확인
+
+확인된 도메인의 이메일로 [Console](https://opencode.ai/console)에 로그인하는 사람은 회사의 ID 공급자로
+안내됩니다. SSO가 활성화되면 **Email domains**에서 **Add domain**을 클릭하고 도메인을 입력한 뒤 표시된 TXT
+레코드를 게시하세요.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+레코드를 게시한 뒤 **Verify Domain**을 클릭하세요. DNS 변경이 전파되기까지 시간이 걸릴 수 있습니다. 각 도메인은
+하나의 워크스페이스에만 속할 수 있습니다.
+
+## SSO 적용
+
+워크스페이스에 SSO가 설정되면 관리자와 멤버는 워크스페이스를 열기 위해 SSO로 로그인해야 하며, Console이 자동으로
+리디렉션합니다. `/connect`로 OpenCode를 연결할 때도 같은 규칙이 적용됩니다.
+
+소유자는 SSO 없이도 로그인할 수 있습니다. ID 공급자 설정이 잘못되더라도 워크스페이스 설정에 접근할 수 있습니다.
+
+## 자동 멤버십
+
+확인된 도메인의 사람은 SSO로 처음 로그인할 때 **Member**로 워크스페이스에 합류합니다. 다음 경우에는 자동으로
+추가되지 않습니다.
+
+- 대기 중인 초대가 있는 경우. 초대가 대신 사용됩니다.
+- 워크스페이스가 [디렉터리 동기화](/console/scim)를 사용해 멤버십을 결정하는 경우.
+- 워크스페이스에 [Go](/console/go) 구독이 있는 경우.
+
+SSO가 설정된 워크스페이스의 초대 링크를 열면 ID 공급자로 이동합니다.
+
+## 기존 계정
+
+같은 이메일로 Console 계정이 이미 있으면 SSO 흐름에서 다시 로그인하고 **Link account**로 확인합니다. 초대를
+받아도 이 확인은 생략되지 않습니다. 확인된 워크스페이스 도메인의 SCIM 프로비저닝 계정은 자동으로 연결될 수
+있습니다.
+
+## 편집 또는 삭제
+
+연결의 **Edit**을 클릭해 세부 정보를 변경합니다. 시크릿이나 인증서를 비워 두면 현재 값이 유지됩니다. OIDC와
+SAML을 전환하려면 연결을 삭제하고 새로 만드세요.
+
+**⋯ › Delete...**에서 연결을 삭제합니다. 멤버는 다른 로그인 방법을 사용하게 되고, 디렉터리 동기화는 토큰이
+폐기되면서 중단됩니다. 이메일 도메인은 유지됩니다.

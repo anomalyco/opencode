@@ -1,0 +1,57 @@
+---
+title: "CLI 插件"
+description: "在 CLI 中从 OpenCode 配置加载 TUI 插件，并在 cli.json 中添加仅用于 CLI 的插件及其选项。"
+---
+
+在 `opencode.json(c)` 中配置且提供 TUI 组件的插件会由 CLI 自动加载。如需了解如何开发插件，请参阅[构建插件](/build/plugins)。你无需在 `cli.json` 中重复添加同一个包。CLI 会从已连接的 OpenCode 服务器获取当前启用的插件列表，因此服务器在远程时同样适用。
+
+仅用于 CLI 的插件请配置在 `cli.json` 中。这类插件在本地终端中运行，即使 CLI 连接到远程服务器也会保持启用：
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+条目按顺序处理。在 ID 或通配符前加上 `-` 可禁用匹配的插件：
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+使用对象形式传入插件选项：
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode 还会在全局配置目录和项目的 `.opencode` 目录中查找插件。每个插件的目录结构与已发布的包相同，服务器入口和 TUI 入口放在一起。
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+通过这种方式发现的插件可以直接导入 `@opencode/plugin/tui`，OpenCode 会在运行时解析该包。示例请参阅[构建 TUI 插件](/build/plugins/cli)。

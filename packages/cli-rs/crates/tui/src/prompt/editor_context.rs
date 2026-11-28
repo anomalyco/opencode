@@ -229,6 +229,9 @@ struct State {
     server: Option<Value>,
     last_zed_key: Option<String>,
     preserve: bool,
+    /// Whether a session's directory has been followed; the first follow completes startup, later ones are
+    /// session prompts that mount in a directory, perhaps the same one.
+    followed: bool,
     directory: String,
     started: Option<Started>,
     generation: u64,
@@ -350,19 +353,12 @@ impl Context {
         Disposer::new(bind!(self.0, |state| state.borrow_mut().watchers.retain(|(other, _)| *other != id)))
     }
 
-    /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. The selection is
-    /// cleared unless a new session asked to keep it.
+    /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. A new directory
+    /// clears the selection unless a new session asked to keep it, as does a later follow of the same one; only
+    /// the first follow keeps it, as a Zed poll can land before the session's location does.
     pub fn reconnect(&self, tui: &Tui, directory: Option<&str>) {
         let resolved = directory.filter(|directory| !directory.is_empty()).unwrap_or(&tui.directory).to_owned();
-        let same = self.0.borrow().directory == resolved;
-        let preserved = std::mem::take(&mut self.0.borrow_mut().preserve);
-        if !preserved {
-            if !same {
-                self.0.borrow_mut().last_zed_key = None;
-            }
-            self.set_selection(None);
-        }
-        if same {
+        if !self.retarget(&resolved) {
             return;
         }
         let mut state = self.0.borrow_mut();
@@ -376,6 +372,22 @@ impl Context {
             started.task.abort();
             started.task = spawn(tui, &started.source, &directory, generation, &started.proxy);
         }
+    }
+
+    /// Whether `directory` is new. A new one clears the selection unless a new session asked to keep it, and a
+    /// later follow of the same one clears it too, as `clearSelectionForReconnect` does; the first follow keeps
+    /// it, because the session's location can land after the Zed poll.
+    fn retarget(&self, directory: &str) -> bool {
+        let same = self.0.borrow().directory == directory;
+        let preserved = std::mem::take(&mut self.0.borrow_mut().preserve);
+        let followed = std::mem::replace(&mut self.0.borrow_mut().followed, true);
+        if !preserved && (!same || followed) {
+            if !same {
+                self.0.borrow_mut().last_zed_key = None;
+            }
+            self.set_selection(None);
+        }
+        !same
     }
 
     fn listener_id(&self) -> u64 {
@@ -1105,6 +1117,52 @@ mod tests {
     /// A POSIX test path as an absolute path of this platform: `/w/app` is `C:\w\app` on Windows.
     fn abs(posix: &str) -> String {
         if cfg!(windows) { format!("C:{}", posix.replace('/', "\\")) } else { posix.to_owned() }
+    }
+
+    fn selection(file_path: &str) -> Selection {
+        Selection {
+            file_path: file_path.to_owned(),
+            source: Some(SourceKind::Zed),
+            ranges: vec![Range {
+                text: "ab".to_owned(),
+                selection: Span { start: Position { line: 2, character: 0 }, end: Position { line: 3, character: 0 } },
+            }],
+        }
+    }
+
+    #[test]
+    fn the_first_follow_keeps_a_zed_selection_that_landed_before_the_session_location() {
+        let context = Context::default();
+        context.0.borrow_mut().directory = "/w".to_owned();
+        let posted = |file_path: &str| Posted { generation: 0, event: Event::Zed(Some(selection(file_path))) };
+        context.apply(&posted("/w/a.ts"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
+        // The session's location lands after the first Zed poll; it names the directory already followed.
+        assert!(!context.retarget("/w"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
+        // A session in another directory clears it, and its own poll brings its selection in.
+        assert!(context.retarget("/other"));
+        assert!(context.selection().is_none());
+        context.apply(&posted("/other/a.ts"));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("a.ts#2-3".to_owned()));
+    }
+
+    #[test]
+    fn a_later_follow_of_the_same_directory_clears_the_selection_like_typescript() {
+        let context = Context::default();
+        context.0.borrow_mut().directory = "/w".to_owned();
+        let posted = |selection: Selection| Posted { generation: 0, event: Event::Zed(Some(selection)) };
+        assert!(!context.retarget("/w"));
+        context.apply(&posted(selection("/w/a.ts")));
+        // A second session mounts in the same directory: `clearSelectionForReconnect` clears the selection and
+        // keeps the Zed key, so the poll does not put the unchanged selection back.
+        assert!(!context.retarget("/w"));
+        assert!(context.selection().is_none());
+        context.apply(&posted(selection("/w/a.ts")));
+        assert!(context.selection().is_none());
+        // The editor's next selection comes through.
+        context.apply(&posted(selection("/w/b.ts")));
+        assert_eq!(context.selection().map(|selection| selection.label()), Some("b.ts#2-3".to_owned()));
     }
 
     #[test]

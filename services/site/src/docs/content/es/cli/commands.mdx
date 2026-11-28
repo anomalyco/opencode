@@ -1,0 +1,634 @@
+---
+title: "Comandos de la CLI"
+description: "Referencia de la línea de comandos de opencode."
+---
+
+Todos los comandos aceptan `--help` para ver su lista completa de flags, por ejemplo `opencode run --help`. Algunos comandos respaldados por el servidor aceptan `--standalone` para ejecutar un servidor privado o `--server <url>` para apuntar a uno concreto; consulta la ayuda del comando para ver los flags compatibles.
+
+## run
+
+Envía un mensaje e imprime la respuesta sin abrir la interfaz interactiva.
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+En CI, pasa una clave de API del proveedor como secreto y usa el modo independiente para que la reciba el servidor privado. Por ejemplo, este trabajo de GitHub Actions revisa el repositorio extraído:
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-5-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Elige un modelo.
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
+```
+
+Continúa la última sesión.
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+Emite JSON delimitado por saltos de línea para scripts.
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+Adjunta archivos al mensaje.
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+Ejecuta con un agente concreto.
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+Continúa una sesión concreta.
+
+```bash
+$ opencode run --session ses_4f2a1c "Check edge cases"
+```
+
+Aprueba automáticamente los permisos que no se deniegan explícitamente.
+
+```bash
+$ opencode run --auto "Fix the failing test"
+```
+
+Crea la sesión archivada para que las ejecuciones de scripts o de CI no aparezcan en las listas de sesiones ni en la bandeja de entrada. La sesión sigue existiendo: `opencode session list` la incluye y puedes abrirla por su ID.
+
+```bash
+$ opencode run --archived "Review this diff"
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+Inicia la interfaz interactiva mínima en lugar de la TUI a pantalla completa.
+
+```bash
+$ opencode mini
+```
+
+Continúa la última sesión.
+
+```bash
+$ opencode mini --continue
+```
+
+Empieza con un modelo y un prompt inicial.
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-5-5 --prompt "Summarize this repository"
+```
+
+Continúa una sesión concreta.
+
+```bash
+$ opencode mini --session ses_4f2a1c
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+Gestiona las sesiones.
+
+```bash
+$ opencode session list
+```
+
+Limita la lista e imprime JSON.
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+Elimina una sesión y sus sesiones hijas.
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+Exporta los datos de la sesión como JSON.
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+Oculta los datos sensibles del historial de la conversación y de los archivos al exportar.
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+Importa datos de sesión desde un archivo JSON o una URL.
+
+```bash
+$ opencode session import session.json
+```
+
+Importa en un directorio concreto.
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+Gestiona proveedores de IA y credenciales.
+
+```bash
+$ opencode auth list
+```
+
+Lístalos como JSON.
+
+```bash
+$ opencode auth list --format json
+```
+
+Inicia sesión en un proveedor.
+
+```bash
+$ opencode auth login anthropic
+```
+
+Inicia sesión con un método de autenticación concreto.
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+Cierra la sesión de una cuenta guardada.
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+Cambia la cuenta activa de una integración.
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+Exporta las credenciales guardadas e impórtalas en otra máquina. El archivo contiene secretos.
+
+```bash
+$ opencode auth export anthropic > credentials.json
+$ opencode auth import credentials.json
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+Enumera todos los modelos disponibles.
+
+```bash
+$ opencode models
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+Gestiona servidores MCP (Model Context Protocol).
+
+```bash
+$ opencode mcp list
+```
+
+Agrega un servidor remoto.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Agrega un servidor local a la configuración global.
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+Agrega un servidor local con una variable de entorno.
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+Agrega un servidor remoto con un encabezado.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+Autentícate con un servidor remoto compatible con OAuth.
+
+```bash
+$ opencode mcp auth sentry
+```
+
+Elimina las credenciales OAuth guardadas de un servidor.
+
+```bash
+$ opencode mcp logout sentry
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+Gestiona plugins.
+
+```bash
+$ opencode plugin list
+```
+
+Incluye los plugins integrados del servidor.
+
+```bash
+$ opencode plugin list --builtin
+```
+
+Instala un plugin y agrégalo a la configuración global.
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+Busca actualizaciones de los plugins de paquete.
+
+```bash
+$ opencode plugin check
+```
+
+Actualiza los plugins de paquete.
+
+```bash
+$ opencode plugin update
+```
+
+Elimina un plugin de la configuración global.
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+Muestra estadísticas de uso que puedes compartir.
+
+```bash
+$ opencode stats
+```
+
+Muestra los últimos 7 días.
+
+```bash
+$ opencode stats --days 7
+```
+
+Muestra el uso por modelo.
+
+```bash
+$ opencode stats --models
+```
+
+Muestra los detalles de costo y tokens.
+
+```bash
+$ opencode stats --cost
+```
+
+Imprime JSON en lugar de un informe.
+
+```bash
+$ opencode stats --json
+```
+
+Muestra solo el proyecto actual.
+
+```bash
+$ opencode stats --project .
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+Inicia la API y el servidor web. Consulta [Web](/cli/web).
+
+```bash
+$ opencode serve
+```
+
+Escucha en todas las interfaces en un puerto fijo.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Permite un cliente de navegador desde otro origen.
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+Imprime enlaces de un solo uso, además de un código QR del primero, que inician la sesión de un navegador o
+una aplicación en el servidor. Los enlaces caducan a los 5 minutos y funcionan una sola vez.
+
+```bash
+$ opencode pair
+```
+
+Usa una URL externa en los enlaces.
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+Empareja desde cualquier lugar a través de una dirección remota de OpenTunnel. Esto expone el
+servidor a internet, así que la primera vez que habilita el acceso remoto lo explica
+y te pide que lo aceptes. Consulta [Acceso remoto](/cli/web#remote-access).
+
+```bash
+$ opencode pair --remote
+```
+
+Acepta sin preguntar, por ejemplo en un script sin terminal.
+
+```bash
+$ opencode pair --remote --yes
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+Gestiona el servidor en segundo plano. Consulta [Web](/cli/web).
+
+```bash
+$ opencode service start
+```
+
+Reinícialo.
+
+```bash
+$ opencode service restart
+```
+
+Muestra su estado.
+
+```bash
+$ opencode service status
+```
+
+Detenlo.
+
+```bash
+$ opencode service stop
+```
+
+Lee un ajuste.
+
+```bash
+$ opencode service get hostname
+```
+
+Define un ajuste.
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+Permite un origen CORS adicional.
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+Pasa una variable de entorno al proceso del servidor.
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Restablece un ajuste a su valor predeterminado.
+
+```bash
+$ opencode service unset hostname
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+Recarga la configuración sin reiniciar el servidor. Las sesiones en curso pasan a usar los servicios recargados al terminar el paso actual.
+
+```bash
+$ opencode reload
+```
+
+## api
+
+Hace una solicitud al servidor en ejecución.
+
+```bash
+$ opencode api GET /api/session
+```
+
+Llama a un ID de operación con un parámetro de consulta.
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+Envía un cuerpo JSON.
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+Agrega un encabezado a la solicitud.
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+Inicia un servidor Agent Client Protocol por la entrada y la salida estándar para integraciones de editores. Se ejecuta hasta que el cliente cierra la conexión.
+
+```bash
+$ opencode acp
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+Proporciona herramientas de depuración y solución de problemas.
+
+```bash
+$ opencode debug agents
+```
+
+Enumera las fuentes de configuración.
+
+```bash
+$ opencode debug config
+```
+
+Escribe una instantánea del heap del servidor en segundo plano en ejecución e imprime su ruta.
+
+```bash
+$ opencode debug heap-dump
+```
+
+Escribe la instantánea en un directorio que elijas.
+
+```bash
+$ opencode debug heap-dump --directory ./snapshots
+```
+
+Muestra las rutas globales.
+
+```bash
+$ opencode debug paths
+```
+
+Imprime una sola ruta.
+
+```bash
+$ opencode debug paths db
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+Actualiza OpenCode a la última versión o a una concreta. Alias: `update`.
+
+```bash
+$ opencode upgrade
+```
+
+Actualiza a una versión concreta con un gestor de paquetes concreto.
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+Detiene los servicios en segundo plano, elimina la caché global y desinstala OpenCode. Los datos de sesión, la configuración y
+el estado no se eliminan.
+
+```bash
+$ opencode uninstall
+```
+
+Previsualiza lo que se eliminaría.
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+Ver todos los subcomandos y flags.
+
+```bash
+$ opencode uninstall --help
+```

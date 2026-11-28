@@ -192,7 +192,10 @@ describe("Ripgrep", () => {
     withTempDir((tmp) =>
       Effect.gen(function* () {
         yield* Effect.promise(() =>
-          fs.writeFile(path.join(tmp.path, "generated.ts"), `Cloudflare${"x".repeat(70 * 1024)}\n`),
+          fs.writeFile(
+            path.join(tmp.path, "generated.ts"),
+            `Cloudflare${"x".repeat(70 * 1024)}\n${"y".repeat(35 * 1024)}Cloudflare${"y".repeat(35 * 1024)}\n${"z".repeat(35 * 1024)}Cloudflare\n`,
+          ),
         )
 
         const environment = yield* Environment.Service
@@ -204,22 +207,23 @@ describe("Ripgrep", () => {
           limit: 10,
         })
 
-        expect(matches).toHaveLength(1)
+        expect(matches).toHaveLength(3)
         expect(matches[0]?.entry.path).toBe(RelativePath.make("generated.ts"))
-        expect(matches[0]?.text).toHaveLength(2_003)
-        expect(matches[0]?.text.endsWith("...")).toBe(true)
+        expect(matches[0]?.text).toBe(`Cloudflare${"x".repeat(1_990)}...`)
         expect(matches[0]?.submatches).toEqual([{ text: "Cloudflare", start: 0, end: 10 }])
+        expect(matches[1]?.text).toBe(`...${"y".repeat(1_000)}Cloudflare${"y".repeat(990)}...`)
+        expect(matches[2]?.text).toBe(`...${"z".repeat(1_989)}Cloudflare\n`)
       }),
     ),
   )
 
-  it.live("ends oversized line previews on a whole character", () =>
+  it.live("cuts oversized line previews on whole characters", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
         yield* Effect.promise(() =>
           fs.writeFile(
             path.join(tmp.path, "emoji.txt"),
-            [1_998, 1_999, 2_000].map((count) => `${"x".repeat(count)}😀tail\n`).join(""),
+            `${"x".repeat(1_999)}😀${"x".repeat(999)}tail${"x".repeat(2_000)}\n${"x".repeat(2_000)}tail${"x".repeat(995)}😀${"x".repeat(2_000)}\n`,
           ),
         )
 
@@ -228,9 +232,8 @@ describe("Ripgrep", () => {
         const matches = yield* ripgrep.grep({ environment, cwd: tmp.path, pattern: "tail", limit: 10 })
 
         expect(matches.map((match) => match.text)).toEqual([
-          `${"x".repeat(1_998)}😀...`,
-          `${"x".repeat(1_999)}...`,
-          `${"x".repeat(2_000)}...`,
+          `...${"x".repeat(999)}tail${"x".repeat(997)}...`,
+          `...${"x".repeat(1_000)}tail${"x".repeat(995)}...`,
         ])
       }),
     ),

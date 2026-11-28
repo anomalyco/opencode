@@ -27,6 +27,32 @@ fn register(setup: &mut Setup, kinds: Rc<RefCell<HashMap<u64, Kind>>>) {
     setup.on_fence_gone(move |key| {
         forget.borrow_mut().remove(&key);
     });
+    setup.code_block_draws("mermaid", |code, width| {
+        const NEUTRAL: Rgba = Rgba::new(0, 0, 0, 255);
+        const PALETTE: Palette = Palette {
+            text: NEUTRAL,
+            primary: NEUTRAL,
+            secondary: NEUTRAL,
+            muted: NEUTRAL,
+            warning: NEUTRAL,
+            background: NEUTRAL,
+            request: NEUTRAL,
+            response: NEUTRAL,
+            note: NEUTRAL,
+            note_background: NEUTRAL,
+            box_text: NEUTRAL,
+            box_border: NEUTRAL,
+            line: NEUTRAL,
+            label_background: NEUTRAL,
+            group: NEUTRAL,
+            group_text: NEUTRAL,
+            marker: NEUTRAL,
+            note_border: NEUTRAL,
+            note_text: NEUTRAL,
+            note_connector: NEUTRAL,
+        };
+        matches!(render(code, width, &PALETTE), Rendered::Diagram(_) | Rendered::Syntax { prefix: Some(_), .. })
+    });
     setup.code_block("mermaid", move |read, fence| {
         let mut kinds = kinds.borrow_mut();
         let previous = kinds.remove(&fence.key);

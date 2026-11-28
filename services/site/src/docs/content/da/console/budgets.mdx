@@ -1,0 +1,88 @@
+---
+title: "Budgetter"
+description: "Sæt et loft for månedligt forbrug for et arbejdsområde, dets medlemmer og tjenestekonti."
+---
+
+Budgetter sætter et loft for månedligt forbrug gennem politikker. Ejere og administratorer administrerer dem i
+**Controls**.
+
+## Budgetniveauer
+
+| Politikkens målgruppe    | Gælder for                                                 |
+| ------------------------ | ---------------------------------------------------------- |
+| Hele arbejdsområdet      | Samlet forbrug for alle medlemmer og tjenestekonti         |
+| Medlemmer med tags       | Medlemmer med de valgte tags                               |
+| Medlemmer med tagget     | Medlemmer med de valgte tags                               |
+| Disse medlemmer          | Bestemte medlemmer                                         |
+| Alle tjenestekonti       | Hver tjenestekonto eller én delt kvote                     |
+| Disse tjenestekonti      | Bestemte tjenestekonti                                     |
+
+En anmodning skal holde sig inden for alle gældende budgetter. En højere grænse tilsidesætter aldrig en lavere. Uden et budget er der intet loft over forbruget.
+
+## Budget for arbejdsområdet
+
+Når arbejdsområdet når sit budgetloft, afvises nye anmodninger fra alle.
+
+1. Åbn **Controls**, og klik på **Add policy**.
+2. Vælg **Entire workspace**, og tilføj en regel af typen **Budget**.
+3. Angiv den månedlige grænse i USD, og klik på **Save**.
+
+## Medlemsbudgetter
+
+Vælg **All members** i en politik for at give hvert medlem en månedlig kvote eller dele ét beløb mellem gruppen. Vælg
+bestemte medlemmer eller tags for at dække en mindre gruppe.
+
+Sådan sætter du et budget for én person:
+
+1. Åbn medlemmet i **Settings › Members**.
+2. Klik på **Create budget policy** for at åbne politikeditoren med medlemmet valgt på forhånd.
+3. Angiv beløbet, og klik på **Save**.
+
+Medlemmets side viser de politikker, der gælder. Hvis et budget for alle medlemmer også dækker personen, gælder begge
+grænser.
+
+## Budgetter for tjenestekonti
+
+Vælg **All service accounts** eller **These service accounts** i **Controls**, tilføj en **Budget**-regel, og angiv en
+individuel eller delt månedlig kvote. Politikken dækker alle nøgler, der tilhører disse konti.
+
+## Beløb og nulstilling
+
+- Beløb er i amerikanske dollars med op til to decimaler.
+- Budgetter nulstilles den 1. i hver måned kl. 00:00 UTC.
+- Et budget på `$0` blokerer alt forbrug, der tæller med i budgetter.
+- Tilføjelse eller ændring af et budget omfatter forbrug, der allerede er registreret i måneden; kvoten nulstilles ikke.
+
+## Hvad tæller med
+
+Som standard dækker et budget **All spend**. Du kan indsnævre det til udvalgte modeller; derefter tæller kun disse
+modeller, med enten én kvote for sættet eller en separat kvote for hver model.
+
+| Forbrug                                                              | Tæller med i budgetter        |
+| -------------------------------------------------------------------- | ----------------------------- |
+| Betalte Console-modeller                                             | Ja                            |
+| Modeller hos [dine egne udbydere](/console/providers) med en angivet pris | Ja, til den konfigurerede pris |
+| [Websøgning](/console/websearch)                                     | Ja, for budgetter for samlet forbrug |
+| Gratis modeller                                                      | Nej                           |
+| [Go](/console/go)-forbrug inden for planen                           | Nej                           |
+| Go-merforbrug betalt med kredit                                      | Ja                            |
+
+## Når et budget er nået
+
+Nye anmodninger afvises med HTTP `429`, indtil budgettet nulstilles, eller en ejer eller administrator hæver det. Svaret angiver, at en budgetpolitik blokerede anmodningen, men ikke hvilket budget der var tale om. Åbn anmodningen under **Activity › Logs** for at se, hvilken politik der blokerede den.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Budgetter kontrolleres, når en anmodning starter. Anmodninger, der allerede er i gang, fuldføres, så forbruget kan ende
+lidt over grænsen.
+
+## Følg forbruget
+
+Hvert medlem ser sit eget forbrug og sin egen grænse under **Activity**. Åbn **My usage** for **Activity › Overview**,
+inklusive budgetdetaljer og nulstillingsdatoer.
+
+Ejere og administratorer kan åbne **Activity › Usage** fra forbrugsgrafen. Den opdeler omkostninger efter dag, model og
+person, og knappen **Export usage** downloader daglige totaler for de seneste 7, 30 eller 90 dage som CSV. Hvis du vil
+downloade den samme fil fra et script, skal du bruge [API'et til forbrugseksport](/console/api/usage-export).

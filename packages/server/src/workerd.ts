@@ -18,6 +18,7 @@ import { Npm } from "@opencode/util/npm"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
 import { withoutParentSpan } from "./request-tracing"
+import { WorkerdMachineLink } from "./workerd-machine-link"
 
 /**
  * The workerd runtime profile: boots opencode core and server inside a
@@ -40,6 +41,8 @@ import { withoutParentSpan } from "./request-tracing"
  * - Blob storage and video generation report themselves unsupported: blobs are files on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
+ * - With the `machines` flag on, workers dial in to `machine.link` as on Node,
+ *   upgraded through a `WebSocketPair` (see `WorkerdMachineLink`).
  *
  * Bundle with the `workerd` condition, e.g.
  * `bun build src/workerd.ts --conditions=workerd --target=node`
@@ -82,9 +85,14 @@ export const create = Effect.fn("ServerWorkerd.create")(function* (options: Opti
   })
   const run = Effect.runPromiseWith(yield* withoutParentSpan(Effect.context()))
   const workspace = Context.get(server.context, Workspace.Service)
-  const handler: Handler = Object.assign(server.handler, {
-    alarm: () => run(Effect.asVoid(workspace.suspendIdle())),
-  })
+  const link = yield* WorkerdMachineLink.make.pipe(Effect.provide(server.context))
+  const handler: Handler = Object.assign(
+    (request: Request) => {
+      const upgrade = link(request)
+      return upgrade ? run(upgrade) : server.handler(request)
+    },
+    { alarm: () => run(Effect.asVoid(workspace.suspendIdle())) },
+  )
   return handler
 })
 

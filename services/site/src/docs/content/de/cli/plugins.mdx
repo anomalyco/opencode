@@ -1,0 +1,65 @@
+---
+title: "CLI-Plugins"
+description: "Lade TUI-Plugins aus deiner OpenCode-Konfiguration und trage Plugins, die nur in der CLI laufen, samt Optionen in cli.json ein."
+---
+
+Plugins, die in `opencode.json(c)` konfiguriert sind und eine TUI-Komponente bereitstellen, werden von der CLI automatisch
+geladen. Wie du Plugins baust, erfährst du unter [Plugins bauen](/build/plugins). Du musst dasselbe Paket nicht zu
+`cli.json` hinzufügen. Die CLI bezieht die Liste der aktiven Plugins vom verbundenen OpenCode-Server, daher funktioniert
+das auch bei einem entfernten Server.
+
+Nutze `cli.json` für Plugins, die nur in der CLI laufen. Diese Plugins laufen lokal im Terminal und bleiben aktiv, wenn die CLI sich mit
+einem entfernten Server verbindet:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Einträge werden der Reihe nach verarbeitet. Stelle einer ID oder einem Wildcard-Muster ein `-` voran, um passende
+Plugins zu deaktivieren:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Übergib Plugin-Optionen mit der Objektform:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode entdeckt Plugins außerdem unter dem globalen Konfigurationsverzeichnis und in `.opencode`-Verzeichnissen von
+Projekten. Jedes Plugin nutzt dieselbe Struktur wie ein veröffentlichtes Paket, mit Server- und TUI-Einstiegspunkten
+zusammen.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+Entdeckte Plugins können `@opencode/plugin/tui` direkt importieren; OpenCode löst das Paket zur Laufzeit auf. Siehe
+[TUI-Plugins bauen](/build/plugins/cli) für Beispiele.

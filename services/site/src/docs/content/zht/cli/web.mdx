@@ -1,0 +1,159 @@
+---
+title: "Web"
+description: "在瀏覽器中執行 OpenCode。"
+---
+
+OpenCode 內建網頁介面，由 TUI 使用的同一個伺服器提供。網頁介面預設啟用，並受密碼保護。
+
+## 存取
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+在瀏覽器中開啟連結，會以工作階段 Cookie 登入並載入 Web
+介面。從 OpenCode 應用程式掃描 QR 碼，或將連結貼到其
+伺服器位址欄位，也會以相同方式連接應用程式。工作階段持續 30 天；
+變更伺服器密碼會登出所有工作階段。
+
+### 透過 SSH
+
+當伺服器只監聽 localhost 時，請從你的機器轉送其連接埠，並在本機開啟印出的連結：
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+伺服器預設只監聽 localhost。其連接埠依平台而定：
+
+| 平台 | 預設連接埠 |
+| --- | --- |
+| macOS、Linux 與 WSL | 49374 |
+| Windows | 28894 |
+
+Windows 會保留從 49152 起的連接埠，而 WSL 鏡像網路會另外保留 49152 以下的一段範圍。使用 `opencode service status` 查看目前位址：
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+你可以使用 `opencode service` 指令變更此設定。
+
+### 遠端存取
+
+若要從任何地方連接，請透過 [OpenTunnel](https://github.com/anomalyco/opentunnel)
+遠端位址配對：
+
+```bash
+$ opencode pair --remote
+```
+
+第一次啟用遠端存取時，它會先詢問再繼續：
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+沒有互動式終端機時，除非傳入 `--yes` 接受，否則指令會失敗。一旦接受，
+之後的執行會略過提示，即使已使用 `opencode service set remote false` 關閉遠端存取。
+
+## 設定
+
+使用 `opencode service set` 設定任何選項：
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+變更設定會停止背景伺服器。請再次啟動它以套用新設定：
+
+```bash
+$ opencode service start
+```
+
+## 獨立模式
+
+`opencode serve` 會在前景執行相同的伺服器，而不是透過
+共用的背景服務。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+適用於下列情況：
+
+- 在共用、常開或遠端主機上執行 OpenCode，然後以
+  `opencode --server <url>` 連接用戶端。
+- 為單一處理程序控制主機名稱、連接埠與 CORS 來源。
+- 交給 systemd、Docker 等需要前景處理程序的環境管理。
+- 保留專用伺服器，而不是共用的背景服務。
+
+使用 `--server` 將用戶端連接到它：
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### 驗證
+
+設定 `OPENCODE_PASSWORD` 以使用固定密碼，而不是產生的密碼。相同的
+變數會將密碼提供給 `opencode --server`。
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+其他 HTTP 用戶端使用基本驗證。使用者名稱一律是 `opencode`，只有
+密碼可以變更。
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+`opencode service set password` 只適用於受管理的背景服務。`opencode serve` 會讀取 `OPENCODE_PASSWORD`；若未設定，每次啟動時都會產生新密碼。
+
+### Docker
+
+每個版本都會將映像發布到 `ghcr.io/anomalyco/opencode`，並以版本號作為標籤。映像的進入點是 `opencode`，預設會啟動 TUI，因此請傳入 `serve`。請繫結至 `0.0.0.0`，因為預設的 `127.0.0.1` 只能從容器內連線。
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 設定 `OPENCODE_PASSWORD`，讓密碼在重新啟動後維持不變。
+- 請掛載資料目錄 `/root/.local/share/opencode`，其中的資料庫存放你的工作階段。若未掛載，工作階段會隨容器一併消失。也請掛載設定目錄 `/root/.config/opencode`，以保留全域設定。
+- 使用 `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info` 確認伺服器是否就緒。

@@ -1,0 +1,197 @@
+---
+title: "ฟอร์แมตเตอร์"
+description: "จัดรูปแบบไฟล์หลัง OpenCode แก้ไข ด้วยฟอร์แมตเตอร์ในตัวเช่น Prettier, Biome, gofmt และ Ruff หรือคำสั่งของคุณเอง"
+---
+
+OpenCode จัดรูปแบบไฟล์หลังเครื่องมือ `write`, `edit` หรือ `patch` เปลี่ยนไฟล์ได้
+ฟอร์แมตเตอร์ปิดโดยค่าเริ่มต้น จึงต้องเปิดในการกำหนดค่าของคุณ
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## เปิดใช้งาน
+
+ตั้ง `formatter` เป็น `true` เพื่อเปิดฟอร์แมตเตอร์ในตัวทั้งหมด OpenCode รัน
+ฟอร์แมตเตอร์ในตัวเฉพาะเมื่อไฟล์ปฏิบัติการและข้อกำหนดเฉพาะโปรเจกต์พร้อมใช้งาน
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+ออบเจกต์ก็เปิดฟอร์แมตเตอร์ในตัวและให้คุณแทนที่หรือเพิ่มฟอร์แมตเตอร์กำหนดเองได้
+ออบเจกต์ว่างจะคงการตั้งค่าฟอร์แมตเตอร์ที่สืบทอดมา ส่วน `true` จะรีเซ็ตเป็นค่าในตัว
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## ฟอร์แมตเตอร์ในตัว
+
+OpenCode มีฟอร์แมตเตอร์ในตัวตามรายการด้านล่าง ส่วนใหญ่จะทำงานได้เมื่อมีคำสั่งที่ระบุ ฟอร์แมตเตอร์ที่มีเงื่อนไขตรวจหาเพิ่มเติมจะระบุไว้ในตาราง
+
+| ฟอร์แมตเตอร์ | นามสกุลไฟล์ | สิ่งที่ต้องมี |
+| --- | --- | --- |
+| `gofmt` | `.go` | คำสั่ง `gofmt` |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | คำสั่ง `mix` |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | แพ็กเกจ `oxfmt` ใน `package.json` |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | แพ็กเกจ `prettier` ใน `package.json` |
+| `biome` | นามสกุลเดียวกับ `prettier` ด้านบน | `biome.json` หรือ `biome.jsonc` และไบนารี `@biomejs/biome` ที่ติดตั้งแล้ว |
+| `zig` | `.zig`, `.zon` | คำสั่ง `zig` |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | คำสั่ง `clang-format` และ `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | คำสั่ง `ktlint` |
+| `ruff` | `.py`, `.pyi` | คำสั่ง `ruff` และการกำหนดค่าหรือประกาศแพ็กเกจ Ruff |
+| `air` | `.R` | คำสั่ง `air` ที่ระบุตัวเองว่าเป็นฟอร์แมตเตอร์ R |
+| `uv` | `.py`, `.pyi` | คำสั่ง `uv` ที่รองรับ `uv format` |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | คำสั่ง `rubocop` |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | คำสั่ง `standardrb` |
+| `htmlbeautifier` | `.erb` | คำสั่ง `htmlbeautifier` |
+| `dart` | `.dart` | คำสั่ง `dart` |
+| `ocamlformat` | `.ml`, `.mli` | คำสั่ง `ocamlformat` และ `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | คำสั่ง `terraform` |
+| `latexindent` | `.tex` | คำสั่ง `latexindent` |
+| `gleam` | `.gleam` | คำสั่ง `gleam` |
+| `shfmt` | `.sh`, `.bash` | คำสั่ง `shfmt` |
+| `nixfmt` | `.nix` | คำสั่ง `nixfmt` |
+| `rustfmt` | `.rs` | คำสั่ง `rustfmt` |
+| `pint` | `.php` | `laravel/pint` ใน `composer.json` |
+| `ormolu` | `.hs` | คำสั่ง `ormolu` |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | คำสั่ง `cljfmt` |
+| `dfmt` | `.d` | คำสั่ง `dfmt` |
+
+ตัวอย่างเช่น การเปิดฟอร์แมตเตอร์ในตัวทำให้ OpenCode ค้นพบและรันแพ็กเกจ Prettier
+ภายในโปรเจกต์สำหรับไฟล์ที่ตรงกัน
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## ปรับแต่ง
+
+เพิ่มรายการโดยระบุชื่อฟอร์แมตเตอร์ที่ต้องการแก้ไขหรือสร้างขึ้นเอง สำหรับฟอร์แมตเตอร์ที่สร้างขึ้นเอง ต้องระบุทั้ง `command` และ `extensions` จึงจะใช้งานได้
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| ฟิลด์ | ชนิด | ลักษณะการทำงาน |
+| --- | --- | --- |
+| `disabled` | `boolean` | นำฟอร์แมตเตอร์ที่ระบุออกเมื่อเป็น `true` |
+| `command` | `string[]` | แทนที่คำสั่งในตัวหรือกำหนดคำสั่งกำหนดเอง |
+| `environment` | `Record<string, string>` | เพิ่มตัวแปรสภาพแวดล้อมโดยคงสภาพแวดล้อมของโปรเซสแม่ |
+| `extensions` | `string[]` | แทนที่รายการนามสกุลไฟล์ในตัวหรือกำหนดรายการกำหนดเอง ใส่จุดนำหน้าด้วย |
+
+ทุกฟิลด์เป็นทางเลือก รายการที่มีอยู่ในตัวจะสืบทอดค่าที่ไม่ระบุ ส่วนรายการใหม่ที่ไม่มีคำสั่ง
+หรือนามสกุลไฟล์จะทำงานไม่ได้
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## คำสั่ง
+
+`command` เป็นอาร์เรย์อาร์กิวเมนต์ ไม่ใช่สตริงคำสั่ง shell OpenCode แทนที่
+`$FILE` ด้วยพาธสัมบูรณ์ของไฟล์และรันคำสั่งจากไดเรกทอรีโปรเจกต์ที่ใช้งาน
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## การจับคู่
+
+OpenCode เปรียบเทียบนามสกุลไฟล์สุดท้ายของไฟล์กับ `extensions` การจับคู่
+แยกตัวพิมพ์เล็กใหญ่ และรายการแบบผสมอย่าง `.part.md` ไม่ตรงกับ
+`notes.part.md` เพราะนามสกุลสุดท้ายคือ `.md`
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+หากมีฟอร์แมตเตอร์หลายตัวตรงกับไฟล์ OpenCode จะลองตามลำดับที่ลงทะเบียนและหยุดเมื่อคำสั่งแรกทำงานสำเร็จ
+ฟอร์แมตเตอร์ในตัวใช้ลำดับเดิม ส่วนฟอร์แมตเตอร์ที่กำหนดเองจะตามมาตามลำดับในออบเจกต์
+หากคำสั่งจบโดยไม่สำเร็จ OpenCode จะบันทึกข้อผิดพลาดและลองฟอร์แมตเตอร์ตัวถัดไปที่ตรงกับไฟล์
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## ปิดใช้งาน
+
+การจัดรูปแบบจะปิดเมื่อไม่มีไฟล์กำหนดค่าใดตั้ง `formatter` หากต้องการปิดการจัดรูปแบบ
+ที่ไฟล์ลำดับต่ำกว่าเปิดไว้ ให้ตั้งเป็น `false`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+หากต้องการปิดฟอร์แมตเตอร์ในตัวหนึ่งตัวโดยที่ตัวอื่นยังเปิด ให้ทำเครื่องหมายรายการที่มีชื่อนั้น
+ว่าปิดใช้งาน
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

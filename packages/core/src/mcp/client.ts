@@ -50,9 +50,18 @@ import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
+import { McpTarget } from "./target.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
+import { ConnectError, NeedsAuthError, SessionExpiredError, SkillMismatchError } from "./errors.js"
 
-export { EventStreamRejectedError, EventStreamTerminatedError }
+export {
+  ConnectError,
+  EventStreamRejectedError,
+  EventStreamTerminatedError,
+  NeedsAuthError,
+  SessionExpiredError,
+  SkillMismatchError,
+}
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -113,8 +122,9 @@ const EventError = Schema.Struct({
 })
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
-const Cursor = Schema.optional(Schema.NullOr(Schema.String))
-const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Int]) }) }
+const Cursor = Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed(null)))
+const Subscription = Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Int]) })
+const Subscribed = { _meta: Subscription }
 // Each event type is decoded on its own, so one malformed type doesn't hide the rest.
 const EventList = Schema.toStandardSchemaV1(
   Schema.Struct({ events: Schema.Array(Schema.Unknown), nextCursor: Schema.optional(Schema.String) }),
@@ -126,7 +136,7 @@ const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
     cursor: Cursor,
-    truncated: Schema.optional(Schema.Boolean),
+    truncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
     heartbeatMs: Schema.Int.check(Schema.isGreaterThan(0)),
     ...Subscribed,
   }),
@@ -189,27 +199,6 @@ export interface Tool {
   readonly annotations?: Record<string, unknown>
   readonly execution?: Record<string, unknown>
   readonly _meta?: Record<string, unknown>
-}
-
-export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
-  server: Schema.String,
-  message: Schema.String,
-}) {}
-
-export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
-  server: Schema.String,
-  message: Schema.String,
-  /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
-  answered: Schema.optional(Schema.Boolean),
-}) {}
-
-/** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
-export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()("MCP.SessionExpiredError", {
-  server: Schema.String,
-}) {
-  override get message() {
-    return `MCP server session expired: ${this.server}`
-  }
 }
 
 export type CallToolContent =
@@ -320,13 +309,6 @@ export interface Events {
   }) => Stream.Stream<EventMessage, Error>
 }
 
-/** A skill file the server served doesn't match its entry: not listed, or a different size, digest or frontmatter. */
-export class SkillMismatchError extends Schema.TaggedError<SkillMismatchError>()("McpClient.SkillMismatchError", {
-  uri: Schema.String,
-  check: Schema.Literals(["unlisted", "size", "digest", "frontmatter"]),
-  message: Schema.String,
-}) {}
-
 /** Experimental: MCP Skills is a beta extension; may change without compatibility guarantees. */
 export interface Skills {
   /** Every valid skill the server lists (`skills/list`); invalid entries are logged and skipped. No file is read. */
@@ -350,7 +332,7 @@ export interface Attached {
 
 export interface ConnectOptions {
   readonly server: string
-  readonly config: typeof ConfigMCP.Server.Type | Attached
+  readonly target: McpTarget.Target | Attached
   /** Resolves a relative stdio `cwd` and is the default one, and is the root `roots/list` answers with. */
   readonly directory: string
   /** Remote only. A 401 the provider cannot recover from ends in UnauthorizedError → needs_auth. */
@@ -372,13 +354,13 @@ export interface ConnectOptions {
  */
 export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const server = options.server
-  const config = options.config
+  const target = options.target
   const elicitation = options.elicitation
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
-    config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
-  const protocol = config.protocol ?? (config.type === "attached" ? "legacy" : "auto")
+    target.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : target.config.timeout
+  const protocol = target.type === "attached" ? (target.protocol ?? "legacy") : (target.config.protocol ?? "auto")
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -464,39 +446,33 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     if (options.roots !== false)
       client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
     if (options.events) {
-      const deliver = (
-        params: { readonly _meta: { readonly [SUBSCRIPTION_ID]: string | number } },
-        message: EventMessage,
-      ) => {
-        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+      const opened = (meta: typeof Subscription.Type) => streams.get(String(meta[SUBSCRIPTION_ID]))
+      const deliver = (meta: typeof Subscription.Type, message: EventMessage) => {
+        const open = opened(meta)
         if (!open) return
         Queue.offerUnsafe(open.heard, undefined)
         Queue.offerUnsafe(open.queue, message)
       }
       client.setNotificationHandler("notifications/events/active", { params: ActiveNotification }, (params) => {
+        const { _meta, heartbeatMs, ...active } = params
         // The server's grant is authoritative, and it comes with every `active`.
-        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
-        if (open) open.silence = Duration.millis(params.heartbeatMs * MISSED_HEARTBEATS)
-        deliver(params, { type: "active", cursor: params.cursor ?? null, truncated: params.truncated === true })
+        const open = opened(_meta)
+        if (open) open.silence = Duration.millis(heartbeatMs * MISSED_HEARTBEATS)
+        deliver(_meta, { type: "active", ...active })
       })
-      client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) =>
-        deliver(params, {
-          type: "event",
-          eventId: params.eventId,
-          name: params.name,
-          timestamp: params.timestamp,
-          data: params.data,
-          cursor: params.cursor ?? null,
-        }),
+      client.setNotificationHandler(
+        "notifications/events/event",
+        { params: EventNotification },
+        ({ _meta, ...event }) => deliver(_meta, { type: "event", ...event }),
       )
       client.setNotificationHandler("notifications/events/heartbeat", { params: HeartbeatNotification }, (params) =>
-        deliver(params, { type: "heartbeat", cursor: params.cursor ?? null }),
+        deliver(params._meta, { type: "heartbeat", cursor: params.cursor }),
       )
       client.setNotificationHandler("notifications/events/error", { params: ErrorNotification }, (params) =>
-        deliver(params, { type: "error", error: params.error }),
+        deliver(params._meta, { type: "error", error: params.error }),
       )
       client.setNotificationHandler("notifications/events/terminated", { params: ErrorNotification }, (params) => {
-        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+        const open = opened(params._meta)
         if (open)
           Queue.failCauseUnsafe(open.queue, Cause.fail(new EventStreamTerminatedError({ server, ...params.error })))
       })
@@ -542,12 +518,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     )
       return new NeedsAuthError({ server, message: describe(error) })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    const body = typeof error.data.text === "string" ? error.data.text : ""
     // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
-      (error.status === 404 && !methodNotFound(error.data.text)) ||
-      (error.status === 400 &&
-        typeof error.data.text === "string" &&
-        error.data.text.includes("Bad Request: Server not initialized"))
+      (error.status === 404 && Option.isNone(decodeMethodNotFound(body))) ||
+      (error.status === 400 && body.includes("Bad Request: Server not initialized"))
     if (!expired) return new Error(explain(error))
     if (!session.reported) {
       session.reported = true
@@ -557,18 +532,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   }
 
   const exit = yield* Effect.gen(function* () {
-    if (config.type === "attached") return yield* initialize(config.transport, protocol)
-    if (config.type === "local") {
-      const [command, ...args] = config.command
+    if (target.type === "attached") return yield* initialize(target.transport, protocol)
+    if (target.type === "local") {
+      const command = target.command
       const spawn = (protocol: ConfigMCP.Protocol) =>
         McpStdio.make({
           server,
           command,
-          args,
-          cwd: McpStdio.resolveCwd(options.directory, config.cwd),
+          args: target.args,
+          cwd: McpStdio.resolveCwd(options.directory, target.config.cwd),
           environment: {
             ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-            ...config.environment,
+            ...target.config.environment,
           },
         }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
       // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
@@ -586,14 +561,10 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
     const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
-    // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
-    // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
-    const url = new URL(config.url)
-    const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode") && !rejectsUnknownQuery(url)
-    if (addedCodemode) url.searchParams.set("codemode", "false")
+    const dialed = McpTarget.dialUrl(target.url, target.config.codemode)
     const open = Effect.fnUntraced(function* (url: URL, protocol: ConfigMCP.Protocol, startup?: number) {
       session.transport = new StreamableHTTPClientTransport(url, {
-        requestInit: config.headers ? { headers: config.headers } : undefined,
+        requestInit: target.config.headers ? { headers: target.config.headers } : undefined,
         authProvider: options.authProvider,
         fetch,
       })
@@ -621,12 +592,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
 
     return yield* retrying(
       "MCP connect",
-      negotiate(url).pipe(
+      negotiate(dialed ?? target.url).pipe(
         Effect.catch((error) => {
-          if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
+          if (!dialed || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
             return Effect.fail(error)
           // Servers that reject unknown query params get one retry at the configured URL.
-          return negotiate(new URL(config.url))
+          return negotiate(target.url)
         }),
       ),
       deadline,
@@ -1073,7 +1044,6 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
 const decodeMethodNotFound = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ code: Schema.Literal(-32601) }) })),
 )
-const methodNotFound = (body: unknown) => typeof body === "string" && Option.isSome(decodeMethodNotFound(body))
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.
@@ -1089,17 +1059,6 @@ function repeats(error: unknown): boolean {
     isTransient(error) ||
     PlatformError.isPlatformError(error)
   )
-}
-
-// These servers reject any unknown query parameter and have no Code Mode of their own, so adding
-// ?codemode=false only costs a failed request before the retry at the configured URL.
-function rejectsUnknownQuery(url: URL) {
-  // Google Workspace MCP (gmailmcp, drivemcp, calendarmcp, ...) returns 404.
-  if (url.hostname.endsWith(".googleapis.com")) return true
-  // Zoho MCP gateways (zohomcp.com, zohomcp.eu, ...) return 400.
-  if (/(^|\.)zohomcp\.[a-z.]+$/.test(url.hostname)) return true
-  // Loopback servers run on this machine (Figma Desktop's Dev Mode MCP returns 404), so they are not hosted Code Mode servers.
-  return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
 }
 
 // Legacy sends the plain initialize handshake with no discover probe.

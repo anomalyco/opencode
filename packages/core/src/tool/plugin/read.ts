@@ -1,7 +1,7 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import { dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -146,10 +146,12 @@ export const Plugin = {
                         ),
                       )
                       if (content.type === "directory") return yield* missing({ input: input.path, requested, context })
+                      // Shown as written, by the rules of the machine the file is on.
+                      const rules = requested.environment.path
                       return {
                         content,
                         target,
-                        path: join(dirname(input.path), basename(alternate)),
+                        path: rules.join(rules.dirname(input.path), rules.basename(alternate)),
                       }
                     }),
                 ),
@@ -209,13 +211,13 @@ export const Plugin = {
       .pipe(Effect.orDie)
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (target: FileAccess.Target) {
-      const base = canonical(basename(target.absolute))
-      const matches = (yield* target.environment.files.list(AbsolutePath.make(dirname(target.absolute)))).filter(
+      // The path follows its environment's rules, whatever this server's platform joins with.
+      const rules = target.environment.path
+      const base = canonical(rules.basename(target.absolute))
+      const matches = (yield* target.environment.files.list(AbsolutePath.make(rules.dirname(target.absolute)))).filter(
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
-      // The path follows its environment's rules, whatever this server's platform joins with.
-      const rules = target.environment.path
       return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 
@@ -257,13 +259,17 @@ export const Plugin = {
       folder: string,
       moved: string[],
     ) {
+      const rules = miss.requested.environment.path
       let child = folder
-      let parent = dirname(folder)
+      let parent = rules.dirname(folder)
       while (parent !== child) {
         const found = yield* listing(miss.requested.environment.files, parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
-          const suggestions = [...moved, ...similar(found.names, basename(child)).map((entry) => join(parent, entry))]
+          const suggestions = [
+            ...moved,
+            ...similar(found.names, rules.basename(child)).map((entry) => rules.join(parent, entry)),
+          ]
           const message = [
             `File not found: ${miss.input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
@@ -272,7 +278,7 @@ export const Plugin = {
           return yield* new ToolFailure({ message })
         }
         child = parent
-        parent = dirname(parent)
+        parent = rules.dirname(parent)
       }
       return yield* new ToolFailure({
         message: [`File not found: ${miss.input}`, ...didYouMean(moved)].join("\n\n"),
@@ -281,13 +287,17 @@ export const Plugin = {
 
     const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
       const moved = yield* reroot(miss).pipe(Effect.orElseSucceed(() => []))
-      const folder = dirname(miss.requested.absolute)
+      // The folders are the requested machine's, by its own path rules.
+      const rules = miss.requested.environment.path
+      const folder = rules.dirname(miss.requested.absolute)
       const found = yield* listing(miss.requested.environment.files, folder)
       if (found.type === "missing") return yield* missingFolder(miss, folder, moved)
       const suggestions = [
         ...moved,
         ...(found.type === "found"
-          ? similar(found.names, basename(miss.input)).map((entry) => join(dirname(miss.input), entry))
+          ? similar(found.names, rules.basename(miss.input)).map((entry) =>
+              rules.join(rules.dirname(miss.input), entry),
+            )
           : []),
       ]
       return yield* new ToolFailure({

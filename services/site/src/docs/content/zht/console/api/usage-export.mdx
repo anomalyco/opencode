@@ -1,0 +1,113 @@
+---
+title: "用量匯出 API"
+description: "將工作區的每日用量下載為 CSV，包含每天、人員、供應商與模型的請求、token 與成本。"
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export` 會以 CSV 回傳工作區的用量，每列代表一個 UTC 日期、
+成員或服務帳號、供應商與模型。這與 **Export usage** 按鈕從
+**Activity › Usage** 下載的檔案相同。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## 驗證
+
+以 bearer 權杖傳送 [API 金鑰](/console/api#api-keys)。匯出範圍為建立該金鑰的工作區。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+金鑰需要 **Usage › Read**。具有 **All** 或 **Read only** 的金鑰已包含此權限。受限金鑰需要：
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+排程匯出請使用[服務帳號金鑰](/console/api#service-accounts)，或擁有者／管理員的
+[個人 API 金鑰](/console/api#personal-api-keys)。成員無法讀取工作區用量，因此其
+金鑰會回傳 `403`。
+
+## 請求
+
+| 參數 | 必填 | 值 |
+| --- | --- | --- |
+| `range` | 是 | `7d`、`30d` 或 `90d`。 |
+| `user_id` | 否 | 成員 ID（`user_...`）或服務帳號 ID（`svcacct_...`）。只回傳該成員或服務帳號的資料列。 |
+
+`range` 以 UTC 日期計算並包含今天，因此 `7d` 是今天與之前六天。今天的資料列會持續增加，
+直到 UTC 午夜。
+
+若要匯出單一服務帳號的用量，請從先前匯出的 `user_id` 欄位傳入其 ID：
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+不在工作區中的 ID 只會回傳標題列。
+
+## 回應
+
+成功的請求會回傳 `200` 與 `Content-Type: text/csv; charset=utf-8`。第一行是標題。資料列
+接著出現，最新的日期在前。
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- 各行以 `\r\n` 結尾。
+- 沒有用量的日期不會有資料列。
+- 回應是下載檔（`Content-Disposition: attachment; filename="usage-30d.csv"`），且永遠不會快取
+  （`Cache-Control: private, no-store`）。
+- 以 `=`、`+`、`-` 或 `@` 開頭的文字儲存格會加上前置的 `'`，讓試算表不會將其當作公式執行。
+
+### 欄位
+
+| 欄位 | 意義 |
+| --- | --- |
+| `day` | UTC 日期，格式為 `YYYY-MM-DD`。 |
+| `user_type` | `member` 或 `service_account`。 |
+| `user_id` | 成員或服務帳號的 ID。 |
+| `user_name` | 成員的電子郵件，或服務帳號的名稱。可以留空。 |
+| `provider` | 提供請求的供應商，例如 [OpenCode Models](/console/models) 的 `opencode`。 |
+| `model` | 模型 ID。 |
+| `requests` | 請求數。 |
+| `input_tokens` | 輸入 token。 |
+| `output_tokens` | 輸出 token。 |
+| `cache_read_tokens` | 從提示詞快取讀取的 token。 |
+| `cache_write_5m_tokens` | 以 5 分鐘存留時間寫入提示詞快取的 token。 |
+| `cache_write_1h_tokens` | 以 1 小時存留時間寫入提示詞快取的 token。 |
+| `cost_micro_cents` | 成本，以整數微美分表示。一美元為 `100000000`。 |
+| `cost_usd` | 同一筆費用的美元金額，以至少兩位小數的精確十進位數表示，例如 `2.145` 或 `0.00`。 |
+
+### 包含內容
+
+- 工作區成員與服務帳號發出的每個模型請求。
+- 免費模型的請求，以及成員透過自己的 Claude Code、Codex 或 OpenCode 訂閱發出的請求，
+  都會列入匯出檔，記錄 token 用量，費用則為零。
+- [網路搜尋](/console/websearch)與其他託管服務不包含在內。
+- 總計可能落後新請求約一分鐘。
+
+## 限制
+
+- 一次匯出最多涵蓋 90 天。若要保留更長的記錄，請排程儲存檔案。
+- 請求會計入控制台 API 每帳號每分鐘 300 個請求的限制，與其其他
+   端點共用。以個人 API 金鑰送出的請求，計入金鑰持有者的上限。
+
+## 錯誤
+
+| 狀態 | 意義 |
+| --- | --- |
+| `400` | 缺少 `range`，或它不是 `7d`、`30d` 或 `90d`，或 `user_id` 不是成員或服務帳號 ID。 |
+| `401` | 沒有憑證，或金鑰已過期或撤銷。 |
+| `403` | 金鑰沒有 **Usage › Read**，或屬於非擁有者或管理員的成員。 |
+| `429` | 超過速率限制。請依 `Retry-After` 標頭中的秒數重試。 |
+| `503` | 每日總計尚無法使用。請稍後重試。 |

@@ -1,0 +1,117 @@
+---
+title: "Harnesses"
+description: "استخدم نماذج Console وGo من وكلاء برمجة وتطبيقات AI أخرى."
+---
+
+تعمل Console مع وكلاء برمجة غير OpenCode. اربط أداة harness ببوابة Console باستخدام مفتاح API لتتمكّن من استخدام أي
+نموذج مدفوع أو نموذج Go. وتُحتسب تكلفة الاستخدام على مساحة عملك شأنها شأن أي طلب آخر.
+
+| Harness                                       | الدفع حسب الاستخدام | Go        | MCP |
+| --------------------------------------------- | ------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | نعم           | نعم       | نعم |
+| [Codex](/console/harnesses/codex)             | نعم           | نعم       | نعم |
+| [Hermes](/console/harnesses/hermes)           | مدمج      | مدمج  | نعم |
+| [OpenClaw](/console/harnesses/openclaw)       | ملحق        | مدمج  | نعم |
+| [Pi](/console/harnesses/pi)                   | مدمج      | مدمج  | نعم |
+| [Raycast](/console/harnesses/raycast)         | امتداد     | امتداد | نعم |
+
+لا تتاح نماذج المحادثة في الخطة المجانية إلا من داخل OpenCode. وتتلقى أدوات harness الأخرى HTTP `403` لهذه النماذج،
+حتى مع مفتاح API من Console. فاستخدم النماذج المدفوعة أو اشتراك Go.
+
+## Console CLI
+
+يربط [Console CLI](https://github.com/anomalyco/opencode-console-cli) أداة harness بمساحة عملك بأمر
+واحد. ويحتاج إلى Node.js 22 أو أحدث.
+
+| Harness          | الأمر                                        |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+يفتح متصفحك Console، حيث توافق على تسجيل الدخول وتختار مساحة العمل. ثم تحصل أداة harness على
+
+- نماذج مساحة العمل، عبر Console
+- سياسات مساحة العمل، يُتحقق منها قبل كل استدعاء أداة
+- خوادم MCP والمهارات والتعليمات الخاصة بمساحة العمل
+
+يحافظ Console CLI على تزامن الأداة مع مساحة العمل ويحدّث نفسه تلقائيًا.
+
+وللاحتفاظ بتسجيل دخول أداة harness ونماذجها، مثل اشتراك Claude أو ChatGPT، أضف `--keep-provider`. فتحصل الأداة
+مع ذلك على سياسات مساحة العمل وخوادم MCP والمهارات والتعليمات. ويتوفّر هذا الخيار مع Claude Code وCodex وHermes وOpenClaw.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+ولإعداد أداة harness يدويًا، أو أداة لا يغطيها CLI، استخدم مفتاح API وعناوين URL الأساسية أدناه.
+
+## الحصول على مفتاح API
+
+تصادق أدوات harness بمفتاح API من Console. والخيار الأسرع هو
+[مفتاح API شخصي](/console/api#personal-api-keys)، يستدعي النماذج باسمك.
+
+1. افتح **Account** من قائمة الحساب في [Console](https://opencode.ai/console).
+2. تحت **Personal API keys**، انقر **Add API key**.
+3. اختر مساحة العمل، وسمّ المفتاح، وانقر **Create**.
+4. انسخ المفتاح. فهو يُعرض مرة واحدة فقط.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+ويُحتسب الاستخدام ضمن [ميزانيتك بصفتك عضوًا](/console/budgets#member-budgets). استخدم مفتاحًا من مساحة عمل لديها رصيد
+للدفع حسب الاستخدام، أو من مساحة عمل مشتركة في [Go](/console/go) لـ Go.
+
+وللأجهزة المشتركة أو CI، يمكن للمالك والمسؤول إنشاء مفتاح [حساب خدمة](/console/api#service-accounts) بدلًا من ذلك،
+فلا يرتبط الاستخدام بشخص واحد.
+
+## عناوين URL الأساسية
+
+يُقدَّم الدفع حسب الاستخدام وGo من عنواني URL أساسيين مختلفين. استخدم العنوان المطابق لخطتك.
+
+| الخطة          | عنوان URL الأساسي                  |
+| ------------- | ---------------------------------- |
+| الدفع حسب الاستخدام | `https://opencode.ai/inference`    |
+| Go            | `https://opencode.ai/inference/go` |
+
+أضف مسار API التي تدعمها أداة harness. تتيح كل API جميع النماذج النصية المدفوعة ونماذج Go. ترسل Console الطلب
+إلى نقطة النهاية الأصلية للنموذج إن كانت تدعم تلك API، وإلا حوّلت الطلب إلى الصيغة المناسبة.
+
+| API                     | المسار                                          |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## الجلسات
+
+أرسل معرّف جلسة ثابتًا مع كل طلب حتى تتمكن Console من توجيه المحادثة بثبات وإعادة استخدام ذاكرة
+مطالباتها المؤقتة. وهذا المعرّف [إلزامي في Go](/console/go#where-can-i-use-it).
+
+```text
+x-opencode-session: ses_...
+```
+
+وتتعرّف Console أيضًا على ترويسات الجلسة الأصلية التي ترسلها Claude Code وCodex وHermes وPi، وترسل OpenClaw
+`x-opencode-session` بنفسها، فلا تحتاج أي منها إلى إعداد إضافي.
+
+## Console MCP
+
+تستطيع أدوات harness التي تدعم MCP إدارة مساحة عملك عبر خادم Console MCP. ويستخدم OAuth مع تسجيل عملاء
+ديناميكي، فتسجّل الدخول من المتصفح بدل لصق مفتاح.
+
+```text
+https://opencode.ai/console/mcp
+```
+
+وتوضّح صفحة كل أداة كيفية إضافته. ويضيف OpenCode الخادم تلقائيًا باسم `opencode_console` عندما تفعّله مساحة عملك،
+ويطلب منك تسجيل الدخول من المتصفح عند أول استخدام له.

@@ -1,0 +1,373 @@
+---
+title: "Go"
+description: "Tre piani per accedere in modo affidabile a modelli aperti per il coding, da solo o con tutto il team."
+---
+
+OpenCode Go offre tre piani mensili per accedere in modo affidabile ai modelli aperti per il coding più diffusi:
+
+| Piano        | Prezzo                                 | Utilizzo incluso                                                           |
+| ------------ | -------------------------------------- | -------------------------------------------------------------------------- |
+| **Go**       | **$10/mese**                           | Accesso più economico ai modelli qui sotto                                 |
+| **Go Plus**  | **$40/mese**                           | Limiti di utilizzo più alti su tutti i modelli seguenti                    |
+| **Go Teams** | **$20/membro/mese**, minimo 2 membri   | Ogni membro ha limiti di utilizzo propri, più alti di $5/mese rispetto a Go per ciascun modello |
+
+Go funziona come qualsiasi altro provider in OpenCode. Quando ti abboni a OpenCode Go, ricevi la tua chiave API. L'abbonamento è **del tutto facoltativo**: puoi usare OpenCode anche senza.
+
+Il servizio è pensato principalmente per utenti internazionali e offre un accesso globale stabile.
+
+## Come funziona
+
+1. Accedi alla [OpenCode Console](https://opencode.ai/console), abbonati a Go, Go Plus o Go Teams, aggiungi i dettagli di fatturazione e copia la tua chiave API.
+2. Esegui `/connect` nella TUI, seleziona **OpenCode Go** e incolla la tua chiave API.
+
+   ```text
+   /connect
+   ```
+
+3. Esegui `/models` per selezionare un modello disponibile tramite Go.
+
+   ```text
+   /models
+   ```
+
+<Callout>
+  Go e Go Plus coprono il membro che si abbona e le chiavi API dello spazio di lavoro. Gli altri membri che inviti usano i modelli gratuiti
+  o il saldo dello spazio di lavoro. Puoi passare da Go o Go Plus a Go Teams in qualsiasi momento: ricevi un credito per la parte
+  inutilizzata della dotazione mensile. Go Teams copre tutti i membri dello spazio di lavoro a $20 al mese per membro, con
+  un minimo di 2 membri ($40/mese). Il secondo posto è riservato al prossimo membro che entra, senza costi aggiuntivi.
+  Dal terzo membro in poi, se qualcuno si aggiunge a periodo già iniziato, Console addebita $20 e gli assegna l'intera dotazione mensile.
+  Go Teams non copre gli account di servizio.
+</Callout>
+
+Consulta l'[elenco attuale dei modelli](https://opencode.ai/console/go#models). L'elenco può cambiare man mano che testiamo e aggiungiamo altri modelli.
+
+### Abilitare i modelli limitati
+
+Le impostazioni di privacy dello spazio di lavoro si applicano anche a Go. Per impostazione predefinita, Console blocca gli endpoint a pagamento che usano i dati delle richieste per l'addestramento e
+consente le regioni **Europe & United States**. Gli spazi di lavoro senza impostazioni di privacy salvate consentono anche **Global**
+per le richieste dalla Cina.
+
+In **Settings › Privacy**, un proprietario o un amministratore può abilitare:
+
+- **DeepSeek V4.1 Flash e V4 Pro:** seleziona **Global** in **Regions**.
+- **LongCat 2.5:** seleziona **Global** in **Regions**.
+- **Muse Spark 1.3 Contributor e Muse Spark 1.2 Contributor:** attiva **Allow paid endpoints that train on request data**.
+
+Vedi [Privacy](#privacy) per i termini di addestramento e conservazione di ogni modello.
+
+## Pagare con i crediti
+
+I proprietari e gli amministratori possono pagare Go con i crediti dello spazio di lavoro, anche per rinnovare o passare a un piano superiore. Scegli **Credit** come
+metodo di pagamento quando ti abboni o in seguito da **Manage subscription**. Il pagamento dell'abbonamento è distinto da
+[Extra Usage](#usage-beyond-limits), che copre l'utilizzo oltre i limiti del piano.
+
+- Console scala l'intero importo dal saldo dei crediti. Se il saldo non basta, puoi ricaricarlo prima di pagare.
+- Alla fine del periodo, Console detrae il costo del rinnovo dai crediti. Se il saldo non basta, Go resta attivo mentre
+  Console ritenta l'addebito 1, 3 e 7 giorni dopo la scadenza e non appena il saldo torna sufficiente.
+  Se l'ultimo tentativo non va a buon fine, Go termina.
+- Gli spazi di lavoro con [pagamento su fattura](/console/billing#invoiced-billing) non possono pagare Go con i crediti.
+- Se ottieni il rimborso di un pagamento Go effettuato con i crediti, l'importo torna nel saldo dei crediti e il periodo Go termina.
+
+## Dove posso usarlo?
+
+OpenCode Go è pensato per [OpenCode](https://opencode.ai) e per altri agenti di coding
+che inviano richieste simili. Monitoriamo il traffico per individuare gli abusi che
+peggiorano l'esperienza degli altri utenti.
+
+Il tuo client dovrebbe:
+
+1. Inviare traffico tipico di un agente di coding
+2. Identificarsi con il proprio user agent, ad esempio `my-coding-agent/1.0`, invece
+   che con un nome generico di SDK o libreria HTTP.
+3. Inviare un ID di sessione stabile in `x-opencode-session` per ogni conversazione, così possiamo ottimizzare routing e
+   cache dei prompt.
+
+Le richieste di [decisione](#decision-models) e [embedding](#embedding-models) non richiedono `x-opencode-session`, quindi qualsiasi
+client, come una libreria RAG, un provider di memoria o uno script, può chiamarle con la tua chiave Go.
+
+Vedi [Harness](/console/harnesses) per configurare Go in Claude Code, Codex, Hermes, OpenClaw, Pi e Raycast.
+
+### Client validati
+
+Oltre a OpenCode, abbiamo verificato il funzionamento di questi client con OpenCode Go.
+Non garantiamo che continuino a funzionare in futuro.
+
+| Client            | Supporto alle sessioni                                                                                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hermes**        | Aggiorna a **v0.21.6 o successivo**, che invia l'header sulle richieste principali e ausiliarie di OpenCode ([PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864)).                                                    |
+| **Claude Code**   | Go riconosce il suo header di sessione nativo. Non serve alcun wrapper per header personalizzati.                                                                                                                                           |
+| **Codex**         | Go riconosce il suo header di sessione nativo. Alcune versioni e configurazioni proxy lo omettono ancora; conserva l'header di sessione quando inoltri le richieste.                                                                        |
+| **ZCode**         | Go riconosce il suo header di sessione nativo. La nostra [richiesta per `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) resta aperta, ma non è più necessario inviare quello specifico header.                        |
+| **Pi**            | Le build correnti inviano le informazioni di sessione per OpenCode. Aggiorna le installazioni più vecchie.                                                                                                                                   |
+| **jcode**         | Aggiorna a **v0.81.6 o successivo**, che include la [correzione dell'header di sessione](https://github.com/1jehuang/jcode/issues/1167).                                                                                                    |
+| **OpenClaw**      | Le build correnti inviano `x-opencode-session` sulle richieste Go. L'accesso dal browser richiede **2026.11.7 o successivo**.                                                                                                               |
+| **Kilo Code CLI** | Le build che contengono la [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) ripristinano gli header di sessione di OpenCode. Questa correzione copre la CLI, non l'estensione VS Code. Vedi la [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+| **MiMo Code**     | Aggiorna alla **v0.1.16 o successiva**: da questa versione il client invia `x-opencode-session` nelle richieste a Go ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
+
+### Client problematici noti
+
+Nelle versioni che abbiamo esaminato, questi client non supportano le sessioni o le supportano solo in parte.
+Segui le segnalazioni per aggiornamenti sulle correzioni e sulle soluzioni alternative.
+
+| Client                  | Stato e monitoraggio                                                                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepSeek Harness**    | Riceviamo le informazioni di sessione solo su alcune route dei modelli. Riconosciamo già l'header nativo: resta da inviarlo tramite tutti gli adattatori. [Discussione #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Il supporto automatico all'header di sessione è richiesto nella [issue #334186 di VS Code](https://github.com/microsoft/vscode/issues/334186).                                                                                                          |
+| **Kimi Code**           | La richiesta dell'header di sessione nella [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) è stata chiusa come non pianificata.                                                                                                     |
+
+## Limiti di utilizzo
+
+Su Go, tutti i modelli a pagamento attingono alla stessa dotazione. Su Go Teams, ogni membro ha una dotazione personale che vale per tutti i modelli.
+
+- Il **limite di 5 ore** è il 20% della tua dotazione mensile. La finestra parte quando usi per la prima volta la dotazione e dura cinque ore.
+- Il **limite settimanale** è il 50% della tua dotazione mensile. Si reimposta lunedì alle 00:00 UTC.
+- La tua **dotazione mensile** si reimposta quando parte un nuovo periodo a pagamento.
+
+Anche se cambi modello, continui a usare la stessa dotazione. Se raggiungi un limite, puoi usare un modello gratuito o attivare
+[Extra Usage](#usage-beyond-limits) per usare i crediti di Console finché non hai di nuovo dotazione disponibile.
+
+Il [limite mensile](https://opencode.ai/console/go#limits) di ogni modello indica quanto puoi usarlo con il tuo piano se nel mese usi solo quel modello.
+Ad esempio, $1.50 di utilizzo su un modello con un limite di $15 consumano il 10% della dotazione mensile, come $6 su un modello
+con un limite di $60. Nelle risposte di Go, [`opencode.allowance`](/console/api/inference#cost) indica quanto incide ogni richiesta sulla dotazione.
+
+I [prezzi dei token](https://opencode.ai/console/go#pricing) sono per 1M token e sono gli stessi per Go, Go Plus e Go Teams.
+
+I modelli di [decisione](#decision-models) e [embedding](#embedding-models) hanno il prezzo di listino, senza sconto Go: il loro
+limite mensile corrisponde a quanto paghi, $10 su Go e $40 su Go Plus. Su Go Teams è $15, $5 in più di Go come su ogni
+modello.
+
+**Beam Free:** Gratuito per un periodo limitato. Non disponibile in Angola, Bielorussia, Cambogia, Cina (comprese Hong Kong e Macao), Cuba, Repubblica Democratica del Congo, Guinea Equatoriale, Iran, Iraq, Laos, Libia, Nigeria, Corea del Nord, Russia, Siria, Turkmenistan, Uzbekistan, Venezuela o nelle regioni di Crimea, Donetsk e Luhansk dell'Ucraina.
+
+**Gemini 4 Argon:** Lo sconto del 50% si applica fino al 30 novembre 2026.
+
+**HungerG Free:** Gratuito per un periodo limitato.
+
+### Richieste stimate
+
+La pagina Go di Console [stima le richieste ogni 5 ore](https://opencode.ai/console/go#limits) per ogni modello, in base
+all'uso tipico di Go. Il numero effettivo di richieste può variare.
+
+Puoi tenere traccia del tuo utilizzo attuale nella [console](https://opencode.ai/console), o con l'[endpoint di utilizzo](#usage).
+
+<Callout type="tip">Se raggiungi il limite di utilizzo, puoi continuare a usare i modelli gratuiti.</Callout>
+
+I limiti di utilizzo possono cambiare in base ai primi dati di utilizzo e al feedback.
+
+---
+
+### Utilizzo oltre i limiti
+
+Se hai anche crediti nel saldo di Console, puoi attivare **Extra Usage** nella
+pagina **Go**. Con questa opzione attiva, quando raggiungi i limiti di utilizzo Go attinge al [saldo a consumo](/console/models#pricing)
+anziché bloccare le richieste.
+
+Su Go Teams, **Extra Usage** è già attivo. Puoi disattivarlo o riattivarlo nella pagina **Go**.
+
+### Perché alcuni modelli hanno un utilizzo più basso
+
+Con Go, l'utilizzo mensile incluso varia per modello.
+
+Per la maggior parte dei modelli, otteniamo sconti sui volumi e riserviamo capacità GPU. Grazie a questi risparmi possiamo offrirti limiti mensili più alti.
+
+Per alcuni modelli non abbiamo ancora potuto negoziare uno sconto o trovare un modo di ospitarli a un costo inferiore: sono nuovi o hanno già un prezzo di listino scontato.
+
+Per questi modelli ottieni comunque un po' più di utilizzo di quanto otterresti pagando direttamente i provider. È per questo che il loro utilizzo mensile incluso è più basso.
+
+## Endpoint
+
+Puoi anche accedere ai modelli Go tramite l'API su `https://opencode.ai/inference/go`. Vedi per ogni modello
+[l'ID, il percorso e il pacchetto AI SDK](https://opencode.ai/console/go#api). Ogni modello è elencato con la sua API nativa, ma ogni
+modello testuale funziona anche tramite le altre API: Console si occupa di convertire le richieste. Vedi
+[URL di base](/console/harnesses#base-urls) per l'insieme completo.
+
+Questi pacchetti AI SDK sono per le applicazioni che chiamano Go direttamente. Per usare Go in OpenCode, collegati con `/connect` e imposta
+il [modello](/models) usando il formato `opencode-go/<model-id>`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+
+### Modelli
+
+Scarica l'elenco completo dei modelli disponibili e i loro metadati dall'endpoint dei modelli:
+
+```bash
+curl https://opencode.ai/inference/go/v1/models
+```
+
+Vedi l'[API dell'elenco dei modelli](/console/api/models) per ogni campo della risposta, compresi i limiti di utilizzo mensile di Go.
+
+### Modelli di decisione
+
+I modelli di decisione rispondono a domande tipizzate su uno `state` invece di generare testo. Invia la stessa richiesta System One
+dei [modelli di Console](/console/models#jev) a `https://opencode.ai/inference/go/systemone/v1/systemone` con la tua chiave
+Go:
+
+```bash
+curl https://opencode.ai/inference/go/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My payments have failed for three days and I am losing sales.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+| Modello                             | ID modello          | Input  | Output   | Lettura cache | Scrittura cache |
+| ----------------------------------- | ------------------- | ------ | -------- | ------------- | --------------- |
+| Jev 1.14                            | jev-1.14            | $0.042 | Gratuito | -             | -               |
+| Gemini Decision 1                   | gemini-decision-1   | $0.10  | Gratuito | -             | -               |
+| GPT 6 Luna Decision (≤ 272K token)  | gpt-6-luna-decision | $0.10  | Gratuito | $0.01         | $0.125          |
+| GPT 6 Luna Decision (> 272K token)  | gpt-6-luna-decision | $0.20  | Gratuito | $0.02         | $0.25           |
+
+- I prezzi sono per 1M token.
+- Le richieste nel formato Decisions di OpenAI funzionano su `https://opencode.ai/inference/go/openai/v1/decisions`.
+- Vedi [Jev](/console/models#jev) per i tipi di domanda, e
+  [GPT 6 Luna Decision e Gemini Decision 1](/console/models#gpt-6-luna-decision-and-gemini-decision-1) per immagini,
+  audio, video e PDF in `state`.
+
+### Modelli di embedding
+
+I modelli di embedding trasformano il testo in vettori. Per usarli, chiama l'API Embeddings di OpenAI all'indirizzo
+`https://opencode.ai/inference/go/openai/v1/embeddings` con la tua chiave Go:
+
+```bash
+curl https://opencode.ai/inference/go/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+| Modello                | ID modello             | Input |
+| ---------------------- | ---------------------- | ----- |
+| text-embedding-3-small | text-embedding-3-small | $0.02 |
+| Qwen3 Embedding 8B     | qwen3-embedding-8b     | $0.01 |
+| Gemini Embedding 2     | gemini-embedding-2     | $0.20 |
+
+- I prezzi sono per 1M token di input.
+- La richiesta accetta anche `dimensions` ed `encoding_format`. Vedi [Modelli di embedding](/console/models#embedding-models).
+
+### Utilizzo
+
+Controlla quanta parte dei tuoi [limiti di utilizzo](#usage-limits) hai già consumato, ad esempio per mostrare i dati nel tuo client:
+
+```bash
+curl https://opencode.ai/inference/go/v1/usage \
+  -H "Authorization: Bearer <token>"
+```
+
+Usa la stessa chiave che usi per Go. Su Go e Go Plus, è la [chiave API personale](/console/api#personal-api-keys) dell'abbonato
+o una [chiave di account di servizio](/console/api#service-accounts). Su Go
+Teams, è la chiave API personale di qualsiasi membro.
+
+La risposta ha un contatore per ogni limite: `rolling` per il limite di 5 ore, `weekly` e `monthly`.
+
+```json
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 30, "resetsAt": "2026-11-21T15:00:00.000Z" },
+    "weekly": { "status": "rate-limited", "percent": 100, "resetsAt": "2026-11-23T00:00:00.000Z" },
+    "monthly": { "status": "ok", "percent": 50, "resetsAt": "2026-12-01T00:00:00.000Z" }
+  }
+}
+```
+
+| Campo      | Significato                                                                                                |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `status`   | `ok`, o `rate-limited` quando il limite è esaurito.                                                        |
+| `percent`  | Quanta parte del limite è usata, come numero intero da `0` a `100`.                                        |
+| `resetsAt` | Quando si reimposta il limite, in ISO 8601. Prima che parta la finestra di 5 ore, `rolling` si reimposta tra cinque ore. |
+
+Le richieste senza una chiave valida restituiscono HTTP `401`. Le richieste con una chiave non coperta da Go restituiscono HTTP `403` con un messaggio che spiega
+il motivo, ad esempio quando lo spazio di lavoro non ha un abbonamento Go attivo.
+
+```json
+{ "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
+```
+
+## Privacy
+
+Per ogni modello puoi verificare se [si addestra sui tuoi dati](https://opencode.ai/console/go#privacy).
+
+| Modello                    | Conservazione dei dati |
+| -------------------------- | ---------------------- |
+| Grok 4.7                   | 30 giorni              |
+| GPT 6 Luna                 | 30 giorni              |
+| GPT 5.6 Luna               | 30 giorni              |
+| Claude Haiku 5.5           | 30 giorni              |
+| Gemini 4 Argon             | 55 giorni              |
+| GLM-5.3-Flash              | 0 giorni               |
+| GLM-5.3                    | 0 giorni               |
+| Kimi K3.1 Pro              | 0 giorni               |
+| Kimi K3                    | 0 giorni               |
+| Kimi K2.7 Code             | 0 giorni               |
+| LongCat 2.5                | 0 giorni               |
+| MiMo-V2.6-Pro              | 0 giorni               |
+| MiMo-V2.6-Flash            | 0 giorni               |
+| Qwen4 Max                  | 0 giorni               |
+| Qwen3.8 Max                | 0 giorni               |
+| Qwen3.8 Flash              | 0 giorni               |
+| Qwen3.7 Plus               | 0 giorni               |
+| MiniMax M3.1 Flash         | 0 giorni               |
+| MiniMax M3                 | 0 giorni               |
+| Muse Spark 1.3 Contributor | Non ZDR                |
+| Muse Spark 1.2 Contributor | Non ZDR                |
+| DeepSeek V4.1 Flash        | 0 giorni\*             |
+| DeepSeek V4 Pro            | 0 giorni\*             |
+| Hy4                        | 0 giorni               |
+| Hy4 preview                | 0 giorni               |
+| Hy3                        | 0 giorni               |
+| Step 5 Preview             | 0 giorni               |
+| Beam Free                  | 30 giorni              |
+| Iceman Contributor Free    | Non ZDR                |
+| Hy4 flash Free             | 0 giorni               |
+
+- **Grok 4.7:** ZDR disabilita importanti funzionalità API che dipendono dai dati archiviati, comprese la Responses API con stato, Files and Collections e la Batch API. [Scopri di più](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 6 Luna / GPT 5.6 Luna:** I log di monitoraggio degli abusi vengono generati per l'utilizzo di tutte le funzionalità API e conservati per un massimo di 30 giorni. [Scopri di più](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** Le richieste vengono conservate per 30 giorni in conformità con le [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
+- **Gemini 4 Argon:** Le richieste vengono conservate per un massimo di 55 giorni per il monitoraggio degli abusi in conformità con i [Google's Gemini API Terms](https://ai.google.dev/gemini-api/terms).
+- **Muse Spark 1.3 Contributor:** Prezzo dei token fortemente scontato in cambio del permesso di usare i tuoi prompt e completamenti per addestrare futuri modelli Meta. La disponibilità è limitata alle regioni consentite dalla [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) di Meta. [Scopri di più](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Muse Spark 1.2 Contributor:** Prezzo dei token fortemente scontato in cambio del permesso di usare i tuoi prompt e completamenti per addestrare futuri modelli Meta. La disponibilità è limitata alle regioni consentite dalla [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) di Meta. [Scopri di più](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Iceman Contributor Free:** Gratuito per un periodo limitato in cambio del permesso di usare i tuoi prompt e completamenti per migliorare il modello.
+- **HungerG Free:** Gratuito per un periodo limitato. Nessun addestramento sui dati: i tuoi prompt e completamenti non vengono usati per addestrare modelli.
+- **LongCat 2.5:** Ospitato in Cina. Nelle impostazioni di privacy dello spazio di lavoro devi selezionare **Global** per le regioni.
+- **DeepSeek:** L'accordo ZDR viene rinnovato mensilmente. L'accordo attuale è valido fino al 31 dicembre 2026.
+
+## Contesto
+
+I modelli aperti hanno fatto grandi progressi. Ora, nelle attività di coding, offrono prestazioni vicine a quelle dei modelli proprietari.
+Dato che molti provider li offrono a condizioni competitive, in genere costano molto meno.
+
+Tuttavia, ottenere un accesso affidabile e a bassa latenza può essere difficile. I provider variano per qualità e disponibilità.
+
+<Callout type="tip">Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con OpenCode.</Callout>
+
+Per risolvere il problema:
+
+1. Abbiamo testato un gruppo selezionato di modelli aperti e parlato con i loro team di come eseguirli al meglio.
+2. Abbiamo lavorato con alcuni provider per assicurarci che erogassero correttamente i modelli.
+3. Abbiamo misurato le prestazioni delle combinazioni di modelli e provider e selezionato quelle che possiamo consigliarti.
+
+Go, Go Plus e Go Teams danno tutti accesso a questi modelli; scegli il piano adatto a quanto li usi, o Go
+Teams per coprire tutto il tuo team.
+
+## Obiettivi
+
+Abbiamo creato OpenCode Go per:
+
+1. Rendere il coding con l'IA **accessibile** a più persone con un abbonamento a basso costo.
+2. Offrire un accesso **affidabile** ai migliori modelli di coding aperti.
+3. Selezionare modelli **testati e valutati con benchmark** per l'uso con agenti di coding.
+4. Evitare il **lock-in**: con OpenCode puoi usare anche qualsiasi altro provider.

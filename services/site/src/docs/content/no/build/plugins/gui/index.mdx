@@ -1,0 +1,3837 @@
+---
+title: "GUI"
+description: "Bygg GUI-delen av en OpenCode-plugin for OpenCode Desktop med @opencode/plugin/gui."
+---
+
+En GUI-plugin legger til paneler, kommandoer, innstillingssider og native integrasjoner i OpenCode Desktop med GUI-plugin-SDK-et,
+`@opencode/plugin/gui`. Den er `./gui-experimental`-delen av en [pluginpakke](/build/plugins), alene eller ved siden av en
+[serverdel](/build/plugins/server) og en [TUI-del](/build/plugins/cli).
+
+<Callout type="note">
+  GUI-plugin-API-et er eksperimentelt og kan endres mellom utgivelser. Eksportnavnet `-experimental` sier det i
+  pakken din.
+</Callout>
+
+`./gui-experimental`-filen standardeksporterer `Plugin.define`, som server- og TUI-delene:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () => void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})
+```
+
+En GUI-plugin kan kjøre i to prosesser:
+
+- **`setup`** kjører i hvert desktop-appvindu. Den bidrar med paneler, kommandoer, innstillingssider, slots, serverkilder,
+  lenkehandterere og stiler. Se [Vinduet](#the-window).
+- **`main`** kjører én gang, i Electron-hovedprosessen. Den tilbyr typede `Ipc`-kontrakter, native menyelementer,
+  `WebContentsView`-innbygginger og Node- og Electron-integrasjoner. Se [Hovedprosessen](#the-main-process).
+
+## Pakke
+
+En pluginpakke kan levere server-, TUI- og GUI-kode fra én npm-pakke. Legg til én `./gui-experimental`-eksport ved siden av
+`./tui`, og OpenCode Desktop laster den for hver plugin på sin egen bakgrunnsserver.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
+```
+
+Brukere installerer den som enhver annen plugin; det finnes ikke et eget GUI-installasjonstrinn.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+GUI-delen definerer ingen egen ID. Den bruker pluginens ID, som er serverdelens `id` eller pakkenavnet hvis pakken ikke har en serverdel.
+En lokal katalog uten `name` bruker katalognavnet. Les ID-en fra `ctx.id`.
+
+### Én fil, to prosesser
+
+Hver prosess evaluerer hele `./gui-experimental`-filen og leser standardeksporten. Vinduer kjører `setup`, og
+desktop-appens hovedprosess kjører `main`.
+
+```tsx title="src/gui.tsx"
+import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // Window code: Solid components, ctx.layout, ctx.add(Command, …).
+  },
+  main(ctx) {
+    // Main code: electron, Node built-ins, ctx.windows.
+    ctx.windows.on("open", () => shell.beep())
+  },
+})
+```
+
+Fordi begge prosessene evaluerer samme fil, bruker hver av dem inerte plassholdere for den andre prosessens moduler:
+
+- **I et vindu** er `electron` og Nodes innebygde moduler inerte plassholdere.
+- **I hovedprosessen** er Solid og modulene som bare brukes i vinduer, inerte plassholdere.
+
+En plassholder godtar enhver egenskapslesing, kall eller konstruksjon på modulnivå, som Solids hevede maler eller en
+bundlers hevede `require`-kall. Hold hver prosess' kode inne i sitt eget oppsett: kode som kjører i feil prosess,
+får plassholdere i stedet for fungerende verdier.
+
+`Plugin.define` og kontrakthjelperne kommer fra ett SDK i begge prosesser. I hovedprosessen
+løses `@opencode/plugin/gui` til hoved-SDK-et, som eksporterer samme `Plugin`, `Store`, `Ipc`, `Contract` og
+`Registry`. Én definisjon betjener begge prosesser. Dens vindu-only-eksporter, som `Command`, `bindPlugin` og
+`createKeyed`, er `undefined` i hovedprosessen, så bruk dem bare inne i `setup`.
+
+## Bygg bundlen
+
+`./gui-experimental` må være én forhåndsbygget CommonJS-fil. Bygg den med Vite-forhåndsinnstillingen fra `@opencode/plugin/gui/vite`:
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })
+```
+
+```bash
+vite build
+```
+
+Forhåndsinnstillingen gjør følgende:
+
+- Kompilerer Solid JSX med `vite-plugin-solid`.
+- Lager én CommonJS-fil og legger alle dynamiske `import()`-kall direkte i filen, fordi appen ikke kan laste enda en chunk.
+- Holder appens [delte moduler](#shared-modules), Electron og Nodes innebygde moduler utenfor bundlen, og pakker alle andre
+  avhengigheter inn i den.
+- Avbryter byggingen hvis den finner andre `effect/*`-, `solid-js/*`- eller `@opencode/*`-moduler. Appen tilbyr dem ikke, og en
+  kopi i bundlen ville ikke brukt samme modulinstans som appen.
+
+```text
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+```
+
+Importer fra den delte inngangen i stedet, for eksempel `import { Schema } from "effect"`.
+
+### Forhåndsinnstilte alternativer
+
+Send alternativer til `gui()` for å endre inngangen eller utdatafilen.
+
+```ts title="vite.config.ts"
+export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
+```
+
+- `entry` er filen som standardeksporterer `Plugin.define`. Standard er `src/gui.tsx`.
+- `outFile` er bundlen som `./gui-experimental`-eksporten peker til. Standard er `dist/gui-experimental.cjs`.
+
+#### Referanse
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
+
+### Avhengigheter
+
+Legg byggeverktøyene til som devDependencies. Appen tilbyr `@opencode/plugin/gui` ved kjøring, så bundlen trenger bare
+typene fra `@opencode/plugin`-avhengigheten.
+
+```bash
+bun add -d vite vite-plugin-solid solid-js
+```
+
+For Electron- og Node-typene i `main`, legg også til `electron` og `@types/node`:
+
+```bash
+bun add -d electron @types/node
+```
+
+### Delte moduler
+
+Hver prosess gjør disse modulene tilgjengelige for bundlen. Hvis bundlen prøver å laste inn en modul som ingen av prosessene tilbyr,
+kan pluginens GUI ikke lastes.
+
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **Begge prosesser:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
+  `@opencode/schema/rpc`, `@opencode/client` og `@opencode/client/effect`.
+- **Bare vinduer:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid` og
+  `@opencode/plugin/gui/{file,review,browser}`. Hovedprosessen får inerte plassholdere.
+- **Bare hovedprosessen:** `electron` og Nodes innebygde moduler som `node:fs`. Vinduer får inerte plassholdere.
+
+## Hvor GUI-oppføringer lastes
+
+OpenCode Desktop laster GUI-oppføringer fra sin egen bakgrunnsserver, som allerede laster pluginene fra konfigurasjonen din, så
+de legger aldri til en ny kilde til kode. Konfigurer plugin'en i den globale `opencode.json(c)` for å gjøre GUI-en tilgjengelig i
+hvert vindu.
+
+<Callout type="note">
+  TUI-en leser pluginene sine fra `cli.json`, men desktop-appen leser bare `opencode.json(c)`. En pakke som bare leverte
+  en TUI-del, og som brukerne lister i `cli.json`, må også listes i `opencode.json(c)` når den legger til
+  `./gui-experimental`.
+</Callout>
+
+Desktop-appens hovedprosess henter listen over plugins og leser tilhørende bundles fra sin egen server med påloggingsopplysninger som
+bare hovedprosessen har. Den sender det samme settet til alle vinduene. Et vindu kan ikke levere kode til hovedprosessen.
+
+En plugin hvis serverdel ikke kan lastes, har ingen GUI.
+
+## Omlasting og oppdateringer
+
+Last plugin'en fra den lokale katalogen og bygg på nytt ved hver endring:
+
+```bash
+vite build --watch
+```
+
+- En lokal katalog hvis `package.json` har `name` og `exports`, løser `./gui-experimental` gjennom dem. Uten
+  dem laster den `gui-experimental.cjs` (eller `.js`) i roten. Inngangen må være `.cjs` eller `.js`; enhver annen fil
+  ignoreres.
+- Hver gjenoppbygging laster pluginens GUI på nytt i hvert vindu og i hovedprosessen. Serverinngangen restartes ikke.
+- En installert pakkes GUI endres bare med versjonen.
+- Endring av pluginens `options` i `opencode.json(c)` laster plugin'en på nytt.
+- `opencode plugin update` erstatter en pakkes GUI når oppdateringen er ferdig.
+- [**Settings > Extensions > Plugins**](/plugins#desktop) lister plugin'en med en bryter som slår GUI-en av. For å
+  fjerne den, fjern den fra `opencode.json(c)` eller kjør `opencode plugin remove <package>`.
+
+<Callout type="note">
+  Appens egne plugins reserverer ID-ene sine. Hvis pluginens id er en av dem, ligger under en med `.`, har en
+  nestet under seg eller er i `opencode`-navnerommet, lastes ikke GUI-en, og **Settings > Extensions > Plugins**
+  lister den som ikke lastet.
+</Callout>
+
+## Definer GUI-plugin'en
+
+`Plugin.define` erklærer systemene plugin'en kjører på, dens lagrede vindusstilstand, ikonene og teksten. Verten
+leser disse erklæringene før noen av oppsettene kjører.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})
+```
+
+- Verten gir plugin'en id-en sin, `ctx.id`: serverdelens `id`, eller pakkenavnet for en pakke uten
+  serverdel (katalognavnet for en lokal katalog uten `name`). Den prefikser hver id plugin'en oppretter: kommandoer (`<id>.<command>`), panelnøkler (`<id>:<tab>`), lagrede
+  nøkler (`plugin.<id>.<key>`) og ID-ene til [kontraktene og Ipc-ene](#contracts-and-tokens) den tilbyr.
+- `os` begrenser plugin'en til noen operativsystemer. Utelat den for å kjøre på alle OS. En plugin hvis `os` utelater dette
+  systemet, kjører ikke, og **Settings > Extensions > Plugins** beholder raden med «Not available on this system.»
+- `stores` erklærer [lagret tilstand](#stored-state) for vinduer. Les den som `ctx.stores.<key>`.
+- `icons` erklærer pluginens [egne ikoner](#icons), hvert som teksten i en SVG-fil. Les et ikons navn som
+  `ctx.icons.<name>`.
+- `i18n` inneholder tekst per språkvariant. Skriv teksten for hver variant direkte i definisjonen. Engelsk tekst brukes for nøkler varianten mangler. Les teksten med
+  `ctx.t(key, params)` og `ctx.plural(key, count)`. I et vindu leser `ctx.t` også appens delte nøkler, for eksempel `common.*`. I `main` får du tilbake selve nøkkelen hvis den mangler.
+- Definer `setup`, `main` eller begge. En GUI uten noen av dem kan ikke lastes.
+- Uten oppsett returnerer `Plugin.define` erklæringene som en `Plugin.Declarations`, slik at oppsett i andre filer kan
+  types fra dem. `Plugin.Definition` er typen til hele definisjonen.
+- En plugin erklærer ikke kontraktene den tilbyr eller bruker. Den tilbyr og leser dem ved kjøring; se
+  [Kontrakter og tokens](#contracts-and-tokens).
+
+#### Referanse
+
+```ts
+interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext<this>): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Messages = Record<string, string>
+
+type Cleanup = () => void | Promise<void>
+```
+
+### Del opp i filer
+
+En liten GUI-plugin passer i `src/gui.tsx`. For en større, erklær plugin'en i `definition.ts`, legg delte tokens i
+`contract.ts`, skriv hvert oppsett i sin egen fil og kombiner dem i `src/gui.tsx`.
+
+```text
+src/
+├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── rpc.ts              RPC contract between the server part and its clients
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
+    ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
+    ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
+    ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
+    ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
+    └── i18n/en.ts      English copy
+```
+
+Hele `./gui-experimental`-filen evalueres når et vindu starter, så hold modulnivå og `setup` lette. Registrer
+bidrag der og gjør dyrt arbeid inne i komponenter, `createKeyed` eller `createLatest`.
+
+For en større plugin, erklær plugin'en først, type hvert oppsett fra erklæringene, og definer deretter plugin'en med dem.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})
+```
+
+```tsx title="src/gui/window.tsx"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.provide(Notes, { count: () => ctx.stores.notes.value.count })
+}
+```
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  ctx.log.write("info", "acme started")
+}
+```
+
+```tsx title="src/gui.tsx"
+import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })
+```
+
+- `Plugin.Setup<typeof definition>` er typen til et vinduoppsett. Den typer `ctx.stores` fra de erklærte storene og
+  `ctx.icons` fra de erklærte ikonene.
+- `Plugin.MainSetup` er typen til et hovedoppsett, og `Plugin.Cleanup` typen til oppryddingsfunksjonen et av oppsettene
+  kan returnere.
+- Importer registre, tokens og hjelpere som `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`,
+  `Registry`, `Store`, `createKeyed`, `usePlugin` og `bindPlugin` fra `@opencode/plugin/gui`.
+- Importer main-only-registre som `MenubarItem` fra `@opencode/plugin/gui/main`.
+
+## Delt kontekst
+
+Begge oppsettene mottar pluginens alternativer, en klient for OpenCode-serveren og appmetadata, som server- og TUI-
+delene.
+
+### Alternativer
+
+`ctx.options` inneholder `options` fra pluginens `opencode.json(c)`-oppføring: samme verdier som serverdelen får.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}
+```
+
+```ts
+setup(ctx) {
+  const team = ctx.options.team
+}
+```
+
+- Endring av alternativene laster plugin'en på nytt.
+
+### Serverklient
+
+`ctx.client` er OpenCode-klienten til serveren som kjører plugin'en: desktop-appens egen server. Bruk den til å kalle
+serverdelen din gjennom [RPC](/build/plugins/rpc).
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () => ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () => {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))
+```
+
+- Les `ctx.client` der du kaller den. Den endres etter at serveren restartes.
+- Mens serveren er utilgjengelig, avvises hvert kall.
+
+### Appmetadata
+
+`ctx.app` beskriver appen som kjører.
+
+```ts
+if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
+```
+
+- `name` er `"opencode"`, som i en serverplugins `ctx.app.name`.
+- `platform` er `"desktop"` i Electron-appen og i `main`, og `"web"` i en nettleserfane.
+- `packaged` er `true` når desktop-appen kjører pakket. Den er alltid `false` på web.
+- Serverplugins får `name`, `version` og `channel`; TUI-plugins får `version` og `channel`.
+
+#### Referanse
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
+
+## Kontrakter og tokens
+
+Tokens lar GUI-plugins snakke på tvers av prosesser og med hverandre uten å importere hverandres kjøretidskode. Legg hvert
+token i `contract.ts`. Et token inneholder bare typen og id-en, pluss skjemaene til en `Ipc`, slik at andre plugins kan importere det
+uten din kjøretidskode.
+
+- `ctx.provide(token, impl)` tilbyr ett av dine egne tokens: en `Contract` fra vinduoppsettet, eller en `Ipc` fra
+  `main`.
+- `ctx.use(token)` følger en kontrakt eller en `Ipc` som en annen plugin tilbyr. Den returnerer en
+  [`Live`](#live-dependencies-and-failure-handling)-aksessor.
+- `ctx.main(ipc)` returnerer en klient for en `Ipc` som din egen `main` tilbyr.
+
+En plugin tilbyr bare tokens hvis id er dens egen id eller starter med den, som `<id>.<name>`. `ctx.provide` kaster for enhver
+annen id, og `ctx.main` kaster for en `Ipc` utenfor din id. Eksemplene på denne siden bruker plugin-id-en `acme`, så
+token-ID-ene deres starter med `acme.`.
+
+```ts
+Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
+Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acme.
+```
+
+### Kontrakter
+
+Bruk `Contract.define` når en plugins vinduoppsett eksponerer et API eller en Solid-komponent til andre plugins' vindu-
+oppsett.
+
+```ts title="src/gui/contract.ts"
+import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define<AcmeBadge, "acme.badge">("acme.badge")
+```
+
+Tilby den fra vinduoppsettet med `ctx.provide`. Når kontrakten inneholder en komponent, pakk den med `bindPlugin`
+under oppsettet. Da leser `usePlugin()` inne i den leverandørens kontekst, ikke forbrukerens.
+
+```tsx title="src/gui.tsx"
+import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) => (
+        <span>
+          {ctx.t("title")}: {props.label}
+        </span>
+      )),
+      count: () => 42,
+    })
+  },
+})
+```
+
+- Angi typen til props for en komponent du pakker med `bindPlugin`, som i `bindPlugin((props: FileTreeProps) => ...)`.
+  TypeScript kan ikke utlede dem inne i `ctx.provide`.
+- La datametoder som `count` være upakkede.
+- `ctx.provide` returnerer en funksjon som trekker kontrakten tilbake tidlig. Verten trekker den også tilbake med gjeldende eier,
+  ellers når plugin'en stopper.
+
+### Bruk en annen plugins kontrakt
+
+Eksporter `contract.ts` fra pakken din, for eksempel som `./contract`, slik at andre plugins kan importere tokenene. En annen
+plugin følger kontrakten med `ctx.use(token)`. Aksessorens verdi endres når leverandøren starter, stopper og
+restarter, så les den der du bruker den.
+
+```tsx title="src/gui.tsx"
+import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () => {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () => <span>{count()}</span> })
+  },
+})
+```
+
+- `ctx.use` returnerer samme aksessor for hvert kall med tokenet.
+- Forbrukeren fortsetter å virke mens leverandøren er av. Se
+  [Live-avhengigheter og feilhåndtering](#live-dependencies-and-failure-handling).
+
+### IPC mellom main og vinduer
+
+Bruk `Ipc.define` med Effect `Schema`-kodere for å definere en typet bro mellom `main` og `setup`. `main` implementerer den
+med `ctx.provide`, og vinduet kaller den gjennom `ctx.main`.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})
+```
+
+```ts
+const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)
+```
+
+- Andre plugins følger din `Ipc` med `ctx.use(KeepAwake)`, som en kontrakt.
+- Se [Definer og tilby en Ipc](#define-and-provide-an-ipc) for tilstand, hendelser og leverandøren.
+
+### Registre plugin'en eier
+
+Bruk `Registry.define` for en liste plugin'en eier. Andre plugins bidrar med elementer med `ctx.add`, og plugin'en din leser
+dem med `ctx.list`.
+
+```ts title="src/gui/contract.ts"
+import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define<Exporter>("acme.exporter")
+```
+
+```tsx
+// Another plugin contributes an item.
+ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
+
+// The owner lists every contribution. Reactive: read it in render or in a memo.
+const exporters = () => ctx.list(Exporter)
+```
+
+## Vinduet
+
+En plugins `setup` kjører i hvert desktop-appvindu. Send den til `Plugin.define` fra `@opencode/plugin/gui` i
+pluginens [`./gui-experimental`-fil](#define-the-gui-plugin). `setup` er synkron og kan returnere en
+oppryddingsfunksjon; se [Levetider og opprydding](#lifetimes-and-cleanup).
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () => ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})
+```
+
+## Komponenter
+
+Inne i Solid-komponenter, kall `usePlugin<typeof definition>()` for samme kontekstobjekt som `setup` mottar. Type
+det fra erklæringene i deres egen fil ([del opp i filer](#split-across-files)), slik at
+komponenten og definisjonen ikke importerer hverandre.
+
+```tsx title="src/gui/window.tsx"
+import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin<typeof definition>()
+
+  return <span>{ctx.t("title")}</span>
+}
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Slot, { at: "window.bottom", render: () => <StatusLabel /> })
+}
+```
+
+`usePlugin` kaster utenfor et pluginbidrag. I en komponent som en annen plugin renderer, returnerer den den pluginens
+kontekst, så pakk en komponent du tilbyr på en kontrakt, med `bindPlugin`; se [Kontrakter](#contracts).
+
+## Ikoner
+
+Hvert `icon`-felt i SDK-et, og `ctx.ui.Icon`, tar en `IconName`: navnet på et av appens egne ikoner, eller på
+et ikon plugin'en din erklærer. Enhver annen streng kompilerer ikke.
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### Erklær egne ikoner
+
+For grafikk appen ikke har, som produktmerket ditt, hold SVG-filen i pakken og erklær den i
+`icons`. Importer filen med `?raw`, som `gui()`-forhåndsinnstillingen bundler som tekst.
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+Send deretter ikonets navn fra `ctx.icons` der en `IconName` skal brukes.
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons` har ett navn for hvert ikon du erklærer. Et navn du ikke erklærte, kompilerer ikke.
+- Verten registrerer ikonene dine før `setup` kjører og trekker dem tilbake når plugin'en forsvinner.
+- En verdi som ikke er et SVG-dokument, feiler plugin'en når den starter.
+- For at `?raw`-importen skal typesjekke, legg `"vite/client"` til i `types` i `tsconfig.json`.
+
+### Tegn et ikon
+
+Verten tegner ikonet ditt som sitt eget: i størrelsen og fargen til stedet som viser det.
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- `viewBox` rammer inn tegningen, eller `width` og `height` når den mangler. Verten skalerer den til 14, 16 eller
+  20 piksler, så tegn på et 16-piksels rutenett.
+- Tegn med `currentColor`. Ikonet tar da fargen til stedet sitt, for eksempel en pills `tone` eller en menyerads dempede
+  ikonfarge.
+- En `id` i tegningen tilhører hele vinduet. Hold ID-er unike, eller utelat dem.
+
+### Animer et ikon
+
+Et ikon kan bevege seg, for eksempel for å vise at arbeid pågår. Bruk SVG-animasjonselementer som `animate` og
+`animateTransform` i filen.
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- Hvert sted som viser ikonet, beveger seg i takt.
+- Animasjonen fortsetter mens verten renderer stedet på nytt, for eksempel når en pills `show` kjører igjen.
+- Under brukerens innstilling for redusert bevegelse holder verten hvert ikon på sin første ramme. Gjør første ramme til
+  hvilestegningen.
+- Et ikon som ingen steder viser, koster ingenting.
+
+### Lagrede ikonnavn
+
+Et ikons navn er en streng, `<plugin id>:<name>`, så verten lagrer det som navnet på et av sine egne ikoner. En
+[composer-note eller sitat](#attach-to-the-composer) beholder det med utkastet og den sendte meldingen, og en
+[lukket fane](#reopen-closed-tabs) beholder det med øktens oppsett.
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- Mens plugin'en din ikke er aktiv, tegner ikonet ingenting og beholder størrelsen.
+- Les navnet fra `ctx.icons` der du bruker det. Et navn skrevet for hånd kompilerer ikke.
+
+#### Referanse
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
+
+## Registre
+
+Send et registertoken og et element til `ctx.add` for å legge til noe i vinduets grensesnitt. Send elementet som en funksjon,
+`() => item | undefined`, når det følger reaktiv tilstand som språket. Verten kjører funksjonen igjen når
+det den leser, endres. Returner `undefined` for å trekke elementet tilbake til funksjonen returnerer ett igjen.
+
+```ts
+ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
+```
+
+- Les etiketter med `ctx.t` inne i funksjonen. En etikett som leses én gang, i et fast element, beholder språket den ble lest i.
+- Når elementet har et felt med en literaltype, som `hidden: true`, en `section`, et `icon` eller et menynavn, angi
+  funksjonens returtype: `(): Command => ({ ... })`. Uten det utvider TypeScript feltet til `string` eller
+  `boolean`, og ingen overload samsvarer.
+- Send et fast element når det aldri endres, som en [stil](#styles).
+- Verten holder noen objekter stabile: fanene et panel returnerer fra `list`, og elementer med `render`, som paneler
+  og innstillingssider. Les etikettene deres fra gettere, som `get title() { return ctx.t("title") }`.
+- `ctx.add` returnerer en funksjon som trekker elementet tilbake tidlig.
+
+### Kommandoer
+
+`Command` legger en handling til kommandopaletten, **Settings > Shortcuts** og eventuelt `/`-menyen i composer. Verten
+publiserer kommandoen som `<plugin id>.<command id>`.
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command => ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () => {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)
+```
+
+- `title` er palettetiketten, `description` dens andre linje, og `group` dens kategori, som oversatt tekst.
+- `keywords` inneholder ekstra ord paletten samsvarer med, atskilt med mellomrom.
+- `section` er **Settings > Shortcuts**-seksjonen. Standard er `general`.
+- `bind` er standardtastebindingen, for eksempel `mod+shift+t`. Brukere kan endre den.
+- `slash` tilbyr også kommandoen i `/`-menyen. Med `arguments: true` går teksten etter navnet til
+  `run(input)`.
+- `hidden` holder kommandoen utenfor paletten, men tastebindingen virker fortsatt.
+- `suggested` lister også kommandoen under **Suggested** mens den er aktivert. `featured` lister den når paletten åpnes
+  uten en spørring.
+- `enabled: false` tar kommandoen ut av paletten og slår av tastebindingen. Den er reaktiv.
+- `scope` er en CSS-velger som tastaturfokus må være innenfor for at bindingen skal gjelde. Med `editable` utløses bindingen
+  også mens et tekstfelt har fokus.
+- For å kjøre en kommando fra din egen kode, bruk `ctx.commands.run`; se [Kjør kommandoer](#run-commands).
+
+Fra en tastebinding kan `run` returnere `false` for å avslå tasten. Hendelsen går da videre til målet sitt, som om kommandoen
+ikke hadde noen tastebinding. Denne kommandoen fortsetter økten når brukeren trykker Enter i en tom prompt, og overlater hver
+annen Enter til prompten:
+
+```ts
+ctx.add(Command, () => ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () => {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))
+```
+
+- Returner `false` synkront. Hvis du returnerer et Promise-objekt, regnes tastetrykket som håndtert.
+- Hvis du returnerer `false` fra paletten eller en skråstrekkommando, skjer det ikke noe mer.
+
+#### Referanse
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise<void>
+}
+```
+
+### Paneler
+
+`Panel` bidrar med faner til en økts sideområde (`region: "side"`). Brukeren kan dra en fane til et bunnpanel under
+tidslinjen.
+
+```tsx
+import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) => (input.open.includes("main") ? [mainTab] : []),
+  render: (props) => <NotesView session={props.session} screen={props.screen} tab={props.tab} />,
+})
+```
+
+Alle panelcallbacks (`list`, `render`, `focus`, `enter`, `close`, `closed`, `restore`, `normalize`) mottar ett
+inputobjekt:
+
+- Les `props.session` og `props.tab` som reaktive gettere der du bruker dem. Destrukturer dem aldri øverst i
+  `render`: når brukeren bytter fra økt A til økt B, forblir panelet montert og `props.session` oppdateres på
+  stedet.
+- `props.screen` er det faste `SessionScreen`-objektet som eier panelet (`file`, `comment`, `composer`). Handlingene retter seg alltid mot
+  økten som gjeldende rute viser.
+- Returner samme `PanelTab`-objekt fra `list` mens en fane er uendret, så verten ikke remonterer utløseren.
+  Les etikettene fra gettere, så de følger språket uten et nytt objekt.
+
+Et panels callbacks:
+
+- `list` returnerer fanene som skal vises. `input.open` inneholder denne pluginens fane-ID-er lagret i økten. Den er reaktiv.
+- `render` renderer en fanes innhold én gang.
+- `focus` kjører når en fane velges. `restored` er `true` for valget området monteres med.
+- `enter` kjører når brukeren åpner sideområdet på fanen med bryteren, når fanen er på skjermen. Flytt tastatur-
+  fokus til fanens eget mål, som et tekstfelt. Når fokus fortsatt er utenfor området, fokuserer verten
+  området.
+- `close` kjører etter at verten har fjernet en fane.
+- `closed` og `restore` lar brukeren åpne en lukket fane igjen; se [Gjenåpne lukkede faner](#reopen-closed-tabs).
+- `normalize` returnerer den kanoniske formen til en lagret fane-ID som kan lagres på mer enn én måte.
+
+Et panels alternativer:
+
+- `mobile` legger til en smalskjermsvisning av panelet. Med `cached: true` forblir visningen montert mens brukeren viser
+  en annen visning. Som standard monteres visningen hver gang den vises.
+- `wide` ber om den større minimumsbredden for øktvisningen mens sideområdet er åpent.
+- `width` gir panelet egen bredde for sideområdet; se [Panelbredde](#panel-width).
+- `transient`-panelfaner gjenopprettes ikke.
+
+#### Panelbredde
+
+Som standard har hver fane i sideområdet samme bredde som samtalen. Angi `width` når panelet trenger mer eller mindre plass
+enn gjennomgangs- eller nettleserpanelet. Angi bredden i CSS-piksler, eller bruk `"narrow"` for minste tillatte bredde.
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- Bredden gjelder mens sidepanelet viser en av panelets faner. Andre faner beholder samtalens bredde.
+- Når brukeren drar skillet på en av panelets faner, beholder verten den bredden for panelet, appvidt, i stedet
+  for `width`.
+- Verten holder samtalen på minimumsbredden og området minst `"narrow"`.
+- `ctx.layout.side.width(panel)` leser den lagrede bredden, og `ctx.layout.side.resize(panel, width)` lagrer en, som en dragning
+  gjør. En lagret bredde gjelder selv for et panel uten `width`.
+
+En fanes alternativer:
+
+- `id` er fane-ID-en; dens vertsnøkkel er `<plugin id>:<id>`. `title` er dens tilgjengelige navn, og `label` renderer egendefinert
+  utløserinnhold.
+- `pinned`-faner listes uten å åpnes, kommer først og lukkes eller dras aldri.
+- `draggable` lar brukeren endre rekkefølgen på fanen. Standard er `true`.
+- `closable` angir lukkeknappens utseende: `"compact"`, `"hover"` eller `false` for ingen.
+- `transient` markerer en startfane, som **Open file**, som neste forhåndsvisning erstatter.
+- `fallback` velger fallback-valg når det lagrede valget mangler.
+- Faner i samme `group` deler én rendering som forblir montert.
+- `missing` stryker over fanen, for eksempel for en fil som ikke lenger finnes.
+- `hidden` holder en gjenopprettet fane listet og valgbar, men ikke tegnet, mens innholdet ennå ikke er kjent.
+- `file` er stien til filen fanen viser i arbeidsområdet. Filen vises i listen over øktens åpne filer.
+- `tabbable` setter fanepanelet i tabulatorrekkefølgen, for innhold uten fokuserbare elementer.
+
+#### Referanse
+
+```ts
+interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}
+```
+
+### Gjenåpne lukkede faner
+
+Verten beholder en oppføring for hver sidefane brukeren lukker. Mens fokus er i sideområdet, åpner ⌘⇧T den nyeste
+på nytt. Sideområdets **New tab**-visning lister lukkede faner som viser en `file` under **Recently closed**. Legg til `closed` og
+`restore` for å styre hvordan en fane leses der og hvordan den kommer tilbake.
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed` kjører når brukeren lukker en fane. Fang det gjenåpning trenger nå: returner hvordan raden leses og `data`
+  som `restore` trenger, eller `false` når fanen ikke kan komme tilbake.
+- `title` er som standard fanens tittel, og `icon` panelets mobilikon. En fane med en `file` viser filikonet
+  og mappen sin som `detail`.
+- Verten lagrer oppføringen, så hold `data` liten, som en URL.
+- `restore` mottar den lukkede fanens `id` og `data` som `closed` returnerte. Uten `restore` åpner verten
+  samme nøkkel igjen.
+- Uten `closed` listes en fane som ikke er `transient`, under tittelen og gjenåpnes under samme nøkkel.
+
+#### Referanse
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}
+```
+
+### Innstillingssider
+
+`SettingsPage` bidrar med en side til **Settings**, en seksjon på en vertsside (`page: "general"` eller `page: "servers"`), eller
+rader i vertens General-seksjon (`page: "general", section: "general"`).
+
+```tsx
+import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) => <AcmeSettings highlight={input.target} />,
+})
+```
+
+- `id` er sidens innstillingstabverdi (`/settings?tab=<id>`) og argumentet til `ctx.layout.settings`.
+- `page` legger en seksjon til en vertsside i stedet for en side. Med `section: "general"` legger den rader til den sidens General-
+  seksjon.
+- `title` og `icon` er en sides navigasjonsetikett og ikon.
+- `entries` er søkemetadata, indeksert uten å montere siden. Når søk avdekker en oppføring, mottar `render` dens
+  id som `target`.
+- En innstillingsside har en `render`, så verten holder den stabil. Les etikettene og oppføringene fra gettere.
+
+Render siden med appens innstillingskomponenter, så den ser ut som appens egne sider og søk kan avdekke
+radene:
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- En egen side renderer `SettingsLayout`, en seksjon på en vertsside (`page`) renderer `SettingsSection`, og rader
+  i en vertsseksjon (`section`) renderer `SettingsRow`-er.
+- En rads `id` er `SettingEntry.id` som avdekker den: søk ruller til raden og uthever den.
+- Se [Innstillingskomponenter](#settings-components) for propene deres.
+
+#### Referanse
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
+
+### Slots
+
+`Slot` renderer UI inn i en av fire vindusslots.
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) => <UsageRing session={input.session} active={input.active} />,
+})
+```
+
+- `window.bottom` er en fullbreddestripe nederst i vinduet, over varsler.
+- `session.header` er økttidslinjens tittelrad. En bufret tidslinje forblir montert mens den er skjult, med `active`
+  `false`.
+- `session.location.menu` legger elementer til prosjektmenyen, etter plasseringsdetaljene.
+- `session.panel.end` holder handlinger på slutten av sideområdets fanestripe.
+- `order` sorterer elementene i én slot.
+
+`session.location.menu` mottar `shown`, som er `true` mens prosjektmenyen er åpen. Abonner på plasseringsdata
+bare mens den er `true`:
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+Prosjektmenyen er en vertsmeny: render radene med `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup` og `MenuSeparator`,
+slik at de navigeres med tastaturet og lukker menyen som vertens rader. Se [Menyerader](#menu-rows).
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
+})
+```
+
+#### Referanse
+
+```ts
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record<string, never>
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}
+```
+
+### Menyelementer
+
+`MenuItem` legger en oppføring til sidepanelets **+**-meny (`"session.panel"`), **Add server**-menyen (`"server.add"`),
+eller hver servers radmeny i Settings (`"server.row"`).
+
+```ts
+import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () => {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})
+```
+
+- `order` sorterer elementene i stigende rekkefølge. Standard er `0`.
+- Et `server.row`-elements `run` mottar radens servernøkkel. `when` lister elementet bare på noen rader, og `enabled`
+  viser det deaktivert på andre.
+
+Et `session.panel`-element er også en startknapp. Når brukeren åpner sideområdet uten faner, eller klikker **+** mens ingen
+element er `primary`, viser verten en **New tab**-visning som lister startknappene.
+
+- `icon` er elementets ikon, og `keybind` en publisert kommando-ID hvis snarvei elementet viser.
+- `description` er en kort dempet detalj etter tittelen i en startrad, som et antall.
+- `opened: true` betyr at fanen elementet åpner, allerede er åpen. Startlister utelater elementet, og **+**-menyen
+  lister det fortsatt.
+- `primary: true` lar **+** kjøre elementet direkte i stedet for å vise startknappene. Det første primære elementet i `order`
+  vinner. Åpning av sideområdet uten faner viser fortsatt **New tab**-visningen, som lister elementene som ikke er
+  primære og ikke åpne.
+- `ctx.layout.side.menu()` lister hver plugins `session.panel`-elementer, for en egen startknapp; se
+  [Layout](#layout).
+
+#### Referanse
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
+
+### Tittellinjeelementer
+
+`TitlebarItem` viser en avrundet knapp i vinduets tittellinje eller nederst i fanefeltet. Etiketten vises når du holder pekeren over knappen.
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
+)
+```
+
+- `title` er det tilgjengelige navnet når det avviker fra `label`.
+- `busy` viser en lasteindikator og deaktiverer knappen. `pressed` viser knappen i inntrykket tilstand.
+- `run` kjører ved klikk. Utelat den for et element som bare vises.
+
+#### Referanse
+
+```ts
+interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
+
+### Statusmerker ved composer
+
+`ComposerPill` legger til et statusmerke i raden over øktens composer, ved siden av appens merker for bakgrunnsarbeid og gjøremål.
+Bruk merket til å vise status for økten brukeren arbeider i, for eksempel pull requests for den aktuelle branchen. Merkene
+ligger over tidslinjen, slik at endringer i hvilke merker som vises, ikke påvirker størrelsen på composer. Raden følger brukerens
+innstilling for plassering av bakgrunnsaktivitet og vises ikke i økter som tilhører subagenter.
+
+`show` returnerer statusmerket for én økt, eller `undefined` hvis det ikke skal vises noe merke. Verten kjører funksjonen for hver
+monterte composer og på nytt når dataene funksjonen leser, endres. Denne pluginen henter åpne pull requests for katalogen til hver økt
+via serverdelens [RPC](/build/plugins/rpc) og viser dem i ett statusmerke:
+
+```tsx
+import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
+
+createKeyed(
+  () => ctx.sessions.current()?.directory,
+  (directory) =>
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) => setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) => {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) => pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) => ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () => ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})
+```
+
+- `label` er teksten på merket og avkortes hvis den er for lang. `icon` er valgfritt.
+- `tone` farger ikonet: `"success"`, `"warning"` eller `"danger"`.
+- For en glyf appen ikke har, som et statusmerke som beveger seg, [erklær ditt eget ikon](#icons) og send
+  `ctx.icons.<name>`. Det tar `tone` som ethvert ikon, og animasjonen fortsetter mens `show` kjører igjen.
+- `rows` får merket til å åpne en meny med `title` som overskrift, eller `label` hvis det ikke har en tittel. Hver rad har eget `icon`,
+  `tone` og dempet `detail`, og kjører `run` når den velges; en rad uten `run` vises bare.
+- Uten `rows` kjøres `run` når brukeren klikker på merket.
+- `title` er også merkets tilgjengelige navn når det avviker fra `label`.
+- `order` sorterer merkene dine blant merkene fra andre plugins, med laveste verdi først. Appens egne merker kommer før alle disse.
+- Hvis `show` kaster en feil, er det bare bidraget fra pluginen din som feiler.
+
+#### Referanse
+
+```ts
+interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### Kodeblokker
+
+`CodeBlock` viser kodeblokker på språkene du angir, med ditt eget grensesnitt i stedet for syntaksuthevet kode.
+Bruk den for innhold som er lettere å lese i ferdig visning enn som kildekode, for eksempel en tabell med ` ```csv ` eller en
+formel med ` ```latex `:
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages` sammenlignes med det første ordet etter åpningen av kodeblokken. Ordet gjøres om til små bokstaver, så ` ```CSV title="Q3" `
+  samsvarer med `csv`. Verten slår ikke opp aliaser, så oppgi hvert navn du godtar.
+- `render` mottar blokkens `code`, dens `language` og `session` som viser den. Returner `undefined` eller `null` for
+  å beholde den uthevede koden, for eksempel når kilden ikke parses.
+- En rendering som kaster, registrerer feilen under plugin'en din, og blokken viser koden sin. Andre bidrag
+  fortsetter å virke.
+- Når flere plugins lister et språk, renderer det første bidraget det. Rendereren din erstatter også appens eget
+  Mermaid-diagram når du lister `mermaid`.
+
+#### Strømming
+
+Verten bruker rendereren først når Markdown-markøren som avslutter kodeblokken, er mottatt. Brukeren ser syntaksuthevet kode mens blokken
+strømmes, eller hvis meldingen stopper midt i blokken. Når blokken er komplett, vises grensesnittet ditt i stedet. Rendereren får aldri en ufullstendig blokk.
+
+#### Hvor den gjelder
+
+| Flate                                                        | Innhold i kodeblokk |
+| -------------------------------------------------------------- | ------------------ |
+| Tidslinje: assistenttekst og verktøyutdata                     | Ja                  |
+| Sidepaneler på øktskjermen, f.eks. Markdown-forhåndsvisningen   | Ja                  |
+| `ctx.ui.Markdown` rendret på øktskjermen                       | Ja                  |
+| `ctx.ui.Code`, og Markdown inne i din egen `CodeBlock`-rendering | Nei                 |
+| Innstillingssider, dialoger og andre flater utenfor skjermen   | Nei                 |
+
+#### Layout og ytelse
+
+- Blokker med språk ingen plugin lister, koster ingenting; bare en blokk med et listet språk renderer UI-et ditt, og bare mens
+  tidslinjeraden er på skjermen.
+- Blokken vokser og krymper med UI-et ditt. Gi asynkront innhold en minimumshøyde, så tidslinjen forskyves mindre
+  når det kommer.
+- Blokken beholder knappen som kopierer kildekoden. Den og dine `CodeBlockAction`-knapper vises øverst i hjørnet på sluttsiden i leseretningen.
+
+### Kodeblokkhandlinger
+
+`CodeBlockAction` legger en knapp ved siden av Kopier-knappen til kodeblokkene for språkene du lister. `run` mottar den
+samme blokken som en `CodeBlock`-rendering mottar:
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- Knappen vises først når avslutningen på kodeblokken er mottatt. Dermed kjøres den aldri på en ufullstendig kommando.
+- Knapper avdekkes med Kopier ved hover eller tastaturfokus, før den, i stigende `order`.
+- Les `title` fra en getter, så den følger språket.
+- En `run` som kaster eller avvises, logges under plugin'en din og endrer ingenting annet.
+
+#### Referanse
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
+### Lenkehandterere
+
+`LinkHandler` åpner lokale filer eller egendefinerte lenker som brukeren klikker på i meldinger eller på merker i composer. Håndtereren med
+høyest `priority` hvis `match` returnerer true, åpner lenken.
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+- `href` er målet: en sti, en URL eller en `file://`-lenke.
+- `origin` er plugin'en som produserte det lenkede elementet.
+- `exact` betyr at stien viser til en kjent fil i arbeidsområdet, ikke en sti som er utledet fra tekst.
+- En `background`-lenke må ikke bytte smalskjermsvisningen.
+- `base` er den arbeidsområderelative katalogen lenken ble skrevet i.
+- Uten `exists` svarer `ctx.links.exists` `false`, så tekst aldri ser ut som en lenke handtereren ikke kan åpne.
+
+#### Referanse
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
+
+### Servere
+
+`Server` bidrar med en liste over servertilkoblinger, som servere plugin'en din starter på andre maskiner.
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server => ({
+    ready: loaded(),
+    entries: machines().map((machine) => ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)
+```
+
+- Oppstart venter på at hver kilde er `ready`. En klar kildes oppføringer er dens komplette beholdning.
+- `order` sorterer kildene i stigende rekkefølge.
+- Hver oppførings nøkkel er `<plugin id>:<id>`. `label` er et kort merke ved siden av `name`.
+- `auth` betyr at serveren venter på at brukeren logger inn, og `incompatible` at den kjører en versjon denne appen ikke
+  støtter.
+- `listed: false` holder oppføringen utenfor appens serverliste. Settings viser den fortsatt.
+- `http` er endepunktet, når serveren er `ready`.
+- `reconnect` løser et tapt endepunkt igjen, `connect` forbereder en server som ikke er klar, og `remove` kjører før
+  oppføringen fjernes.
+- `row` renderer serverens innstillingsrad, og `cover` dekker den rutete økten mens serveren ikke er klar.
+- En `row` mottar vertens status-`Indicator`, siste `health()`-sjekk og radens `server.row`-meny `Items`.
+  Dens `remove()` kjører oppføringens `remove` og lukker deretter serverens faner.
+
+#### Referanse
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
+
+### Stiler
+
+`Style` injiserer en CSS-streng i dokumentet mens bidraget er aktivt.
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
+```
+
+### Temaer
+
+`Theme` legger et fargetema til Settings › Appearance › Theme. Det tar samme format som appens egne temafiler, så
+en temafil importeres som den er.
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+En temafil navngir seg selv og gir en lys og en mørk variant. Hver variant starter fra en `palette` eller fra `seeds`,
+aldri begge, og kan feste enkelte tokens med `overrides`.
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- Velgeren lister plugintemaer blant appens temaer, alfabetisk etter `name`.
+- Verten nøkler hvert tema som `<plugin id>:<theme id>`, så den erstatter aldri et apptema eller en annen plugins.
+- Tilbaketrekking av temaet, eller deaktivering av plugin'en, tar det ut av velgeren. En bruker som valgte det, beholder valget: vinduet
+  viser standardtemaet til temaet kommer tilbake.
+- Ved oppstart viser vinduet fargene som er bufret fra forrige kjøring, til plugin'en bidrar med temaet igjen.
+
+## Vert-API-er
+
+Vert-API-er er egenskaper på `ctx`. Ingen av dem kaster før appgrensesnittet monteres: lesinger returnerer dokumenterte
+standarder, og tidlige skrivinger, som `ctx.layout.open`, `ctx.dialogs.open` og storeoppdateringer, venter og brukes i kall-
+rekkefølge når første rute rendres.
+
+```ts
+ctx.add(Command, () => ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))
+```
+
+Avsnittene nedenfor dekker hvert API. `ctx.options`, `ctx.client` og `ctx.app` er den
+[delte konteksten](#shared-context), `ctx.provide`, `ctx.use` og `ctx.main` arbeider med
+[kontrakter og tokens](#contracts-and-tokens), `ctx.stores` holder storene plugin'en
+[erklærer](#define-the-gui-plugin), og `ctx.icons` holder navnene til [ikonene](#icons) den erklærer.
+
+#### Referanse
+
+```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  use<T>(token: Contract<T>): () => Live<T>
+  use<S extends IpcSpec>(token: Ipc<S>): () => Live<IpcClient<S>>
+  main<S extends IpcSpec>(token: Ipc<S>): IpcClient<S>
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
+
+### Layout
+
+`ctx.layout.open(key, session, options?)` åpner en panelfane etter nøkkelen, `<plugin id>:<tab id>`. Den virker for økter
+som ikke er montert.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+- `tab: "open"`, standard, velger fanen i forhåndsvisningssloten. `"preview"` gjør den til ny forhåndsvisning, `"append"` legger
+  den til uten å velge den, og `"select"` legger den til og velger den, og beholder forhåndsvisningen.
+- `background: true` beholder gjeldende visning på smale skjermer og åpner sideområdet, for en handling brukeren
+  ikke startet fra panelet.
+- `close(key, session)` fjerner fanen og kaller panelets `close`. `toggle(key, session)` lukker en synlig fane, ellers
+  åpner den.
+- `hide(key, session)` skjuler panelet som viser en synlig fane, uten å lukke fanen: sideområdet, eller bunn-
+  panelet for en fane brukeren flyttet dit. Å åpne fanen igjen viser panelet.
+- `state(key, session)` er `"closed"` når fanen ikke er i stripen, `"open"` når den er det, men panelet viser en annen
+  fane, `"active"` når panelet viser den, men panelet er skjult (sideområdet er lukket, eller bunnpanelet er
+  skjult), og `"visible"` når den er på skjermen.
+- `stored(session)` er denne pluginens fane-ID-er lagret i øktens sidestripe.
+- `ready()` er `true` når det lagrede oppsettet er lastet, og `narrow()` mens visningsporten er under 768px.
+- `side.opened(session)` er `true` mens sideområdet er åpent, og `side.toggle(session)` åpner eller lukker det.
+- `side.menu()` lister hver plugins `session.panel`-[menyelementer](#menu-items) i `order`, for en egen startknapp.
+- `side.width(panel)` og `side.resize(panel, width)` leser og lagrer sideområdebredden til et av panelene dine; se
+  [Panelbredde](#panel-width).
+- `sidebar.opened()` er den indre sidepanelinnstillingen som hvert sidepanel deler.
+- `scroll` lagrer rulleforskyvninger per økt og nøkkel.
+- `settings(page?)` åpner Settings. `project(server, title)` åpner en prosjektkatalogvelger og et nytt utkast.
+- `draft({ server, directory, prompt })` åpner en ny utkastøkt i sin egen fane, med prompten fylt inn for
+  brukeren å se gjennom og sende.
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
+
+#### Referanse
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
+
+### Økter og øktskjermen
+
+`ctx.sessions.current()` er den rutete økten, og `ctx.screen.current()` er skjermen dens. Begge er `undefined` på Home
+og på et utkast. Les dem der du handler, aldri én gang i `setup`.
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+- `key` er `<server id>\n<session id>`, unik på tvers av servere. Nøkle per-økt-tilstand etter den.
+- `tab` er nøkkelen til hovedfanen som eier økten. `pending` er `true` mens serveren fortsatt oppretter økten.
+- `directory` er øktens arbeidsområdekatalog, og `local` er `true` når den er prosjektroten.
+- `listedProject` er sidepanelprosjektet økten tilhører.
+- `visit` er et nytt objekt hver gang økten rutes.
+- `background` viser subagentene og terminalkommandoene som kjører i økten.
+- `ctx.sessions.list()` returnerer øktene i de åpne hovedfanene.
+- Skjermens `file` leser arbeidsområdets filer, og `comment` holder linjekommentarene til neste prompt.
+  `composer` er neste prompt: teksten, vedlagte deler og modellen; se
+  [Legg ved i composer](#attach-to-the-composer).
+- `file.sync(path)` laster en fil og ber serveren overvåke den for endringer. Kall `file.unwatch(path)` når filens
+  fane lukkes.
+
+#### Referanse
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
+
+### Legg ved i composer
+
+Bruk `ctx.screen.current()?.composer` i en hendelseshandterer eller kommando for å legge en fil, et notat eller et sitat ved brukerens
+neste prompt.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element <button id="submit">Save</button>',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})
+```
+
+- `attach` lar tastaturfokus være der det er. Kall `focus()` for å flytte det til prompten.
+- `update(commentID, { comment?, preview? })` endrer en vedlagt del; et notat eller et sitat tar bare en ny `comment`.
+- `detach(commentID)` fjerner en vedlagt del.
+- Et notats `live` erstatter `subject` og `href` mens notatet blir i denne appprosessen, for referanser bare denne
+  prosessen kan løse, som et sideelement. Et lagret utkast dropper det, og det gjør også en sendt melding som en tilbakestilling eller en
+  forgrening gjenoppretter.
+
+Et sitat er tekst brukeren siterte fra noe plugin'en din viser, som loggutdata, med en valgfri kommentar. Det
+rendres som et sitat fra økttidslinjen, under kildens ikon og etikett. Sjekk `quotable()` først: den er
+`false` i økter som tilhører en subagent, siden de ikke har noen composer, og mens composer kjører terminalkommandoer.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject` navngir kilden for modellen, for eksempel `the terminal`. Den er ikke lokalisert.
+- Utelat `comment` for å la brukeren legge til en fra chipen.
+- `focus(commentID)` åpner kommentarfeltet for et vedlagt sitat. Hvis composer er skjult, for eksempel når et panel er åpent på en smal
+  skjerm, åpnes kommentarfeltet først når composer vises igjen.
+- Modellen leser `The user quoted the following from <subject>:`, deretter teksten med hver linje prefikset med `> `,
+  deretter kommentaren, hvis noen.
+
+#### Referanse
+
+```ts
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}
+```
+
+### Les og skriv prompten
+
+Les hva brukeren skrev med `text()`, og om de skriver med `focused()`:
+
+```ts
+const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()
+```
+
+- `text()` er prompten som ren tekst: en omtale leses som sin `@`-tekst, og vedlegg og vedlagte deler utelates.
+  I shell-modus er verdien terminalkommandoen. Verdien er `""` til øktens utkast er lastet, og i en subagents økt,
+  som ikke har noen composer. Verdien er reaktiv.
+- `focused()` er `true` mens tastaturfokus er i prompten. Den er ikke reaktiv, så les den der du handler, som i
+  en kommandos `run`.
+
+`insert(text)` skriver tekst inn i prompten, slik at brukeren kan se gjennom og sende den. Ingen av metodene på composer sender prompten.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()
+```
+
+- `insert` legger teksten til ved markøren brukeren sist forlot i prompten, ellers på slutten, og flytter markøren etter
+  den. Den erstatter ikke valgt tekst.
+- Teksten parses ikke: `@path` forblir tekst, ikke en omtale.
+- `setText(text)` erstatter promptens tekst, omtaler inkludert. Vedlegg og vedlagte deler blir. `setText("")`
+  tømmer teksten.
+- Begge lar tastaturfokus være der det er. Kall `focus()` for å flytte det til prompten.
+- En skriving før øktens lagrede utkast lastes (`insert`, `setText`, `attach`, `update` eller `detach`) venter på
+  det. Den brukes deretter på økten som var rutet da du kalte den, i kallrekkefølge. Den erstatter aldri det lagrede
+  utkastet.
+- Kallene har ingen effekt i økter som tilhører en subagent, siden de ikke har noen composer.
+
+### Velg modellen
+
+`model()` er modellen neste prompt sendes med, og `setModel` velger én som modellvelgeren gjør:
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer && !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}
+```
+
+- `model()` er brukerens valg for den rutete økten, ellers agentens standard, ellers appens standard. Den er
+  `undefined` mens modellkatalogen lastes, når ingen tilkoblet leverandør tilbyr modellen, og i en subagents økt.
+  Den er reaktiv.
+- `setModel` velger modellen for økten og flytter den øverst i listen over nylig brukte modeller. Uten `variant` beholder modellen
+  varianten velgeren ville vist for den.
+- `setVariant(variant)` velger en variant av gjeldende modell. `undefined` velger modellens standardvariant.
+- `setModel` returnerer `false` og endrer ingenting mens katalogen lastes, når ingen tilkoblet leverandør tilbyr
+  modellen, eller når modellen ikke har en slik variant.
+- `setVariant` returnerer `false` og endrer ingenting når det ikke finnes en gjeldende modell eller modellen ikke har en slik variant.
+- Begge returnerer `false` i en subagents økt.
+
+#### Referanse
+
+```ts
+interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+```
+
+### Servere og serverhendelser
+
+`ctx.servers.get(id)` returnerer en levende `ServerRef`. Desktop-appens egen server, som kjører plugin'en din, har id-en
+`"sidecar"`. Reager på hendelsene dens med `data.on`:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+- `id` er vertsnøkkelen: `"sidecar"`, en http-URL, eller `<plugin id>:<id>` for en [bidratt server](#servers).
+- `data` er serverens synkroniserte data, som økter og prosjekter, og `on(type, handler)` for hendelsene. Den er
+  reaktiv.
+- `builtin` er `true` for appens egen server.
+- `compatible` er `true` når serverens versjon fungerer med denne appen, og `connected` mens hendelsestilkoblingen er
+  oppe.
+- `password` er HTTP Basic-passordet brukeren konfigurerte, hvis noe.
+- Les `client`, `data` og `url` fra den levende `ServerRef` hver gang: en restartet server får en ny klient under
+  samme id.
+- `ctx.servers.list()` returnerer ID-ene til serverne appen lister.
+
+#### Referanse
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
+
+### Dialoger
+
+`ctx.dialogs.open(render, { replace? })` åpner en dialog over de åpne og returnerer et håndtak hvis `close()` lukker
+den. Dialogen lukkes også når dens eier-scope avsluttes.
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+- `replace: true` lukker hver åpen dialog først, inkludert vertens og andre plugins' dialoger.
+- `ctx.dialogs.active()` er `true` mens en dialog er åpen.
+- Render innholdet i `ctx.ui.Dialog` for appens dialogramme; se [Appkomponenter](#app-components).
+
+### Spør brukeren
+
+`confirm`, `alert`, `prompt` og `select` spør i appens egne dialoger, så plugin'en din trenger ikke eget dialog-UI.
+Hver returnerer en promise for svaret.
+
+```ts
+const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })
+```
+
+- `confirm` gir `true` bare når brukeren bekrefter. `danger` markerer bekreftelsesknappen som en destruktiv handling og
+  gir Avbryt-knappen fokus i utgangspunktet.
+- Alle dialogene åpnes på samme måte som med `open` og lukkes når eieren som åpnet dem, avsluttes, eller når pluginen stoppes hvis det ikke finnes en eier.
+- Avbryting, Escape, klikk utenfor dialogen, åpning av en dialog som erstatter den, eller avslutning av eieren gir `false` fra `confirm`
+  og `undefined` fra `prompt` og `select`.
+
+`alert` forteller brukeren noe de må bekrefte, med én knapp. Den løses når dialogen lukkes, uansett hvordan:
+
+```ts
+await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
+```
+
+`prompt` ber om én linje tekst. Startverdien `value` er valgt, så skriving erstatter den. Den løser aldri en tom
+streng: innsending gjør ingenting mens feltet er tomt. `secret: true` skjuler det brukeren skriver, for et passord eller
+token:
+
+```ts
+const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })
+```
+
+`select` lister alternativer i en søkbar liste, som kommandopaletten, og løser det valgte alternativets `value`:
+
+```ts
+const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) => ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)
+```
+
+- Søk samsvarer med hvert alternativs `title` og `description`.
+- Alternativer med samme `group` listes sammen under den overskriften.
+- `current` er verdien til alternativet som utheves først.
+
+#### Referanse
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise<boolean>
+  alert(options: AlertOptions): Promise<void>
+  prompt(options: PromptOptions): Promise<string | undefined>
+  select<T>(options: SelectOptions<T>): Promise<T | undefined>
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions<T> {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}
+```
+
+### Appkomponenter
+
+En plugin-bundle kan ikke importere `@opencode/ui`, så `ctx.ui` gir den appens egne komponenter. De rendres i
+brukerens tema, fonter og språk, så pluginens UI ser ut og oppfører seg som appens.
+
+```tsx
+import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () => [summaryTab],
+  render: () => (
+    <div>
+      <ui.Tooltip value={ctx.t("copy")}>
+        <ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() => void ctx.system.copy(summary.latest ?? "")} />
+      </ui.Tooltip>
+      <Show when={summary.latest} fallback={<ui.Loader size="large" />}>
+        {(text) => <ui.Markdown text={text()} />}
+      </Show>
+    </div>
+  ),
+})
+```
+
+- `Icon`, `Button` og `IconButton` tar en hvilken som helst `IconName`, som hvert `icon`-felt i SDK-et: et av appens
+  ikoner, eller et av [dine egne](#icons) fra `ctx.icons`. En `IconButton`s `label` er dens tilgjengelige navn; pakk den i
+  `Tooltip` for å vise den ved hover.
+- `busy` på en knapp erstatter ikonet med lasteindikatoren og deaktiverer den til den er `false` igjen.
+- Bruk `Loader` for hver lastetilstand som ikke er AI-en som arbeider, som et panel, et søk eller en tilkobling som
+  laster.
+- `Menu` åpner en liste med `items`: handlinger, `{ type: "separator" }` og `{ type: "group", label, items }`.
+- `Switch` og `TextInput` holder ingen tilstand: send verdien fra `onChange` eller `onInput` tilbake til `checked` eller `value`.
+- `Keybind` viser taster som chiper, som `ctx.keybinds.keybind(command)`.
+- `Markdown` rendres som tidslinjen renderer en melding, og `Code` viser en uthevet, skrivebeskyttet kodeblokk. Begge fylles
+  inn kort etter at de monteres.
+
+`Dialog` er appens dialogramme: en tittel, innhold og knapper. Render den fra `ctx.dialogs.open`; andre steder renderer den
+ingenting nyttig.
+
+```tsx
+const ui = ctx.ui
+
+ctx.dialogs.open((dialog) => (
+  <ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      <ui.Button variant="contrast" onClick={dialog.close}>
+        {ctx.t("done")}
+      </ui.Button>
+    }
+  >
+    <ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus />
+  </ui.Dialog>
+))
+```
+
+- `size` er `"fit"` som standard: 480px bred og så høy som innholdet. `"normal"`, `"large"` og `"x-large"` er faste
+  størrelser.
+- Escape og et klikk utenfor lukker dialogen. `closable: false` skjuler topptekstens lukkeknapp.
+
+#### Menyerader
+
+`MenuItem`, `MenuSub`, `MenuGroup` og `MenuSeparator` er rader for en meny verten renderer, som
+`session.location.menu`-sloten. De navigeres med tastaturet, viser vertens dempede ikoner og snarveischips, og lukker
+menyen ved valg.
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem` tar samme felt som en oppføring i `Menu`s `items`.
+- `MenuSub` åpner barna i en undermeny ved siden av raden. `onOpenChange` sier når, så du kan laste radene
+  bare mens den er åpen.
+- `MenuGroup` setter rader under en overskrift, og `MenuSeparator` tegner en linje mellom rader.
+- `MenuItem`, `MenuSub` og `MenuGroup` kaster utenfor en meny: verten registrerer feilen og renderer ingenting av det
+  bidraget.
+
+#### Valg
+
+`Select` velger ett av en liste valg, som appens innstillingsrader velger et språk. Verdien er en streng; typen til
+`options` begrenser den.
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` er valgets tilgjengelige navn; det valgte alternativets `label` er det som vises.
+- En `value` som ingen alternativ har, viser `placeholder`. Valg av det valgte alternativet igjen kaller ikke `onChange`.
+
+#### Innstillingskomponenter
+
+`SettingsLayout`, `SettingsSection` og `SettingsRow` renderer en [innstillingsside](#settings-pages) slik appen renderer
+sine egne: sidehodet, seksjoner med overskrifter over kantlinjede lister, og rader med tittel, beskrivelse og en
+kontroll til slutt.
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- Bruk `SettingsLayout` for en egen side, `SettingsSection` for en seksjon på en vertsside, og `SettingsRow` alene
+  for rader i en vertsseksjon. Radene liner opp med vertens rader i alle tilfeller.
+- `id` på en rad er `SettingEntry.id` som avdekker den. Søk som avdekker sidens egen id, uthever hodet.
+- `actions` sitter på slutten av tittelraden. En seksjons `footer` sitter under listen, utenfor kantlinjen.
+- De tar utseendet fra Settings-skjermens stiler, så render dem fra en `SettingsPage`.
+
+#### Referanse
+
+```ts
+interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) => void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) => void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}
+```
+
+### Varsler (toasts)
+
+`ctx.toast.show` viser en kort melding i hjørnet av vinduet og returnerer et håndtak hvis `dismiss()` lukker den.
+
+```ts
+ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
+```
+
+- `variant` er `"default"`, `"success"`, `"error"` eller `"loading"`. Et `success`-varsel viser et hakeikon med mindre du angir
+  `icon`.
+- `duration` er hvor lenge varselet vises, i millisekunder. Standard er 5 sekunder.
+- `persistent: true` beholder varselet til brukeren eller `dismiss()` lukker det, og ignorerer `duration`.
+- Et varsel likt et som fortsatt vises, erstatter det i stedet for å stable en kopi.
+- Pluginens varsler lukkes når den stopper, så ingen knapp overlever koden den kjører. Et varsel lukkes ikke med
+  komponenten eller `createKeyed`-kjøringen som viste det.
+
+Vis et `loading`-varsel mens arbeid pågår, og lukk det når arbeidet slutter:
+
+```ts
+const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()
+```
+
+`actions` legger til knapper. Et klikk kjører handlingen og lukker varselet:
+
+```ts
+ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () => void sync() }],
+})
+```
+
+#### Referanse
+
+```ts
+interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}
+```
+
+### Varsler (system)
+
+`ctx.attention.notify` får brukerens oppmerksomhet mens de ser en annen vei: et systemvarsel og en lyd, med
+samme regler som appens egne varsler.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}
+```
+
+- Systemvarselet vises bare mens ingen appvindu har fokus. Lyden spilles uansett.
+- Begge følger **Settings > Notifications**. `variant: "default"` følger **Agent**-radene, og `variant: "error"` følger
+  **Errors**-radene. Skrivebordsvarsler for begge er av som standard; lydene deres er på.
+- `sound: false` spiller aldri en lyd.
+- Klikk på varselet bringer appen frem og åpner `session`, når du oppgir en.
+- Hvert appvindu kjører sin egen kopi av plugin'en din. Send en `id` for hendelsen, som en kjørings id, slik at bare det første
+  vinduet som sender den, varsler og spiller lyden. Uten `id` varsler hvert kall.
+- Før appgrensesnittet monteres, venter `notify` på det.
+
+`notify` avviser aldri. Den løser det den gjorde: `notification` er `true` når appen ba systemet vise
+varselet, og `sound` er `true` når lyden startet.
+
+```ts
+const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })
+```
+
+- `notification` er `false` når brukeren slo det av, et appvindu har fokus, eller et annet vindu allerede sendte
+  `id`. Systemet kan fortsatt skjule et varsel appen ba det vise, for eksempel når brukeren avslo en
+  nettlesertillatelse.
+
+#### Referanse
+
+```ts
+interface Attention {
+  notify(options: NotifyOptions): Promise<NotifyResult>
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}
+```
+
+### Bruksdata
+
+En økts token-, kostnads- og plantall ligger i serverens data, samme reaktive store som appen leser for
+topptekstens «28k · $0.28». Les dem der i stedet for fra opencodes database.
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()` er assistenttrinnet hvis tokens fyller kontekstvinduet nå, som appens kontekstring bruker. Sammenlign dets
+  `tokens` med modellens `limit.context` fra `data.location.model.list`.
+- `limits()` holder OpenCode Console-budsjettene og Go-planens kvote når `data.location.usage.sync(location)` har
+  lastet dem. Den er `null` når serveren ikke rapporterer noen.
+
+### Faner
+
+`ctx.tabs` leser og endrer appens hovedfaner: øktene og utkastene som er åpne som faner. Dette flytter en økts fane til
+fronten når kjøringen er ferdig:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) =>
+    onCleanup(
+      data.on("session.execution.succeeded", (event) => {
+        const tab = ctx.tabs.list().find((item) => item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)
+```
+
+- `list()` returnerer de åpne fanene i striperekkefølge. Den er reaktiv. En fanes `session` er `undefined` for et utkast, og
+  `active` er `true` for fanen på skjermen.
+- `open({ server, id }, { focus? })` åpner en økt som fane på slutten av stripen, i bakgrunnen med mindre `focus`
+  er `true`. En økt som allerede er åpen, beholder fanen, det gjør også en subagent som forelderens fane viser.
+- `focus(key)` viser en fane, `move(key, index)` flytter den, og `close(key)` lukker den som brukeren gjør.
+- En nøkkel ingen åpen fane har, gjør ingenting. Skrivinger før appgrensesnittet monteres venter på det.
+
+#### Referanse
+
+```ts
+interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}
+```
+
+### Hurtigtaster
+
+`ctx.keybinds` leser brukerens snarvei for en publisert kommando-ID.
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+- `keybind(command)` returnerer visningsdelene til kommandos effektive tastebinding, for eksempel `["Ctrl", "K"]`. Den er
+  tom når kommandoen er ubundet.
+- `keys(bind)` returnerer tastene som skal vises for en tastekombinasjon appen ikke håndterer, for eksempel en som siden håndterer selv.
+- `matches(command, event)` er `true` når hendelsen samsvarer med kommandos effektive tastebinding.
+
+#### Referanse
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### Kjør kommandoer
+
+`ctx.commands.run(id)` kjører en kommando som å velge den i kommandopaletten. Den returnerer `false` når kommandoen
+ikke kan kjøre:
+
+```ts
+if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })
+```
+
+- `id` er en publisert plugin-kommando, `<plugin id>.<command id>`, fra en hvilken som helst plugin, eller en av appens egne kommandoer,
+  som `command.palette`.
+- Appens kommando-ID-er er ikke et stabilt API og kan endres mellom utgivelser.
+- `run` returnerer `false` når ingen aktivert kommando har id-en. En listet, men deaktivert kommando kjører ikke.
+- Før appgrensesnittet monteres er ingen kommando registrert, så `run` returnerer `false`.
+- `run` venter ikke på en kommandos asynkrone arbeid.
+
+#### Referanse
+
+```ts
+interface Commands {
+  run(id: string): boolean
+}
+```
+
+### System og miljø
+
+`ctx.system` fungerer på alle plattformer. `ctx.desktop` gir tilgang til funksjoner som bare finnes i desktop-appen, og er `undefined` i nettleseren.
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save` viser en lagredialog på desktop og laster ned på web. Den returnerer `false` når brukeren avbryter
+  dialogen.
+- `system.openExternal` åpner en URL i systemnettleseren. For lenker inne i appen, bruk `ctx.links.open`, som ruter
+  en `Link` til dens [lenkehandterer](#link-handlers).
+- `desktop.launch(path, app?)` åpner en sti i en angitt app, eller i standardappen. `desktop.reveal(path)` viser den i
+  filbehandleren.
+- `ctx.embeds` renderer en hovedprosess-webvisning i et vindu; se
+  [Innebygde webvisninger](#embedded-web-views).
+- `ctx.locale` leser grensesnittspråket og skriveretningen. `ctx.appearance.font("mono")` er CSS-font-
+  familien til brukerens terminalfont.
+- `ctx.router` leser gjeldende rutesti og om appen er i ferd med å bytte rute.
+- `ctx.workspaces.on("remove", handler)` kjører når brukeren fjerner en arbeidsområdekatalog fra en server, så du kan
+  rydde opp i storene som er avgrenset til den.
+
+`desktop.pick(options)` ber brukeren velge filer eller mapper i systemets dialogboks for å åpne filer. Resultatet er de absolutte
+stiene til det brukeren valgte:
+
+```ts
+const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })
+```
+
+- `directory: true` velger mapper i stedet for filer, og `multiple: true` lar brukeren velge mer enn én.
+- `extensions` begrenser filene som tilbys, uten punktum, som `["json"]`. Mapper ignorerer det.
+- `title` er dialogens tittel. Ikke hvert system viser den.
+- Du får ingen stier hvis brukeren avbryter. Kallet til `pick` avvises hvis dialogboksen ikke kan åpnes.
+- `pick` er bare for desktop: en nettleser forteller aldri siden hvor en valgt fil ligger.
+
+`ctx.appearance.mode()` er fargeskjemaet grensesnittet viser, `"light"` eller `"dark"`. Det er reaktivt:
+
+```ts
+const background = () => (ctx.appearance.mode() === "dark" ? "#000" : "#fff")
+```
+
+- Det følger brukerens valg i **Settings > Appearance**, med **System** løst til systemets gjeldende skjema.
+- Før appgrensesnittet monteres, er det systemets skjema.
+
+#### Referanse
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  pick(options?: PickOptions): Promise<string[]>
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
+## Lagret tilstand
+
+Desktop-vinduer laster lagret tilstand over IPC, mens web leser `localStorage` med en gang. Erklær stores i
+`Plugin.define({ stores })`, så laster verten dem for deg.
+
+- **`Store.global`** beholder én verdi for appen. Den lastes før `setup` kjører, så `ctx.stores.name.value` er aldri
+  `undefined`.
+- **`Store.session`** beholder én verdi per økt. Den lastes når økten monteres; `ctx.stores.name(session).value`
+  er `undefined` til da.
+
+Erklærte stores er for vinduer. `main` åpner tilstanden sin med `ctx.storage.store`, som leser synkront; se
+[Hovedkontekst](#main-context).
+
+Muter en verdi på stedet med `update(draft => …)`, som ikke må returnere noe, eller erstatt den med `set(next)`:
+
+```ts
+const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) => {
+  draft.enabled = !draft.enabled
+})
+```
+
+- `ready()` er `true` når verdien er lastet. Skrivinger før det venter og brukes i kallrekkefølge.
+- `from` navngir andre lagrede nøkler å importere verdien fra én gang, mens storen ikke holder noen, som nøkkelen til en
+  store du har gitt nytt navn: `"plugin.acme.settings"`. Send en liste for å prøve flere nøkler, nyeste først. Den andre nøkkelen beholder
+  kopien sin til storen fjernes.
+
+```ts
+stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}
+```
+
+#### Referanse
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted<T, V = T | undefined> {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
+
+### Kjøretidsstores
+
+`ctx.storage.store(key, options)` åpner en store for en nøkkel som bare er kjent ved kjøring. `scope` beholder én verdi per server,
+katalog eller økt.
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+- `scope: "global"`, standard, beholder én verdi for appen.
+- `scope: { server, directory? }` beholder én verdi per server, eller per arbeidsområdekatalog på den.
+- `scope: { session }` beholder én verdi per økt, åpnet på nytt når økten flytter til en ny katalog.
+- En kjøretidsstores `value` er `undefined` til den lastes.
+- `ctx.storage.memory(key, { initial })` beholder vinduslokal tilstand som overlever plugin-omlastinger, men ikke vindusomlastinger.
+- `ctx.storage.remove(key, { scope, from })` sletter verdien, så nøkkelen leses som `initial` igjen.
+
+#### Referanse
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
+
+## Reaktive primitiver
+
+Foretrekk disse hjelperne framfor rå `createEffect`, `createRenderEffect` og `createComputed`. De følger en plugins levetid
+og avhengighetenes restarter, som håndskrevne effekter ofte gjør feil.
+
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })` kjører `fn` i en fersk eier for hver nøkkel: hver aktive generasjon av en
+`ctx.use`-aksessor, eller hver verdi av en vanlig aksessor. Alt som registreres inne i `fn`, avsluttes med den kjøringen.
+
+```tsx
+import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
+```
+
+- `otherwise` kjører mens kilden ikke har noen nøkkel: en `Live`-aksessor som ikke er aktiv, eller en vanlig aksessor hvis verdi
+  er `undefined`, `null` eller `false`.
+- `equals` avgjør om en vanlig aksessors nye verdi er samme nøkkel, så `fn` ikke kjører igjen. Bruk den når
+  kilden bygger et nytt objekt hver gang. En `Live`-aksessor nøkler alltid etter generasjon.
+
+#### Referanse
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)` henter når `source` endres, avbryter utdaterte forespørsler og suspenderer
+aldri.
+
+```ts
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+const text = () => summary.latest ?? ""
+```
+
+- `latest` er siste resultat, beholdt mens en nyere forespørsel kjører. Den er `undefined` før den første.
+- `loading` er `true` mens en forespørsel for gjeldende verdi er underveis.
+- `error` er gjeldende forespørsels avvisning, hvis noen.
+
+#### Referanse
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
+
+### createVisitState
+
+`createVisitState(initial)` lager et `[value, setValue]`-signal som tilbakestilles hver gang brukeren forlater økten og
+kommer tilbake.
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+#### Referanse
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
+### usePanel og useDrawer
+
+`usePanel()` leser den omkringliggende panelrammen, og kaster utenfor en panelrendering. `useDrawer()` returnerer den mobile
+skuffen rundt et bidrag, eller `undefined` utenfor en.
+
+```ts
+const panel = usePanel()
+const drawer = useDrawer()
+const compact = () => panel.placement() === "mobile"
+const close = () => drawer?.close()
+```
+
+- `placement()` er `"side"` i sideområdet og `"mobile"` i en smalskjermsvisning.
+- `visible()` er `true` mens området er åpent og denne fanen er valgt. `present()` forblir `true` mens området
+  animeres lukket.
+- `reserve()` ber deg legge av plass på slutten av et hode til vertens områdebryter.
+- `sidebar` er den indre sidepanelinnstillingen som hvert sidepanel deler. Et panel med et sidepanel renderer sin egen
+  bryter.
+- `drawer.open(view)` viser innhold i stedet for skuffens visning, med en tilbake-kontroll.
+
+#### Referanse
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}
+```
+
+## Appkontrakter
+
+Appen tilbyr disse kontraktene til hver plugin. Følg én med `ctx.use(token)`, og håndter den mens den ikke er
+`active`, som for enhver annen plugins kontrakt. For eksempel er `Browser` `inactive` på web.
+
+### Filer
+
+`@opencode/plugin/gui/file` eksporterer appens trevisning for filer, **Open in**-knappen og `FileViewer`-registeret.
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+- **`FileTree`** er en kontrakt. `Tree` og `List` renderer et virtualisert tre eller en liste over arbeidsområdefiler med endrings-
+  markører. Les den med `ctx.use(FileTree)`. Et tres `labels` legger tekst etter en mappes navn, som hvor mange
+  oppføringer den har.
+- **`OpenInApp`** er en kontrakt. `Button` er desktop-**Open in**-knappen for en økts arbeidsområde.
+- **`FileViewer`** er et register. En viser lister `kinds` den renderer, kan avvise byte med `problem`, og renderer en
+  `View` som rapporterer `onDetails` og `onError`.
+
+#### Referanse
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<FileViewerProps>
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}
+```
+
+### Gjennomgå endringer
+
+`@opencode/plugin/gui/review` eksporterer `Changes`, appens visning av en økts endringer, og `ChangeKind`
+(`"add"`, `"del"` eller `"mix"`).
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () => {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" && session ? live.value.diffs(session).length : 0
+}
+```
+
+- `diffs(session)` er gjeldende gjennomgangsmodus' differ, og `ready(session)` er `true` når de er lastet. Begge er
+  reaktive. Bare den rutete økten har endringer; andre økter leses som tomme.
+- `kinds(session)` mapper hver endret fil og katalog til dens `ChangeKind`.
+- `active(session)` er filen gjennomgangspanelet viser.
+- `details(session)` er øktkatalogens ikke-innsjekkede endringer, uansett gjennomgangsmodus.
+- `focus(session, path)` viser en fil i gjennomgangspanelet, og `open(session)` viser alle endringer.
+- `watch(screen, source)` holder endringene til en visning lastet mens den viser dem, på tvers av visningens øktbytter.
+  Send den eide skjermen fra panel- eller slotinputet. Den returnerer en funksjon som stopper overvåkingen; se
+  [createKeyed](#createkeyed).
+- En `tree`-overvåking er en vedvarende endringsliste: åpning av sideområdet oppdaterer den. En `details`-overvåking laster
+  `details(session)`.
+
+#### Referanse
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
+
+### Nettleser
+
+`@opencode/plugin/gui/browser` eksporterer `Browser`, desktop-nettleserpanelet til en økt.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+- `attached(session)` er `true` når økten har et nettleserpanel.
+- `canOpen(session, path?)` er `true` når en arbeidsområdefil eller en http(s)-URL kan åpnes i panelet.
+- `open(session, url)` åpner en URL som nettleserfane i øktens sidepanel.
+- `openFile(session, path)` åpner en arbeidsområdefil som en `file://`-fane.
+
+#### Referanse
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
+
+## Hovedprosessen
+
+I OpenCode Desktop kjører pluginens `main`-oppsett én gang i Electron-hovedprosessen, med én instans for hele appen. Det har
+full tilgang til de innebygde modulene i Node.js, `electron` og vertens API-er for hovedprosessen. Send oppsettet til `Plugin.define` i pluginens
+[`./gui-experimental`-fil](#define-the-gui-plugin), ved siden av vinduets `setup` eller alene.
+
+```tsx title="src/gui.tsx"
+import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () => {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) => {
+      if (enabled && blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () => blockerId !== undefined && powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) => setActive(enabled),
+    })
+
+    return release
+  },
+})
+```
+
+I et vindu er `electron` en inert plassholder, så importen er trygg i den delte `./gui-experimental`-filen. Se
+[Én fil, to prosesser](#one-file-two-processes).
+
+## Hovedkontekst
+
+`main` mottar en `MainContext`. I motsetning til vinduets `setup` kan `main` være `async`, og den kan returnere, eller løse til, en
+oppryddingsfunksjon.
+
+```ts
+main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}
+```
+
+- `ctx.options`, `ctx.client` og `ctx.app` er den [delte konteksten](#shared-context). I `main`
+  er `ctx.app.platform` alltid `"desktop"`.
+- `ctx.storage.store(key, { schema, initial })` åpner en store synkront i pluginens navnerom. Dens `value` er
+  alltid definert, og hver `set` eller `update` når databasen før den returnerer. `ctx.storage.remove(key)` sletter
+  verdien.
+- `ctx.signal` avbrytes når plugin'en deaktiveres, lastes på nytt eller fjernes, eller appen avsluttes. `ctx.onCleanup(fn)` kjører `fn`
+  da; se [Levetider og opprydding](#lifetimes-and-cleanup).
+- `ctx.provide` implementerer en `Ipc` under pluginens id; se [Definer og tilby en Ipc](#define-and-provide-an-ipc).
+- `ctx.add` bidrar til hovedprosessregistre som [`MenubarItem`](#native-app-menu).
+- `ctx.windows` lister appens vinduer og rapporterer når et åpnes eller lukkes.
+- `ctx.embeds` plasserer en `WebContentsView` i et vindus layout; se [Innebygde webvisninger](#embedded-web-views).
+- `ctx.serverEndpoints.get(id)` returnerer serverens URL og tilgangsopplysninger. Desktop-appens egen server er `"sidecar"`.
+- `ctx.cli` beskriver OpenCode-CLI-en desktop-appen kjører.
+- `ctx.log.write` skriver til desktop-loggfilen.
+
+#### Referanse
+
+`@opencode/plugin/gui/main` eksporterer `MainStorage` og `MainEmbeds` nedenfor som `Storage` og `Embeds`.
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted<T, T>
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  sameMachine: boolean
+  password?: string
+}
+```
+
+## Definer og tilby en Ipc
+
+En `Ipc`-spesifikasjon kan erklære `state` per vindu, kallbare `methods` og push-`events`. Effect `Schema` validerer og
+koder hver verdi som krysser broen.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})
+```
+
+- Id-en er pluginens id eller starter med den, som `acme.counter`. `ctx.provide` i `main` og `ctx.main` i et vindu
+  kaster for enhver annen id.
+- Utelat `input` for en metode som ikke tar argument, og `output` for en metode som ikke returnerer noe.
+
+#### Referanse
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
+### Implementer leverandøren i main
+
+Hver metode mottar dekodet inndata og en `Caller` (`{ window, signal }`). Kall `provider.changed(window?)` når
+`state` endres, for å pushe det nye snapshottet til abonnerte vinduer, eller `provider.emit(name, payload, window?)` for å sende
+en hendelse.
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const counts = new Map<number, number>()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) => ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) => {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next > 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) => {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}
+```
+
+- En spesifikasjon med `state` trenger også `state(window)` i implementasjonen. Main leser den når et vindu abonnerer og ved
+  hver `changed`.
+- En metode som kaster, avviser vinduets kall.
+- `changed` og `emit` når hvert vindu når du utelater `window`.
+- `dispose()` trekker `Ipc`-en tilbake tidlig. Vinduer ser den som `pending`, og `ctx.main`-kall venter, til plugin'en tilbyr
+  den igjen eller stopper. Verten trekker den også tilbake når plugin'en stopper.
+
+#### Referanse
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}
+```
+
+### Bruk Ipc-en i et vindu
+
+I et vindu returnerer `ctx.main(Counter)` klienten for `Ipc`-en din `main` tilbyr. En metode uten `input`-
+skjema tar bare valgfrie `{ signal }`-kallalternativer. Ikke send `undefined` som første argument.
+
+```tsx title="src/gui/window.tsx"
+import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  const counter = ctx.main(Counter)
+
+  // Follows main across restarts; removed when the plugin stops.
+  counter.on("overflow", (data) => console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () => ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () => {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}
+```
+
+- Et kall venter mens `main` starter. Det avvises når `main` ikke kan svare: på web, mens pluginens `main` er av
+  eller feilet, eller når metoden kaster. Fang avvisningen der brukeren trenger tilbakemelding.
+- `state()` og `on()` følger `main` på tvers av restarter. En lytter avsluttes med gjeldende eier, ellers med plugin'en.
+- `ctx.main` returnerer samme klient for hvert kall med tokenet.
+
+Les dette vinduets `state` med `client.state()`. Den er `undefined` til første snapshot kommer, og oppdateres hver
+gang `main` kaller `changed`.
+
+```tsx
+const count = () => ctx.main(Counter).state()?.count ?? 0
+```
+
+#### Referanse
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
+}
+```
+
+Definer plugin'en med begge oppsett i `src/gui.tsx`: `Plugin.define({ ...definition, setup, main })`.
+
+### Andre plugins
+
+En annen plugin følger din `Ipc` med `ctx.use(Counter)`, som den følger en kontrakt. Mens den er `active`, er verdien
+den samme `IpcClient`.
+
+```ts
+const counter = ctx.use(Counter)
+
+const count = () => {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+- Hver `Ipc` er `inactive` på web, der ingen hovedprosess kjører.
+
+## Native appmeny
+
+`main` legger elementer til de native menyene (macOS-appmenyen, File, Edit, View, Go, Window og Help) og til appmenyen
+på Windows og Linux med `MenubarItem` fra `@opencode/plugin/gui/main`:
+
+```ts
+import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem => ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () => true,
+    run: (focusedWindow) => {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)
+```
+
+- `after` navngir elementet det følger: et av denne pluginens elementer etter id, eller et innebygd element etter kommandoen, ellers
+  handlingen, ellers rollen, for eksempel `logs.export`, `edit.copy` eller `about`. Når ingenting samsvarer, går elementet
+  på slutten av menyen.
+- `app`-elementer vises bare på macOS.
+- `run` mottar det fokuserte vinduet, hvis noe.
+- Main leser funksjonen hver gang den bygger menyen, så etiketten følger språket.
+
+#### Referanse
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
+
+## Innebygde webvisninger
+
+For å bygge inn en isolert `WebContentsView` i et panel, opprett den i `main` og render boksen fra vinduet.
+
+```ts title="src/gui/main.ts"
+import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const attach = (window: BrowserWindow) => {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // Send embed.id to the window over your Ipc.
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}
+```
+
+```tsx title="src/gui/pane.tsx"
+<ctx.embeds.View id={embedId} visible radius={8} />
+```
+
+- `"open"` utløses bare for vinduer som åpnes senere, så koble til `ctx.windows.list()` først.
+- Et vindu sender innbyggingens `id` til `ctx.embeds.View` og `ctx.embeds.capture`.
+- `show(visible)` styrer synligheten fra siden. Visningen er bare synlig når vinduet har satt av plass til den og
+  `show(true)` gjelder.
+- `on("visible", handler)` kjører når visningen går på eller av skjermen, inkludert når vinduet maler et stillbilde på
+  plassen.
+- `capture()` returnerer et stillbilde av siden, eller `undefined` mens den er skjult.
+- `dispose()` fjerner visningen fra vinduet, men lukker ikke siden; kall `view.webContents.close()` når
+  du er ferdig med den. Verten avhender også innbyggingen når plugin'en forsvinner.
+- I vinduet fyller `View` boksen med den innebygde visningen. Verten holder visningens plassering og størrelse, zoom, hjørneavrunding
+  og tildekking av dialogbokser synkronisert. Visningen skjules mens vinduet er skjult eller en dialogboks er åpen.
+- `frozen` maler et stillbilde i stedet for den levende visningen, så DOM-innhold kan flyte over den. `radius` runder bunn-
+  hjørnene, og `background` er fargen hjørnene viser.
+- `page` er det innbyggingen viser, som URLen. Mens et panel flyttes, maler verten et stillbilde av innbyggingen på
+  plassen, og dropper et stillbilde tatt mens `page` hadde en annen verdi.
+- Vinduets `capture(id)` returnerer et JPEG-stillbilde, eller `undefined` mens innbyggingen er skjult og alltid på web.
+
+#### Referanse
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```
+
+## Live-avhengigheter og feilhåndtering
+
+`ctx.use(token)` returnerer en funksjon som leser den reaktive `Live<T>`-tilstanden til pluginen som tilbyr tokenet.
+Pluginen din fortsetter å kjøre selv om leverandøren er slått av. Håndter derfor alle tilstander der kontrakten ikke er `active`.
+Ikke la brukeren sitte igjen med kontroller som ikke reagerer, eller en lasteindikator som aldri stopper.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () => {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" && !!session,
+    run: () => {
+      if (live.status === "active" && session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})
+```
+
+- **`pending`:** leverandøren har ikke startet ennå, for eksempel mens plugin'en lastes eller restarter. Vis en laste-
+  tilstand, eller skjul valgfrie kontroller.
+- **`active`:** leverandøren kjører, og `value` er dens kontrakt eller `Ipc`-klient. `generation` teller aktiveringer, så en
+  leverandør som restarter, kommer tilbake med en ny.
+- **`inactive`, `disabled`:** leverandøren er slått av, fraværende eller ikke tilgjengelig på denne plattformen, som hver
+  `Ipc` er på web. Vis en utilgjengelig tilstand, eller utelat kontrollen.
+- **`inactive`, `failed`:** leverandørens oppsett kastet en feil. Vis en utilgjengelig tilstand.
+- Din egen `main` har ingen `Live`-tilstand. Kall gjennom [`ctx.main`](#use-the-ipc-in-a-window) venter mens den starter, og
+  avvises når den ikke kan svare.
+
+#### Referanse
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }
+```
+
+## Levetider og opprydding
+
+Alt som registreres gjennom `ctx` (`ctx.add`, `ctx.provide`, `ctx.dialogs.open`, `ctx.embeds.create` og `Ipc`-
+hendelseslyttere), trekkes tilbake når dens eier-scope avsluttes:
+
+- Inne i en komponent eller en `createKeyed`-tilbakeringing avsluttes registreringene når den komponenten eller `createKeyed`-kjøringen avhendes.
+- På toppnivået i `setup` avsluttes registreringene når plugin'en deaktiveres, lastes på nytt eller fjernes, eller vinduet
+  lukkes.
+- I `main` avsluttes registreringene når plugin'en deaktiveres, lastes på nytt eller fjernes, eller appen avsluttes. En innbygging avsluttes også
+  når vinduet lukkes.
+
+For andre ressurser, som timere eller sockets, returner en oppryddingsfunksjon fra oppsettet. Den kjører samtidig.
+
+- **Vinduets `setup`** kan ikke være `async`, fordi den kjører under en Solid-eier. Returner en oppryddingsfunksjon, eller bruk
+  `onCleanup` eller `ctx.signal`.
+- **`main`** kan være `async`. Returner, eller løs til, en oppryddingsfunksjon, eller bruk `ctx.onCleanup(fn)`.
+
+### Vindusoppsett
+
+Vinduets `setup` må være synkron. Start asynkront arbeid inne i `createKeyed` eller `createLatest`.
+
+```tsx title="src/gui.tsx"
+import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // Runs once per active generation of Changes; the command is withdrawn with it.
+    createKeyed(ctx.use(Changes), (changes) => {
+      ctx.add(Command, () => ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () => {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() => console.log("still here"), 60_000)
+
+    return () => clearInterval(timer)
+  },
+})
+```
+
+### Hovedoppsett
+
+`main` kan være `async`. Returner, eller løs til, en oppryddingsfunksjon for ressursene den åpner, eller registrer den med
+`ctx.onCleanup(fn)`.
+
+```ts
+async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() => socket.close())
+}
+```
+
+- `ctx.onCleanup` kjører funksjonene sine når plugin'en deaktiveres, lastes på nytt eller fjernes, eller appen avsluttes, sist
+  registrert først. Den kjører en funksjon med en gang når plugin'en allerede er borte.
+- Etter en `await`, returner hvis `ctx.signal` er avbrutt, før du registrerer eller endrer noe.
+- En `async` opprydding utsetter avslutning til den er ferdig, i høyst 3 sekunder.

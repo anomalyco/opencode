@@ -91,7 +91,14 @@ const serve = (incoming: Incoming, handshakes: Semaphore.Semaphore, admit: Effec
         return yield* Link.serve({
           ...carrier(stream, () => connection.close(CLOSE, [])),
           describe: () => {
-            const path = connection.paths().find((path) => path.isSelected)
+            // Iroh selects one path per remote key, not per connection: when a worker dials again while its old
+            // connection is still open (a restart, or a redial before the idle timeout), the old connection's path
+            // stays selected and the home never selects one on the new connection. Fall back to direct before relayed,
+            // then the lowest round trip.
+            const paths = connection.paths()
+            const path =
+              paths.find((path) => path.isSelected) ??
+              paths.toSorted((a, b) => Number(a.isRelay) - Number(b.isRelay) || a.rttMs - b.rttMs)[0]
             return {
               kind: "iroh",
               ...(path ? { path: path.isRelay ? "relayed" : "direct", rtt: path.rttMs } : {}),

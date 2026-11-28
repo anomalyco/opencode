@@ -1,0 +1,79 @@
+---
+title: Budgets
+description: Plafonnez les dépenses mensuelles d’un espace de travail, de ses membres et de ses comptes de service.
+---
+
+Les budgets plafonnent les dépenses mensuelles via des politiques. Les propriétaires et administrateurs les gèrent dans **Controls**.
+
+## Niveaux de budget
+
+| Périmètre de la politique | S’applique à |
+| --- | --- |
+| Tout l’espace de travail | Dépenses combinées de tous les membres et comptes de service |
+| Tous les membres | Chaque membre, ou un plafond commun à tous les membres |
+| Membres avec certaines étiquettes | Les membres auxquels les étiquettes choisies sont attribuées |
+| Ces membres | Des membres précis |
+| Tous les comptes de service | Chaque compte de service, ou un plafond commun |
+| Ces comptes de service | Des comptes de service précis |
+
+Une requête doit respecter tous les budgets applicables. Un plafond plus élevé n’annule jamais un plafond inférieur. Sans budget, les dépenses sont illimitées.
+
+## Budget de l’espace de travail
+
+Le budget de l’espace de travail bloque les requêtes de tout le monde dès que l’espace de travail l’atteint.
+
+1. Ouvrez **Controls** et cliquez sur **Add policy**.
+2. Choisissez **Entire workspace** et ajoutez une règle **Budget**.
+3. Saisissez la limite mensuelle en USD et cliquez sur **Save**.
+
+## Budgets des membres
+
+Choisissez **All members** dans une politique pour fixer un plafond mensuel par membre ou un plafond commun. Pour un groupe plus restreint, sélectionnez des membres ou des étiquettes spécifiques.
+
+Pour fixer le budget d’une personne :
+
+1. Ouvrez la fiche du membre dans **Settings › Members**.
+2. Cliquez sur **Create budget policy**. Le formulaire s’ouvre avec ce membre déjà sélectionné.
+3. Saisissez le montant et cliquez sur **Save**.
+
+Sa fiche indique les politiques qui s’appliquent. Si le membre est aussi soumis à un budget défini pour tous les membres, les deux plafonds s’appliquent.
+
+## Budgets des comptes de service
+
+Dans **Controls**, choisissez **All service accounts** ou **These service accounts**, ajoutez une règle **Budget** et définissez un plafond mensuel par compte ou un plafond commun. La politique couvre toutes les clés appartenant à ces comptes.
+
+## Montants et réinitialisation
+
+- Les montants sont en dollars américains, avec deux décimales au maximum.
+- Les budgets se réinitialisent le 1er de chaque mois à 00:00 UTC.
+- Un budget de `$0` bloque toutes les dépenses comptant dans les budgets.
+- Quand vous ajoutez ou modifiez un budget, les dépenses déjà enregistrées dans le mois restent prises en compte. Le compteur ne repart pas de zéro.
+
+## Ce qui compte
+
+Par défaut, un budget couvre **All spend**. Vous pouvez le limiter à certains modèles : seuls leurs coûts seront alors pris en compte, avec un plafond commun ou un plafond par modèle.
+
+| Dépense | Compte dans les budgets |
+| --- | --- |
+| Modèles Console payants | Oui |
+| Modèles de [vos propres fournisseurs](/console/providers) avec un prix défini | Oui, au prix configuré |
+| [Recherche web](/console/websearch) | Oui, pour les budgets sur toutes les dépenses |
+| Modèles gratuits | Non |
+| Utilisation de [Go](/console/go) dans le cadre de l’offre | Non |
+| Utilisation supplémentaire de Go payée avec des crédits | Oui |
+
+## Quand un budget est atteint
+
+Les nouvelles requêtes échouent avec un HTTP `429` jusqu’à la réinitialisation du budget ou son augmentation par un propriétaire ou un administrateur. La réponse signale qu’un budget fixé par une politique est atteint, sans préciser lequel. Ouvrez la requête dans **Activity › Logs** pour voir la politique qui l’a bloquée.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Les budgets sont vérifiés au démarrage d’une requête. Les requêtes déjà en cours se terminent, si bien que les dépenses peuvent dépasser légèrement la limite.
+
+## Suivre les dépenses
+
+Chaque membre voit ses propres dépenses et sa limite dans **Activity**. Cliquez sur **My usage** pour accéder à **Activity › Overview**, où figurent le détail du budget et les dates de réinitialisation.
+
+Les propriétaires et administrateurs peuvent ouvrir **Activity › Usage** depuis le graphique de dépenses. La page détaille les coûts par jour, modèle et personne, et le bouton **Export usage** télécharge les totaux quotidiens des 7, 30 ou 90 derniers jours au format CSV. Pour télécharger le même fichier depuis un script, utilisez l’[API d’export d’utilisation](/console/api/usage-export).

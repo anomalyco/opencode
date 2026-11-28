@@ -1,0 +1,1865 @@
+---
+title: "伺服器"
+description: "建置 OpenCode 外掛的伺服器部分：工具、掛鉤、整合、指令與 agent。"
+---
+
+外掛的伺服器部分會在 OpenCode 伺服器中執行。它會修改 OpenCode 的行為並新增功能：工具、
+掛鉤、整合、指令與 agent。外掛套件的配置、載入與發布方式請參閱[總覽](/build/plugins)。
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+## 生命週期
+
+`setup` 會在外掛載入時執行。它可以傳回一個清理函式，在外掛卸載時執行。
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### 上下文
+
+外掛上下文基本上就是 [OpenCode 伺服器用戶端](/build/client)。其中讀取資料和執行動作的方法，輸入及回應都與用戶端相同。
+外掛上下文還提供專用方法，可用於轉換、執行階段掛鉤、重新載入、註冊與外掛選項。
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location` 描述此外掛執行個體載入的位置。它包含 `directory`、選用的 `workspaceID` 與 `project` 中繼資料（`id`、
+`directory` 與 `canonical`）。它在 Promise 與 Effect 外掛中都可使用。
+這是外掛執行個體的位置，而不是它能存取的每個工作階段或接收的每個事件的位置。
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### 選項
+
+在 `opencode.json(c)` 中以物件形式傳遞外掛選項。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+在 `setup` 期間從 `ctx.options` 讀取這些值。
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## 轉換
+
+轉換會同步修改 OpenCode 各功能領域的狀態，並以同一領域中先前的註冊結果為基礎。
+`ctx.model.list()` 等登錄讀取會反映目前為止的每個註冊，包括在外掛設定期間；
+啟動批次只會合併更新通知，絕不會延遲讀取的回傳內容。資源狀態 API 仍會
+回報執行中資源的狀態：已註冊定義並不表示其連線或其他資源工作已完成。
+
+來源會透過 `ctx.provider.transform` 提供供應商及不可變的模型定義。
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+任何註冊、移除或 `reload()` 都會將登錄標記為已變更；下一次讀取會依註冊順序將每個
+作用中的轉換重播到全新的值上，藉此重建它。請讓轉換保持輕量且可重複。你已
+讀取的值永遠不會被之後的重建修改。
+
+套用供應商轉換並確認哪些供應商可用後，OpenCode 會為啟用中的供應商建立模型清單，再依序重播各項模型轉換。
+模型原則可檢視所有候選模型，連來源剛更新的模型也包括在內。
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+捕捉的輸入不會自動受到監看。請在同步回呼前載入外部資料，然後在那些輸入變更後呼叫
+`reload()`。此處 `loadFromSource()` 會回傳
+`{ info: Provider.Info, models: readonly Model.Info[] }` 項目。
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+供應商變更會使整個作用中模型結果失效，因此輸出價格原則仍會篩選重新整理後的模型。
+當只有模型轉換捕捉的輸入變更時，請使用 `ctx.model.reload()`。
+
+## API
+
+### Agent
+
+讀取所有 agent，或依 ID 取得一個。
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+註冊轉換以檢視、新增、更新或移除 agent，也可以選取預設 agent。
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+使用 `editor.update` 註冊新的 agent。若 ID 已存在，就編輯該 agent；否則會先以 `Agent.Info.default(id)` 建立 agent，再執行回呼函式。
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
+})
+```
+
+當轉換使用的外部狀態變更後，請重新載入 agent。
+
+```ts
+await ctx.agent.reload()
+```
+
+#### 參考
+
+Schema：[`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### 供應商
+
+讀取可用供應商，或依 ID 檢視單一供應商的中繼資料。
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+供應商轉換會編輯供應商設定與來源定義。透過編輯器讀取時，結果也會包含未啟用的供應商，且提供的定義不可變。
+`models.update` 編輯的是由轉換單獨持有的來源模型副本。
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-5-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+使用 `models.set` 取代供應商的來源清單，然後在捕捉的定義變更後重新載入。
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+若要依帳號探索，請將用來載入清單的連線作為 `sourceConnection` 傳入。當選取另一個連線時，
+OpenCode 會排除該供應商，直到你的外掛發布其更新後的清單。
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### 參考
+
+Schema：[`Provider.Info`](/api#schema-Provider.Info)、[`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### 模型
+
+讀取可用模型與預設選取。
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+模型轉換會編輯整個現用供應商候選集合。已停用的候選項目在所有
+轉換完成前仍可編輯；`update` 只能在可用供應商下新增模型。
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-5-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+回呼會編輯原始模型覆寫。OpenCode 在確認結果時會合併一次供應商預設值；未變更的讀取
+會重用該結果。`editor.provider` 會公開不可變的來源定義（包括未啟用的範本），而不是
+模型轉換的輸出。
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### 參考
+
+Schema：[`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### 指令
+
+讀取某個位置可用的指令。
+
+```ts
+const commands = await ctx.command.list()
+```
+
+使用轉換註冊指令。執行器會收到工作階段、提示詞附件與要求的傳遞模式。
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+當轉換使用的外部狀態變更後，請重新載入指令。
+
+```ts
+await ctx.command.reload()
+```
+
+#### 參考
+
+Schema：[`Command.Info`](/api#schema-Command.Info)、
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### 整合
+
+讀取整合並檢視作用中的憑證。
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+使用 API 金鑰連接整合。
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+開始、檢視、完成或取消 OAuth 連線嘗試。
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+以指令為基礎的連線會公開相同的開始、狀態與取消流程。
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+註冊轉換以檢視整合並管理其驗證方法。
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+當轉換使用的外部狀態變更後，請重新載入整合。
+
+```ts
+await ctx.integration.reload()
+```
+
+#### 參考
+
+Schema：[`Integration.Info`](/api#schema-Integration.Info)、[`Integration.Method`](/api#schema-Integration.Method)、
+[`Connection.Info`](/api#schema-Connection.Info)、[`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### 憑證
+
+將已儲存的憑證設為其整合的作用中憑證。
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### 參考
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+列出 MCP 伺服器及其目前的連線狀態。
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+外掛只能透過轉換管理 MCP 伺服器。使用 `editor.set` 新增或取代伺服器、使用 `editor.update`
+變更其設定，並使用 `editor.remove` 移除它。使用 `editor.list` 與 `editor.get` 檢視設定。
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+在轉換中設定 `disabled: true` 可停用伺服器並中斷連接，或設定 `disabled: false` 啟用它並允許
+OpenCode 連接。OpenCode 會從轉換後的設定協調伺服器生命週期。
+
+當轉換使用的外部狀態變更時，請呼叫 `reload()` 以重新套用轉換並協調伺服器。
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### 參考
+
+Schema：[`Mcp.Server`](/api#schema-Mcp.Server)、[`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded)、
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### 外掛
+
+列出某個位置目前作用中的外掛。
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### 參考
+
+Schema：[`Plugin.Info`](/api#schema-Plugin.Info)、[`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### 引用
+
+讀取某個位置可用的引用。
+
+```ts
+const references = await ctx.reference.list()
+```
+
+註冊轉換以檢視、新增或移除本機與 Git 引用。`get(name)` 會回傳目前設定的來源，
+名稱不存在時則回傳 `undefined`。
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+當轉換使用的外部狀態變更後，請重新載入引用。
+
+```ts
+await ctx.reference.reload()
+```
+
+#### 參考
+
+Schema：[`Reference.Info`](/api#schema-Reference.Info)、[`Reference.LocalSource`](/api#schema-Reference.LocalSource)、
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### Generate（實驗性）
+
+使用所選模型產生內容，而不建立工作階段、叫用工具或加入工作階段記錄。這些 API
+可能會變更。`ctx.generate.text` 仍可使用，但已棄用，請改用 `ctx.experimental.generate.text`。
+
+```ts
+const review = await ctx.experimental.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+  prompt: "Review this proposed action.",
+})
+
+const { images } = await ctx.experimental.generate.image({
+  model: { providerID: "openai", id: "gpt-image-1-mini" },
+  prompt: "A watercolor fox in the snow",
+  aspect: "16:9",
+})
+
+const { answers } = await ctx.experimental.generate.decisions({
+  model: { providerID: "opencode", id: "jev-1.13" },
+  input: [{ type: "text", text: "I was charged twice, please refund one." }],
+  questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
+})
+```
+
+### 權限
+
+在執行動作前請求權限。`assert` 會評估工作階段的[權限規則](/permissions)，
+包括已儲存的核准，並在規則結果為 `ask` 時提示使用者。只有在動作獲准後，Promise 才會成功完成。
+
+```ts
+execute: async (input, context) => {
+  await ctx.permission.assert({
+    sessionID: context.sessionID,
+    agent: context.agent,
+    source: { type: "tool", messageID: context.messageID, id: context.id },
+    action: "deploy",
+    resources: [input.environment],
+    save: [input.environment],
+  })
+  return { content: await deploy(input.environment) }
+}
+```
+
+- `action` 與 `resources` 會與規則比對。任何 `deny` 都會封鎖動作；否則任何 `ask` 都會提示。
+- `save` 列出使用者選擇一律允許時儲存的模式。
+- `agent` 指定要套用哪個 agent 的規則，預設為工作階段的 agent。`source` 會將提示詞附加到工具呼叫。
+- `metadata` 會將額外細節傳遞給權限提示與 `evaluate` 掛鉤。
+
+如果規則拒絕操作，或使用者拒絕並附上意見回饋，就會擲出帶有原因的 `Tool.Error`，讓模型讀到原因後繼續。
+使用者若只拒絕、不附上意見，則會結束目前的步驟。請讓這些錯誤向外傳遞，不要把它們當成工具輸出回傳。
+
+檢視或解析待處理的權限請求。
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
+```
+
+取代以工作階段為範圍的權限規則。它們會在 agent 的規則之後評估，
+且最後一條相符的規則生效。子工作階段會在建立時繼承當時生效的規則。
+
+```ts
+await ctx.session.update({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### 工作階段
+
+建立或讀取工作階段。
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+一次一頁列出工作階段。若要取得下一頁，請將 `cursor.next` 作為 `cursor` 傳回。游標會記住你的
+篩選條件，因此不必重複。
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20 })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+```
+
+變更後續請求使用的 agent 或模型。
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
+```
+
+傳送使用者提示詞、短暫產生請求、指令或合成訊息。
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+await ctx.session.command({ sessionID, name: "review", text: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+`generate` 會回傳 `text` 及該呼叫的 `tokens` 與 `cost`，形式與助理訊息
+回報的相同。
+
+重新命名、中斷或等待工作階段。
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, resume: false })
+await ctx.session.wait({ sessionID })
+```
+
+使用 `remove` 移除暫存工作階段。移除會停止作用中的執行，並遞迴刪除子工作階段。
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+使用 `compact` 要求壓縮。它會回傳已接納的收件匣項目，而不是完成的摘要；壓縮預設會在
+下一個步驟邊界執行。改為傳入 `delivery: "queue"` 可保留佇列順序。
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+使用 `instructions.entry` 附加、列出或移除以鍵識別的工作階段指示項目。工作階段指示會以 `<context key="...">` 區塊呈現這些項目。更新或移除會在下一個步驟邊界通知，不會另排一個訊息回合。
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
+#### 參考
+
+Schema：[`Session.Info`](/api#schema-Session.Info)、[`Model.Ref`](/api#schema-Model.Ref)、
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User)、[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)、
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: ExperimentalSessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<void>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### 技能
+
+讀取某個位置可用的技能。
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+註冊轉換以檢視、新增、更新或移除技能。`get(id)` 會回傳目前的編輯器項目，技能不存在時
+則回傳 `undefined`。
+
+```ts
+import { Skill } from "@opencode/plugin"
+
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: Skill.ID.make("review"),
+    name: Skill.Name.make("Review"),
+    description: "Review the current changes",
+    path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+當轉換使用的外部狀態變更後，請重新載入技能。
+
+```ts
+await ctx.skill.reload()
+```
+
+#### 參考
+
+Schema：[`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### 儲存
+
+儲存、讀取或移除以此外掛為範圍的持久 JSON 值。
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+使用選用的游標分頁依前綴掃描鍵。
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### 參考
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### 工具
+
+在轉換回呼外讀取工具，會取得所有轉換套用完畢後目前註冊的工具。每個工具的 `id` 都包含其實際名稱。
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+使用同步轉換註冊、更新與移除工具，包括在 Promise 外掛中。請在註冊或重新載入前
+載入外部資料。較晚的有效註冊會覆寫相同的有效工具名稱。
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+Promise 工具執行器會收到 `context.signal`。請將它傳遞給可取消的工作，例如 `fetch`，讓停止工作階段
+時也能停止底層操作。
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+#### 自由格式工具輸入
+
+只有一個必填字串欄位的直接工具，可以讓模型不經 JSON 包裝直接寫入該字串。將 `freeform` 設為 `{ type: "text" }`、`{ type: "regex", pattern }` 或 `{ type: "lark", grammar }`。
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+若所選模型的 API 在 models.dev 中列出 `regex`，模型可以直接寫入 `OPS-42`。否則 Core 會**只**省略 `freeform`：模型仍有 `ticket` 工具，並以 `{"id":"OPS-42"}` 呼叫它。格式清單缺少或為空表示不支援自由格式。無論如何，執行器都會收到 `{ id }`。
+
+在 Code Mode 中（`codemode: true`），自由格式工具會直接接受其字串，例如 `await tools.ticket("OPS-42")`。`await tools.ticket({ id: "OPS-42" })` 也可使用。
+
+在變更回呼所捕捉的來源資料後，請呼叫 `reload()`。重新載入會重播作用中的轉換，而不
+變更其順序；它不會重新執行外掛設定。
+
+```ts
+await ctx.tool.reload()
+```
+
+使用 `list()` 與 `get()` 檢視編輯器中目前的工具。工具具有包含其有效名稱的 `id`，
+當該 ID 不存在時，`get()` 會回傳 `undefined`。請以有效工具名稱（含命名空間，如上方的 `acme_greeting`）呼叫 `update` 和 `remove`。
+命名空間中的句點會換成 `_`；工具名稱則保留字母、數字、`_` 和 `-`，其餘字元一律換成 `_`。找不到名稱時會略過該操作；建立工具時，必須
+以 `add` 提供完整定義。更新會保留名稱與命名空間。請指派新的 schema 或選項來取代
+它們，而不要變更巢狀值。無效的更新會記錄下來，並保留先前的定義。
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+新增、更新與移除都會依序重播，MCP 目錄重新整理後也不例外。釋放註冊時，會撤銷該項註冊的變更，並依其餘轉換重建。
+
+釋放註冊會移除該項轉換，再依其餘轉換重建，因此先前被覆寫的定義會再次生效。重複釋放不會產生額外效果；卸載外掛也會釋放其註冊。
+
+```ts
+await registration.dispose()
+```
+
+每個模型請求都會擷取一份固定且可執行的工具快照。之後的轉換、重新載入或釋放註冊只會影響未來的
+快照，不會改動已擷取的定義、Code Mode 命名空間說明或執行器。執行器若透過閉包參照可變的外掛資料，
+仍會讀到後續的變更。如果某個值必須固定在該定義中，請在轉換內擷取它。
+
+#### 參考
+
+Schema：[`Tool.Content`](/api#schema-Tool.Content)、[`Tool.TextContent`](/api#schema-Tool.TextContent)、
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+讀取儲存庫資訊、工作副本狀態或檔案差異。
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branch.list({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+使用轉換註冊以位置為範圍的 VCS 提供者。符合偵測到之儲存庫類型的提供者會
+自動選取；使用 `editor.default.set` 選取其他提供者。
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+提供者回呼會收到目前位置、工作副本根目錄、標準專案根目錄與選用的儲存庫
+存放區。差異回呼也會收到所選模式、要求的上下文與輸出位元組額度。儲存庫探索
+仍會使用 OpenCode 內建的 Git 與 Mercurial 偵測器。
+
+提供者可以選擇性實作 `init(scope, { signal })`，以在 `scope.worktree` 中建立儲存庫。初始化會依 ID
+選取提供者（預設為 Git），而不是依偵測到的儲存庫類型。即使位置尚無儲存庫，也請註冊具有 `init` 的提供者；
+OpenCode 會在呼叫它之前檢查目錄存在且沒有儲存庫，然後重新探索專案。新的儲存庫格式仍需要此回呼以外的探索支援。
+
+#### 參考
+
+Schema：[`Vcs.Info`](/api#schema-Vcs.Info)、[`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)、
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branch: {
+    list(input?: VcsBranchListInput, requestOptions?: RequestOptions): Promise<VcsBranchListOutput>
+  }
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Worktree
+
+使用一般外掛生命週期註冊本機 worktree 策略。此範例中的實作模組負責
+選項驗證，以及後端的 `create`、`remove` 與 `list` 操作。
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+透過 `plugins` 載入外掛，並另行設定共用目的地：
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- 新增策略會自動選取它。最後一個作用中的註冊生效；不需要策略選擇設定。
+- 處置其註冊或卸載外掛會還原先前的實作，最終回到內建的 Git 策略。
+- `reload()` 會在捕捉的輸入變更後重播轉換；它不會重新執行外掛設定。
+- 建立失敗不會改用 Git 重試。即使預設變更，既有 worktree 仍保留其記錄的擁有者。
+- 策略會管理本機目錄。遠端工作區佈建不屬於此介面。
+
+#### 操作
+
+外掛上下文會公開與用戶端相同的專案式 worktree 操作。每個操作都需要
+`projectID`。`list` 只會讀取已儲存的清單，包括同一專案的已知 checkout；它不會載入
+設定、啟動外掛或探索檔案系統變更。
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+建立 worktree 時，會從專案記錄的 `canonical` 目錄載入設定與外掛，並使用選定的策略。
+它接受選用的父 `directory`、來源 `from`、起始 `branch` 與 `name`。
+來源預設為主要 checkout，且 `from` 指定的來源必須屬於該專案。選擇來源
+不會變更設定根目錄。
+提供的起始 ref 必須受所選策略支援；
+例如 Rift 的原生快照操作沒有 ref 選擇選項。
+
+建立與重新整理作業會等待主要 checkout 的外掛啟用。在該 checkout 的外掛初始化期間發出的呼叫，
+會看到當時已有的註冊項目，不會等到呼叫端的外掛本身啟用。
+
+移除 worktree 時，會載入主要 checkout 的設定並啟用其外掛，再使用該 worktree 記錄的策略，而不是目前選定的預設策略。
+若記錄中的策略已無法使用，就會發生錯誤。worktree 的目的地可以位於其他位置：
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+如果找不到原先管理該 worktree 的策略，移除作業會失敗，不會改用 Git。策略可從 `@opencode/plugin` 匯入 `Worktree`，並擲出 `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })`，要求使用者確認強制移除，而不必依賴 Core 或 Git 錯誤。
+
+重新整理會載入主要 checkout 的設定，並要求所有可用策略在已知的 checkout 根目錄中尋找 worktree。
+OpenCode 會合併結果，保留目錄與其管理策略的對應，並從清單移除已不存在的目錄。若某個來源探索失敗，OpenCode 會記錄錯誤，
+並繼續處理其他來源。目錄只要仍存在，即使沒有任何可用策略回報，也會保留在清單中。請監聽
+`worktree.updated` 並再次呼叫 `list` 以讀取變更後的清單。
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### 參考
+
+實作會在命名與衝突處理後收到建議的目的地。請從 `create` 傳回實際目錄；
+當後端需要自己的配置時，它可能不同。OpenCode 會解析傳回的路徑，並將其用於
+清單、啟動指令與 API 結果。傳回的目錄必須存在。
+
+選擇其他目的地的策略會自行處理那裡的命名衝突。OpenCode 仍會在呼叫策略前建立建議的父
+目錄。`list` 只能回報策略擁有的目錄，以及任何儲存庫根目錄。
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+Promise 回呼必須配合 `signal` 取消。Effect 回呼會回傳 Effect，並改用 Effect 中斷。
+註冊仍以外掛執行階段為範圍；專案操作會使用主要 checkout 的登錄。
+Core 設定轉接器會將目錄設定饋入該登錄。
+
+### 網路搜尋
+
+列出網路搜尋提供者，或透過所選提供者執行查詢。
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+註冊提供者並以轉換選取預設提供者。
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = (await response.json()) as { url: string; title: string; content: string }
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+選擇 `false` 可停用網路搜尋，或在外部狀態變更後重新載入提供者。
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### 參考
+
+Schema：[`WebSearch.Provider`](/api#schema-WebSearch.Provider)、[`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### 事件
+
+訂閱已連接伺服器的公開事件串流。請在外掛清理期間中止串流。傳入 `types`，例如 `ctx.event.subscribe({ types: ["config.updated"] })`，即可只接收那些事件類型；事件會相應地具型別。外掛在伺服器內執行，因此與 SDK 用戶端不同，它們永遠不會收到 `server.connected`。未知的類型名稱會被忽略，並在伺服器日誌中留下警告。
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### 參考
+
+Schema：[`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventContext {
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
+}
+```
+
+## 掛鉤
+
+掛鉤會攔截即時操作。在其網域上註冊掛鉤，並在不再需要時處置
+傳回的註冊。
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+多個外掛可以註冊相同的掛鉤。OpenCode 會依外掛順序執行它們，
+因此較晚的掛鉤會看到較早掛鉤所做的變更。
+
+### 工作階段
+
+工作階段掛鉤會攔截提示詞收錄、模型呼叫、原生 HTTP 與重試。
+
+#### 建立工作階段分支
+
+建立工作階段分支時，`fork` 掛鉤會在 OpenCode 複製記錄後、呼叫傳回前執行。`sessionID` 識別新的工作階段。
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
+#### 提示詞收錄
+
+在解析附件與技能、將提示詞收錄至持久收件匣之前，攔截使用者送出的提示詞：
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+掛鉤會收到一份由它單獨持有、可以修改的草稿：
+
+- `prompt` 包含 `text`、`files`、`agents` 中提到的 agent，以及選取的 `skills`。
+- `metadata` 包含應用程式為收錄流程定義的中繼資料。
+- `delivery` 預設為 `"steer"`，可以變更為 `"queue"`。
+- 工作階段與訊息 ID 是唯讀的，掛鉤不能改變提示詞收錄的目標。
+
+掛鉤新增的檔案與技能會遵循正常的解析與驗證
+路徑。改寫文字時，請更新或移除不再相符的附件 `mention` 位移。
+提及 agent 不會切換工作階段目前使用的 agent。
+
+提示詞掛鉤會在下列情況下執行：
+
+- 掛鉤會在工作階段的位置外掛就緒後，依註冊順序執行。
+- 透過 `session.prompt` 提交的指令會執行掛鉤。
+- 合成訊息、shell 訊息、壓縮控制與移動控制不會。
+- 掛鉤會在收錄時執行一次，而非每次呼叫模型前都執行。
+- 無法將掛鉤限定於特定供應商，因為系統會在收錄後才解析模型。
+
+修改後的內容就是正式儲存的使用者輸入。準備作業若失敗或中斷，OpenCode 就不會收錄該提示詞。
+
+請確保提示詞掛鉤可以安全重試。系統不保證掛鉤的副作用只會發生一次：
+
+- 重試尚待處理或已傳遞的 ID 時，會回傳最初的收錄結果，不會重新執行掛鉤。
+- 同時提交可能使掛鉤執行多次，但只有第一筆成功收錄的結果會生效。
+- 提示詞掛鉤會轉換輸入，且不公開具型別的拒絕 API。
+
+#### 模型請求
+
+在模型派送前立即修改組合後的系統指示、訊息、工具或請求選項。工作階段發出的每種
+請求都有自己的掛鉤，因此外掛可以分別處理 agent 迴圈與輔助請求：
+
+- `context` 會為 agent 迴圈執行，包括工具驅動的續接。
+- `compaction` 會為檢查點摘要執行。`messages` 是正在摘要的對話記錄；OpenCode 會在掛鉤執行後附加其
+  摘要提示詞。設定 `result` 可自行記錄壓縮並跳過模型呼叫；它會採用
+  與完成的壓縮訊息相同的欄位。
+- `generate` 會為短暫的 `ctx.session.generate` 呼叫執行。
+- `title` 會為標題產生執行。它沒有 `agent` 或 `tools`。設定 `result` 可自行提供標題。
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+變更只會影響對外模型呼叫，不會影響持久記錄或設定。應套用至
+每個請求的掛鉤，必須為每種請求註冊。
+
+`context`、`compaction` 與 `generate` 掛鉤中的訊息會攜帶其儲存訊息的 `metadata`，為唯讀
+（例如 `prompt` 掛鉤設定的內容）。它不會傳送給模型。
+
+持有 OpenCode 指示的 `system` 部分也會在 `metadata.experimental.instructions` 中列出每個來源為
+`{ key, text }`，例如 `core/date` 或 `core/environment`，讓掛鉤能區分來源。此清單是複本：
+編輯該部分的 `text` 不會更新它。這是實驗性功能，可能會變更。
+
+請求覆寫遵循下列規則：
+
+- 每次模型呼叫的 `options` 都會從空開始；它不包含已解析的模型設定。
+- 具型別的鍵是產生設定；任何其他鍵會作為供應商選項傳遞給所選協定。
+- 掛鉤會依註冊順序執行，並看到較早掛鉤所做的覆寫。
+- 請求覆寫優先於模型預設值，模型預設值優先於路由預設值。
+- 供應商選項物件會遞迴合併；陣列與純量值會取代先前的值。
+- 刪除覆寫或設為 `undefined` 會退回設定的預設值，而不是移除它們。
+- 轉成所選協定的格式之後，才會套用原始 HTTP 主體的覆寫，因此也能覆寫轉換後產生的欄位。
+
+#### 供應商選項
+
+供應商選項使用所選協定的語意選項名稱，而不是原始 HTTP 主體欄位。請將供應商專屬
+設定限定於相符的供應商。例如，OpenAI Responses 使用 `reasoningEffort`：
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+產生選項取決於所選協定與模型：
+
+- `maxTokens` 是語意的輸出 token 上限。
+- Gemini 支援 `topK`；OpenAI Responses 不公開它。
+
+#### 模型解析
+
+實驗性。每當工作階段為請求解析模型時、在為其建構任何內容之前執行。`model` 一開始
+是所選模型；變更它即可使用同一供應商的另一個模型來服務此請求，包括從模型選取器中隱藏的模型。
+工作階段會保留其選取的模型；請求與助理訊息則使用新的模型。
+`kind` 表示正在解析哪個請求，因此路由器可以略過標題或在壓縮後重新路由。來自
+另一個供應商的模型會以無法使用失敗。
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
+
+#### 模型請求
+
+修改模型請求設定，並可選擇將掛鉤限制為單一供應商。事件會攜帶與
+下列 HTTP 掛鉤相同的 `kind`。
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### 原生 HTTP
+
+修改原生供應商請求或回應。其主體是一次性串流；讀取前請先複製或取代主體。
+
+這兩個掛鉤都會為工作階段發出的每個請求執行。`event.kind` 表示哪個流程發出請求：agent
+迴圈為 `"primary"`、檢查點摘要為 `"compaction"`、標題產生為 `"title"`，短暫
+`ctx.session.generate` 呼叫則為 `"generate"`。請用它而非 agent ID 來區分輔助請求。
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### 原生 WebSocket（實驗性）
+
+透過 WebSocket 串流的供應商會為每個工作階段開啟一條連線，並在請求之間重複使用，因此
+`http.request` 與 `http.response` 永遠不會看到該流量。`experimental.ws.handshake` 掛鉤會在每次模型
+呼叫時、選取連線前執行一次。它攜帶與 HTTP
+掛鉤相同的 `sessionID`、`agent`、`model` 與 `kind`，以及連線的 `url` 與 `headers`。變更 `url` 或 `headers` 會改用其他通訊端，因此輪替 Bearer 權杖時會重新建立連線。
+
+HTTP 掛鉤仍會為每個 HTTP 請求執行，包括 WebSocket 路由退回的請求。
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send` 與 `experimental.ws.receive` 會公開訊框本身，是編輯 HTTP 請求或回應主體的 WebSocket 對應功能。
+`send` 會在供應商驅動程式建立對外訊框後、寫入前執行；`receive` 則會在每個傳入訊框被驅動程式觀察前執行。
+兩者都會以字串攜帶訊框，並在掛鉤傳回時送出 `frame` 的內容。
+
+OpenCode 不會驗證改寫後的訊框。驅動程式會從供應商的回覆追蹤狀態，因此改變協定意義的
+改寫是外掛的責任，就像改寫 HTTP 主體一樣。
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+這些掛鉤是實驗性功能，其名稱或形式可能會變更。
+
+#### 重試原則
+
+供應商請求失敗時，你可以覆寫是否重試的決定，或另設重試前的等待時間（毫秒）。OpenCode 會先
+判定錯誤類型、依原則提出處理方式，再執行掛鉤，最後才排程重試。掛鉤不提供 OpenCode
+在內部如何執行下一次嘗試的資訊。
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+重試掛鉤可以變更 OpenCode 的初始 `decision`，讓終止性失敗變成可重試，
+或否決建議的重試。
+
+重試決定遵循下列規則：
+
+- 多個掛鉤會依註冊順序執行，較晚的掛鉤會看到目前的決定。
+- 內建的最大嘗試次數仍是硬性限制。
+- `attempt` 是正在考慮的實際嘗試。初始請求是 `1`，因此第一次重試是 `2`。
+- `NaN`、無限或負值等無效延遲會退回計算出的延遲。
+- 上下文溢位復原會獨立處理，因為它會壓縮對話，而不是重試相同的請求。
+
+#### 工作階段參考
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  native?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### 權限
+
+在設定的規則評估後、動作執行或權限提示發布前，檢視權限決定。
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+權限掛鉤遵循下列規則：
+
+- 掛鉤會為 `allow` 與 `ask` 決定執行。
+- 明確設定的 `deny` 是最終結果，不會叫用掛鉤。
+- 掛鉤可以將 `effect` 變更為 `allow`、`ask` 或 `deny`。
+- `message` 會出現在升級的權限請求中，或成為拒絕原因。
+
+#### 參考
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### Shell
+
+在執行前修改 shell 指令、工作目錄、逾時、可執行檔或環境變數。
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### 參考
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### 工具
+
+在執行前檢視或取代工具輸入。
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+在執行後檢視成功的結果或失敗。
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### 參考
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## 支援 V1
+
+外掛可以從同一個套件進入點支援 V1 與 V2。預設匯出
+一個含有 V1 `server()` 函式與 V2 `setup()` 函式的物件：
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- V1 會呼叫 `server()` 並使用傳回的掛鉤。
+- V2 會讀取預設匯出的 `id` 與 `setup()`（Effect 外掛則為 `effect()`），並忽略 `server()`。
+- 請讓每個實作使用自己的 API；共用匯出不會將 V1 掛鉤轉譯為 V2 掛鉤。
+- 將 `Plugin.define(...)` 展開到匯出物件中，讓它與 `server()` 分開對 V2 定義進行型別檢查。
+
+OpenCode `1.18.29` 支援 V1 物件形式。較舊的 V1 版本可能
+預期函式匯出；請以你打算支援的最舊 V1 版本與 V2 測試已安裝的套件。

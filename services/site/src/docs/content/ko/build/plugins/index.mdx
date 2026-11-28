@@ -1,0 +1,120 @@
+---
+title: "플러그인 만들기"
+description: "서버 파트, TUI 파트, GUI 파트 또는 이들의 조합을 담은 하나의 패키지로 OpenCode 플러그인을 만드세요."
+---
+
+플러그인은 OpenCode의 동작을 바꾸고 새 기능을 추가합니다. 플러그인은 서버 파트, TUI 파트, GUI 파트 또는 이들의 조합을 담은 하나의 패키지입니다.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+기존 OpenCode 1 플러그인을 마이그레이션한다면 [V1 플러그인 마이그레이션 가이드](/build/plugins/migrate-v1)를 따르세요.
+
+## 파트
+
+패키지는 각 파트를 별도로 내보냅니다. 모든 파트의 SDK는 하나의 `@opencode/plugin` 의존성을 공유합니다.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **서버**(`.` 또는 `./server`)는 `@opencode/plugin`으로 OpenCode 서버에서 실행됩니다. 도구, 훅,
+  통합 기능, 명령어, 에이전트를 추가합니다. [서버](/build/plugins/server)를 참고하세요. Effect API는
+  [Effect 플러그인](/build/plugins/effect)을 참고하세요.
+- **TUI**(`./tui`)는 `@opencode/plugin/tui`로 터미널 UI에서 실행됩니다. [TUI](/build/plugins/cli)를 참고하세요.
+- **GUI**(`./gui-experimental`)는 모든 OpenCode Desktop 창에서 `setup`을, 데스크톱 앱의 메인 프로세스에서
+  `main`을 `@opencode/plugin/gui`로 실행합니다. [GUI](/build/plugins/gui)를 참고하세요.
+- **RPC**(`./rpc`)는 서버 파트가 구현하고 다른 파트와 클라이언트가 호출하는 타입 지정 계약입니다.
+  [RPC](/build/plugins/rpc)를 참고하세요.
+
+플러그인의 `id`는 서버 파트의 `Plugin.define`에서 나옵니다. GUI 파트가 있고 서버 파트가 없는 패키지는 패키지
+이름(또는 로컬 디렉터리 이름)을 `id`로 사용합니다. TUI 파트는 자체 `id`를 선언하고, GUI 파트는 선언하지 않으며
+플러그인의 ID를 사용합니다.
+
+## 로드
+
+`.opencode/plugins/` 아래의 플러그인은 위의 로컬 예제처럼 자동으로 로드됩니다. 게시된 패키지나 다른 위치의 플러그인
+디렉터리를 로드하려면 `plugins`에 추가하세요. 설정 파일은 `opencode.json(c)`입니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- 하나의 항목이 모든 파트를 로드합니다. TUI는 서버가 로드하는 플러그인의 TUI 파트를 로드하고, OpenCode Desktop은
+  전역 `opencode.json(c)`의 플러그인 GUI 파트를 로드합니다.
+- TUI 파트만 있는 패키지는 대신 [`cli.json`](/cli/plugins)에 넣습니다.
+- `package.json`의 `name`과 `exports`가 있는 로컬 플러그인 디렉터리는 게시된 패키지처럼 이를 통해 파트를
+  로드합니다. 없으면 루트의 파일 이름을 사용합니다. `server`(없으면 `index`), `tui`, `rpc`에 `.ts`, `.tsx`, `.js`
+  확장자를 붙인 파일과 `gui-experimental.cjs`(또는 `.js`)입니다.
+- 로드와 구성 옵션은 [플러그인 구성](/plugins)을 참고하세요.
+
+## 게시
+
+게시된 플러그인은 위 `package.json`을 가진 npm 패키지입니다. 파트는 로컬 플러그인과 같은 기본 export를
+사용합니다.
+
+```bash
+npm publish
+```
+
+- 다른 플러그인과 클라이언트가 구현을 로드하지 않고 [RPC 계약](/build/plugins/rpc)을 가져와야 하면 `./rpc`를
+  export하세요.
+- 게시 전에 GUI 번들을 빌드하고 `files`로 포함하세요.
+  [번들 빌드](/build/plugins/gui#build-the-bundle)를 참고하세요.
+- 대상으로 하는 OpenCode 릴리스와 호환되는 버전을 사용하고, 워크스페이스에 링크된 복사본이 아니라 설치된
+  패키지를 테스트하세요. 더 새로운 API 계약을 채택하면 호환되는 플러그인 업데이트를 게시하세요.
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    OpenCode 서버에서 도구, 훅, 통합, 명령어, 에이전트를 추가합니다.
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    터미널 UI에 명령어, 라우트, 슬롯, Markdown 렌더러를 추가합니다.
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    OpenCode Desktop에 패널, 명령어, 설정 페이지, 네이티브 통합을 추가합니다.
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    서버 파트에서 다른 파트와 클라이언트에 타입이 지정된 메서드와 이벤트를 제공합니다.
+  </Card>
+</CardGroup>

@@ -3,6 +3,8 @@ use crate::support::{self, DIRECTORY, Fake, Harness, Log, deref_harness, list};
 use std::path::Path;
 use std::sync::Arc;
 
+use opencode_api::generated::SessionID;
+use opencode_tui::Route;
 use opencode_tui::prompt::editor_context::{self, LabelState, Source, zed};
 use opencode_ui::path::Flavor;
 use opencode_ui::prompt_input::parse::file_url;
@@ -15,6 +17,9 @@ use ide::Ide;
 fn fake() -> Fake {
     Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/vcs") => (200, list(DIRECTORY, json!({}))),
+        ("GET", "/api/session/ses_b") => (200, json!({ "data": support::test_session("ses_b", "Write docs") })),
+        ("GET", "/api/session/ses_b/message") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", path) if path.starts_with("/api/session/ses_b/") => (200, json!({ "data": [] })),
         ("POST", path) if path.ends_with("/synthetic") => (
             200,
             json!({ "data": {
@@ -197,6 +202,29 @@ fn zed_selection_is_read_from_its_database() {
     setup.wait("the wide selection", wide);
     let range = setup.tui.prompt.editor.selection().unwrap().ranges[0].selection;
     assert_eq!((range.start.character, range.end.character), (2, 4));
+}
+
+#[test]
+fn a_second_session_in_the_same_directory_clears_the_zed_selection() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let db = root.path().join("db.sqlite");
+    let file = root.path().join("src/index.ts");
+    std::fs::create_dir(root.path().join("src")).unwrap();
+    std::fs::write(&file, "const a = 1\nconst b = 2\n").unwrap();
+    zed_database(&db, &file, (6, 17));
+    let setup = Setup::new(Source { zed_terminal: true, zed_db: vec![db], ..Source::default() });
+    setup.wait_for("src/index.ts#1-2");
+    // The first session's prompt has followed this directory, so the next prompt's follow is a session switch.
+    setup.wait_for("Fix the parser");
+    setup.tui.navigate(Route::Session { id: SessionID("ses_b".into()) });
+    setup.wait_for("Write docs");
+    setup.wait("the label to go", || setup.tui.prompt.editor.label_state() == LabelState::None);
+    assert!(!setup.app.text().contains("index.ts#"));
+    // The next prompt carries no editor context.
+    setup.app.type_text("hello");
+    setup.app.press("return");
+    setup.wait("the prompt", || setup.posts().iter().any(|(path, _)| path.ends_with("/prompt")));
+    assert!(setup.posts().iter().all(|(path, _)| !path.ends_with("/synthetic")));
 }
 
 /// A Zed database whose only workspace is `/` with `file` active, selected from byte `start` to `end`. Zed keeps

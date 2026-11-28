@@ -1123,17 +1123,19 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   expect(gutter.x + gutter.width).toBe(chat.x)
 
   const actions = await Promise.all(
-    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
-      const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
+    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-automations", "vertical-tabs-new-session"].map(
+      async (action) => {
+        const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
 
-      if (!box) throw new Error(`${action} is not rendered`)
+        if (!box) throw new Error(`${action} is not rendered`)
 
-      return box
-    }),
+        return box
+      },
+    ),
   )
 
   const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([3, 3])
+  expect(gaps).toEqual([3, 3, 3])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
@@ -2419,6 +2421,46 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
   expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
+})
+
+test("the inbox opens sessions without tabs and ignores the tab shortcuts", async ({ page }) => {
+  const prompts: string[] = []
+
+  await mockWorkspace(page, {
+    name: "InboxNoTabs",
+    sessions: [a, b],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+    onPrompt: (input) => void prompts.push(input.sessionID),
+  })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+
+  const editor = page.locator('[data-component="composer-editor"]')
+
+  const storedTabs = async () =>
+    JSON.parse((await page.evaluate(() => localStorage.getItem("opencode.window.browser.dat:tabs"))) ?? "[]")
+
+  await rows.filter({ hasText: a.title }).click()
+  await expectPath(page, sessionHref(a.id))
+  await rows.filter({ hasText: b.title }).click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(editor).toBeEditable()
+
+  // ⌘W, ⌥⌘W and ⇧⌘T act on tabs, which the inbox doesn't have.
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.keyboard.press("ControlOrMeta+Alt+w")
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expectPath(page, sessionHref(b.id))
+  await expect(rows.filter({ hasText: b.title })).toHaveAttribute("data-state", "active")
+  await expect.poll(storedTabs).toEqual([])
+
+  // Sending from a session with no tab still works, and opens none.
+  await editor.fill("Hello from the inbox")
+  await editor.press("Enter")
+  await expect.poll(() => prompts).toEqual([b.id])
+  await expect(page.locator('[data-timeline-row="UserMessage"]')).toContainText("Hello from the inbox")
+  await expect.poll(storedTabs).toEqual([])
 })
 
 test("renaming an inbox card updates the same session on Home", async ({ page }) => {

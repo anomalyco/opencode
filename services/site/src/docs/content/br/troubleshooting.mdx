@@ -1,0 +1,271 @@
+---
+title: "Solução de problemas"
+description: "Diagnostique problemas do OpenCode verificando o serviço em segundo plano, inspecionando a API, lendo logs e capturando perfis."
+---
+
+<Callout type="tip">
+  Você pode pedir ao próprio OpenCode que investigue o problema. Descreva o que aconteceu e indique esta página. Ele pode seguir
+  os passos abaixo, inspecionar o serviço e os logs e ajudar a identificar o problema.
+</Callout>
+
+O OpenCode usa uma arquitetura cliente-servidor. Um servidor em segundo plano gerencia sessões, plugins, permissões e outros dados
+de estado da aplicação. Primeiro, identifique se o problema está em um cliente, no servidor compartilhado ou em um projeto específico.
+
+## Verificar o serviço em segundo plano
+
+Mostre as informações atuais do servidor:
+
+```bash
+opencode service status
+```
+
+Verifique se a API está funcionando:
+
+```bash
+opencode api get /api/info
+```
+
+Se o serviço travar ou não estiver funcionando, reinicie-o:
+
+```bash
+opencode service restart
+```
+
+Você também pode pará-lo e iniciá-lo explicitamente:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  O OpenCode normalmente descobre ou inicia o serviço compartilhado em segundo plano automaticamente. Os comandos de serviço só são
+  necessários ao diagnosticar o ciclo de vida dele.
+</Callout>
+
+## Permitir uma origem de navegador
+
+Se um cliente de navegador em outra origem não consegue se conectar por causa de CORS, adicione a origem do cliente à configuração do serviço:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Use uma origem HTTP ou HTTPS exata, incluindo a porta quando necessário, sem caminho nem barra final. Para permitir várias
+origens, passe uma lista separada por vírgulas como um único argumento; espaços em branco ao redor de cada origem são removidos:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` imprime um array JSON. Remova a lista configurada com:
+
+```bash
+opencode service unset cors
+```
+
+Ao definir ou remover a configuração, o serviço em segundo plano é interrompido. Na próxima inicialização, ele carrega a nova configuração;
+use `opencode service start` para iniciá-lo explicitamente.
+
+Para um servidor em primeiro plano, repita `--cors` para cada origem adicional permitida:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+Com `serve --service`, as flags `--cors` fornecidas substituem a lista persistida naquele processo. Sem essas flags, o modo de serviço
+usa a lista persistida. O CORS não muda o endereço de escuta nem contorna a autenticação do servidor.
+
+## Inspecionar a API
+
+O comando `api` usa o fluxo local de descoberta e autenticação do serviço. Ele aceita um método e caminho HTTP ou um
+ID de operação OpenAPI.
+
+Consulte a [referência da API](/api) para todos os endpoints e IDs de operação.
+
+Passe um corpo de requisição JSON com `--data` ou `-d`, e adicione cabeçalhos com `--header` ou `-H`.
+
+<Callout type="warning">
+  Executar `opencode api` pode iniciar o serviço em segundo plano se não houver um serviço compatível e funcionando.
+</Callout>
+
+## Ler logs
+
+As builds instaladas gravam logs em:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Acompanhe o log enquanto reproduz o problema:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Cada linha inclui um ID de `run` do processo e um campo `role`. Use `role=server` para atividade de sessão, provedor, plugin, permissão e
+ferramentas.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## Exportar telemetria
+
+O OpenCode pode enviar logs e traces para um coletor OpenTelemetry ou um backend de APM que aceite OTLP sobre HTTP.
+Defina a URL base do coletor, sem incluir um caminho:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variável                      | Comportamento |
+| ----------------------------- | ------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | URL base. Os logs vão para `<endpoint>/v1/logs` e os traces, para `<endpoint>/v1/traces`. Se a variável não estiver definida, a exportação fica desativada. |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | Cabeçalhos no formato `key=value`, separados por vírgulas, enviados em cada exportação. Um exemplo é uma chave de API. |
+| `OTEL_RESOURCE_ATTRIBUTES`    | Atributos no formato `key=value`, codificados para URL e separados por vírgulas, adicionados a cada registro. Se uma entrada estiver malformada, todas são descartadas. |
+
+Cada registro também inclui `service.name` (`opencode`), `service.version`, `deployment.environment.name` (o canal de
+lançamento), `opencode.client` e `opencode.run`, o mesmo ID de execução que aparece no arquivo de log.
+
+O serviço em segundo plano é um processo separado e não herda as variáveis do seu shell. Defina as variáveis também
+no serviço para rastrear chamadas ao modelo e execuções de ferramentas:
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
+## Capturar um snapshot de heap
+
+Grave um snapshot de memória (heap) do servidor em segundo plano em execução em qualquer plataforma:
+
+```bash
+opencode debug heap-dump
+```
+
+O comando espera até o snapshot ficar completo e imprime o caminho dele:
+
+```text
+/home/me/.local/share/opencode/log/heap-48213-2026-10-23T013012345Z.heapsnapshot
+```
+
+Grave em outro lugar com `--directory`. O servidor cria o diretório quando ele não existe:
+
+```bash
+opencode debug heap-dump --directory ./snapshots
+```
+
+- Ele só usa um servidor que já está rodando. Nunca inicia, substitui nem reinicia um.
+- Use `--server <url>` para capturar um snapshot de um servidor que você iniciou com `opencode serve`. Se o servidor exigir senha,
+  defina `OPENCODE_PASSWORD`. Nesse caso, `--directory` indica um caminho na máquina do servidor.
+- Abra o arquivo no painel Memory do Chrome DevTools.
+
+<Callout type="warning">
+  O servidor pausa enquanto grava o snapshot, e o uso de memória dele pode aumentar por um curto período. O snapshot pode
+  conter prompts, conteúdo de arquivos e credenciais. Não o compartilhe publicamente.
+</Callout>
+
+### No app desktop
+
+Execute **Capture heap snapshots** na paleta de comandos. O comando cria uma subpasta em Downloads com um snapshot de
+cada parte do app, além de detalhar o uso de memória que os snapshots não mostram:
+
+```text
+opencode-heap-2026-10-23T013012345Z/
+  memory.json                  where the memory is, per process, in MiB: start here
+  memory-infra.json            Chromium's memory dump trace; open it in https://ui.perfetto.dev
+  heap-48213-….heapsnapshot    the desktop's own server
+  window-1-48390.heapsnapshot  one per app window
+  main-48102.heapsnapshot      the desktop main process
+  gpu.json                     the GPU and driver
+  manifest.json                processes, PIDs, and memory before and after; written last
+```
+
+- Um snapshot de heap contém apenas objetos JavaScript e a página. Imagens, layout, camadas do compositor e memória de GPU ficam em
+  `memory.json` e `memory-infra.json`.
+- A captura não inclui servidores remotos. Use `opencode debug heap-dump` na máquina remota.
+- O servidor grava o snapshot direto na pasta, sem mover nem copiar arquivos grandes.
+- Abas do navegador não são incluídas, porque os snapshots delas contêm o conteúdo das páginas que você visitou.
+
+## Capturar perfis de CPU e memória
+
+No macOS e no Linux, você pode enviar um sinal a um processo do OpenCode em execução para capturar dados de diagnóstico. Obtenha o PID
+do servidor em segundo plano no endpoint de verificação de integridade:
+
+```bash
+opencode api get /api/info
+```
+
+Use o `pid` da resposta com um destes sinais:
+
+- `SIGPROF` captura um perfil de CPU de dez segundos:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+O resultado é gravado no diretório de logs como `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` captura um snapshot de memória (heap):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+O resultado é gravado no diretório de logs como `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Antes de abrir o arquivo, espere aparecer `CPU profile written` ou `heap snapshot written` em `opencode.log`. A entrada do log
+inclui o caminho completo do arquivo. Você pode inspecionar os dois tipos de arquivo no Chrome DevTools.
+
+<Callout type="note">
+  Perfis acionados por sinal não estão disponíveis no Windows. Use `opencode debug heap-dump` para snapshots de heap.
+  Gravar um snapshot de heap pode pausar o processo e aumentar temporariamente o uso de memória dele.
+</Callout>
+
+## Arquivos do serviço
+
+O servidor compartilhado se registra em:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+A configuração privada do serviço dele fica armazenada separadamente em:
+
+```text
+~/.config/opencode/service.json
+```
+
+O banco de dados normalmente fica em:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` pode substituir o local do banco de dados.
+
+<Callout type="warning">
+  Não exclua nem edite arquivos de serviço ou o banco de dados durante a solução de problemas. Use os comandos de serviço para gerenciar o
+  daemon e faça um backup antes de inspecionar dados persistentes com ferramentas externas.
+</Callout>
+
+## Relatar um problema
+
+Inclua o seguinte ao relatar um problema reproduzível:
+
+- A saída de `opencode --version`
+- A saída de `opencode service status`
+- A menor sequência de passos que reproduz o problema
+- Se o problema afeta o serviço compartilhado, um cliente específico ou um projeto
+- Linhas de log relevantes, incluindo os campos `run` e `role` delas
+
+Remova chaves de API, cabeçalhos de autorização, prompts, conteúdo de arquivos e outros dados sensíveis antes de compartilhar logs.
+
+Registre problemas reproduzíveis em [GitHub Issues](https://github.com/anomalyco/opencode/issues).

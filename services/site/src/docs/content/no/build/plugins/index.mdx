@@ -1,0 +1,121 @@
+---
+title: "Bygge plugins"
+description: "Bygg en OpenCode-plugin: én pakke med en serverdel, en TUI-del, en GUI-del eller en kombinasjon."
+---
+
+Plugins endrer OpenCodes atferd og legger til nye funksjoner. En plugin er én pakke med en serverdel, en TUI-del, en GUI-
+del eller en kombinasjon.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+Migrerer du en eksisterende OpenCode 1-plugin? Følg [migreringsveiledningen for V1-plugins](/build/plugins/migrate-v1).
+
+## Deler
+
+Hver del er en eksport fra pakken. Hver dels SDK kommer fra den ene `@opencode/plugin`-avhengigheten.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **Server** (`.` eller `./server`) kjører i OpenCode-serveren med `@opencode/plugin`. Den legger til verktøy, hooks,
+  integrasjoner, kommandoer og agenter. Se [Server](/build/plugins/server), eller [Effect-plugins](/build/plugins/effect)
+  for Effect-API-et.
+- **TUI** (`./tui`) kjører i terminalgrensesnittet med `@opencode/plugin/tui`. Se [TUI](/build/plugins/cli).
+- **GUI** (`./gui-experimental`) kjører sin `setup` i hvert OpenCode Desktop-vindu og sin `main` i desktop-appens
+  hovedprosess, med `@opencode/plugin/gui`. Se [GUI](/build/plugins/gui).
+- **RPC** (`./rpc`) er en typet kontrakt som serverdelen implementerer og de andre delene og klientene kaller. Se
+  [RPC](/build/plugins/rpc).
+
+Pluginens `id` kommer fra serverdelens `Plugin.define`. En pakke med GUI-del, men uten serverdel, bruker
+pakkenavnet (eller navnet på den lokale katalogen) som `id`. TUI-delen definerer sin egen `id`. GUI-delen definerer ingen egen ID, men
+bruker pluginens.
+
+## Last
+
+Plugins under `.opencode/plugins/` lastes automatisk, som det lokale eksempelet ovenfor. For å laste publiserte pakker eller
+pluginkataloger fra andre plasseringer, legg dem til i `plugins` i `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- Én oppføring laster hver del. TUI-en laster TUI-delene av pluginene serveren laster, og OpenCode Desktop laster
+  GUI-delene av pluginene i din globale `opencode.json(c)`.
+- En pakke med bare en TUI-del går i [`cli.json`](/cli/plugins) i stedet.
+- En lokal pluginkatalog med `package.json` som har `name` og `exports`, laster delene sine gjennom dem, som den publiserte
+  pakken. Uten dem bruker den filnavn i roten: `server` (ellers `index`), `tui` og `rpc` med `.ts`-,
+  `.tsx`- eller `.js`-endelse, og `gui-experimental.cjs` (eller `.js`).
+- Se [Konfigurer plugins](/plugins) for flere innlastings- og konfigurasjonsalternativer.
+
+## Publiser
+
+En publisert plugin er en npm-pakke med `package.json` ovenfor. Delene bruker samme standardeksporter som en lokal
+plugin.
+
+```bash
+npm publish
+```
+
+- Eksporter `./rpc` når andre plugins og klienter skal importere [RPC-kontrakten](/build/plugins/rpc) din uten å laste
+  implementasjonen.
+- Bygg GUI-bundlen før du publiserer, og ta den med via `files`. Se
+  [Bygg bundlen](/build/plugins/gui#build-the-bundle).
+- Bruk versjoner som er kompatible med OpenCode-utgivelsen du sikter mot, og test den installerte pakken, ikke bare en
+  kopi som er koblet til arbeidsområdet. Publiser en kompatibel plugin-oppdatering når du tar i bruk en nyere API-kontrakt.
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    Legg til verktøy, hooks, integrasjoner, kommandoer og agenter i OpenCode-serveren.
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    Legg til kommandoer, ruter, slots og Markdown-renderere i terminalgrensesnittet.
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    Legg til paneler, kommandoer, innstillingssider og native integrasjoner i OpenCode Desktop.
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    Eksponer typede metoder og hendelser fra serverdelen til de andre delene og til klienter.
+  </Card>
+</CardGroup>

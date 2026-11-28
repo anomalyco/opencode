@@ -29,7 +29,7 @@ pub fn attach(tui: &Tui, markdown: &Markdown, renderers: &CodeBlockRenderers) ->
     let links = Rc::new(Links { markdown: markdown.clone(), used: used.clone(), pressed: Cell::new(None) });
     let weak = tui.weak();
     opencode_ui::markdown::inline_hook(markdown, renderers, move |spans, cx| match weak.upgrade() {
-        Some(tui) => link_spans(&tui, &used, spans, cx),
+        Some(tui) => link_spans(&tui, Some(&used), spans, cx),
         None => spans,
     });
     let (weak, this) = (tui.weak(), Rc::downgrade(&links));
@@ -63,7 +63,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
             .iter_mut()
             .filter(|(id, _)| changes.has(id, Touched::INFO))
             .filter_map(|(id, used)| {
-                let label = label_of(tui, id);
+                let label = label_of(tui, id, true);
                 (*used != label).then(|| {
                     *used = label;
                     id.clone()
@@ -81,7 +81,18 @@ fn mentions_any(source: &str, sessions: &HashSet<SessionID>) -> bool {
     mentions(source).any(|mention| sessions.iter().any(|id| id.0 == mention.id(source)))
 }
 
+/// Transforms inline Markdown spans to link known session IDs without recording or triggering
+/// fetches, for unmounted Markdown inspection.
+pub fn transform_readonly(tui: &Tui, spans: Vec<InlineSpan>, cx: &InlineContext<'_>) -> Vec<InlineSpan> {
+    link_spans(tui, None, spans, cx)
+}
+
 impl Links {
+    /// Transforms inline Markdown spans to link known session IDs, using this instance's tracked IDs.
+    pub fn transform(&self, tui: &Tui, spans: Vec<InlineSpan>, cx: &InlineContext<'_>) -> Vec<InlineSpan> {
+        link_spans(tui, Some(&self.used), spans, cx)
+    }
+
     /// The session a plain left click opens: a press and a release on the same cell, without a modifier or selected
     /// text (the [`crate::features::links`] rules), on a link the last frame drew.
     fn clicked(&self, tui: &Tui, event: &MouseEvent) -> Option<String> {
@@ -105,7 +116,7 @@ impl Links {
 
 fn link_spans(
     tui: &Tui,
-    used: &RefCell<HashMap<SessionID, Option<String>>>,
+    used: Option<&RefCell<HashMap<SessionID, Option<String>>>>,
     spans: Vec<InlineSpan>,
     cx: &InlineContext<'_>,
 ) -> Vec<InlineSpan> {
@@ -127,10 +138,12 @@ fn link_spans(
         let mut last = 0;
         for mention in mentions(text) {
             let id = SessionID(mention.id(text).to_owned());
-            let label = label_of(tui, &id);
+            let label = label_of(tui, &id, used.is_some());
             // A label that differs from the one recorded stays recorded, so the next sync draws the other blocks
             // that show it again.
-            used.borrow_mut().entry(id.clone()).or_insert_with(|| label.clone());
+            if let Some(used) = used {
+                used.borrow_mut().entry(id.clone()).or_insert_with(|| label.clone());
+            }
             let Some(label) = label else { continue };
             if last < mention.start {
                 out.push(piece(&span, &text[last..mention.start]));
@@ -161,7 +174,7 @@ fn piece(span: &InlineSpan, text: &str) -> InlineSpan {
     piece
 }
 
-fn label_of(tui: &Tui, id: &SessionID) -> Option<String> {
+fn label_of(tui: &Tui, id: &SessionID, fetch: bool) -> Option<String> {
     if *tui.route() == (Route::Session { id: id.clone() }) {
         return None;
     }
@@ -173,7 +186,7 @@ fn label_of(tui: &Tui, id: &SessionID) -> Option<String> {
             .then(|| display_label(session.title.as_deref(), session.parent_id.is_some()))),
         None => Err(state.is_missing(id)),
     });
-    if label == Err(false) {
+    if fetch && label == Err(false) {
         // Reads dedupe in-flight and finished loads; a miss marks the session missing. Hooks can run under a store
         // read, which must not write.
         let id = id.clone();

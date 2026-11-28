@@ -1,0 +1,248 @@
+---
+title: "テーマ"
+description: "ライトモードとダークモード、色相、状態別の色、トークンを指定し、OpenCode のカスタムターミナルテーマを JSON ファイルで作成します。"
+---
+
+ターミナル UI で `Ctrl+P` を押し、**Open settings** を選択して **Theme** を開くとテーマを選べます。グローバルの CLI 設定で直接設定することもできます。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+テーマはターミナルクライアントに属します。テーマの選択は `opencode.json` ではなく `cli.json` に置きます。設定の場所とその他のターミナル設定については [CLI の設定](/cli/config)を参照してください。
+
+## モード
+
+ターミナルの外観に合わせるには `system` を使用し、テーマを 1 つのモードに固定することもできます。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| 値       | 動作                                             |
+| -------- | ------------------------------------------------ |
+| `system` | ターミナルのライトモードまたはダークモードに従います。 |
+| `dark`   | 常にダークテーマを使用します。                   |
+| `light`  | 常にライトテーマを使用します。                   |
+
+カスタムテーマが 1 つのモードしか提供していない場合、もう一方が要求されたときはそのモードを使用します。
+
+## 組み込み
+
+組み込みテーマは名前で選択します。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+利用可能なテーマは次のとおりです。
+
+- `aura`, `ayu`, `carbonfox`, `cobalt2`, `cursor`, `dracula`, `everforest`, `flexoki`
+- `catppuccin`, `catppuccin-frappe`, `catppuccin-macchiato`
+- `github`, `gruvbox`, `kanagawa`, `material`, `matrix`, `mercury`, `monokai`, `nightowl`, `nord`
+- `one-dark`, `opencode`, `opencode-classic`, `orng`, `lucent-orng`, `osaka-jade`, `palenight`, `rosepine`
+- `solarized`, `synthwave84`, `tokyonight`, `vercel`, `vesper`, `zenburn`
+
+`system` テーマは、OpenCode がターミナルのパレットを読み取れる場合に利用できます。
+
+## ファイル
+
+`ocean` という名前のグローバルテーマを作成するには、テーマツールを使ってグローバルのテーマディレクトリに完全なファイルを生成します。関連する構造は次のとおりです。
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+その後、設定で `ocean` を選択するか、`cli.json` で `theme.name` を `ocean` に設定します。ファイル名から `.json` を除いたものがテーマ名です。
+
+| スコープ | ディレクトリ                             |
+| -------- | ---------------------------------------- |
+| グローバル | `~/.config/opencode/themes/`           |
+| プロジェクト | プロジェクトツリー内の `.opencode/themes/` |
+
+OpenCode は `.json` ファイルだけを読み取ります。カレントディレクトリに近いテーマは、同じ名前のグローバルテーマまたは親テーマを置き換えます。
+
+## 形式
+
+すべての V2 テーマは、1 つの完全な `base` トークンツリーと、少なくとも 1 つの `light` または `dark` の色相パレットを宣言します。モードはそのファイルの base からのみ継承し、組み込みの OpenCode テーマや他のモードからは継承しません。カスタマイズする前に、テーマツールで完全な base を生成してください。
+
+以下の例は各概念に関連するセクションのみを示しており、完全なテーマファイルではありません。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## 色
+
+色は、16 進数の色コード、`transparent`、またはテーマ内の別の色への参照で指定します。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+16 進数の値は 3、4、6、8 桁を使用できます。参照は `$` で始まり、色相の参照は `$hue.<name>.<step>` の形式です。
+
+## 色相
+
+色相のエイリアスを上書きすると、関連する色のグループをまとめて変更できます。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| 種類       | 値                                                                   |
+| ---------- | -------------------------------------------------------------------- |
+| ベース     | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| エイリアス | `accent`, `interactive`, `neutral`                                   |
+| ステップ   | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`        |
+
+色相のステップはモードのコントラストの方向に従います。ライトテーマでは `100` が暗く `900` が明るく、ダークテーマでは `100` が明るく `900` が暗くなります。
+
+`categorical` は、エージェントやその他の繰り返し項目を区別するために使用する色相を順序付きで設定します。少なくとも 1 つのベース色相またはエイリアスを含める必要があります。
+
+## 状態
+
+状態のキーを使ってインタラクティブな色を変更します。指定されていない状態は、最も近い base の値を使用します。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| グループ | 値                                                           |
+| -------- | ------------------------------------------------------------ |
+| アクション | `primary`, `secondary`, `destructive`                      |
+| 状態     | `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled` |
+
+フォームフィールドは、`text.formfield` または `background.formfield` の直下で同じ状態のキーを使用します。
+
+## トークン
+
+完全な `base` にはすべてのトークングループが含まれます。モードは、完全な色相パレットを提供した後、その任意の部分を上書きできます。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| グループ     | 目的                                                                 |
+| ------------ | -------------------------------------------------------------------- |
+| `text`       | ベース、ミュート、フェイント、選択、アクション、フォームフィールド、フィードバックのテキスト |
+| `background` | ベース、選択、サーフェス、アクション、フォームフィールド、フィードバックの塗り |
+| `border`     | 境界線                                                               |
+| `scrollbar`  | スクロールバー                                                       |
+| `diff`       | 追加、削除、コンテキスト、ハイライト、行番号の色                     |
+| `syntax`     | ソースコードのハイライト                                             |
+| `markdown`   | Markdown の要素                                                      |
+
+構文のキーは `comment`、`keyword`、`function`、`variable`、`string`、`number`、`type`、`operator`、`punctuation` です。Markdown のキーは `text`、`heading`、`link`、`linkText`、`code`、`blockQuote`、`emphasis`、`strong`、`horizontalRule`、`listItem`、`listEnumeration`、`image`、`imageText`、`codeBlock` です。
+
+## 浮き上がったサーフェス
+
+パネル、ダイアログ、メニュー、トーストは `background.raised` から表示階層に応じた背景を選びます。ダイアログでは、専用の `@dialog` サーフェスも使えます。TUI は `@dialog` を適用した後にパレットの色を再計算するため、`$background.base` を参照するトークンにはダイアログの背景色が反映されます。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog` は base モードと同じトークングループを受け付けます。アクションの文脈的な `base` は、指定されていない状態のフォールバックにもなり、明示的な状態の上書きが優先されます。

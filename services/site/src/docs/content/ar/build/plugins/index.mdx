@@ -1,0 +1,121 @@
+---
+title: "بناء الملحقات"
+description: "ابنِ ملحق OpenCode: حزمة واحدة بجزء خادم أو جزء TUI أو جزء GUI أو أي مزيج."
+---
+
+تعدّل الملحقات سلوك OpenCode وتضيف ميزات جديدة. والملحق حزمة واحدة بجزء خادم أو جزء TUI أو جزء
+GUI أو أي مزيج.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+إذا كنت تنقل ملحقًا موجودًا من OpenCode 1، فاتّبع [دليل ترحيل ملحقات V1](/build/plugins/migrate-v1).
+
+## الأجزاء
+
+تُصدّر الحزمة كل جزء على حدة. وتوفّر التبعية `@opencode/plugin` حزمة SDK لجميع الأجزاء.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **الخادم** (`.` أو `./server`) يعمل في خادم OpenCode بـ`@opencode/plugin`. ويضيف أدوات وخطافات
+  وتكاملات وأوامر ووكلاء. راجع [الخادم](/build/plugins/server)، أو [ملحقات Effect](/build/plugins/effect)
+  لواجهة Effect.
+- **TUI** (`./tui`) يعمل في واجهة الطرفية بـ`@opencode/plugin/tui`. راجع [TUI](/build/plugins/cli).
+- **GUI** (`./gui-experimental`) يشغّل `setup` في كل نافذة من OpenCode Desktop و`main` في
+  العملية الرئيسية لتطبيق سطح المكتب، بـ`@opencode/plugin/gui`. راجع [GUI](/build/plugins/gui).
+- **RPC** (`./rpc`) عقد محدّد النوع يطبّقه جزء الخادم وتستدعيه الأجزاء الأخرى والعملاء. راجع
+  [RPC](/build/plugins/rpc).
+
+يأتي `id` الملحق من `Plugin.define` في جزء الخادم. وإذا تضمّنت الحزمة جزء GUI دون جزء خادم، تستخدم
+اسم الحزمة (أو اسم المجلد المحلي) بوصفه `id`. ويصرّح جزء TUI بقيمة `id` مستقلة، أما جزء GUI فلا يصرّح بمعرّف
+خاص به، بل يستخدم معرّف الملحق.
+
+## التحميل
+
+تُحمَّل الملحقات تحت `.opencode/plugins/` تلقائيًا، مثل المثال المحلي أعلاه. ولتحميل حزم منشورة أو
+مجلدات ملحقات من مواقع أخرى، أضفها إلى `plugins` في `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- إدخال واحد يحمّل كل الأجزاء. ويحمّل TUI أجزاء TUI من الملحقات التي يحمّلها خادمه، ويحمّل OpenCode Desktop
+  أجزاء GUI من الملحقات في `opencode.json(c)` العام.
+- والحزمة التي لها جزء TUI وحده تُوضع في [`cli.json`](/cli/plugins) بدلًا من ذلك.
+- ومجلد ملحق محلي فيه `name` و`exports` في `package.json` يحمّل أجزاءه عبرهما، مثل الحزمة
+  المنشورة. وبدونهما يستخدم أسماء ملفات في جذره: `server` (وإلا `index`)، و`tui`، و`rpc` بامتداد `.ts`
+  أو `.tsx` أو `.js`، و`gui-experimental.cjs` (أو `.js`).
+- راجع [إعداد الملحقات](/plugins) لمزيد من خيارات التحميل والإعداد.
+
+## النشر
+
+الملحق المنشور حزمة npm فيها `package.json` أعلاه. وتستخدم أجزاؤه التصديرات الافتراضية نفسها التي يستخدمها الملحق
+المحلي.
+
+```bash
+npm publish
+```
+
+- صدّر `./rpc` عندما ينبغي لملحقات وعملاء آخرين استيراد [عقد RPC](/build/plugins/rpc) دون تحميل
+  تطبيقك.
+- ابنِ حزمة GUI قبل النشر، وأدرجها عبر `files`. راجع
+  [بناء الحزمة](/build/plugins/gui#build-the-bundle).
+- استخدم إصدارات متوافقة مع إصدار OpenCode الذي تستهدفه، واختبر الحزمة المثبّتة، لا
+  نسخة مرتبطة بمساحة عمل فقط. وانشر تحديثًا متوافقًا للملحق عندما تتبنّى عقد API أحدث.
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    أضف أدوات وخطافات وتكاملات وأوامر ووكلاء في خادم OpenCode.
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    أضف أوامر ومسارات ومواضع إدراج وعارضات Markdown إلى واجهة الطرفية.
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    أضف لوحات وأوامر وصفحات إعدادات وتكاملات أصلية إلى OpenCode Desktop.
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    أتح للأجزاء الأخرى وللعملاء استخدام طرق وأحداث محدّدة الأنواع من جزء الخادم.
+  </Card>
+</CardGroup>

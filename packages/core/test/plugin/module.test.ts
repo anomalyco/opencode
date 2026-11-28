@@ -20,6 +20,7 @@ import { tempGlobalLayer } from "../fixture/global"
 import { setOrganizationPolicy } from "../fixture/policy"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { noToolCalls } from "../lib/tool"
 import { PluginTestLayer } from "./fixture"
 
 ensurePluginRuntime()
@@ -262,6 +263,7 @@ export default Plugin.define({
       messageID: SessionMessage.ID.make("msg_host_effect"),
       id: Tool.CallID.make("call_host_effect"),
       progress: () => Effect.void,
+      tool: noToolCalls,
     }
 
     expect(yield* execute(checkTool, { count: 3, code: "  v42  " }, context)).toEqual({

@@ -45,6 +45,31 @@ const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema
 const rawText = (data: typeof RawData.Type) =>
   "text" in data ? data.text : Buffer.from(data.bytes, "base64").toString("utf8")
 
+// A long line shows the part around its first match, not its start, which may be far from the match.
+const around = (text: string, at: number) => {
+  const start = Math.max(0, Math.min(at - MAX_LINE_CHARS / 2, text.length - MAX_LINE_CHARS))
+  const rest = TextBoundary.tail(text, text.length - start)
+  return (
+    (start > 0 ? "..." : "") + TextBoundary.head(rest, MAX_LINE_CHARS) + (rest.length > MAX_LINE_CHARS ? "..." : "")
+  )
+}
+
+// rg reports a match's start as a byte offset into the line, which is also its index when the line is ASCII.
+const preview = (data: typeof RawData.Type, match = 0) => {
+  if ("text" in data)
+    return data.text.length <= MAX_LINE_CHARS
+      ? data.text
+      : around(
+          data.text,
+          Buffer.byteLength(data.text) === data.text.length
+            ? match
+            : new TextEncoder().encodeInto(data.text, new Uint8Array(match)).read,
+        )
+  const bytes = Buffer.from(data.bytes, "base64")
+  const text = bytes.toString("utf8")
+  return text.length <= MAX_LINE_CHARS ? text : around(text, bytes.subarray(0, match).toString("utf8").length)
+}
+
 export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
@@ -263,20 +288,15 @@ const layer = Layer.effect(
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
                   return Effect.undefined
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => {
-                    const lines = rawText(match.data.lines)
-                    return {
-                      ...match.data,
-                      lines: {
-                        text: lines.length > MAX_LINE_CHARS ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..." : lines,
-                      },
-                      path: { text: normalizePath(rawText(match.data.path)) },
-                      submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
-                        ...submatch,
-                        match: { text: rawText(submatch.match) },
-                      })),
-                    }
-                  }),
+                  Effect.map((match) => ({
+                    ...match.data,
+                    lines: { text: preview(match.data.lines, match.data.submatches[0]?.start) },
+                    path: { text: normalizePath(rawText(match.data.path)) },
+                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
+                      ...submatch,
+                      match: { text: rawText(submatch.match) },
+                    })),
+                  })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),

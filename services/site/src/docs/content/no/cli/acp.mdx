@@ -1,0 +1,396 @@
+---
+title: "ACP"
+description: "Bruk OpenCode med en Agent Client Protocol-klient."
+---
+
+`opencode acp` kjører OpenCode som en [Agent Client Protocol](https://agentclientprotocol.com)-agent, slik at du kan bruke den
+fra en ACP-klient som Zed. Dette eksempelet legger OpenCode til i Zed:
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Andre ACP-klienter bruker samme kommando og `acp`-argument, men konfigurasjonsfilen og feltnavnene kan variere. Hvis
+en grafisk klient ikke finner `opencode`, setter du `command` til den absolutte banen som `which opencode` skriver ut.
+
+## Autentisering
+
+OpenCode bruker tilgangsopplysningene den allerede har for leverandøren. Logg inn fra en terminal før du starter ACP-klienten:
+
+```bash
+opencode auth login
+```
+
+OpenCode tilbyr én autentiseringsmetode, `opencode-login`. Som standard er det en agentautentiseringsmetode. `authenticate`-forespørselen
+godtar bare den metoden og samler ikke inn tilgangsopplysninger. Hvis en prompt mislykkes fordi en leverandør krever autentisering,
+returnerer OpenCode ACP-feilen `auth_required`.
+
+Hvis klienten setter `clientCapabilities.auth.terminal` til `true`, er autentiseringsmetoden en terminalautentiseringsmetode:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+Klienten må ikke sende denne metoden til `authenticate`. I stedet legger den til `--login` i kommandoen som starter OpenCode,
+for eksempel `opencode acp --login`, og kjører den i en terminal. OpenCode kjører `opencode auth login`-flyten og avslutter.
+Avslutningsstatus 0 betyr at påloggingen lyktes. Klienten kobler deretter til på nytt og sender `initialize` igjen.
+
+Hvis klienten setter `clientCapabilities._meta["terminal-auth"]` til `true`, inkluderer autentiseringsmetoden påloggingskommandoen:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## Feilsøking
+
+`opencode acp` venter på ACP-meldinger på stdin, så den ser ut til å henge når du kjører den direkte i en terminal. Start den fra
+en ACP-klient i stedet.
+
+Hvis klienten rapporterer at prosessen avsluttet eller skrev ugyldig protokollutdata, legger du til `--print-logs` før `acp` i
+klientens argumenter. OpenCode skriver da ACP-loggene og de private serverloggene til stderr. Stdout inneholder bare ACP-meldinger.
+
+```bash
+opencode --print-logs acp
+```
+
+## Protokollreferanse
+
+Denne delen er for forfattere av ACP-klienter. Den lister delene av ACP som OpenCode støtter, og `_meta`-nøklene som
+OpenCode legger til. Klienter som ikke kjenner disse nøklene, kan ignorere dem. [ACP-dokumentasjonen](https://agentclientprotocol.com)
+definerer meldingene.
+
+### Transport
+
+Klienten starter `opencode acp` som en underordnet prosess. Prosessene utveksler JSON-RPC-meldinger over stdin og stdout,
+med én melding per linje og ACP-protokollversjon 1.
+
+`opencode acp` starter en privat OpenCode-server til eget bruk. Den kobler ikke til den delte bakgrunnstjenesten,
+og den åpner ikke en nettverksport for ACP. Én prosess kan betjene mange ACP-økter. Den avsluttes når klienten lukker
+stdin.
+
+### Egenskaper
+
+OpenCodes `initialize`-svar inkluderer disse agentegenskapene:
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode leser disse klientegenskapene:
+
+| Egenskap                               | Effekt                                                         |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `auth.terminal` satt til `true`        | Autentiseringsmetoden er en [terminalautentiseringsmetode](#authentication). |
+| `elicitation.form`                     | OpenCode stiller [spørsmål](#questions) som skjemaer.          |
+| `session.compaction`                   | OpenCode rapporterer [komprimering](#compaction) med ACP-oppdateringer. |
+| `_meta["terminal-auth"]` satt til `true` | Autentiseringsmetoden inkluderer [påloggingskommandoen](#authentication). |
+
+### Økter
+
+Klienten angir arbeidskatalogen når den oppretter en økt. OpenCode bruker denne katalogens konfigurasjon,
+inkludert modeller, agenter, kommandoer, skills, instruksjoner, plugins og MCP-servere.
+
+- `cwd` må være en absolutt bane. OpenCode avviser en relativ `cwd` med en invalid params-feil.
+- `session/load` spiller av de lagrede meldingene. `session/resume` og `session/fork` spiller dem ikke av.
+- For å laste, gjenoppta eller forgrene en økt må klienten sende øktens katalog som `cwd`, eller en annen katalog i
+  samme prosjekt, for eksempel hovedutsjekken til en økt som flyttet inn i en worktree. OpenCode avviser enhver annen
+  `cwd` med en invalid params-feil der `data.directory` er øktens katalog.
+- `session/list` returnerer opptil 100 økter per side. Den godtar et `cwd`-filter og en `cursor`. Hver subagentøkt
+  har `_meta["opencode/child-session"]` med `id`, `parentID` og `title`.
+- Når OpenCode gir en økt nytt navn, for eksempel etter at den har generert en tittel, sender den `session_info_update` med den nye
+  `title`.
+- `session/close` avbryter aktivt arbeid og kobler økten fra ACP-prosessen. OpenCode beholder den lagrede
+  økten.
+- `session/delete` avslutter en aktiv prompt som `session/cancel`, og fjerner deretter økten. Sletting av en økt som
+  ikke finnes, lykkes.
+- En økt kjører én prompt om gangen. OpenCode returnerer en feil for en andre `session/prompt` mens den første er
+  aktiv.
+- Hvis en prompt mislykkes, har feilens `data` `errorName` for feilen. Den har også `status` og `retryAfterMs` når
+  leverandøren sendte dem.
+
+### Avbrudd
+
+`session/cancel` avslutter den aktive prompten med `stopReason: "cancelled"`. En `$/cancel_request` for promptforespørselen gjør
+det samme. OpenCode avviser ventende tillatelsesforespørsler. Verktøykall som ikke fullføres etter et avbrudd, rapporteres som
+`failed`.
+
+### Flere kataloger
+
+Klienten kan sende `additionalDirectories` på `session/new`, `session/load`, `session/resume` og `session/fork`:
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- Hver oppføring må være en absolutt bane uten `*` eller `?`.
+- OpenCode tillater tilgang til eksterne kataloger innenfor hver rot. Tillatelsesreglene for lesing, redigering og terminalkommandoer gjelder fortsatt.
+- Hver forespørsels liste erstatter øktens forrige liste, slik
+  [additional directories-RFD-en](https://agentclientprotocol.com/rfds/additional-directories) angir.
+- OpenCode lagrer tilgangene på økten, så de gjelder også når en annen OpenCode-klient bruker økten. Underordnede
+  økter kopierer tilgangene når OpenCode oppretter dem.
+
+`session/list` returnerer hver økts lagrede liste i `additionalDirectories`.
+
+### Konfigurasjonsalternativer
+
+Nye økter bruker katalogens standardmodell og primæragent. Svarene på `session/new`, `session/load`,
+`session/resume` og `session/fork` inkluderer disse konfigurasjonsalternativene:
+
+| ID       | Kategori        | Verdier                                                                        |
+| -------- | --------------- | ----------------------------------------------------------------------------- |
+| `model`  | `model`         | Aktiverte modeller som `provider/model`. Et `/variant`-suffiks angir også innsatsen. |
+| `effort` | `thought_level` | Modellens varianter og `default`. Bare til stede for modeller med varianter.    |
+| `mode`   | `mode`          | Synlige primæragenter.                                                        |
+
+Hvert `model`-alternativ er navngitt etter leverandørens visningsnavn og modellens navn, for eksempel
+`Anthropic / Claude Sonnet 5.5`. `session/set_config_option` tar strengverdier:
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
+```
+
+`session/set_mode` angir også agenten. OpenCode sender `config_option_update` når de tilgjengelige modellene eller agentene
+endres. Den sender også én når en annen klient endrer øktens modell eller agent.
+
+### Promptinnhold
+
+Prompter kan inneholde tekst, bilder, innebygde ressurser og ressurslenker. OpenCode ignorerer lydblokker. Den håndterer de
+andre blokkene slik:
+
+| Blokk                                                 | Hva OpenCode gjør                                                                     |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `text`                                                | Sender den til modellen.                                                               |
+| `text` med bare målgruppen `assistant`                 | Sender den til modellen som separat kontekst, utenfor brukerens melding.               |
+| `text` med bare målgruppen `user`                      | Utelater den fra modellens inndata.                                                    |
+| `image` med `data`                                   | Legger den ved i prompten.                                                             |
+| `image` med bare `uri`                               | Håndterer den som en ressurslenke.                                                     |
+| `resource` med `text`                                | Setter inn teksten etter ressursens bane eller URI.                                    |
+| `resource` med `blob`                                | Legger den ved. Uten `mimeType` utledes den fra URI-ens filnavn.                      |
+| `resource_link` til en `file:`-URI                    | Legger ved filen. Sender en Markdown-lenke i stedet hvis filen mangler eller ikke kan leses. |
+| `resource_link` til en `zed://`-URI med en `path`-spørring | Legger ved filen på `path`.                                                       |
+| `resource_link` til en annen URI                      | Sender en Markdown-lenke som `[spec](https://example.com/spec.md)`.                   |
+
+Målgruppen kommer fra blokkens `annotations`. OpenCode avviser en `image`-blokk som verken har `data` eller `uri`.
+Denne blokken er bare kontekst for modellen:
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### Kommandoer
+
+Etter `session/new`, `session/load`, `session/resume` eller `session/fork` sender OpenCode `available_commands_update`
+med katalogens kommandoer, den innebygde kommandoen `compact` og katalogens skills. Den sender en ny oppdatering
+når kommandoene eller skillene endres.
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+Hvis en prompt starter med `/` og navnet på en tilgjengelig kommando, kjører OpenCode den kommandoen med resten av teksten
+som argumenter. Hvis den starter med `/` og en skills ID, sender OpenCode prompten med den skillen vedlagt. OpenCode sender
+annen tekst som starter med `/`, som en vanlig prompt. `/compact` kjører [komprimering](/compaction). En skill
+hvis ID samsvarer med en kommando, listes ikke.
+
+Hvis en kommando mislykkes, feiler også prompten. Svaret inneholder kommandoens egen melding, for eksempel bruksanvisningen, og `data.service` settes til
+`command`.
+
+### MCP-servere
+
+Klienten kan sende stdio- og HTTP-MCP-servere på `session/new`, `session/load`, `session/resume` og `session/fork`.
+OpenCode legger dem til i øktens katalog så lenge `opencode acp`-prosessen lever, slik at andre økter i den
+katalogen kan bruke dem. Hvis OpenCode losser en ledig katalog, legger den dem til igjen før øktens neste prompt.
+OpenCode sender HTTP-headere videre og bruker ikke OAuth for disse serverne. Den annonserer ikke MCP over SSE, og den
+støtter ikke MCP over ACP.
+
+| Tilfelle                         | Atferd                                                           |
+| -------------------------------- | ------------------------------------------------------------------ |
+| Samme navn som en konfigurert server | Klientens server erstatter den konfigurerte i den katalogen. |
+| [Policyer](/policies)            | `integration.use`-reglene gjelder fortsatt.                       |
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### Tillatelser
+
+Tillatelsesforespørsler tilbyr tre alternativer:
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+Når en forespørsel endrer filer, inkluderer OpenCode `diff`-innhold hvis den kan bygge en forhåndsvisning av endringen.
+
+### Spørsmål
+
+Hvis klienten annonserer `elicitation.form`, stiller OpenCode spørsmål med `elicitation/create` i skjemamodus. Forespørselen
+inkluderer `toolCallId` når OpenCode sendte det verktøykallet som en `session/update` for denne økten.
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode sender aldri skjemaer som kan samle inn hemmeligheter. Et svarvalg formulert som et slikt spørsmål, for eksempel «Hvilket API-token
+  skal jeg bruke?», sendes likevel, men uten mulighet til å skrive inn et svar.
+- Hvis et felt godtar fritekst i tillegg til de faste alternativene, legger skjemaet til en valgfri strengegenskap `<key>_custom`.
+  For et enkeltvalg erstatter et ikke-tomt egendefinert svar det valgte alternativet. For et flervalg legger OpenCode det
+  til de valgte alternativene.
+- Hvis brukeren avslår eller avbryter skjemaet, avbryter OpenCode spørsmålet.
+
+Hvis OpenCode ikke kan vise et spørsmål, avbryter den spørsmålet og ber modellen fortsette uten svar.
+
+### Komprimering
+
+Hvis klienten annonserer `session.compaction`, rapporterer OpenCode komprimering med oppdateringene `compaction_update` og
+`compaction_summary_chunk` fra ACPs [session compaction](https://agentclientprotocol.com/rfds/session-compaction)-RFD,
+som er i forhåndsvisning. Når klienten laster en økt, spiller OpenCode av hver fullførte eller mislykkede komprimering som én
+oppdatering.
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+Andre klienter mottar [komprimeringsmarkøren](#compaction-marker) i stedet. Det gjør også komprimeringer i underordnede økter.
+
+### Bruk
+
+Promptsvar inkluderer `usage` fra [end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage)-RFD-en,
+som er et utkast. `usage` summerer promptens modellkall i denne økten. Den inkluderer ikke underordnede økter.
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+Før svaret sender OpenCode `usage_update` fra
+[session usage](https://agentclientprotocol.com/rfds/session-usage)-RFD-en. Den sendes bare hvis prompten brukte tokens og
+OpenCode kjenner modellens kontekststørrelse. `cost` er totalkostnaden i USD for økten og dens underordnede økter.
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### Underordnede økter
+
+Mens en prompt kjører, sender OpenCode oppdateringer fra sine underordnede økter som `session/update`-varsler på promptens
+økt. Hver oppdatering har `_meta["opencode/child-session"]`. OpenCode prefikser verktøykall-ID-er med
+`<childSessionId>:`. Den prefikser verktøykalltitler med den underordnede øktens tittel hvis den har en.
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| Felt       | Type     | Beskrivelse                                                                            |
+| ---------- | -------- | -------------------------------------------------------------------------------------- |
+| `id`       | `string` | Den underordnede øktens ID.                                                            |
+| `parentID` | `string` | ID-en til den underordnede øktens overordnede økt.                                     |
+| `depth`    | `number` | 1 for et barn av promptens økt, 2 for et barn av den underordnede økten, og så videre. |
+| `title`    | `string` | Den underordnede øktens tittel. OpenCode utelater den når den underordnede økten ikke har noen tittel. |
+
+Tillatelsesforespørsler fra en underordnet økt har samme nøkkel på `toolCall._meta`. Etter at prompten slutter, slutter OpenCode å
+sende oppdateringer fra underordnede økter. Tillatelsesforespørsler og spørsmål fra underordnede økter når fortsatt klienten.
+
+### Status for nye forsøk
+
+Når et modellkall mislykkes og OpenCode planlegger et nytt forsøk, sender den `session_info_update` med `_meta["opencode/retry"]`.
+Når det nye forsøket starter, sender OpenCode `"opencode/retry": null`. Fjern eventuell status for nye forsøk når svaret på prompten kommer.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| Felt          | Type     | Beskrivelse                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `attempt`     | `number` | Nummeret på det nye forsøket.                                                              |
+| `nextRetryAt` | `string` | Tidspunktet for neste forsøk, i ISO 8601-format.                                          |
+| `error`       | `object` | Har `type` og `message`. Har også `status` og `response.body` hvis leverandøren sendte dem. |
+
+### Komprimeringsmarkør
+
+Hvis klienten ikke annonserer `session.compaction`, rapporterer OpenCode komprimeringsfremdrift som `session_info_update` med
+`_meta["opencode/compaction"]`. OpenCode bruker alltid markøren for komprimeringer i underordnede økter.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| Felt        | Type     | Beskrivelse                                                                          |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `status`    | `string` | `started`, `completed` eller `failed`. En avbrutt komprimering er `failed`.          |
+| `messageId` | `string` | Kobler starten og slutten av en komprimering. Behandle den som en ugjennomsiktig nøkkel. |
+| `reason`    | `string` | `auto` eller `manual`.                                                               |
+| `error`     | `object` | Til stede når `status` er `failed`. Samme form som `error` for [nye forsøk](#retry-status). |
+
+Markøren inkluderer ikke et sammendrag. En automatisk komprimering kan mislykkes uten en `started`-markør. Når klienten
+laster en økt, spiller OpenCode av hver fullførte eller mislykkede komprimering som én markør.

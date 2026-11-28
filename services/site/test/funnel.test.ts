@@ -102,9 +102,9 @@ describe("funnel config", () => {
       target: "cli",
       properties: { file: "opencode-linux-x64.tar.gz", channel: "beta", os_match: expect.any(Boolean) },
     })
-    expect(downloadOf(new URL("https://testflight.apple.com/join/M9eFEE1q"))).toEqual({
+    expect(downloadOf(new URL("https://apps.apple.com/us/app/opencode/id6788226734"))).toEqual({
       target: "mobile",
-      properties: { file: "testflight.apple.com" },
+      properties: { file: "apps.apple.com" },
     })
     expect(downloadOf(new URL("https://marketplace.visualstudio.com/items?itemName=sst-dev.opencode"))?.target).toBe(
       "ide",

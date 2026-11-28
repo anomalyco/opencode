@@ -1719,11 +1719,14 @@ pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {
 }
 
 pub fn markdown_with(tui: &Tui, renderers: &CodeBlockRenderers) -> opentui::widget::Markdown {
-    let page = tui.page();
+    markdown_in(tui, &tui.page(), renderers)
+}
+
+pub fn markdown_in(tui: &Tui, theme: &Theme, renderers: &CodeBlockRenderers) -> opentui::widget::Markdown {
     let conceal = tui.config().info.session.as_ref().and_then(|session| session.markdown)
         != Some(opencode_local::cli_config::Markdown::Source);
-    let syntax = opencode_ui::code::syntax_theme(&page);
-    opencode_ui::markdown::view(&tui.app, &page, &syntax, renderers, conceal, false)
+    let syntax = opencode_ui::code::syntax_theme(theme);
+    opencode_ui::markdown::view(&tui.app, theme, &syntax, renderers, conceal, false)
 }
 
 /// A Code Mode script the session itself runs (the prompt footer's and the Scripts tab's count).

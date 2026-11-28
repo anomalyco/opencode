@@ -1,19 +1,36 @@
+import { fromPathname, strip, type Locale } from "~/lib/language"
 import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
-import { docsHref, docsMarkdownHref } from "./lib/navigation"
+import { docsHref, docsLocaleHref, docsMarkdownHref } from "./lib/navigation"
 
 /**
  * What a request under a docs set's base gets, given each set's page slugs (`virtual:docs-pages`, the
  * list the build prerenders): one of the set's own files, a page or its Markdown twin, or a redirect.
+ * The latest docs take the site's locale prefix (`/zh/docs/config/`); English has none, and its
+ * prefixed address redirects there. The V1 docs never take one: their slugs carry their own
+ * languages (/v1/docs/ja/config/).
+ *
  * Any /docs path that isn't a page here was a V1 docs page, which may have had another language
- * (/docs/ja/...), so it goes to the same path on the V1 docs, temporarily, because V2 may add the page
- * later. Undefined outside the docs.
+ * (/docs/ja/...), so it goes to the same path on the V1 docs, temporarily, because V2 may add the
+ * page later. Under a locale prefix the V1 address uses that language too (`/zh/docs/old` →
+ * /v1/docs/zh-cn/old). Undefined outside the docs.
  */
 export function docsRoute(url: URL, accept: string, slugs: Record<DocsSet["id"], readonly string[]>) {
-  const set = docsSets.find((set) => `${url.pathname.replace(/\.md$/, "")}/`.startsWith(set.base))
+  const locale = fromPathname(url.pathname)
+  const pathname = locale ? strip(url.pathname) : url.pathname
+  const set = docsSets.find((set) => `${pathname.replace(/\.md$/, "")}/`.startsWith(set.base))
   if (!set) return
+  // The V1 docs keep their own addresses: a locale prefix belongs to the site, not to them
+  // (middleware.ts strips it and redirects).
+  if (locale && set.id !== "latest") return
+  // English has no prefix: /en/docs/... is the same page at /docs/....
+  if (locale === "en") return redirect(`${pathname}${url.search}`, 301)
+  const pageLocale: Locale = locale ?? "en"
+
   // Agents try a page's URL plus .md first, which for the intro is /docs.md.
-  const pathname = url.pathname === `${set.base.slice(0, -1)}.md` ? `${set.base}index.md` : url.pathname
-  const path = pathname.slice(set.base.length - 1)
+  const path =
+    pathname === `${set.base.slice(0, -1)}.md`
+      ? `${set.base}index.md`.slice(set.base.length - 1)
+      : pathname.slice(set.base.length - 1)
   if (set.files.includes(path.split("/")[1] ?? "")) return { type: "file" as const, set, path }
 
   const file = path.endsWith(".md")
@@ -21,15 +38,26 @@ export function docsRoute(url: URL, accept: string, slugs: Record<DocsSet["id"],
   const slug = page.replace(/^\/|\/$/g, "") || "index"
   if (set.id === "v1" && !slugs.v1.includes(slug)) return v1Fallback(slug, file, url.search)
   const target = moved.get(slug)
-  if (target) return redirect(docsHref(target, latestDocs), 301)
-  if (!slugs[set.id].includes(slug)) return redirect(`/v1/docs${path}${url.search}`, 302)
-  const canonical = docsHref(slug, set)
+  if (target) return redirect(docsLocaleHref(target, latestDocs, pageLocale), 301)
+  if (!slugs[set.id].includes(slug))
+    return redirect(v1Address(pageLocale, slug, file, path.endsWith("/"), url.search), 302)
+  const canonical = docsLocaleHref(slug, set, pageLocale)
   if (!file && path.endsWith("/") && !canonical.endsWith("/")) return redirect(canonical, 307)
   // The API reference has no Markdown twin.
   const twin = slug !== "api"
   const markdown = file || (twin && (accept.includes("text/markdown") || accept.includes("text/x-markdown")))
   if (markdown && !twin) return { type: "missing" as const }
-  return { type: "page" as const, set, slug, markdown, twin }
+  return { type: "page" as const, set, slug, locale: pageLocale, markdown, twin }
+}
+
+// The latest docs' languages in the V1 docs' folders, where their names differ.
+const v1Locales: Partial<Record<Locale, string>> = { zh: "zh-cn", zht: "zh-tw", br: "pt-br", no: "nb" }
+
+/** A missing page's address on the V1 docs, in the same language when they have it. */
+function v1Address(locale: Locale, slug: string, file: boolean, slash: boolean, search: string) {
+  const language = v1Locales[locale] ?? (v1Docs.locales!.includes(locale) ? locale : undefined)
+  const path = `${v1Docs.base}${language ? `${language}/` : ""}${slug}`
+  return `${path}${file ? ".md" : slash ? "/" : ""}${search}`
 }
 
 /**

@@ -1,0 +1,171 @@
+---
+title: "Eklentiler"
+description: "npm paketlerini veya yerel eklenti dizinlerini opencode.json içinde OpenCode'a ekleyin ve eklentileri kimlik ya da joker karakterle etkinleştirin veya devre dışı bırakın."
+---
+
+Yayımlanmış, sürümü belirtilmiş veya namespace altında yayımlanmış paketleri ya da yerel eklenti dizinlerini `opencode.json(c)` dosyasına ekleyin.
+
+## Yapılandırma
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Göreli yollar girdiyi içeren yapılandırma dosyasından çözümlenir.
+
+Yapılandırılmış yerel yollar dizin olmalıdır. Tek bir dosyaya işaret eden yol atlanır. OpenCode'un bir dizindeki her
+parçayı nasıl bulduğu için [Yükleme](/build/plugins#load) bölümüne bakın.
+
+Geçerli yapılandırma dosyalarındaki eklenti dizileri birbirinin yerine geçmek yerine en düşükten en yüksek önceliğe
+uygulanır.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Keşif
+
+OpenCode ayrıca keşfedilen her `.opencode/plugins/` dizininden doğrudan `.ts` ve `.js` dosyalarını ve hemen altındaki
+eklenti paketi dizinlerini yükler.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Genel eklentiler OpenCode yapılandırma dizini altında aynı keşif düzenini kullanır.
+
+```text
+~/.config/opencode/plugins/
+```
+
+Proje kökündeki `opencode.json(c)` yanındaki bir `plugins/` dizini otomatik olarak keşfedilmez; eklenti dizinlerini açıkça
+yapılandırın veya dizini `.opencode/` altına taşıyın.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Denetim
+
+Eklenti girdileri sırayla işlenir. Devre dışı bırakmak için bir kimliğin veya joker karakterin başına `-` ekleyin, her
+eklenti için `*` ve bir kimlik önekiyle eşleştirmek için `.*` kullanın. Sonraki bir kimlik bir eklentiyi yeniden etkinleştirir.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Yeni fork'lara eklenen bildirimi devre dışı bırakmak için `plugins` içine `"-opencode.fork-notice"` ekleyin.
+
+İki yerleşik eklenti, bir deponun [politika](/policies) yaptırımını kapatamaması için kaldırma işlemlerini yok sayar:
+`opencode.config.policy` ve kuruluş politikasını ileten Console bağlantısı `opencode.provider.opencode`.
+
+## Yönetim
+
+Genel paket eklentilerini CLI ile kurun, listeleyin, denetleyin, güncelleyin veya kaldırın.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` sunucu, yalnızca GUI ve yalnızca TUI paket eklentilerini güncellemeler için denetler. `plugin update` eski
+kalmış her paketi günceller; yalnızca o paketi denetlemek veya güncellemek için yapılandırılmış bir paket hedefi iletin.
+Yerel eklentiler ve tam paket revizyonları atlanır.
+
+Bir paket, neyi izleyeceğini belirttiğinde kendini günceller: `name@latest`, `name@^1.2.0`, `name@~1.2.0`, `name@1.x` veya
+`name@>=1.2.0 <2` gibi bir sürüm aralığı, `github:acme/plugin#main` gibi bir Git dalı ya da bir Git `semver:` aralığı.
+OpenCode bunu başlangıçta ve her 24 saatte bir denetler, daha yeni bir sürüm kurar ve yeniden yükler. Bir aralık yalnızca
+içindeki sürümlere geçer. Yeni sürüm yüklenemezse önceki sürüm çalışmaya devam eder ve kurulu kalır.
+
+Sürüm belirtilmeden yalnızca paket adı (`name`) veya depo (`github:acme/plugin`) verilirse kurulan sürüm değişmez.
+`name@next` gibi diğer npm etiketleri ve Git etiketleri için de aynı kural geçerlidir. `plugin check` yine de güncellemelerini bildirir ve `plugin update` onları kurar. Tam sürümler ve
+commit hash'leri sabitlenmiştir.
+
+Paket kurulumu sürüm, etiket veya aralık içeren npm adlarını ve npm uyumlu Git paket belirtimlerini kabul eder. Git
+depoları barındırılan kısayolları, HTTPS veya SSH'yi kullanabilir; mevcut Git kimlik bilgilerinizle erişilebilen özel
+depolar dahil.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Dallar, etiketler, tam commit hash'leri ve npm'in `::path:` depo alt dizini seçicileri desteklenir. Yerel yolları doğrudan
+yapılandırın; `plugin add` tarball ve npm takma ad hedeflerini kabul etmez.
+
+## Yeniden yükleme
+
+İzlenen yapılandırma dizinlerindeki değişiklikler otomatik olarak yeniden yüklenir. Sunucu başlangıcı önbelleğe alınmış
+paket eklentilerini hemen yükler, eksik paketleri arka planda kurar ve sabitlenmemiş npm ve Git eklentilerini güncellemeler
+için denetler. Tam npm sürümleri ve tam Git commit hash'leri sabit kalır. İzlenmeyen yerel bağımlılıklardaki değişiklikler
+yine de OpenCode'un yeniden başlatılmasını gerektirebilir.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Desktop
+
+`./gui-experimental` dışa aktaran bir eklenti OpenCode Desktop'a paneller, komutlar veya ayarlar da ekler. Uygulama
+eklentileri kendi çalıştırdığı sunucudan yükler; bu nedenle eklentiyi her pencerede kullanmak için genel `opencode.json(c)`
+dosyanızda yapılandırın.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+**Settings > Extensions > Plugins** listesi, uygulamanın kendi sunucusu seçildiğinde eklentileri gösterir. Bir eklentinin
+anahtarı yalnızca masaüstü arayüzünü kapatır ve bir hata sonrasında **Reload** onu yeniden yükler. Eklentinin tamamını
+kapatmak için `plugins` içine `-` ve kimliğini ekleyin, örneğin `"-acme"`.
+
+## Terminal
+
+Yalnızca TUI eklentileri ayrıca yapılandırılır ve uzak bir sunucuya bağlanıldığında etkin kalır.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  Araçlar, kancalar, entegrasyonlar, komutlar, agent'lar ve diğer davranışları ekleyen eklentiler oluşturun.
+</Card>

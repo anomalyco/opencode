@@ -1,6 +1,8 @@
 //! Session route: transcript, docks, prompts, and sidebar.
 
 pub mod actions;
+pub mod find;
+pub mod find_view;
 pub mod form;
 pub mod grouping;
 pub mod messages;
@@ -25,6 +27,7 @@ pub struct Session {
     sidebar: sidebar::Sidebar,
     transcript: messages::list::Transcript,
     scroll: scroll::Controls,
+    find: find_view::Find,
     _actions: actions::Actions,
     queued: queued::Queued,
     slot: RefCell<opencode_plugin::SlotMount>,
@@ -34,6 +37,7 @@ pub struct Session {
     form: form::SessionForms,
     location: crate::routes::location_missing::LocationMissing,
     prompt: crate::prompt::editor::Prompt,
+    blocked_by_request: Rc<Cell<bool>>,
     /// The grammars of the first page are still to prewarm, once its read settles.
     prewarm: Cell<bool>,
 }
@@ -43,11 +47,33 @@ impl Session {
         let app = &tui.app;
         let transcript = messages::list::Transcript::new(tui);
         let scroll = scroll::Controls::new(tui, &transcript);
-        let actions = actions::Actions::new(tui, &id, &scroll);
         let permission = permission::Permission::new(tui, &id);
         let form = form::SessionForms::new(tui, &id);
         let location = crate::routes::location_missing::LocationMissing::new(tui, &id);
         let prompt = crate::prompt::editor::mount(tui, Some(&id));
+        let blocked_by_request = Rc::new(Cell::new(false));
+        let blocked_by_composer = Rc::new(Cell::new(false));
+        let find = find_view::Find::new(tui, &transcript, &scroll, {
+            let (prompt_root, textarea) = (prompt.root().clone(), prompt.textarea().clone());
+            let (req, comp) = (blocked_by_request.clone(), blocked_by_composer.clone());
+            move |tui: &Tui, open: bool| {
+                if open {
+                    prompt_root.visible(false);
+                } else if !req.get() && !comp.get() {
+                    prompt_root.visible(true);
+                    if tui.dialogs.is_open() {
+                        tui.dialogs.refocus(&textarea);
+                    } else {
+                        tui.app.focus(&textarea);
+                    }
+                }
+            }
+        });
+        let prompt_available = {
+            let (req, comp) = (blocked_by_request.clone(), blocked_by_composer.clone());
+            move || !req.get() && !comp.get()
+        };
+        let actions = actions::Actions::new(tui, &id, &scroll, &find, prompt_available);
         scroll.follow_submits(&prompt);
         let queued = queued::Queued::new(tui, &id, prompt.weak());
         let rest = View::new(app)
@@ -56,11 +82,18 @@ impl Session {
             .child(permission.root())
             .child(form.root())
             .child(location.root())
+            .child(find.root())
             .child(prompt.root());
         let composer = crate::composer::Composer::new(tui, &id, {
             let (rest, textarea) = (rest.clone(), prompt.textarea().clone());
             let prompt_root = prompt.root().clone();
+            let find_weak = find.weak();
+            let comp = blocked_by_composer.clone();
             Rc::new(move |tui: &Tui, open: bool| {
+                comp.set(open);
+                if open && let Some(find) = find_weak.upgrade() {
+                    find.close(tui, false);
+                }
                 rest.visible(!open);
                 if open {
                     if tui.app.focused().is_some_and(|widget| widget.id() == textarea.id()) {
@@ -122,6 +155,7 @@ impl Session {
             sidebar,
             transcript,
             scroll,
+            find,
             _actions: actions,
             queued,
             slot: RefCell::new(slot),
@@ -131,6 +165,7 @@ impl Session {
             form,
             location,
             prompt,
+            blocked_by_request,
             prewarm: Cell::new(true),
         }
     }
@@ -156,17 +191,28 @@ impl RouteView for Session {
             prewarm(tui, &self.id);
         }
         self.transcript.sync(tui, &self.id, changes);
+        if self.find.is_open()
+            && (changes.has(&self.id, Touched::SHAPE | Touched::CONTENT | Touched::PENDING | Touched::INFO)
+                || changes.any(Touched::INFO))
+        {
+            self.find.sync(tui, changes.any(Touched::INFO));
+        }
         let prompting = self.permission.active() || self.form.active() || self.location.active();
         self.permission.sync(tui, changes);
         self.form.sync(tui, changes, self.permission.active());
         self.location.sync(tui);
+        let next_blocked = self.permission.active() || self.form.active() || self.location.active();
+        self.blocked_by_request.set(next_blocked);
+        if next_blocked && self.find.is_open() {
+            self.find.close(tui, false);
+        }
         // Before the composer follows: a composer that closes as a request shows must not focus the prompt it hides,
         // and one that opens as the last request goes takes the keys from the prompt shown here.
-        if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
-            self.prompt.root().visible(prompting);
+        if next_blocked != prompting {
+            self.prompt.root().visible(prompting && !self.find.is_open());
             if prompting && tui.dialogs.is_open() {
                 tui.dialogs.refocus(self.prompt.textarea());
-            } else if prompting && !self.composer.open() {
+            } else if prompting && !self.composer.open() && !self.find.is_open() {
                 self.prompt.focus(tui);
             }
         }
@@ -181,6 +227,7 @@ impl RouteView for Session {
     fn restyle(&self, tui: &Tui) -> bool {
         self.transcript.restyle(tui);
         self.scroll.restyle(tui);
+        self.find.restyle(tui);
         self.queued.restyle(tui);
         // Plugin claims take the theme when they render, so the slot renders them again where they are.
         self.composer_top.clear();
@@ -198,6 +245,11 @@ impl RouteView for Session {
     fn focus_target(&self) -> Option<AnyWidget> {
         if self.form.active() {
             return self.form.editor().map(|textarea| textarea.as_any());
+        }
+        if self.find.is_open()
+            && let Some(input) = self.find.input()
+        {
+            return Some(input.as_any());
         }
         (!self.permission.active() && !self.location.active() && !self.composer.open())
             .then(|| self.prompt.textarea().as_any())

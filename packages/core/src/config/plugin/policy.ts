@@ -104,7 +104,11 @@ export const Plugin = define({
             statements.findLast(
               (policy) =>
                 policy.action === "tool.use" &&
-                Wildcard.match(`${event.action}:${resource}`, policy.resource, Permission.ignoresCase(event.action)),
+                Wildcard.match(
+                  `${event.action}:${resource}`,
+                  policy.resource,
+                  Permission.ignoresCase(event.action, resource),
+                ),
             ),
           )
           .find((policy) => policy?.effect === "deny")

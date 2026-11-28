@@ -8,12 +8,15 @@ use crate::prelude::*;
 
 /// `MigrationOverlay` starts polling after this, then polls at the same interval.
 const MIGRATION_POLL: Duration = Duration::from_millis(1000);
+/// The server answers 503 while it boots, so consecutive transient failures are retried for about 30 polls.
+const MIGRATION_RETRIES: u32 = 30;
 
 #[derive(Default)]
 pub struct Overlays {
     reconnecting: RefCell<Option<View>>,
     timer: Cell<Option<TimerId>>,
     migration: RefCell<Option<View>>,
+    migration_failures: Cell<u32>,
     connected: Cell<bool>,
     polling: Cell<bool>,
 }
@@ -115,8 +118,20 @@ fn poll_migration(weak: &Weak<Tui>) {
         },
         bind!(weak, |tui, cx, result| {
             let status = match result {
-                Ok(status) => status,
-                Err(error) => return migration_failed(&tui, error.to_string()),
+                Ok(status) => {
+                    tui.overlays.migration_failures.set(0);
+                    status
+                }
+                Err(error) => {
+                    let failures = tui.overlays.migration_failures.get() + 1;
+                    tui.overlays.migration_failures.set(failures);
+                    if transient(&error) && failures <= MIGRATION_RETRIES {
+                        let weak = weak.clone();
+                        cx.app().set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
+                        return;
+                    }
+                    return migration_failed(&tui, error.tui_message());
+                }
             };
             let progress = (status["status"] == "running").then(|| progress(&status["progress"]));
             set_migration(&tui, progress);
@@ -133,6 +148,16 @@ fn poll_migration(weak: &Weak<Tui>) {
             }
         }),
     );
+}
+
+fn transient(error: &opencode_api::error::Error) -> bool {
+    match error {
+        opencode_api::error::Error::Transport(_) => true,
+        opencode_api::error::Error::UnexpectedStatus { status } | opencode_api::error::Error::Status { status, .. } => {
+            *status >= 500
+        }
+        _ => false,
+    }
 }
 
 fn migration_failed(tui: &Tui, message: String) {

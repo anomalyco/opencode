@@ -1,0 +1,120 @@
+---
+title: "建置外掛"
+description: "建置 OpenCode 外掛：一個套件可包含伺服器部分、TUI 部分、GUI 部分，或任意組合。"
+---
+
+外掛會修改 OpenCode 的行為並新增功能。外掛是一個套件，可包含伺服器部分、TUI 部分、GUI
+部分，或任意組合。
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+要移轉既有的 OpenCode 1 外掛？請遵循 [V1 外掛移轉指南](/build/plugins/migrate-v1)。
+
+## 外掛組成
+
+套件會分別匯出各部分，而各部分的 SDK 都由同一個相依套件 `@opencode/plugin` 提供。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **Server**（`.` 或 `./server`）會在 OpenCode 伺服器中以 `@opencode/plugin` 執行。它會新增工具、掛鉤、
+  整合、指令與 agent。請參閱[伺服器](/build/plugins/server)，或 Effect API 的
+  [Effect 外掛](/build/plugins/effect)。
+- **TUI**（`./tui`）會在終端機介面中以 `@opencode/plugin/tui` 執行。請參閱 [TUI](/build/plugins/cli)。
+- **GUI**（`./gui-experimental`）會在每個 OpenCode Desktop 視窗中執行其 `setup`，並在桌面應用程式的
+  主處理程序中以 `@opencode/plugin/gui` 執行其 `main`。請參閱 [GUI](/build/plugins/gui)。
+- **RPC**（`./rpc`）是具型別的契約，由伺服器部分實作，其他部分與用戶端則呼叫它。請參閱
+  [RPC](/build/plugins/rpc)。
+
+外掛的 `id` 來自其伺服器部分的 `Plugin.define`。只有 GUI 部分而沒有伺服器部分的套件，會以其
+套件名稱（或本機目錄名稱）作為 `id`。TUI 部分會宣告自己的 `id`；GUI 部分不宣告，而是
+採用外掛的。
+
+## 載入
+
+`.opencode/plugins/` 下的外掛會自動載入，就像上面的本機範例。若要從其他位置載入已發布套件或
+外掛目錄，請將它們加入 `opencode.json(c)` 的 `plugins`：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- 一個項目會載入每個部分。TUI 會載入其伺服器所載入外掛的 TUI 部分，OpenCode Desktop 則會載入
+  全域 `opencode.json(c)` 中外掛的 GUI 部分。
+- 只有 TUI 部分的套件請改放在 [`cli.json`](/cli/plugins)。
+- 具有 `package.json` `name` 與 `exports` 的本機外掛目錄會透過它們載入其部分，就像已發布的
+  套件。沒有這些設定時，會依根目錄的檔名載入：`server`（若無則用 `index`）、`tui` 與 `rpc`，副檔名為 `.ts`、
+  `.tsx` 或 `.js`，以及 `gui-experimental.cjs`（或 `.js`）。
+- 更多載入與設定選項請參閱[設定外掛](/plugins)。
+
+## 發布
+
+已發布的外掛是含有上述 `package.json` 的 npm 套件。其部分使用與本機
+外掛相同的預設匯出。
+
+```bash
+npm publish
+```
+
+- 當其他外掛與用戶端應在不載入你的實作下匯入你的 [RPC 契約](/build/plugins/rpc)時，請匯出 `./rpc`。
+- 發布前請先建置 GUI bundle，並透過 `files` 納入它。請參閱
+  [建置 bundle](/build/plugins/gui#build-the-bundle)。
+- 請使用與你目標 OpenCode 版本相容的版本，並測試已安裝的套件，而不只是
+  工作區連結的複本。當你採用較新的 API 契約時，請發布相容的外掛更新。
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    在 OpenCode 伺服器中新增工具、掛鉤、整合、指令與 agent。
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    為終端機介面新增指令、路由、插槽與 Markdown 算繪器。
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    為 OpenCode Desktop 新增面板、指令、設定頁面與原生整合。
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    從伺服器部分向其他部分與用戶端公開具型別的方法與事件。
+  </Card>
+</CardGroup>

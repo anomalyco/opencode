@@ -1017,7 +1017,7 @@ impl Thought {
 
     fn restyle(&self, cx: &Context<'_>) {
         self.bar.border_color(cx.theme.decrease(&cx.theme.background.raised.base, 1));
-        opencode_ui::markdown::restyle(&self.markdown, thought_colors(cx.theme), cx.thinking_syntax);
+        opencode_ui::markdown::restyle(&self.markdown, cx.theme, thought_colors(cx.theme), cx.thinking_syntax);
     }
 
     fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning, conceal: bool) {

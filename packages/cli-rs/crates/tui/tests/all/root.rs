@@ -147,3 +147,75 @@ fn the_environment_is_uploaded_when_the_status_follows_server_connected() {
     assert!(app.wait_until(support::WAIT, upload), "{:?}", writes(&memory));
     drop(tui);
 }
+
+#[test]
+fn a_startup_prompt_sent_to_session_is_not_resubmitted_by_a_later_home_view() {
+    let app = TestApp::new(100, 30);
+    let mut routes = routes();
+    routes.push(MemoryRoute::json(
+        "POST",
+        "/api/session/ses_b/prompt",
+        200,
+        &json!({ "data": {
+            "id": "msg_b", "sessionID": "ses_b", "time": { "created": 4 }, "type": "user",
+            "payload": { "text": "STARTUP_ONCE" }, "delivery": "steer",
+        } }),
+    ));
+    let memory = Memory::new(routes);
+    let tui = mount(
+        &app,
+        &memory,
+        support::session_route("ses_b"),
+        Args { session: Some(SessionID("ses_b".into())), prompt: Some("STARTUP_ONCE".into()), ..Args::default() },
+    );
+    let prompts = || {
+        memory
+            .requests()
+            .into_iter()
+            .filter(|logged| logged.method == "POST" && logged.path.ends_with("/prompt"))
+            .map(|logged| {
+                let id = logged.path.split('/').nth(3).unwrap_or_default().to_owned();
+                let text = logged.body.as_ref().and_then(|body| body["text"].as_str()).unwrap_or_default().to_owned();
+                (id, text)
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(app.wait_until(support::WAIT, || prompts().len() == 1), "{:?}", prompts());
+    assert_eq!(prompts(), [("ses_b".to_owned(), "STARTUP_ONCE".to_owned())]);
+
+    tui.navigate(Route::Home);
+    assert!(
+        app.wait_until(support::WAIT, || app.text().contains("Demo Model") && !app.text().contains("STARTUP_ONCE"))
+    );
+    app.type_text("NEXT_PROMPT");
+    app.press("return");
+    assert!(app.wait_until(support::WAIT, || prompts().len() == 2), "{:?}", prompts());
+    assert_eq!(prompts()[1].1, "NEXT_PROMPT");
+    assert_ne!(prompts()[1].0, "ses_b");
+    drop(tui);
+}
+
+#[test]
+fn a_home_startup_prompt_is_submitted_once_and_not_refilled_by_a_later_home_view() {
+    let app = TestApp::new(100, 30);
+    let memory = Memory::new(routes());
+    let tui = mount(&app, &memory, Route::Home, Args { prompt: Some("HOME_ONCE".into()), ..Args::default() });
+    let texts = || {
+        memory
+            .requests()
+            .into_iter()
+            .filter(|logged| logged.method == "POST" && logged.path.ends_with("/prompt"))
+            .map(|logged| logged.body.as_ref().and_then(|body| body["text"].as_str()).unwrap_or_default().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert!(app.wait_until(support::WAIT, || texts().len() == 1), "{:?}", texts());
+    assert_eq!(texts(), ["HOME_ONCE"]);
+
+    tui.navigate(Route::Home);
+    assert!(app.wait_until(support::WAIT, || app.text().contains("Demo Model") && !app.text().contains("HOME_ONCE")));
+    app.type_text("NEXT_PROMPT");
+    app.press("return");
+    assert!(app.wait_until(support::WAIT, || texts().len() == 2), "{:?}", texts());
+    assert_eq!(texts(), ["HOME_ONCE", "NEXT_PROMPT"]);
+    drop(tui);
+}

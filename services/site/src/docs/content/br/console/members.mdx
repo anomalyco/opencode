@@ -1,0 +1,67 @@
+---
+title: "Membros"
+description: "Convide pessoas para um espaço de trabalho do OpenCode Console, gerencie as funções delas e remova-as."
+---
+
+Proprietários e admins gerenciam os membros em **Settings › Members**. Abra a página de um membro para ver seu uso e suas políticas de orçamento.
+
+## Convidar membros
+
+1. Abra **Settings › Members** e clique em **Invite Members**.
+2. Adicione um ou mais endereços de email. Separe-os com espaços, vírgulas ou ponto e vírgula, ou cole uma lista.
+3. Clique em **Send invitations**.
+
+Cada pessoa recebe um email com o título **Join Acme Inc. on OpenCode** e um botão **Join workspace**.
+
+Os convites expiram após 7 dias. Todos entram como **Member**; [mude a função](#change-a-role) depois que entrarem.
+
+<Callout>
+  No [OpenCode Go](/console/go) e no Go Plus, as pessoas que você convida usam os modelos grátis ou o saldo do espaço de trabalho. Para dar
+  a cada pessoa limites próprios do Go, mude para o Go Teams ($20 por membro por mês, mínimo de 2 membros). A partir do terceiro membro,
+  o espaço de trabalho paga $20 por mês por pessoa, a contar da data de entrada.
+</Callout>
+
+Os membros também podem entrar automaticamente:
+
+- O [SSO](/console/sso#automatic-membership) adiciona pessoas dos seus domínios de email verificados no primeiro login.
+- A [sincronização de diretório](/console/scim) adiciona ou remove pessoas conforme você concede ou revoga o acesso delas no seu provedor de identidade.
+
+## Aceitar um convite
+
+A pessoa convidada precisa entrar com o endereço de email para o qual o convite foi enviado. Há duas formas de aceitar:
+
+- Clique em **Join workspace** no email de convite e entre ou crie uma conta.
+- Entre no Console, abra o menu do espaço de trabalho e clique em **Join** em **Pending invitations**.
+
+Se ela tiver entrado com outra conta, o Console pede que clique em **Sign out and continue** e entre com o email que recebeu o convite.
+
+## Gerenciar convites pendentes
+
+Os convites pendentes aparecem na tabela de membros como **Pending · Expires** seguido da data, ou **Expired**.
+
+| Ação | Como                                                                                       |
+| ------ | ----------------------------------------------------------------------------------------- |
+| Reenviar | **⋯ › Resend invitation**. Envia um novo link válido por 7 dias; o link antigo deixa de funcionar. |
+| Revogar | **⋯ › Remove...**. O link deixa de funcionar imediatamente.                                    |
+
+## Mudar uma função
+
+Abra o menu de funções na linha de um membro e escolha **Member**, **Admin** ou **Owner**.
+
+Você só pode atribuir funções de nível igual ou inferior ao seu. O espaço de trabalho sempre precisa ter pelo menos um proprietário. Consulte
+[Funções](/console/workspaces#roles).
+
+## Remover um membro
+
+1. Clique em **⋯ › Remove...** na linha do membro.
+2. Confirme com **Remove member**.
+
+O acesso é revogado imediatamente, e você pode convidar a pessoa de novo mais tarde. O uso anterior dela permanece nos relatórios do espaço de trabalho.
+
+Remover um membro também revoga as chaves de API que ele criou no espaço de trabalho, incluindo chaves de conta de serviço. As contas de serviço
+em si permanecem, e as chaves criadas por outras pessoas continuam funcionando. Consulte [Revogação](/console/api#revocation).
+
+## Detalhes do membro
+
+Clique em um membro para ver o orçamento mensal, os modelos e clientes que ele usa, os gráficos de uso e os logs de requisições. Daqui
+você pode definir o [orçamento](/console/budgets#member-budgets) dele e exportar o uso como CSV.

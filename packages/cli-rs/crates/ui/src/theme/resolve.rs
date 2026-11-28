@@ -17,7 +17,7 @@ use super::tokens::Tokens;
 use super::{Scale, ThemeMode, Views, mode_name};
 use opencode_api_types::js::truthy;
 
-const SECTIONS: [&str; 7] = ["text", "background", "border", "scrollbar", "diff", "syntax", "markdown"];
+const SECTIONS: [&str; 8] = ["text", "background", "border", "scrollbar", "diff", "find", "syntax", "markdown"];
 /// The document keys of [`STATES`].
 const STATE_KEYS: [&str; 5] = ["$disabled", "$pressed", "$focused", "$selected", "$hovered"];
 
@@ -144,6 +144,16 @@ fn action<'a>(groups: &[Group<'a>], section: &str, variant: &str, key: &str) -> 
         .or_else(|| action(below, section, variant, "base"))
 }
 
+/// Unset find colors fall back to the surface's raised and focused tokens.
+fn find_fallback(path: &str) -> Option<&'static str> {
+    match path {
+        "find.text.current" => Some("text.action.primary.focused"),
+        "find.background.match" => Some("background.raised.max"),
+        "find.background.current" => Some("background.action.primary.focused"),
+        _ => None,
+    }
+}
+
 /// Splits a token path; a path deeper than any token is never found.
 fn split(path: &str) -> Option<([&str; 4], usize)> {
     let mut parts = [""; 4];
@@ -253,6 +263,7 @@ impl<'a> Resolver<'a, '_> {
         }
         match lookup(self.groups, &parts[..count]) {
             Some(Value::String(text)) => self.color(text, path, &mut Vec::new()),
+            None if find_fallback(path).is_some() => self.token(find_fallback(path).expect("checked")),
             Some(Value::Number(_) | Value::Object(_)) | None => Err(missing()),
             Some(_) => Err(format!("Invalid theme value at \"theme.{path}\"")),
         }

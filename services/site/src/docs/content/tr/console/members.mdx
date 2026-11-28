@@ -1,0 +1,70 @@
+---
+title: "Üyeler"
+description: "Kişileri bir OpenCode Console çalışma alanına davet edin, rollerini yönetin ve onları kaldırın."
+---
+
+Sahipler ve yöneticiler kişileri **Settings › Members** bölümünde yönetir. Bir üyeyi açarak kullanımını ve bütçe
+politikalarını görün.
+
+## Üye davet etme
+
+1. **Settings › Members** bölümünü açın ve **Invite Members** düğmesine tıklayın.
+2. Bir veya daha fazla e-posta adresi ekleyin. Bunları boşluk, virgül veya noktalı virgülle ayırın ya da bir liste
+   yapıştırın.
+3. **Send invitations** düğmesine tıklayın.
+
+Her kişi, **Join workspace** düğmesi içeren **Join Acme Inc. on OpenCode** konulu bir e-posta alır.
+
+Davetler 7 gün sonra sona erer. Herkes **Member** olarak katılır; katıldıktan sonra
+[rollerini değiştirin](#change-a-role).
+
+<Callout>
+  [OpenCode Go](/console/go) ve Go Plus'ta davet ettiğiniz kişiler ücretsiz modelleri veya çalışma alanı bakiyesini
+  kullanır. Herkese kendi Go limitlerini vermek için Go Teams'e (üye başına ayda 20$, en az 2 üye) yükseltin. İkinciden
+  sonraki her üye katıldığı andan itibaren ayda 20$ ücretlendirilir.
+</Callout>
+
+Üyeler otomatik olarak da katılabilir:
+
+- [SSO](/console/sso#automatic-membership), doğrulanmış e-posta alan adlarınızdaki kişileri ilk oturum açtıklarında ekler.
+- [Dizin eşitleme](/console/scim), kimlik sağlayıcınızda atadığınız kişileri ekler ve kaldırır.
+
+## Daveti kabul etme
+
+Davet edilen kişi, davetin gönderildiği e-posta adresiyle oturum açmalıdır. Kabul etmenin iki yolu vardır:
+
+- Davet e-postasındaki **Join workspace** düğmesine tıklayın, ardından oturum açın veya bir hesap oluşturun.
+- Console'da oturum açın, çalışma alanı menüsünü açın ve **Pending invitations** altındaki **Join** düğmesine tıklayın.
+
+Davetli farklı bir hesapla oturum açmışsa Console, **Sign out and continue** seçeneğiyle çıkış yapıp davetin gönderildiği e-posta adresiyle devam etmesini ister.
+
+## Bekleyen davetleri yönetme
+
+Bekleyen davetler Members tablosunda **Pending · Expires** ve ardından tarih ya da **Expired** olarak görünür.
+
+| Eylem    | Nasıl                                                                                    |
+| -------- | ----------------------------------------------------------------------------------------- |
+| Yeniden gönder | **⋯ › Resend invitation**. 7 gün geçerli yeni bir bağlantı gönderir; eski bağlantı çalışmayı durdurur. |
+| İptal et | **⋯ › Remove...**. Bağlantı hemen çalışmayı durdurur.                                     |
+
+## Rol değiştirme
+
+Bir üyenin satırındaki rol menüsünü açın ve **Member**, **Admin** veya **Owner** seçin.
+
+Kendi rolünüzden daha yetkili bir rol veremezsiniz. Çalışma alanında her zaman en az bir sahip olmalıdır. Ayrıntılar için [Roller](/console/workspaces#roles) bölümüne bakın.
+
+## Üye kaldırma
+
+1. Üyenin satırında **⋯ › Remove...** düğmesine tıklayın.
+2. **Remove member** ile onaylayın.
+
+Erişim hemen kaldırılır ve daha sonra onları yeniden davet edebilirsiniz. Geçmiş kullanımları çalışma alanının
+raporlarında kalır.
+
+Bir üyeyi kaldırdığınızda o üyenin çalışma alanında oluşturduğu tüm API anahtarları, hizmet hesabı anahtarları dahil, iptal edilir. Hizmet hesapları silinmez ve başkalarının oluşturduğu anahtarlar çalışmaya devam eder. Ayrıntılar için [İptal](/console/api#revocation) bölümüne bakın.
+
+## Üye ayrıntıları
+
+Aylık bütçesini, kullandığı modelleri ve istemcileri, kullanım grafiklerini ve istek günlüklerini görmek için bir üyeye
+tıklayın. Buradan [bütçesini](/console/budgets#member-budgets) ayarlayabilir ve kullanımını CSV olarak dışa
+aktarabilirsiniz.

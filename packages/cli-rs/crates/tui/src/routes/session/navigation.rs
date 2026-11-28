@@ -151,6 +151,33 @@ impl Inner {
         );
     }
 
+    /// `centerFind`: scrolls the transcript so screen row `screen_y` sits at the middle of the
+    /// viewport, mounting newer rows first if the bounded window stops short of the target.
+    pub(super) fn center_find(&self, tui: &Tui, id: String, screen_y: f64) {
+        let scroll = self.transcript.scroll();
+        let (_, scroll_top) = scroll.scroll_position();
+        let viewport = scroll.rect();
+        let top = scroll_top + screen_y - viewport.screen_y - (f64::from(viewport.height) / 2.0).floor();
+        self.center_find_top(tui, id, top);
+    }
+
+    fn center_find_top(&self, tui: &Tui, id: String, top: f64) {
+        let viewport = self.height();
+        let max_top = (self.rows_height() - viewport).max(0.0);
+        if top > max_top && self.transcript.mount_newer(tui) {
+            after_layout(
+                &tui.app,
+                bind!(self.this, |inner| {
+                    if let Some(tui) = inner.tui.upgrade() {
+                        inner.center_find_top(&tui, id, top);
+                    }
+                }),
+            );
+            return;
+        }
+        self.align(tui, id, top.clamp(0.0, max_top));
+    }
+
     /// `alignMessage`: stops following the bottom, adds the slack the target needs, and scrolls once
     /// that is laid out. Short of the newest row, newer rows mount instead of the slack.
     fn align(&self, tui: &Tui, id: String, top: f64) {

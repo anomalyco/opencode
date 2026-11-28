@@ -366,6 +366,39 @@ fn down_moves_through_a_multiline_prompt_when_history_is_unbound() {
 }
 
 #[test]
+fn popping_a_stashed_shell_draft_restores_shell_mode() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("!echo pen");
+    setup.wait_for("Shell");
+    setup.tui.keymap.dispatch("prompt.stash", None);
+    setup.wait_gone("echo pen");
+    setup.wait_gone("Shell");
+    assert_eq!(setup.textarea().text(), "");
+
+    setup.tui.keymap.dispatch("prompt.stash.pop", None);
+    setup.wait_for("Shell");
+    assert_eq!(setup.textarea().text(), "echo pen");
+}
+
+#[test]
+fn selecting_a_stashed_shell_draft_from_the_stash_list_restores_shell_mode() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("!echo pen");
+    setup.wait_for("Shell");
+    setup.tui.keymap.dispatch("prompt.stash", None);
+    setup.wait_gone("echo pen");
+    setup.wait_gone("Shell");
+
+    setup.tui.keymap.dispatch("prompt.stash.list", None);
+    setup.wait_for("echo pen");
+    setup.app.press("return");
+    setup.wait_for("Shell");
+    assert_eq!(setup.textarea().text(), "echo pen");
+}
+
+#[test]
 fn down_past_the_newest_entry_restores_the_draft_text_and_shell_mode() {
     let setup = Setup::new(session_route());
     setup.ready();

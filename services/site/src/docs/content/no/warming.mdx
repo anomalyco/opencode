@@ -1,0 +1,216 @@
+---
+title: "Oppvarming"
+description: "Send forespørsler med jevne mellomrom for å holde promptcachen hos leverandøren aktiv når du tar en pause mellom prompter."
+---
+
+Med øktoppvarming sender OpenCode modellforespørsler med jevne mellomrom for å bevare
+promptcachen eller annen kortvarig tilstand hos leverandøren når du tar en pause mellom prompter.
+Funksjonen er slått av som standard.
+
+Slå på oppvarming i en hvilken som helst [OpenCode-konfigurasjonsfil](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Med denne konfigurasjonen varmer OpenCode opp en nylig aktiv økt rett før
+promptcachen utløper: ved 90 % av modellens
+[`cache.ttl`](/models#cache-lifetime), eller hvert fjerde minutt når modellen
+ikke har noen. Det fortsetter til det har gått 30 minutter siden den siste
+forespørselen som ikke var oppvarming.
+
+## Alternativer
+
+Bruk objektformen for å endre oppvarmingsprompten, intervall eller aktivt
+vindu:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Felt | Standard | Formål |
+| --- | --- | --- |
+| `prompt` | Keep-alive-instruksjon | Legges til som en midlertidig brukermelding for hver oppvarmingsforespørsel. Standard ber modellen ikke gjøre arbeid, ikke bruke verktøy og svare med `OK`. |
+| `interval` | `"auto"` | Ledig tid før neste oppvarmingsforespørsel. `"auto"` bruker 90 % av modellens `cache.ttl`, eller fire minutter uten en. |
+| `duration` | `"30 minutes"` | Oppvarmingsvindu målt fra den siste modellforespørselen som ikke var oppvarming. |
+
+Utelatte objektfelt beholder standardverdiene. For eksempel endrer dette bare
+intervallet:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Automatisk intervall
+
+Som standard er `interval` satt til `"auto"`, som varmer opp rett før hver modells
+promptcache utløper. OpenCode bruker 90 % av modellens
+[`cache.ttl`](/models#cache-lifetime)-innstilling, så en cache på `"5m"` varmes opp
+hvert 4,5 minutt. Modeller uten `cache.ttl` varmes opp hvert fjerde minutt.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+En cache som varer lenger enn `duration`, for eksempel `"1h"` med standarden på 30 minutter,
+varmes ikke opp, siden den uansett varer lenger enn oppvarmingsperioden. OpenCode
+logger dette én gang per økt. Øk `duration` for å varme den opp.
+
+## Per leverandør og modell
+
+Angi `settings.cache.warming` på en leverandør eller modell for å varme opp bare dens økter,
+eller gi dem egen tidsstyring. Den tar samme verdier som toppnivåets
+`warming`, unntatt `prompt`, og overstyrer det. En modellinnstilling overstyrer
+leverandørinnstillingen.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Her varmes Anthropic-økter opp hvert 4,5 minutt, unntatt økter som bruker Claude Haiku 5.5.
+Økter hos andre leverandører varmes ikke opp. For felt som mangler i objektet, brukes
+verdiene fra `warming` på toppnivå, eller standardverdiene hvis de heller ikke er angitt der.
+Hvis en innstilling er ugyldig, logger OpenCode en advarsel og bruker `warming` på toppnivå.
+
+## Varigheter
+
+`interval` og `duration` godtar varighetsstrenger. Begge må gi endelige
+verdier større enn null, og `interval` må være kortere enn `duration`;
+ellers hopper OpenCode over oppvarming og logger en advarsel.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Tidsstyring
+
+Oppvarming starter etter en modellforespørsel som ikke er oppvarming, i en toppnivåøkt.
+Subagentøkter varmes ikke opp. Hvert intervall telles fra når den siste
+forespørselen eller oppvarmingsforespørselen ble sendt, ikke fra når svaret ble ferdig,
+fordi levetiden til cachen hos leverandøren regnes fra forespørselen kommer fram. En
+oppvarmingsforespørsel forlenger ikke det aktive vinduet.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Enhver ny modellaktivitet som ikke er oppvarming, inkludert komprimering, tilbakestiller begge timere.
+Et eksplisitt intervall som er like langt som eller lengre enn varigheten, avvises med en
+advarsel. Hvis et `"auto"`-intervall er like langt som oppvarmingsperioden eller lengre, hopper OpenCode over oppvarmingen fordi cachen
+varer lenger enn oppvarmingsperioden.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode sender aldri en oppvarmingsforespørsel mens en modellforespørsel, inkludert en
+komprimering, kjører. Hvis en fortsatt kjører når intervallet forfaller,
+venter oppvarmingen til den er ferdig og sender deretter med en gang, så lenge cachen
+fra den forespørselen ikke er utløpt. Hvis den er det, stopper oppvarmingen til neste
+vanlige forespørsel.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## Forespørsler
+
+En oppvarmingsforespørsel bruker øktens gjeldende modell, agent, instruksjoner og
+samtalekontekst. OpenCode legger den konfigurerte prompten til midlertidig,
+gjør ett modellkall og forkaster svaret.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+Forespørselen tar ikke imot inndata, legger ikke til meldinger i historikken og endrer ikke den
+lagrede økttilstanden. OpenCode kjører ikke lokale verktøykall og fortsetter ikke en verktøyløkke.
+Standardprompten ber også modellen la være å bruke verktøy.
+
+## Feil
+
+OpenCode logger oppvarmingsfeil uten å avbryte eller endre økten. Den venter til neste
+intervall før den prøver igjen. Den opprinnelige oppvarmingsperioden forlenges ikke.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+Hvis en oppvarmingsforespørsel leser mindre fra cachen enn den skriver, regnes det som et cachemiss.
+Da stopper oppvarmingen for økten fram til neste vanlige forespørsel. Hvis leverandøren
+ikke rapporterer cachebruk, regnes forespørselen aldri som et cachemiss.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Kostnader
+
+Oppvarmingsforespørsler er ekte leverandørforespørsler. De kan bruke tokens, påføre
+kostnader, telle mot hastighetsgrenser og mislykkes som andre modellforespørsler.
+
+- Kortere intervaller øker forespørselsvolumet.
+- Lengre varigheter tillater flere oppvarmingsforespørsler.
+- Slå bare på oppvarming når fordelen på leverandørsiden er verdt den ekstra bruken.
+
+For eksempel tillater standardverdiene opptil sju oppvarmingsforsøk i ett uavbrutt 30-minuttersvindu
+på en modell uten `cache.ttl`: ved minutt 4, 8, 12, 16, 20, 24 og 28.
+
+## Slå av
+
+Angi `warming` til `false` for å slå det av eksplisitt. Å utelate feltet lar også
+oppvarming være slått av.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

@@ -488,6 +488,88 @@ fn a_running_migration_shows_its_progress() {
     assert!(shown, "{}", harness.app.text());
 }
 
+fn migration_harness(
+    responses: Vec<Result<(u16, Value), &'static str>>,
+) -> (support::Harness, Arc<std::sync::atomic::AtomicUsize>) {
+    use opencode_api::transport::{BoxFuture, Request, Response, Transport};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+
+    struct MigrationServer {
+        memory: Memory,
+        responses: Vec<Result<(u16, Value), &'static str>>,
+        polls: Arc<AtomicUsize>,
+    }
+
+    impl Transport for MigrationServer {
+        fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+            if request.url.path() != "/api/experimental/migration/v1" {
+                return self.memory.send(request);
+            }
+            let index = self.polls.fetch_add(1, Ordering::SeqCst);
+            let reply = self.responses[index.min(self.responses.len() - 1)].clone();
+            Box::pin(async move {
+                let (status, body) = reply.map_err(str::to_owned)?;
+                Ok(support::respond(status, &body))
+            })
+        }
+    }
+
+    let polls = Arc::new(AtomicUsize::new(0));
+    let memory = Memory::new(vec![MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} }))]);
+    let transport = Arc::new(MigrationServer { memory, responses, polls: polls.clone() });
+    let deps = Deps { events: true, route: Route::Home, ..support::deps(transport) };
+    (support::mount(100, 30, deps), polls)
+}
+
+#[test]
+fn migration_overlay_retries_transient_failures_while_the_server_boots() {
+    use std::sync::atomic::Ordering;
+    let starting = Ok((503, json!({ "code": "service_starting" })));
+    let (harness, polls) = migration_harness(vec![
+        starting.clone(),
+        Err("ECONNRESET"),
+        starting,
+        Ok((200, json!({ "status": "completed" }))),
+    ]);
+    let done = harness.app.wait_until(WAIT, || {
+        harness.app.advance(Duration::from_millis(1000));
+        polls.load(Ordering::SeqCst) == 4
+    });
+    assert!(done, "polls={}", polls.load(Ordering::SeqCst));
+    harness.app.advance(Duration::from_millis(3000));
+    assert_eq!(polls.load(Ordering::SeqCst), 4);
+    assert!(!harness.app.text().contains("Data migration failed"), "{}", harness.app.text());
+}
+
+#[test]
+fn migration_overlay_reports_a_migration_error_from_the_status() {
+    use std::sync::atomic::Ordering;
+    let (harness, polls) = migration_harness(vec![
+        Ok((503, json!({ "code": "service_starting" }))),
+        Ok((200, json!({ "status": "error", "error": "disk full" }))),
+    ]);
+    let failed = harness.app.wait_until(WAIT, || {
+        harness.app.advance(Duration::from_millis(1000));
+        harness.app.text().contains("Data migration failed") && harness.app.text().contains("disk full")
+    });
+    assert!(failed, "{}", harness.app.text());
+    assert_eq!(polls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn migration_overlay_reports_failure_once_transient_retries_run_out() {
+    use std::sync::atomic::Ordering;
+    let (harness, polls) = migration_harness(vec![Ok((503, json!({ "code": "service_starting" })))]);
+    let failed = harness.app.wait_until(WAIT, || {
+        harness.app.advance(Duration::from_millis(1000));
+        harness.app.text().contains("Data migration failed")
+    });
+    assert!(failed, "polls={}\n{}", polls.load(Ordering::SeqCst), harness.app.text());
+    assert_eq!(polls.load(Ordering::SeqCst), 31);
+}
+
 #[test]
 fn pair_matches_typescript() {
     let app = TestApp::new(100, 40);

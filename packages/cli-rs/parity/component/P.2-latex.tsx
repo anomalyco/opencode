@@ -52,7 +52,7 @@ function TextPart(props: { text: string }) {
         renderBlock={createMarkdownCodeBlockRenderer({ latex: render, math: render })}
         content={props.text.trim()}
         streaming={false}
-        tableOptions={{ style: "grid", cellPaddingX: 1 }}
+        tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
         conceal={true}
         fg={theme.markdown.text}
         bg={theme.background.base}

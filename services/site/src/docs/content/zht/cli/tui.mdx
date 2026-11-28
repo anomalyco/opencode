@@ -1,0 +1,104 @@
+---
+title: "TUI"
+description: "在終端機介面啟動工作階段，並掌握常用操作。"
+---
+
+在專案中執行 OpenCode、輸入請求，然後按 **Enter**。
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 換行。OpenCode 正在處理請求時，按 **Enter** 可送出提示詞，調整目前工作階段接下來的處理方向；若要將提示詞排入佇列、稍後再處理，請先按 **Ctrl+X**，再按 **Enter**。
+
+## 專案與目錄
+
+OpenCode 會在你啟動它的目錄中搜尋檔案並執行 shell 指令。同一個 Git 儲存庫中的目錄（包括其 worktree）都屬於同一個專案。不受版本控制的目錄則各自成為獨立的專案。
+
+若要在其他專案中啟動，請指定目錄：
+
+```bash
+opencode ~/code/another-project
+```
+
+按 **Ctrl+O** 開啟最近使用的工作階段與專案清單。選取專案後，按 **Right** 列出該專案的 worktree，再按 **Ctrl+N** 即可新增 worktree。
+
+## 上下文
+
+輸入 `@` 搜尋檔案，然後選取它，將該檔案附加到提示詞。在 `@` 之後繼續輸入可縮小結果範圍。
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+你可以在路徑後加上行號或行號範圍。
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+在空白提示詞開頭輸入 `!` 即可進入 shell 模式。輸入指令並按 **Enter**；按 **Esc** 離開 shell 模式而不執行任何指令。
+
+```text
+!git status
+```
+
+Shell 指令會在目前工作階段的工作目錄中執行，輸出也會保留在該工作階段。
+
+## 指令
+
+輸入 `/` 列出斜線指令。繼續輸入可篩選清單，然後按 **Enter** 執行所選指令。
+
+```text
+/models
+```
+
+常用指令包括 `/new`、`/sessions`、`/models`、`/agents`、`/undo`、`/redo` 與 `/editor`。按 **Ctrl+P** 開啟指令面板，查看目前畫面上所有可用的操作。
+
+更新後，OpenCode 會在主畫面顯示一次這個版本的新功能。執行 `/highlights` 可再次查看；若不想讓它自動開啟，請在 [`cli.json`](/cli/config#alerts) 中設定 `"highlights": false`。
+
+## 附帶問題
+
+執行 `/btw <question>`，就能針對目前為止的對話順便問個問題。回答會使用工作階段的上下文和目前的模型，但不會加入對話，因此不影響之後的提示詞。執行時，輸入框下方會顯示 `/btw`；回答會出現在對話框中，按 **C** 即可複製。
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## 模型
+
+按 **Ctrl+X** 再按 **M** 選擇模型，或執行 `/models`。按 **F2** 循環切換最近使用的模型。
+
+按 **Ctrl+X** 再按 **A** 選擇 agent，或執行 `/agents`。按 **Shift+Tab** 循環切換 agent。
+
+## 工作階段
+
+每個工作階段都是獨立的對話，有自己的記錄和目錄。若要處理另一項工作，請執行 `/new`，或按 **Ctrl+X** 再按 **N** 開啟新的工作階段；先前的工作階段仍可使用。新的工作階段會從你啟動 OpenCode 的目錄開始。若將 [`session.new_location`](/cli/config#sessions) 設為 `inherit`，則會沿用目前工作階段的目錄。
+
+按 **Ctrl+X** 再按 **L**，或執行 `/sessions`，即可回到既有的工作階段。在該清單中，按 **Ctrl+A** 可在目前目錄的工作階段與所有專案的工作階段之間切換。按 **Ctrl+O** 可同時開啟最近使用的工作階段與專案清單。
+
+分頁預設為啟用。使用 **Ctrl+Tab** 與 **Ctrl+Shift+Tab** 在分頁之間移動，按 **Ctrl+X** 再按 **W** 關閉一個分頁，按 **Ctrl+Shift+T** 重新開啟最後關閉的分頁。
+
+## 記錄
+
+按 **Ctrl+X** 再按 **U**，或執行 `/undo`，復原最新的使用者訊息及其後的工作。被復原的提示詞會回到輸入框，讓你編輯。
+
+按 **Ctrl+X** 再按 **R**，或執行 `/redo`，即可重做已復原的工作。如果改送新的提示詞，OpenCode 會保留復原後的狀態，並從該狀態繼續。
+
+## 編輯器
+
+設定 `VISUAL` 或 `EDITOR`，然後按 **Ctrl+X** 再按 **E**，或執行 `/editor`，在該編輯器中編輯目前的提示詞。儲存並結束後，文字會回到輸入框，再按 **Enter** 送出。
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+快捷鍵的前置鍵（Leader 鍵）預設為 **Ctrl+X**。如要變更這些快捷鍵，請參閱[快捷鍵](/cli/keybinds)。

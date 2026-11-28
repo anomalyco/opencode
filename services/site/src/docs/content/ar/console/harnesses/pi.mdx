@@ -1,0 +1,70 @@
+---
+title: "Pi"
+description: "استخدم نماذج Console وGo من وكيل البرمجة Pi."
+---
+
+يتضمّن [Pi](https://pi.dev) مزوّدي OpenCode للدفع حسب الاستخدام ولاشتراك Go. ويختار API المناسبة لكل نموذج مدفوع أو
+نموذج Go. وتتطلّب نماذج المحادثة المجانية استخدام OpenCode، وتُرفض طلباتها من Pi برمز HTTP `403`.
+
+<Callout>
+يتيح لك [Console CLI](/console/harnesses#console-cli) إعداد Pi بأمر واحد، بما يشمل سياسات مساحة العمل وخوادم
+  MCP والمهارات والتعليمات. شغّل `npx @opencode/console setup pi`. والخطوات أدناه تعدّه يدويًا.
+</Callout>
+
+| المزوّد        | الخطة          |
+| ------------- | ------------- |
+| `opencode`    | الدفع حسب الاستخدام |
+| `opencode-go` | Go            |
+
+## الإعداد
+
+يقرأ المزوّدان المفتاح من `OPENCODE_API_KEY`. أنشئ [مفتاح API شخصي](/console/harnesses#get-an-api-key).
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+ويمكنك أيضًا تشغيل `/login` في Pi واختيار المزوّد. ويخزّن Pi المفتاح في `~/.pi/agent/auth.json`.
+
+```text
+/login opencode
+```
+
+## Go
+
+استخدم مزوّد `opencode-go` بمفتاح من مساحة عمل لديها اشتراك [Go](/console/go).
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## النماذج
+
+اختر نموذجًا بصيغة `<provider>/<model-id>`، باستخدام المعرّفات من جدول [Console](/console/models#endpoints) أو
+[Go](/console/go#endpoints). واسرد النماذج التي يعرفها Pi بـ `--list-models`.
+
+```bash
+pi --list-models opencode-go
+```
+
+اضبط نموذجًا افتراضيًا في `~/.pi/agent/settings.json`، أو اضغط `Ctrl+S` في قائمة الاختيار التي يفتحها `/model`.
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+شغّل `pi update --models` عندما لا يظهر نموذج Console جديد بعد.
+
+## Console MCP
+
+يدعم Pi بروتوكول MCP بدءًا من الإصدار v0.99.0. أضف خادم [Console MCP](/console/harnesses#console-mcp)، ثم سجّل الدخول من
+المتصفح.
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```

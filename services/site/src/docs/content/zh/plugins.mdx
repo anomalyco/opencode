@@ -1,0 +1,148 @@
+---
+title: 插件
+description: "在 opencode.json 中添加 npm 包或本地插件目录，并按 ID 或通配符启用、禁用插件。"
+---
+
+你可以在 `opencode.json(c)` 中添加已发布的包、指定版本的包、带作用域的包或本地插件目录。
+
+## 配置
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+相对路径以包含该条目的配置文件为基准解析。
+
+配置的本地路径必须指向目录，指向单个文件的路径会被跳过。关于 OpenCode 如何在目录中查找插件的各个部分，请参阅[加载](/build/plugins#load)。
+
+各个适用配置文件中的插件数组会按优先级从低到高依次应用，而不是相互替换。
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## 自动发现
+
+OpenCode 还会从每个被发现的 `.opencode/plugins/` 目录中加载直接位于其中的 `.ts` 和 `.js` 文件，以及第一层的插件包目录。
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+全局插件在 OpenCode 配置目录下使用相同的发现结构。
+
+```text
+~/.config/opencode/plugins/
+```
+
+与项目根目录的 `opencode.json(c)` 同级的 `plugins/` 目录不会被自动发现；请显式配置这些插件目录，或将它移到 `.opencode/` 下。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## 启用与禁用
+
+插件条目按顺序处理。在 ID 或通配符前加 `-` 可以禁用对应插件，`*` 匹配所有插件，`.*` 匹配 ID 前缀。后面再出现的 ID 会重新启用该插件。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+如需关闭新建分叉时添加的提示，请将 `"-opencode.fork-notice"` 加入 `plugins`。
+
+有两个内置插件会忽略移除操作，以防仓库关闭[策略](/policies)的强制执行：`opencode.config.policy`，以及负责下发组织策略的控制台连接 `opencode.provider.opencode`。
+
+## 管理
+
+使用 CLI 安装、列出、检查、更新或移除全局包插件。
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` 会检查服务器插件包、仅限 GUI 的插件包和仅限 TUI 的插件包是否有更新。`plugin update` 会更新所有过期的包；传入一个已配置的包作为目标，则只检查或更新该包。本地插件和锁定到确切版本的包会被跳过。
+
+当插件注明了要跟随的版本时，它会自行更新：`name@latest`、`name@^1.2.0`、`name@~1.2.0`、`name@1.x` 或 `name@>=1.2.0 <2` 这样的版本范围，`github:acme/plugin#main` 这样的 Git 分支，或 Git 的 `semver:` 范围。OpenCode 会在启动时以及每 24 小时检查一次，安装新版本并重新加载它。版本范围只会升级到范围内的版本。如果新版本加载失败，之前的版本会继续运行并保持安装状态。
+
+裸名称（`name`）或仓库（`github:acme/plugin`）会停留在已安装的版本，`name@next` 等其他 npm 标签和 Git 标签也是如此。`plugin check` 仍会报告它们的更新，`plugin update` 也会安装这些更新。确切的版本和提交哈希则保持锁定。
+
+安装包时，可以使用带版本、标签或版本范围的 npm 包名，也可以使用兼容 npm 的 Git 包描述。Git 仓库可以使用托管平台简写、HTTPS 或 SSH，也包括可通过你现有 Git 凭据访问的私有仓库。
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+支持分支、标签、完整的提交哈希，以及 npm 用于选择仓库子目录的 `::path:` 语法。本地路径请直接写在配置中；`plugin add` 不接受 tarball 和 npm 别名目标。
+
+## 重新加载
+
+被监视的配置目录中发生变更时会自动重新加载。服务器启动时会立即加载已缓存的插件包，在后台安装缺失的包，并检查未锁定版本的 npm 和 Git 插件是否有更新。确切的 npm 版本和完整的 Git 提交哈希会保持锁定。未被监视的本地依赖发生变更时，可能仍需重启 OpenCode。
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## 桌面应用
+
+导出 `./gui-experimental` 的插件还会为 OpenCode Desktop 添加面板、命令或设置。应用会从它运行的服务器加载插件，因此请在全局 `opencode.json(c)` 中配置该插件，让它在每个窗口中都能使用。
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+选择应用自带的服务器时，**Settings > Extensions > Plugins** 会列出这些插件。插件的开关只会关闭其桌面界面，**Reload** 可以在失败后重新加载它。要关闭整个插件，请将 `-` 和它的 ID 加入 `plugins`，例如 `"-acme"`。
+
+## 终端界面
+
+仅限 TUI 的插件需要单独配置，连接到远程服务器时也会保持启用。
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  创建插件，添加工具、钩子、集成、命令、agent 及其他行为。
+</Card>

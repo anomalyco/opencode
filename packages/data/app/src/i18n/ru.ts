@@ -1,3 +1,5 @@
+import type { Key } from "../i18n"
+
 export const dict = {
   "app.title": "Рейтинги использования ИИ-моделей | OpenCode Data",
   "app.description":
@@ -125,6 +127,29 @@ export const dict = {
   "home.noSessionCostTitle": "Нет данных стоимости сеанса",
   "home.noSessionCostDescription": "Нет строк моделей с сеансами для этого продукта.",
   "home.costSession": "Стоимость/сеанс",
+  "home.newModelsTitle": "Новые модели",
+  "home.newModelsDescription": "Крупнейший запуск за последние 30 дней.",
+  "home.retentionDescription": "Доля недельных пользователей, вернувшихся на следующей неделе.",
+  "home.noRetentionTitle": "Нет данных удержания",
+  "home.noRetentionDescription": "Данные удержания появятся, когда будет доступна полная неделя возврата.",
+  "home.comparisonsTitle": "Сравнение моделей",
+  "home.comparisonsDescription": "Популярные пары моделей из рейтинга.",
+  "table.rank": "Ранг",
+  "newModels.releasedBy": "{{author}}, выпущена {{date}}",
+  "newModels.released": "Выпущена {{date}}",
+  "newModels.free": "Бесплатно в OpenCode",
+  "newModels.tokensSinceLaunch": "токенов с запуска",
+  "newModels.usersTried": "пользователей попробовали",
+  "newModels.alsoNew": "Также новые",
+  "newModels.dailyUsage": "Ежедневное использование {{model}}",
+  "retention.marker": "Удержание",
+  "retention.rate": "Доля",
+  "retention.eligible": "Подходящие",
+  "retention.aria": "{{model}}, недельное удержание {{rate}}, {{users}} подходящих пользователь-недель",
+  "compare.detail.topTwo": "Топ-2 по недавнему использованию",
+  "compare.detail.leaderChallenger": "Лидер против претендента",
+  "compare.detail.adjacent": "Соседняя пара в рейтинге",
+  "compare.detail.topAlternative": "Альтернатива топ-модели",
   "lab.title": "Использование и рейтинги ИИ-моделей {{lab}} | OpenCode Data",
   "lab.description":
     "Сравните модели {{lab}}, используемые в OpenCode: использование токенов, рейтинги моделей, контекстные окна, даты релизов, стоимость и данные конкретных моделей.",
@@ -310,7 +335,7 @@ export const dict = {
   "share.comparison.cache": "Ввод из кэша",
   "share.card.outro": "Крупнейший инференс\nв мире",
   "share.card.tokens": "Токены",
-  "share.card.versus": "vs",
+  "share.card.versus": "против",
   "share.card.updated": "Обновлено {{date}}",
   "share.embed.missing": "Такого встраивания не существует.",
   "share.embed.open": "{{title}} в OpenCode Data",
@@ -381,4 +406,4 @@ export const dict = {
   "share.calendar.previous": "Предыдущий месяц",
   "share.calendar.next": "Следующий месяц",
   "share.calendar.wholeRange": "Весь период",
-} as const
+} satisfies Record<Key, string>

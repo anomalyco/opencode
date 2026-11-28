@@ -1,0 +1,106 @@
+---
+title: "TUI"
+description: "Inicia una sesión y usa los flujos de trabajo diarios en la interfaz de terminal."
+---
+
+Ejecuta OpenCode desde tu proyecto, escribe una solicitud y pulsa **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Pulsa **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** o **Ctrl+J** para insertar un salto de línea. Mientras OpenCode trabaja, pulsa **Enter** para reorientar la sesión activa o **Ctrl+X** y luego **Enter** para dejar el prompt en cola.
+
+## Proyectos y directorios
+
+OpenCode busca archivos y ejecuta comandos de shell en el directorio desde el que lo inicias. Los directorios del mismo repositorio
+de Git, incluidos sus worktrees, pertenecen a un único proyecto. Un directorio sin control de versiones es un proyecto independiente.
+
+Indica un directorio para iniciar OpenCode en otro proyecto:
+
+```bash
+opencode ~/code/another-project
+```
+
+Pulsa **Ctrl+O** para abrir la lista de sesiones y proyectos recientes. Con un proyecto seleccionado, pulsa **Right** para ver sus worktrees y,
+desde ahí, **Ctrl+N** para crear uno.
+
+## Contexto
+
+Escribe `@` para buscar un archivo y selecciónalo para adjuntarlo al prompt. Sigue escribiendo después de `@` para acotar los resultados.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Puedes incluir una línea o un rango después de la ruta.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+Escribe `!` al principio de un prompt vacío para entrar en el modo de shell. Escribe un comando y pulsa **Enter**; pulsa **Esc** para salir del modo de shell sin ejecutar ninguno.
+
+```text
+!git status
+```
+
+Los comandos de shell se ejecutan en el directorio de trabajo de la sesión y su salida queda registrada en ella.
+
+## Comandos
+
+Escribe `/` para listar los comandos de barra. Sigue escribiendo para filtrar la lista y pulsa **Enter** para ejecutar el comando seleccionado.
+
+```text
+/models
+```
+
+Los comandos habituales incluyen `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` y `/editor`. Pulsa **Ctrl+P** para abrir la paleta de comandos con todas las acciones disponibles en la vista actual.
+
+Después de una actualización, OpenCode muestra las novedades de la versión una sola vez en la pantalla de inicio. Ejecuta `/highlights` para verlas de nuevo o define `"highlights": false` en [`cli.json`](/cli/config#alerts) para que no se abran automáticamente.
+
+## Preguntas al margen
+
+Ejecuta `/btw <question>` para hacer una pregunta rápida sobre la conversación hasta ese momento. La respuesta usa el contexto de la sesión y el modelo actual, pero no se agrega a la conversación, así que no afecta a los prompts posteriores. Mientras se ejecuta, aparece un indicador `/btw` en el pie del prompt, y la respuesta se abre en un cuadro de diálogo; pulsa **C** para copiarla.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modelos
+
+Pulsa **Ctrl+X** y luego **M** para elegir un modelo, o ejecuta `/models`. Pulsa **F2** para recorrer los modelos usados recientemente.
+
+Pulsa **Ctrl+X** y luego **A** para elegir un agente, o ejecuta `/agents`. Pulsa **Shift+Tab** para recorrer los agentes.
+
+## Sesiones
+
+Cada sesión es una conversación independiente con su propio historial y directorio. Ejecuta `/new` o pulsa **Ctrl+X** y luego **N** para iniciar una sesión para otra tarea. Las sesiones anteriores siguen disponibles. Las nuevas sesiones se abren en el directorio desde el que iniciaste OpenCode o, si [`session.new_location`](/cli/config#sessions) está definido como `inherit`, en el directorio de la sesión actual.
+
+Pulsa **Ctrl+X** y luego **L**, o ejecuta `/sessions`, para volver a una sesión existente. En esa lista, **Ctrl+A** alterna entre las sesiones del directorio actual y las de todos los proyectos. **Ctrl+O** muestra juntas las sesiones y los proyectos recientes.
+
+Las pestañas están habilitadas de forma predeterminada. Usa **Ctrl+Tab** y **Ctrl+Shift+Tab** para moverte entre ellas, **Ctrl+X** y luego **W** para cerrar una, y **Ctrl+Shift+T** para reabrir la última pestaña cerrada.
+
+## Historial
+
+Pulsa **Ctrl+X** y luego **U**, o ejecuta `/undo`, para revertir el último mensaje del usuario y el trabajo realizado a partir de él. El prompt revertido vuelve al campo de entrada para que puedas editarlo.
+
+Pulsa **Ctrl+X** y luego **R**, o ejecuta `/redo`, para restaurar el trabajo revertido. Si en su lugar envías un prompt nuevo, aceptas la reversión y continúas desde ese punto.
+
+## Editor
+
+Define `VISUAL` o `EDITOR`, pulsa **Ctrl+X** y luego **E**, o ejecuta `/editor`, para editar el prompt actual en ese editor. Guarda y sal del editor para devolver el texto al campo de entrada y pulsa **Enter** para enviarlo.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+La tecla líder es **Ctrl+X** de forma predeterminada. Consulta [Atajos de teclado](/cli/keybinds) para cambiar estos atajos.

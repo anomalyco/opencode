@@ -120,19 +120,18 @@ export const androidStatus = "available" as "coming-soon" | "available"
 export const androidSoon = androidStatus === "coming-soon"
 
 /**
- * Where to get the mobile apps. iPhone is a public TestFlight beta until the App Store listing ships
- * (David, 5 Nov 2026); swap the link and label for the App Store URL then. Android is on Google Play.
- * `soon` lists a store as "Coming soon", with no link.
+ * Where to get the mobile apps: iPhone on the App Store, Android on Google Play. `soon` lists a store
+ * as "Coming soon", with no link.
  */
 export const mobileStores = [
   {
     platform: "iOS",
-    label: "Apple TestFlight",
+    label: "App Store",
     device: "iPhone",
-    href: "https://testflight.apple.com/join/M9eFEE1q",
+    href: "https://apps.apple.com/us/app/opencode/id6788226734",
     soon: false,
-    /** A TestFlight beta: links open in a new tab and carry the TestFlight badge. */
-    beta: true,
+    /** True for a TestFlight beta, whose links open in a new tab and carry the TestFlight badge. */
+    beta: false,
   },
   {
     platform: "Android",

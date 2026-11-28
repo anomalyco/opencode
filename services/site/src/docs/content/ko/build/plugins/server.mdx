@@ -1,0 +1,1843 @@
+---
+title: "서버"
+description: "OpenCode 플러그인의 서버 측 구현을 작성해 도구, 훅, 통합, 명령어, 에이전트를 추가하세요."
+---
+
+플러그인의 서버 측 구현은 OpenCode 서버에서 실행됩니다. OpenCode의 동작을 바꾸고 도구, 훅, 통합, 명령어, 에이전트 같은
+기능을 추가합니다. 플러그인 패키지의 구성, 로드, 게시 방법은 [개요](/build/plugins)를 참고하세요.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+## 수명 주기
+
+`setup`은 플러그인이 로드될 때 실행됩니다. 플러그인을 언로드할 때 실행할 정리 함수를 반환할 수 있습니다.
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### 컨텍스트
+
+플러그인 컨텍스트는 사실상 [OpenCode 서버 클라이언트](/build/client)입니다. 읽기와 액션 메서드는 클라이언트와 같은
+입력과 응답을 사용합니다. 여기에 변환, 런타임 훅, 다시 로드, 등록, 플러그인 옵션을 위한 플러그인 전용 메서드가
+추가됩니다.
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location`은 이 플러그인 인스턴스가 로드된 위치를 설명합니다. `directory`, 선택적 `workspaceID`, `project`
+메타데이터(`id`, `directory`, `canonical`)를 포함합니다. Promise와 Effect 플러그인 모두에서 사용할 수 있습니다. 이는
+플러그인 인스턴스의 위치이며, 접근할 수 있는 모든 세션이나 받는 이벤트의 위치는 아닙니다.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### 옵션
+
+`opencode.json(c)`의 객체 형식으로 플러그인 옵션을 전달하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+`ctx.options`에서 그 값을 `setup` 중에 읽으세요.
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## 변환
+
+변환은 OpenCode의 도메인 상태를 동기적으로 수정합니다. 각 변환은 같은 도메인에 먼저 등록된 변환이 반영된 상태에서 실행됩니다. `ctx.model.list()` 같은 메서드로 레지스트리를 조회하면 플러그인 초기화 중에도 그때까지의 등록이 모두 반영됩니다. 시작 시에는 업데이트 알림만 모아 보내므로 조회 결과는 지연되지 않습니다. 리소스 상태 API는 실행 중인 리소스의 상태를 보고합니다. 정의가 등록되었다고 해서 연결이나 다른 리소스 작업이 완료된 것은 아닙니다.
+
+소스는 `ctx.provider.transform`을 통해 제공자와 변경 불가능한 모델 정의를 추가합니다.
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+변환을 등록하거나 제거하거나 `reload()`를 호출하면 레지스트리를 변경된 상태로 표시합니다. 다음 조회 시 새 값에 활성 변환을 모두 등록 순서대로 적용해 레지스트리를 다시 구성합니다. 변환은 실행 비용을 낮게 유지하고 반복 실행할 수 있도록 작성하세요. 이미 조회한 값은 레지스트리를 다시 구성해도 바뀌지 않습니다.
+
+제공자 변환과 가용성이 해결되면 OpenCode는 활성 제공자의 모델을 구체화하고 모든 모델 변환을 순서대로 재생합니다. 모델 정책은 새로 고쳐진 소스를 포함한 후보 전체를 검사할 수 있습니다.
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+캡처한 입력은 자동으로 감시되지 않습니다. 동기 콜백 전에 외부 데이터를 로드한 다음 입력이 바뀌면 `reload()`를 호출하세요. 여기서 `loadFromSource()`는 `{ info: Provider.Info, models: readonly Model.Info[] }` 항목을 반환합니다.
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+제공자 변경은 활성 모델 결과 전체를 무효화하므로 출력 가격 정책이 갱신된 모델에도 계속 적용됩니다. 모델 변환이 캡처한 입력만 바뀌면 `ctx.model.reload()`를 사용하세요.
+
+## API
+
+### 에이전트
+
+모든 에이전트를 읽거나 ID로 하나를 가져옵니다.
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+에이전트를 조회, 생성, 업데이트, 제거하거나 기본 에이전트를 선택하려면 변환을 등록하세요.
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+새 에이전트를 등록하려면 `editor.update`를 사용하세요. ID가 이미 있으면 해당 에이전트를 수정합니다.
+ID가 없으면 `Agent.Info.default(id)`로 에이전트를 생성한 뒤 콜백을 실행합니다.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
+})
+```
+
+변환이 사용하는 외부 상태가 바뀌면 에이전트를 다시 로드하세요.
+
+```ts
+await ctx.agent.reload()
+```
+
+#### 참조
+
+스키마: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### 제공자
+
+사용 가능한 제공자를 읽거나 ID로 한 제공자의 메타데이터를 검사합니다.
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+제공자 변환은 제공자 설정과 소스 정의를 편집합니다. 편집기에서 조회하면 비활성 제공자와 변경 불가능한 정의도 볼 수 있습니다. `models.update`는 소스 모델의 별도 복사본을 편집합니다.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-5-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+`models.set`으로 제공자의 원본 모델 목록을 교체하세요. 캡처한 정의가 바뀌면 다시 로드하세요.
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+계정별로 모델을 검색할 때는 목록을 로드하는 데 사용한 연결을 `sourceConnection`으로 전달하세요. 다른 연결을 선택하면 플러그인이 새 목록을 게시할 때까지 OpenCode가 해당 제공자를 제외합니다.
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### 참조
+
+스키마: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### 모델
+
+사용 가능한 모델과 기본 선택을 읽습니다.
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+모델 변환은 활성 제공자의 모델 후보 전체를 편집합니다. 비활성화된 후보도 모든 변환이 끝날 때까지 편집할 수 있습니다. `update`로 모델을 추가하려면 해당 제공자를 사용할 수 있어야 합니다.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-5-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+콜백은 모델의 원시 재정의 값을 편집합니다. OpenCode가 결과를 확정할 때 제공자 기본값을 한 번 병합하고, 그 뒤 변경 사항이 없으면 조회 시 같은 결과를 재사용합니다. `editor.provider`는 모델 변환 결과가 아니라 비활성 템플릿을 포함한 불변 소스 정의를 제공합니다.
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### 참조
+
+스키마: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### 명령어
+
+위치에서 사용할 수 있는 명령어를 읽습니다.
+
+```ts
+const commands = await ctx.command.list()
+```
+
+변환으로 명령어를 등록합니다. 실행기는 세션, 프롬프트 첨부, 요청된 전달 모드를 받습니다.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+변환이 사용하는 외부 상태가 바뀌면 명령어를 다시 로드하세요.
+
+```ts
+await ctx.command.reload()
+```
+
+#### 참조
+
+스키마: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### 통합
+
+통합을 읽고 활성 자격 증명을 검사합니다.
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+API 키로 통합을 연결합니다.
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+OAuth 연결 시도를 시작, 검사, 완료, 취소합니다.
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+명령 기반 연결은 같은 시작, 상태, 취소 흐름을 제공합니다.
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+통합을 조회하고 인증 방식을 관리하는 변환을 등록합니다.
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+변환이 사용하는 외부 상태가 바뀌면 통합을 다시 로드하세요.
+
+```ts
+await ctx.integration.reload()
+```
+
+#### 참조
+
+스키마: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### 자격 증명
+
+저장된 자격 증명을 해당 통합의 활성 자격 증명으로 만듭니다.
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### 참조
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+MCP 서버와 현재 연결 상태를 나열합니다.
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+플러그인은 변환으로만 MCP 서버를 관리합니다. 서버를 추가하거나 교체하려면 `editor.set`, 구성을 바꾸려면
+`editor.update`, 제거하려면 `editor.remove`를 사용하세요. 구성은 `editor.list`와 `editor.get`으로 확인합니다.
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+변환에서 `disabled: true`를 설정하면 서버를 비활성화하고 연결을 끊으며, `disabled: false`는 활성화해 OpenCode가
+연결하게 합니다. OpenCode는 변환된 구성으로 서버 수명 주기를 조정합니다.
+
+변환이 사용하는 외부 상태가 바뀌면 `reload()`를 호출해 변환을 다시 적용하고 서버를 조정하세요.
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### 참조
+
+스키마: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### 플러그인
+
+위치에서 현재 활성인 플러그인을 나열합니다.
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### 참조
+
+스키마: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### 참조
+
+위치에서 사용할 수 있는 참조를 읽습니다.
+
+```ts
+const references = await ctx.reference.list()
+```
+
+로컬 및 Git 참조를 검사, 추가, 제거하는 변환을 등록합니다. `get(name)`은 현재 구성된 소스를 반환하며 이름이 없으면 `undefined`입니다.
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+변환이 사용하는 외부 상태가 바뀌면 참조를 다시 로드하세요.
+
+```ts
+await ctx.reference.reload()
+```
+
+#### 참조
+
+스키마: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### 생성 (실험)
+
+세션을 만들거나 도구를 호출하거나 세션 기록에 추가하지 않고 선택한 모델로 생성합니다. 이 API는 바뀔 수 있습니다.
+`ctx.generate.text`는 여전히 동작하지만 더 이상 권장하지 않습니다. 대신 `ctx.experimental.generate.text`를 사용하세요.
+
+```ts
+const review = await ctx.experimental.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+  prompt: "Review this proposed action.",
+})
+
+const { images } = await ctx.experimental.generate.image({
+  model: { providerID: "openai", id: "gpt-image-1-mini" },
+  prompt: "A watercolor fox in the snow",
+  aspect: "16:9",
+})
+
+const { answers } = await ctx.experimental.generate.decisions({
+  model: { providerID: "opencode", id: "jev-1.13" },
+  input: [{ type: "text", text: "I was charged twice, please refund one." }],
+  questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
+})
+```
+
+### 권한
+
+작업을 수행하기 전에 권한을 요청합니다. `assert`는 저장된 승인을 포함한 세션의 [권한 규칙](/permissions)을 평가하고,
+규칙이 `ask`로 결정되면 사용자에게 확인을 요청합니다. 작업이 허용되면 완료됩니다.
+
+```ts
+execute: async (input, context) => {
+  await ctx.permission.assert({
+    sessionID: context.sessionID,
+    agent: context.agent,
+    source: { type: "tool", messageID: context.messageID, id: context.id },
+    action: "deploy",
+    resources: [input.environment],
+    save: [input.environment],
+  })
+  return { content: await deploy(input.environment) }
+}
+```
+
+- `action`과 `resources`를 규칙과 대조합니다. 하나라도 `deny`면 작업이 차단되고, 아니면 하나라도 `ask`면 확인합니다.
+- `save`는 사용자가 항상 허용을 선택할 때 저장할 패턴을 나열합니다.
+- `agent`는 어떤 규칙을 적용할지 선택하며 기본값은 세션의 에이전트입니다. `source`는 확인 프롬프트를 도구 호출에 연결합니다.
+- `metadata`는 권한 프롬프트와 `evaluate` 훅에 추가 정보를 전달합니다.
+
+거부 규칙이나 피드백이 있는 거절은 이유를 담은 `Tool.Error`로 거부되므로 모델이 이유를 보고 계속합니다. 단순 거절은
+현재 단계를 끝냅니다. 이 오류를 도구 출력으로 반환하지 말고 그대로 전파하세요.
+
+대기 중인 권한 요청을 검사하거나 해결합니다.
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
+```
+
+세션 범위 권한 규칙을 교체합니다. 에이전트 규칙 뒤에 평가되며 마지막으로 일치한 규칙이 우선합니다. 하위 세션은
+생성될 때 적용 중이던 규칙을 상속합니다.
+
+```ts
+await ctx.session.update({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### 세션
+
+세션을 만들거나 조회합니다.
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+세션을 페이지 단위로 나열합니다. 다음 페이지를 얻으려면 `cursor.next`를 `cursor`로 다시 전달하세요. 커서가 필터를
+기억하므로 반복할 필요가 없습니다.
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20 })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+```
+
+이후 요청에 사용할 에이전트나 모델을 변경합니다.
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
+```
+
+사용자 프롬프트, 일시 생성 요청, 명령어, 합성 메시지를 보냅니다.
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+await ctx.session.command({ sessionID, name: "review", text: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+`generate`는 어시스턴트 메시지가 보고하는 것과 같은 형태로 `text`와 호출의 `tokens`, `cost`를 반환합니다.
+
+세션 이름을 바꾸거나, 세션 실행을 중단하거나, 실행이 끝날 때까지 기다립니다.
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, resume: false })
+await ctx.session.wait({ sessionID })
+```
+
+`remove`로 임시 세션을 제거합니다. 제거는 활성 실행을 중단하고 하위 세션을 재귀적으로 삭제합니다.
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+`compact`로 압축을 요청합니다. 완료된 요약이 아니라 받은 편지함에 접수된 항목을 반환하며, 압축은 기본적으로 다음
+단계 경계에서 실행됩니다. 대기열 순서를 유지하려면 `delivery: "queue"`를 전달하세요.
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+`instructions.entry`로 키가 있는 세션 지침 항목을 첨부, 나열, 제거합니다. 항목은 세션 지침에 `<context key="...">` 블록으로 렌더링되며, 업데이트나 제거는 메시지 턴을 대기열에 넣지 않고 다음 단계 경계에서 알려집니다.
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
+#### 참조
+
+스키마: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: ExperimentalSessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<void>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### 스킬
+
+위치에서 사용할 수 있는 스킬을 읽습니다.
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+스킬을 검사, 추가, 업데이트, 제거하는 변환을 등록합니다. `get(id)`은 현재 편집기 항목을 반환하며 스킬이 없으면 `undefined`입니다.
+
+```ts
+import { Skill } from "@opencode/plugin"
+
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: Skill.ID.make("review"),
+    name: Skill.Name.make("Review"),
+    description: "Review the current changes",
+    path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+변환이 사용하는 외부 상태가 바뀌면 스킬을 다시 로드하세요.
+
+```ts
+await ctx.skill.reload()
+```
+
+#### 참조
+
+스키마: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### 저장소
+
+플러그인 범위의 영구 JSON 값을 저장, 읽기, 제거합니다.
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+접두사로 키를 검색합니다. 필요하면 커서를 사용해 결과를 페이지 단위로 읽을 수 있습니다.
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### 참조
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### 도구
+
+변환 콜백 밖에서, 모든 변환이 끝난 뒤 현재 등록된 도구를 읽습니다. 각 도구의 `id`에는 최종 이름이 담깁니다.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+Promise 플러그인을 포함해 동기 변환으로 도구를 등록, 업데이트, 제거합니다. 등록이나 다시 로드 전에 외부 데이터를 로드하세요. 최종 도구 이름이 같으면 나중에 유효하게 등록된 정의가 이전 정의를 대체합니다.
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+Promise 도구 실행기는 `context.signal`을 받습니다. `fetch`처럼 취소할 수 있는 작업에 이 값을 전달하면 세션을 중단할 때 해당 작업도 중단됩니다.
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+#### 자유 형식 도구 입력
+
+필수 문자열 필드가 정확히 하나인 직접 도구는 모델이 JSON 래퍼 없이 그 문자열을 쓰게 할 수 있습니다. `freeform`을 `{ type: "text" }`, `{ type: "regex", pattern }`, `{ type: "lark", grammar }` 중 하나로 설정하세요.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+선택한 모델의 API가 models.dev에 `regex`를 나열하면 모델이 `OPS-42`를 직접 쓸 수 있습니다. 그렇지 않으면 Core는 **오직** `freeform`만 생략하므로 모델에 `ticket` 도구가 남고 `{"id":"OPS-42"}`로 호출합니다. 형식 목록이 없거나 비어 있으면 자유 형식을 지원하지 않습니다. 어느 경우든 실행기는 `{ id }`를 받습니다.
+
+Code Mode(`codemode: true`) 안에서는 자유 형식 도구가 문자열을 직접 받습니다. 예를 들어 `await tools.ticket("OPS-42")`입니다. `await tools.ticket({ id: "OPS-42" })`도 동작합니다.
+
+콜백이 캡처한 소스 데이터가 바뀌면 `reload()`를 호출하세요. 다시 로드는 순서를 바꾸지 않고 활성 변환을 재생하며 플러그인 setup을 다시 실행하지 않습니다.
+
+```ts
+await ctx.tool.reload()
+```
+
+`list()`와 `get()`으로 편집기에 등록된 도구를 확인하세요. 도구의 `id`에는 최종 이름이 담깁니다. 해당 ID가
+없으면 `get()`이 `undefined`를 반환합니다. `update`와 `remove`에는 위의 `acme_greeting`처럼 네임스페이스를
+포함한 최종 도구 이름을 사용하세요. 네임스페이스의 점은 `_`로 바뀝니다. 도구 이름에서는 영문자, 숫자, `_`, `-`를
+제외한 문자가 `_`로 바뀝니다. 존재하지 않는 이름은 무시됩니다. 도구를 만들려면 `add`에 전체 정의를 전달하세요.
+업데이트해도 이름과 네임스페이스는 유지됩니다. 중첩된 값을 직접 수정하지 말고 새 스키마나 옵션을 할당해 교체하세요.
+잘못된 업데이트는 로그에 남고 이전 정의는 그대로 유지됩니다.
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+업데이트와 제거는 추가와 함께 순서대로 재생되며 MCP 카탈로그 새로 고침 후에도 마찬가지입니다. 등록을 폐기하면 그 변경이 제거되고 남은 변환으로 다시 만듭니다.
+
+등록을 해제하면 해당 변환을 제거하고 남은 변환만으로 도구 목록을 다시 구성합니다. 해당 변환이 덮어쓴 이전 정의가 있다면 다시 적용됩니다. 등록 해제는 여러 번 수행해도 결과가 같으며, 플러그인을 언로드할 때도 등록이 해제됩니다.
+
+```ts
+await registration.dispose()
+```
+
+각 모델 요청은 실행 가능한 도구의 스냅샷을 고정합니다. 이후의 변환, 다시 로드, 등록 해제는 다음 스냅샷부터 적용되며 이미 캡처한 정의, Code Mode 네임스페이스 설명, 실행기에는 영향을 주지 않습니다. 실행기가 클로저로 변경 가능한 플러그인 데이터를 참조하면 이후 변경 사항도 반영됩니다. 값을 정의에 고정해야 한다면 변환 안에서 그 값을 캡처하세요.
+
+#### 참조
+
+스키마: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+저장소 정보, 작업 사본 상태, 파일 diff를 읽습니다.
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branch.list({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+변환으로 위치 범위의 VCS 제공자를 등록합니다. 감지된 저장소 유형과 일치하는 제공자가 자동으로 선택되며,
+`editor.default.set`으로 다른 제공자를 선택하세요.
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+제공자 콜백은 현재 위치, 작업 사본 루트, 기준 프로젝트 루트, 선택 항목인 저장소 데이터의 보관 위치를 받습니다. diff 콜백은 선택한
+모드, 요청한 컨텍스트, 출력 바이트 한도도 받습니다. 저장소를 찾을 때는 계속 OpenCode의 내장 Git 및 Mercurial 감지기를
+사용합니다.
+
+제공자는 선택적으로 `init(scope, { signal })`을 구현해 `scope.worktree`에 저장소를 만들 수 있습니다. 초기화는
+감지된 저장소 유형이 아니라 ID로 제공자를 선택합니다(기본은 Git). 위치에 아직 저장소가 없어도 `init`이 있는
+제공자를 등록하세요. OpenCode는 호출 전에 디렉터리가 있고 저장소가 없는지 확인한 뒤 프로젝트를 다시 찾습니다. 새
+저장소 형식은 이 콜백 외에 탐색 지원이 더 필요합니다.
+
+#### 참조
+
+스키마: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branch: {
+    list(input?: VcsBranchListInput, requestOptions?: RequestOptions): Promise<VcsBranchListOutput>
+  }
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### 워크트리
+
+일반 플러그인 수명 주기로 로컬 워크트리 전략을 등록합니다. 이 예제의 구현 모듈은 옵션 검증과 백엔드의 `create`,
+`remove`, `list` 작업을 담당합니다.
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+`plugins`로 플러그인을 로드하고 공통 대상은 별도로 구성하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- 전략을 추가하면 자동으로 선택됩니다. 활성화된 등록 중 가장 최근 것이 우선하므로 전략을 따로 선택할 필요가 없습니다.
+- 등록을 폐기하거나 플러그인을 내리면 이전 구현으로 돌아가고, 궁극적으로는 번들 Git 전략이 됩니다.
+- `reload()`는 캡처한 입력이 바뀐 뒤 변환을 재생하며 플러그인 setup을 다시 실행하지 않습니다.
+- 생성 실패는 Git으로 재시도하지 않습니다. 기존 워크트리는 기본값이 바뀌어도 기록된 소유자를 유지합니다.
+- 전략은 로컬 디렉터리를 관리합니다. 원격 워크스페이스 프로비저닝은 이 인터페이스의 일부가 아닙니다.
+
+#### 작업
+
+플러그인 컨텍스트는 클라이언트와 같은 프로젝트 기반 워크트리 작업을 제공합니다. 모든 작업에는 `projectID`가 필요합니다. `list`는 같은 프로젝트에서 이미 확인된 체크아웃 등 저장된 목록만 읽습니다. 설정을 로드하거나 플러그인을 시작하거나 파일 시스템의 변경 사항을 찾지 않습니다.
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+생성은 프로젝트에 저장된 `canonical` 디렉터리에서 구성과 플러그인을 로드하고 선택된 전략을 사용합니다. 선택적 상위
+`directory`, 소스 `from`, 시작 `branch`, `name`을 받습니다. 소스 기본값은 기준 체크아웃이며 `from` 재정의는 그
+프로젝트에 속해야 합니다. 소스를 선택해도 구성 루트는 바뀌지 않습니다. 제공된 시작 ref는 선택한 전략이 지원해야
+하며, 예를 들어 Rift의 네이티브 스냅샷 작업에는 ref 선택 옵션이 없습니다.
+
+생성과 새로 고침은 기준 체크아웃의 플러그인이 활성화되기를 기다립니다. 그 체크아웃의 플러그인 초기화 중에 발생한
+호출은 지금까지의 등록을 보며 자체 활성화를 기다리지 않습니다.
+
+제거는 기준 설정을 로드하고 해당 플러그인을 활성화한 뒤, 현재 기본 전략이 아닌 워크트리에 기록된 전략을
+사용합니다. 기록된 관리 주체를 사용할 수 없으면 오류가 발생합니다. 워크트리의 대상 경로는 다른 곳에 있을 수 있습니다.
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+워크트리를 관리하는 전략을 찾을 수 없으면 Git으로 대체하지 않고 제거에 실패합니다. 전략은 `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })` 오류를 던져 강제 제거 여부를 확인할 수 있습니다. `Worktree`는 `@opencode/plugin`에서 가져오므로 Core나 Git 오류에 의존하지 않습니다.
+
+새로 고침은 기준 설정을 로드하고 사용 가능한 모든 전략으로 이미 확인된 체크아웃 루트에서 워크트리를 찾습니다.
+검색 결과를 합치고 기존 관리 주체는 그대로 유지하며, 사라진 디렉터리는 목록에서 정리합니다. 한 소스에서 검색에
+실패하면 오류를 기록하고 다른 소스의 검색은 계속합니다. 어떤 전략도 발견하지 못했더라도 아직 존재하는 디렉터리는
+목록에 남습니다. `worktree.updated` 이벤트를 확인한 뒤 `list`를 다시 호출해 변경된 목록을 읽으세요.
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### 참조
+
+구현은 이름 지정과 충돌 처리 후 제안된 대상을 받습니다. `create`에서 실제 디렉터리를 반환하세요. 백엔드가 자체
+레이아웃을 요구하면 다를 수 있습니다. OpenCode는 반환된 경로를 확인해 인벤토리, 시작 명령, API 결과에 사용합니다.
+반환된 디렉터리는 존재해야 합니다.
+
+다른 대상을 선택하는 전략은 그곳에서 이름 충돌을 처리합니다. OpenCode는 전략을 호출하기 전에 제안된 상위 디렉터리를
+만듭니다. `list`는 전략이 소유한 디렉터리와 저장소 루트만 보고해야 합니다.
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+Promise 콜백은 `signal` 취소에 협조해야 합니다. Effect 콜백은 Effect를 반환하고 대신 Effect 중단을 사용합니다.
+등록은 플러그인 런타임 범위로 유지되며, 프로젝트 작업은 기준 체크아웃의 레지스트리를 사용합니다. Core 구성
+어댑터가 디렉터리 설정을 그 레지스트리에 전달합니다.
+
+### 웹 검색
+
+웹 검색 제공자를 나열하거나 선택한 제공자로 쿼리를 실행합니다.
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+변환으로 제공자를 등록하고 기본 제공자를 선택합니다.
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = (await response.json()) as { url: string; title: string; content: string }
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+`false`를 선택해 웹 검색을 비활성화하거나 외부 상태가 바뀌면 제공자를 다시 로드하세요.
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### 참조
+
+스키마: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### 이벤트
+
+연결된 서버의 공개 이벤트 스트림을 구독합니다. 플러그인 정리 중에 스트림을 중단하세요. `types`를 전달하면 해당 이벤트 유형만 받으며 이벤트 타입이 그에 맞게 지정됩니다. 예: `ctx.event.subscribe({ types: ["config.updated"] })`. 플러그인은 서버 안에서 실행되므로 SDK 클라이언트와 달리 `server.connected`를 받지 않습니다. 알 수 없는 유형 이름은 서버 로그 경고와 함께 무시됩니다.
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### 참조
+
+스키마: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventContext {
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
+}
+```
+
+## 훅
+
+훅은 실시간 작업을 가로챕니다. 해당 도메인에 훅을 등록하고 더 이상 필요 없으면 반환된 등록을 폐기하세요.
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+여러 플러그인이 같은 훅을 등록할 수 있습니다. OpenCode는 플러그인 순서대로 실행하므로 뒤의 훅이 앞의 훅이 만든
+변경을 봅니다.
+
+### 세션
+
+세션 훅은 프롬프트 접수, 모델 호출, 네이티브 HTTP, 재시도를 가로챕니다.
+
+#### 포크
+
+`fork` 훅은 OpenCode가 기록을 복사한 뒤, 포크 호출이 반환되기 전에 실행됩니다. `sessionID`는 새 세션을 식별합니다.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
+#### 프롬프트 접수
+
+첨부 파일과 스킬을 확인하고 받은 편지함에 프롬프트를 저장하기 전에 사용자 프롬프트를 가로챕니다.
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+훅은 직접 수정할 수 있는 전용 초안을 받습니다.
+
+- `prompt`에는 `text`, `files`, `agents`의 에이전트 언급, 선택된 `skills`가 있습니다.
+- `metadata`에는 애플리케이션이 정의한 접수 메타데이터가 있습니다.
+- `delivery`는 기본값이 `"steer"`이며 `"queue"`로 바꿀 수 있습니다.
+- 세션 ID와 메시지 ID는 읽기 전용입니다. 훅에서 접수 대상을 바꿀 수 없습니다.
+
+훅이 추가한 파일과 스킬은 일반 해석 및 검증 경로를 따릅니다. 텍스트를 다시 쓸 때 더 이상 맞지 않는 첨부 `mention`
+오프셋을 업데이트하거나 제거하세요. 에이전트 언급은 세션의 활성 에이전트를 바꾸지 않습니다.
+
+프롬프트 훅은 다음 조건에서 실행됩니다.
+
+- 세션 위치의 플러그인이 준비된 뒤 등록 순서대로 실행됩니다.
+- `session.prompt`로 제출하는 명령어가 훅을 실행합니다.
+- 합성 메시지, 셸 메시지, 압축 제어, 이동 제어에서는 이 훅이 실행되지 않습니다.
+- 훅은 모든 모델 호출 전이 아니라 접수 중에 한 번 실행됩니다.
+- 모델 확인이 접수 후에 이루어지므로 제공자 범위 지정은 사용할 수 없습니다.
+
+편집한 내용이 최종 사용자 입력으로 저장됩니다. 준비에 실패하거나 준비가 중단되면 OpenCode는 프롬프트를 접수하지
+않습니다.
+
+프롬프트 훅은 다시 실행되어도 문제가 없도록 작성하세요. 훅의 부수 효과가 정확히 한 번만 발생한다고 보장할 수 없습니다.
+
+- 이미 대기 중이거나 전달된 ID로 재시도하면 훅을 다시 실행하지 않고 원래 접수를 반환합니다.
+- 동시 제출은 훅을 여러 번 실행할 수 있지만 첫 번째 성공한 접수만 유효합니다.
+- 프롬프트 훅은 입력을 변환하며, 타입이 지정된 거부 API는 제공하지 않습니다.
+
+#### 모델 요청
+
+모델 디스패치 직전에 조립된 시스템 지침, 메시지, 도구, 요청 옵션을 수정합니다. 세션이 보내는 요청 종류마다
+자체 훅이 있으므로 플러그인이 에이전트 루프와 보조 요청을 다르게 처리할 수 있습니다.
+
+- `context`는 에이전트 루프에서 실행됩니다. 도구 호출 후 작업을 계속할 때도 실행됩니다.
+- `compaction`은 체크포인트 요약에 실행됩니다. `messages`는 요약할 대화 기록이며 OpenCode는 훅 실행 후 자체 요약
+  프롬프트를 덧붙입니다. `result`를 설정하면 직접 압축을 기록하고 모델 호출을 건너뛰며, 완료된 압축 메시지와 같은
+  필드를 받습니다.
+- `generate`는 일시적 `ctx.session.generate` 호출에 실행됩니다.
+- `title`은 제목 생성에 실행됩니다. `agent`나 `tools`가 없으며 `result`를 설정해 제목을 직접 제공할 수 있습니다.
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+변경은 나가는 모델 호출에만 영향을 주며 저장된 기록이나 구성은 바뀌지 않습니다. 모든 요청에 적용되어야 하는 훅은
+각 종류에 등록해야 합니다.
+
+`context`, `compaction`, `generate` 훅의 메시지는 저장된 메시지의 `metadata`를 읽기 전용으로 담습니다(예: `prompt`
+훅이 설정한 값). 이는 모델로 전송되지 않습니다.
+
+OpenCode 지침을 담는 `system` 파트는 `metadata.experimental.instructions`에 각 소스를 `{ key, text }`로
+나열합니다(예: `core/date`, `core/environment`). 따라서 훅이 소스를 구분할 수 있습니다. 목록은 복사본이므로 파트의
+`text`를 편집해도 갱신되지 않습니다. 실험 기능이며 바뀔 수 있습니다.
+
+요청 재정의는 다음 규칙을 따릅니다.
+
+- `options`는 모델 호출마다 빈 상태로 시작하며 확인된 모델 설정을 담지 않습니다.
+- 타입이 지정된 키는 생성 설정이고, 다른 키는 선택한 프로토콜에 제공자 옵션으로 전달됩니다.
+- 훅은 등록 순서대로 실행되고 앞의 훅이 만든 재정의를 봅니다.
+- 요청 재정의가 모델 기본값보다, 모델 기본값이 경로 기본값보다 우선합니다.
+- 제공자 옵션 객체는 재귀적으로 병합되며 배열과 스칼라 값은 앞의 값을 대체합니다.
+- 재정의를 삭제하거나 `undefined`로 설정하면 구성된 기본값을 제거하지 않고 그 기본값으로 돌아갑니다.
+- 프로토콜 형식으로 변환한 뒤 원시 HTTP 본문 오버레이가 적용됩니다. 이 오버레이는 변환 결과의 필드를 재정의할 수 있습니다.
+
+#### 제공자 옵션
+
+제공자 옵션은 원시 HTTP 본문 필드가 아니라 선택한 프로토콜의 시맨틱 옵션 이름을 사용합니다. 제공자별 설정은 일치하는
+제공자로 범위를 지정하세요. 예를 들어 OpenAI Responses는 `reasoningEffort`를 사용합니다.
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+생성 옵션은 선택한 프로토콜과 모델에 따라 다릅니다.
+
+- `maxTokens`는 시맨틱 출력 토큰 한도입니다.
+- Gemini는 `topK`를 지원하지만 OpenAI Responses는 이 옵션을 제공하지 않습니다.
+
+#### 모델 확인
+
+실험 기능입니다. Session이 요청의 모델을 확인할 때마다, 아무것도 만들기 전에 실행됩니다. `model`은 선택된 모델로
+시작하며, 같은 제공자의 다른 모델(모델 선택기에서 숨겨진 모델 포함)로 이 요청을 처리하도록 바꿀 수 있습니다.
+Session은 선택한 모델을 유지하고 요청과 어시스턴트 메시지는 새 모델을 사용합니다. `kind`는 어떤 요청을 확인하는지
+알려 주므로 라우터가 제목을 건너뛰거나 압축 후 다시 라우팅할 수 있습니다. 다른 제공자의 모델은 사용할 수 없음으로
+실패합니다.
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
+
+#### 모델 요청
+
+모델 요청 설정을 수정하고 선택적으로 훅을 한 제공자로 제한합니다. 이벤트는 아래 HTTP 훅과 같은 `kind`를
+담습니다.
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### 네이티브 HTTP
+
+네이티브 제공자 요청이나 응답을 수정합니다. 본문은 일회용 스트림이므로 읽기 전에 복제하거나 교체하세요.
+
+두 훅은 세션이 보내는 모든 요청에 실행됩니다. `event.kind`는 요청을 보낸 흐름을 나타냅니다. 에이전트 루프는
+`"primary"`, 체크포인트 요약은 `"compaction"`, 제목 생성은 `"title"`이고, `"generate"`는 일시적
+`ctx.session.generate` 호출을 뜻합니다. 보조 요청을 구분하려면 에이전트 ID 대신 이를 사용하세요.
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### 네이티브 WebSocket (실험)
+
+WebSocket으로 스트리밍하는 제공자는 세션마다 연결 하나를 열고 요청 간에 재사용하므로 `http.request`와
+`http.response`가 그 트래픽을 보지 못합니다. `experimental.ws.handshake` 훅은 연결이 선택되기 전에 모델 호출마다 한
+번 실행됩니다. HTTP 훅과 같은 `sessionID`, `agent`, `model`, `kind`에 연결 `url`과 `headers`를 담습니다. `url`이나
+`headers`를 바꾸면 요청이 사용하는 소켓이 바뀌므로 교체된 베어러 토큰이 연결을 다시 엽니다.
+
+HTTP 훅은 모든 HTTP 요청에서 계속 실행됩니다. WebSocket 라우트가 HTTP로 대체한 요청에도 적용됩니다.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send`와 `experimental.ws.receive`를 사용하면 HTTP 요청이나 응답 본문을 수정하듯 WebSocket
+프레임 자체를 수정할 수 있습니다. `send`는 제공자 드라이버가 아웃바운드 프레임을 만든 뒤 전송하기 전에 실행됩니다.
+`receive`는 드라이버에 전달하기 전에 각 인바운드 프레임에서 실행됩니다. 두 훅은 프레임을 문자열로 담고 훅이 반환할 때 `frame`에 든
+값을 보냅니다.
+
+OpenCode는 다시 쓴 프레임을 검증하지 않습니다. 드라이버는 제공자의 응답에서 상태를 추적하므로 프로토콜 의미를 바꾸는
+재작성은 HTTP 본문 재작성과 마찬가지로 플러그인의 책임입니다.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+이 훅은 실험 기능이며 이름이나 형태가 바뀔 수 있습니다.
+
+#### 재시도 정책
+
+제공자 요청이 실패했을 때 재시도 여부를 바꾸거나 대기 시간을 밀리초 단위로 지정합니다. 이 훅은 OpenCode가 실패를
+분류하고 정책을 제안한 뒤, 재시도를 예약하기 전에 실행됩니다. OpenCode가 내부적으로 다음 시도를 실행하는 방식은
+이 훅에서 제공하지 않습니다.
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+재시도 훅은 종료되는 실패를 재시도 가능하게 만들거나 제안된 재시도를 거부해 OpenCode의 초기 `decision`을 바꿀 수
+있습니다.
+
+재시도 결정은 다음 규칙을 따릅니다.
+
+- 여러 훅은 등록 순서대로 실행되고 뒤의 훅이 현재 결정을 봅니다.
+- 내장 최대 시도 횟수는 여전히 강제 한도입니다.
+- `attempt`는 실행 여부를 판단 중인 실제 요청의 시도 번호입니다. 최초 요청은 `1`, 첫 재시도는 `2`입니다.
+- `NaN`, 무한대, 음수 같은 잘못된 지연은 계산된 지연으로 대체됩니다.
+- 컨텍스트 넘침 복구는 같은 요청을 재시도하지 않고 대화를 압축하므로 별개입니다.
+
+#### 세션 참조
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  native?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### 권한
+
+구성된 규칙이 평가된 뒤, 작업이 실행되거나 권한 프롬프트가 게시되기 전에 권한 결정을 검토합니다.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+권한 훅은 다음 규칙을 따릅니다.
+
+- 훅은 `allow`와 `ask` 결정에 실행됩니다.
+- 명시적으로 구성된 `deny`는 최종이며 훅을 호출하지 않습니다.
+- 훅은 `effect`를 `allow`, `ask`, `deny`로 바꿀 수 있습니다.
+- `message`는 승격된 권한 요청에 나타나거나 거부 이유가 됩니다.
+
+#### 참조
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### 셸
+
+실행 전에 셸 명령, 작업 디렉터리, 타임아웃, 실행 파일, 환경 변수를 수정합니다.
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### 참조
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### 도구
+
+실행 전에 도구 입력을 검사하거나 교체합니다.
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+실행 후 성공 결과나 실패를 검사합니다.
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### 참조
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## V1 지원
+
+플러그인은 같은 패키지 진입점에서 V1과 V2를 지원할 수 있습니다. V1 `server()` 함수와 V2 `setup()` 함수가 있는
+객체 하나를 기본 export하세요.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- V1은 `server()`를 호출하고 반환된 훅을 사용합니다.
+- V2는 기본 export의 `id`와 `setup()`(Effect 플러그인은 `effect()`)을 읽고 `server()`를 무시합니다.
+- 각 구현은 자체 API로 유지하세요. export를 공유한다고 V1 훅이 V2 훅으로 변환되지는 않습니다.
+- `Plugin.define(...)`을 내보내는 객체에 펼쳐 넣어 V2 정의를 `server()`와 별도로 타입 검사하게 하세요.
+
+V1 객체 형식은 OpenCode `1.18.29`에서 지원됩니다. 더 오래된 V1 릴리스는 함수 export를 기대할 수 있으므로, 지원하려는
+가장 오래된 V1 릴리스와 V2에서 설치된 패키지를 테스트하세요.

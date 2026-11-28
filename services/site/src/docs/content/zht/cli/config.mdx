@@ -1,0 +1,430 @@
+---
+title: "設定"
+description: "設定 OpenCode CLI 與 TUI 的每一項設定。"
+---
+
+CLI 設定只控制終端機用戶端。它們與 `opencode.json(c)` 中的伺服器及專案設定
+各自獨立。
+
+按 `Ctrl+P`，然後選擇 **Open settings**，即可從 TUI 變更常用設定。
+
+<img src={`${import.meta.env.BASE_URL}assets/cli/settings.png`} alt="OpenCode TUI settings dialog" />
+
+## 設定檔
+
+OpenCode 將 CLI 設定儲存在單一全域檔案中：
+
+```text
+~/.config/opencode/cli.json
+```
+
+設定 `$XDG_CONFIG_HOME` 時，OpenCode 會使用：
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+沒有專案本機的 CLI 設定檔。加入已發布的 JSON Schema 以供驗證與自動完成：
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode 會在建立或移轉此檔案時加入 `$schema`。有效的編輯會在 TUI 執行時重新載入。
+
+未知的設定會被忽略。請保留 `$schema`，讓編輯器標示無效的值。
+
+### 舊版 `tui.json`
+
+V1 將終端機用戶端設定儲存在 `tui.json`。V2 只在移轉時讀取一次，不會將它當成 `cli.json` 的底層設定：
+
+- 若沒有 `cli.json`，CLI 會從同一個目錄下的全域 `tui.json` 讀取支援的設定，並從狀態目錄下的 `kv.json` 讀取已儲存的偏好設定，據此建立設定檔。
+- `cli.json` 建立後，CLI 就會忽略 `tui.json`。之後修改舊檔不會生效，你可以保留或刪除它。
+- 刪除 `cli.json` 後，下次啟動時會重新移轉。
+- CLI 不會修改或刪除舊版檔案。
+- CLI 只會讀取全域 `tui.json`，不會移轉專案內的 `tui.json`，也不會移轉 `tui.jsonc`。
+
+## 內嵌設定
+
+設定 `OPENCODE_CLI_CONFIG_CONTENT`，從內嵌 JSON 套用 CLI 設定：
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode 會將內嵌設定合併到全域 `cli.json` 之上。巢狀物件會合併，而來自環境的陣列與純量
+值會取代全域值。只要變數存在，內嵌設定就具有最終決定權。
+
+## 外觀
+選擇主題、控制介面動態效果，並覆寫終端機游標：
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Appearance settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `theme.name` | 字串 | 選取內建、自訂或由終端機衍生的主題。 |
+| `theme.mode` | `system`、`dark` 或 `light` | 跟隨終端機外觀，或將主題鎖定為一種色彩模式。 |
+| `animations` | 布林 | 啟用介面動畫。 |
+| `cursor.style` | `block`、`underline`、`line`、`default` | 設定游標形狀。`default` 保留終端機的游標形狀。 |
+| `cursor.blinking` | 布林 | 控制游標閃爍。當 style 為 `default` 時沒有作用。 |
+
+</div>
+
+主題的選擇與建立請參閱[主題](/cli/theme)。
+
+## 輸入
+
+設定滑鼠擷取、捲動、編輯器上下文、貼上與提示詞圖片預覽：
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Input settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `mouse` | 布林 | 啟用終端機滑鼠擷取。 |
+| `scroll.speed` | 數字，至少 `0.001` | 設定每次捲動輸入刻度的固定距離。 |
+| `scroll.acceleration` | 布林 | 加速連續捲動。啟用時優先於速度。 |
+| `prompt.editor` | 布林 | 將作用中編輯器的檔案或選取內容納入提示詞上下文。 |
+| `prompt.paste` | `compact` 或 `full` | 將大量貼上內容顯示為精簡佔位符或完整文字。 |
+| `prompt.image_preview` | 布林 | 在提示詞輸入上方顯示圖片附件預覽。 |
+
+</div>
+
+## 工作階段
+
+設定全螢幕 TUI 工作階段的呈現方式，以及新工作階段的起始位置：
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "submit_scroll": "bottom",
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Session settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `session.sidebar` | `auto` 或 `hide` | 空間足夠時顯示側邊欄，或一律隱藏。 |
+| `session.scrollbar` | 布林 | 顯示對話記錄捲軸。 |
+| `session.submit_scroll` | `bottom` 或 `keep` | 送出提示詞時跳到最新訊息，或保持目前位置。 |
+| `session.thinking` | `show` 或 `hide` | 預設顯示或隱藏模型推理。 |
+| `session.grouping` | `auto` 或 `none` | 將相關的對話記錄項目分組，或分別顯示每個項目。 |
+| `session.image_preview` | 布林 | 在對話記錄中顯示使用者附件與工具結果圖片。 |
+| `session.tps` | 布林 | 在助理頁尾顯示每秒輸出 token 數。 |
+| `session.markdown` | `source` 或 `rendered` | 顯示 Markdown 原始語法，或呈現排版後的內容，不顯示語法標記。 |
+| `session.new_location` | `launch` 或 `inherit` | 從 TUI 啟動目錄開始，或繼承作用中工作階段的位置。 |
+| `session.permissions` | `prompt` 或 `autoaccept` | 針對權限請求提示，或自動接受每個請求。 |
+
+</div>
+
+## 分頁
+
+設定常駐的工作階段分頁列：
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+舊版的布林 `tabs.enabled` 設定仍受支援：`true` 是 `on`，`false` 是 `off`。OpenCode 會讀取它，但不改寫設定檔。
+
+<div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `tabs.mode` | `auto`、`on` 或 `off` | 自動、一律或永不使用分頁。自動模式會在 Herdr 中隱藏它們。 |
+| `tabs.scope` | `cwd` 或 `global` | 依工作目錄保留個別分頁，或全域共用。 |
+| `tabs.layout` | `horizontal` 或 `vertical` | 將分頁放在水平列或垂直側邊欄。 |
+| `tabs.indicators` | `status` 或 `numbers` | 顯示狀態圖示，或一律顯示分頁編號。 |
+
+</div>
+
+顯示編號時仍會保留狀態顏色與背景動畫。不論使用哪種指示方式，Ctrl+數字快捷鍵都能切換分頁。
+
+## Diff
+
+設定初始 Diff 範圍與呈現方式：
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `diffs.source` | `branch`、`committed`、`working` 或 `turn` | 設定初始審查範圍。 |
+| `diffs.wrap` | `word` 或 `none` | 在詞語邊界換行長行，或不換行。 |
+| `diffs.tree` | 布林 | 顯示 Diff 檔案樹。 |
+| `diffs.single` | 布林 | 只顯示所選檔案的修補。 |
+| `diffs.view` | `auto`、`split` 或 `unified` | 設定版面配置。`auto` 會依可用寬度選擇。 |
+
+</div>
+
+`branch` 顯示 **All** 分支與本機變更，`committed` 只顯示分支提交，`working` 顯示已暫存、未暫存與未追蹤的變更。`turn` 顯示 **Last turn**，也就是工作階段在最近一回合變更的檔案；它會在工作階段完成一回合時重新整理，若 `/diff` 不是從工作階段開啟，則改用 `branch`。
+
+在 `/diff` 中按 `d` 可變更範圍，或從 **Base** 選擇比較分支。這些檢視內的選擇會持續到 TUI 結束，且不會變更 `cli.json`。
+
+## 通知
+
+分別啟用系統通知與提示音：
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Alert settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `attention.notifications` | 布林 | 顯示系統通知，通常在終端機未取得焦點時。 |
+| `attention.sound` | 布林 | 播放提示音。 |
+| `attention.volume` | 從 `0` 到 `1` 的數字 | 設定音量。 |
+| `attention.sound_pack` | 字串 | 選取作用中的音效包 ID。 |
+| `attention.sounds` | 物件 | 覆寫 `default`、`question`、`permission`、`error`、`done` 或 `subagent_done` 的音效檔案。 |
+
+</div>
+
+無效或無法讀取的覆寫會改用該事件的內建音效。
+
+更新後，TUI 會在主畫面顯示一次新版本的亮點。執行 `/highlights` 可再次查看，或關閉該對話框：
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## 終端機
+
+設定終端機整合：
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `terminal.title` | 布林 | 更新終端機視窗標題。 |
+| `terminal.copy` | `manual` 或 `select` | 手動複製，或選取後立即複製。平台預設值在 Windows 為 `manual`，其他平台為 `select`。 |
+
+</div>
+
+## Mini
+
+`mini` 群組控制 [`opencode mini`](/cli#mini)，也就是精簡互動式介面：
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `mini.thinking` | `show` 或 `hide` | 顯示或隱藏模型推理。 |
+| `mini.tools` | `show` 或 `hide` | 顯示或隱藏工具呼叫及其前面的助理文字。 |
+| `mini.shell_output` | `show` 或 `hide` | 顯示或隱藏原始 shell 工具輸出。 |
+| `mini.turn_summary` | `show` 或 `hide` | 在捲動歷史中顯示或隱藏 agent、模型與時間摘要。 |
+| `mini.footer` | `show` 或 `hide` | 顯示或隱藏常駐的活動、模型、用量與上下文詳細資料。 |
+| `mini.splash` | `show` 或 `hide` | 顯示或隱藏進入與離開的啟動橫幅。 |
+| `mini.work_spinner` | 載入動畫 ID | 選取頁尾的工作動畫。 |
+| `mini.mono` | 布林 | 使用單色 ASCII 輸出。 |
+| `mini.replay` | 布林 | 在繼續與終端機調整大小時還原工作階段記錄。 |
+| `mini.replay_limit` | 正整數 | 將重播限制為最新訊息。預設上限為 `200`。 |
+
+</div>
+
+可用的載入動畫 ID 為：
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+命令列的 `mini` 重播旗標會在該次叫用中覆寫這些設定。
+
+## 快捷鍵
+
+覆寫指令繫結與 leader 鍵逾時：
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Keybind settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `keybinds.leader` | 繫結值 | 設定其他繫結中 `<leader>` 引用的按鍵。 |
+| `keybinds.<command>` | 繫結值 | 覆寫單一指令 ID 的繫結。 |
+| `keybinds.*.key` | 按鍵字串或描述元 | 選取物件繫結的按鍵。 |
+| `keybinds.*.event` | `press` 或 `release` | 將物件繫結限制為一種按鍵事件。 |
+| `keybinds.*.preventDefault` | 布林 | 控制是否阻止終端機的預設按鍵行為。 |
+| `keybinds.*.fallthrough` | 布林 | 允許優先順序較低的處理常式接收相同事件。 |
+| `leader.timeout` | 正整數 | 設定按下 leader 鍵後等待的毫秒數。 |
+
+</div>
+
+繫結值可以是字串、替代按鍵的陣列或物件。使用 `"none"` 或 `false` 停用繫結。
+支援的按鍵語法、所有指令 ID 與預設繫結，請參閱[快捷鍵](/cli/keybinds)。
+
+## 外掛
+
+依序載入僅限終端機使用的外掛：
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Plugin settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `plugins` | 陣列 | 宣告有序的啟用指示與外部外掛。 |
+| `plugins[].package` | 字串 | 設定套件名稱、本機路徑或檔案 URL。 |
+| `plugins[].options` | 物件 | 將外掛專屬選項傳遞給該外掛。 |
+
+</div>
+
+套件形式、本機探索、萬用字元與停用指示請參閱[外掛](/cli/plugins)。
+
+## 偵錯與實驗性功能
+
+啟用診斷，或選擇加入目前可用的實驗性功能：
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Debug and experimental settings" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `debug.devtools` | 布林 | 顯示 DevTools 偵錯列。 |
+| `debug.timing` | 布林 | 在偵錯列顯示首次繪製時間診斷。 |
+| `debug.turn_tokens` | 布林或 `verbose` | 顯示每回合的 token 用量；`verbose` 也會包含工具呼叫輸入。 |
+| `experimental` | 功能 ID 對應布林值的物件 | 啟用或停用實驗性功能。這些功能可能不經通知就變更或移除。 |
+
+</div>
+
+請只使用 TUI 的 **Experiments** 對話框目前列出的功能 ID。未知的 ID 沒有作用。

@@ -1,15 +1,22 @@
 import { For, Show } from "solid-js"
 import { Bracket } from "~/component/site/site-controls"
 import { useI18n } from "~/context/i18n"
+import type { Locale } from "~/lib/language"
 import type { DocsSet } from "../config"
-import { docsHref, type DocsNavGroup } from "../lib/navigation"
+import { docsLocaleHref, type DocsNavGroup } from "../lib/navigation"
 
 /**
  * The current section's pages, in the site's bracket list (the footer's "[ ]", "[-]" on the current
  * page). It scrolls on its own under the logo and lockup (site.css), fading at an edge while items
  * pass under it (client.ts sets data-fade-top and data-fade-bottom).
  */
-export function DocsNav(props: { set: DocsSet; section: string; groups: DocsNavGroup[]; currentSlug: string }) {
+export function DocsNav(props: {
+  set: DocsSet
+  section: string
+  groups: DocsNavGroup[]
+  currentSlug: string
+  locale: Locale
+}) {
   // A group named after its section ("API" in the API docs) needs no title under the lockup.
   const i18n = useI18n()
   const title = (group: DocsNavGroup) => (group.title === props.section ? undefined : group.title)
@@ -30,7 +37,7 @@ export function DocsNav(props: { set: DocsSet; section: string; groups: DocsNavG
                 {(item) => (
                   <li>
                     <a
-                      href={item.href ?? docsHref(item.slug, props.set)}
+                      href={item.href ?? docsLocaleHref(item.slug, props.set, props.locale)}
                       aria-current={item.slug === props.currentSlug ? "page" : undefined}
                     >
                       <Bracket />

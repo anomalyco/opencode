@@ -1,0 +1,121 @@
+---
+title: "Створення плагінів"
+description: "Створіть плагін OpenCode: один пакет із серверною частиною, частиною TUI, частиною GUI або будь-якою їх комбінацією."
+---
+
+Плагіни змінюють поведінку OpenCode і додають нові можливості. Плагін — це один пакет із серверною частиною, частиною TUI, частиною GUI
+або будь-якою їх комбінацією.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+Переносите наявний плагін OpenCode 1? Дотримуйтеся [посібника з міграції плагінів V1](/build/plugins/migrate-v1).
+
+## Частини
+
+Кожна частина — це експорт пакета. SDK кожної частини походить з єдиної залежності `@opencode/plugin`.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **Server** (`.` або `./server`) працює в сервері OpenCode з `@opencode/plugin`. Він додає інструменти, хуки,
+  інтеграції, команди й агентів. Дивіться [Сервер](/build/plugins/server) або [Effect-плагіни](/build/plugins/effect)
+  для Effect API.
+- **TUI** (`./tui`) працює в термінальному інтерфейсі з `@opencode/plugin/tui`. Дивіться [TUI](/build/plugins/cli).
+- **GUI** (`./gui-experimental`) запускає свій `setup` у кожному вікні OpenCode Desktop, а `main` — у головному процесі
+  десктопного застосунку, з `@opencode/plugin/gui`. Дивіться [GUI](/build/plugins/gui).
+- **RPC** (`./rpc`) — це типізований контракт, який реалізує серверна частина, а викликають інші частини та клієнти.
+  Дивіться [RPC](/build/plugins/rpc).
+
+`id` плагіна береться з `Plugin.define` його серверної частини. Пакет із частиною GUI і без серверної частини використовує
+як `id` назву свого пакета (або назву локального каталогу). Частина TUI оголошує власний `id`; частина GUI не оголошує
+його й бере від плагіна.
+
+## Завантаження
+
+Плагіни в `.opencode/plugins/` завантажуються автоматично, як і локальний приклад вище. Щоб завантажити опубліковані пакети
+або каталоги плагінів з інших місць, додайте їх до `plugins` в `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- Один запис завантажує кожну частину. TUI завантажує частини TUI плагінів, які завантажує його сервер, а OpenCode Desktop
+  завантажує частини GUI плагінів у вашому глобальному `opencode.json(c)`.
+- Пакет лише з частиною TUI слід додавати до [`cli.json`](/cli/plugins).
+- Локальний каталог плагіна з `name` і `exports` у `package.json` завантажує свої частини через них, як опублікований
+  пакет. Без них він використовує назви файлів у корені: `server` (інакше `index`), `tui` і `rpc` з розширенням `.ts`,
+  `.tsx` або `.js`, а також `gui-experimental.cjs` (або `.js`).
+- Дивіться [Налаштування плагінів](/plugins), щоб дізнатися більше про завантаження й конфігурацію.
+
+## Публікація
+
+Опублікований плагін — це пакет npm із наведеним вище `package.json`. Його частини використовують ті самі експорти за замовчуванням,
+що й локальний плагін.
+
+```bash
+npm publish
+```
+
+- Експортуйте `./rpc`, якщо інші плагіни й клієнти мають імпортувати ваш [RPC-контракт](/build/plugins/rpc), не
+  завантажуючи вашу реалізацію.
+- Зберіть бандл GUI перед публікацією й додайте його через `files`. Дивіться
+  [Збирання бандла](/build/plugins/gui#build-the-bundle).
+- Використовуйте версії, сумісні з цільовим випуском OpenCode, і тестуйте встановлений пакет, а не лише копію,
+  пов'язану з робочим простором. Публікуйте сумісне оновлення плагіна, коли переходите на новіший контракт API.
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    Додавайте інструменти, хуки, інтеграції, команди й агентів на сервері OpenCode.
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    Додавайте команди, маршрути, слоти й рендерери Markdown у термінальний інтерфейс.
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    Додавайте панелі, команди, сторінки налаштувань і нативні інтеграції в OpenCode Desktop.
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    Надавайте типізовані методи й події із серверної частини іншим частинам і клієнтам.
+  </Card>
+</CardGroup>

@@ -15,6 +15,9 @@ import { host } from "../plugin/host"
 import { imagePassthrough } from "./image"
 import { permissionLayer } from "./permission"
 
+/** `tool.call` for a context a test builds outside the registry, where nothing should call another tool. */
+export const noToolCalls: Tool.Calls = { call: (name) => Effect.die(new Error(`unexpected tool.call("${name}")`)) }
+
 export const toolIdentity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_tool_test"),

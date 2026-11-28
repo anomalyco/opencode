@@ -1,0 +1,645 @@
+---
+title: "TUI プラグインの作成"
+description: "@opencode/plugin/tui を使って、ターミナル UI 向けの OpenCode プラグインの TUI 部分を作成します。"
+---
+
+TUI プラグインは、コマンド、ルート、スロット、Markdown レンダラー、通知、ローカル状態でターミナル UI を拡張します。TUI プラグインは[プラグインパッケージ](/build/plugins)の `./tui` 部分で、通常は[サーバー部分](/build/plugins/server)の隣に置きます。
+
+```ts title="src/tui.tsx"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
+  },
+})
+```
+
+`@opencode/plugin/tui` を直接インポートします。OpenCode は実行時にこのインポートを解決するため、ローカルの TUI プラグインに OpenCode のチェックアウトへの絶対パスは不要です。
+
+## コンテキスト
+
+`setup` は、設定、アプリのメタデータ、現在の location、OpenCode クライアント、キャッシュされたデータ、テーマのトークン、OpenTUI レンダラー、および以下で説明する UI の API を受け取ります。
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+プラグインが所有するリソースにはクリーンアップ関数を返します。
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## クライアント
+
+`context.client` は生成された OpenCode クライアントで、接続しているサーバー（リモートサーバーを含む）を呼び出せます。
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## イベント
+
+1 種類の型付きイベントを購読するには `data.on`、すべてのサーバーイベントを購読するには `data.listen` を使用します。どちらも購読を解除する関数を返します。
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## セッション
+
+セッションのデータは、一覧、検索、階層、コスト、ステータス、同期、無効化を提供します。
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+保留中の受信トレイの項目とメッセージには、一覧、検索、同期、無効化の API があります。
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+権限リクエストは、セッションについて読み取りと更新ができます。
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+フォームは location で一覧表示、更新、応答、キャンセルができます。
+
+```ts
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## プロジェクトとシェル
+
+プロジェクトと保存済みの権限は、一覧、検索、同期、無効化の操作に対応しています。
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+シェルのデータは、location 単位の一覧、検索、同期、無効化の操作に対応しています。
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Location のデータ
+
+Location の状態は、デフォルトの location と更新の制御を提供します。
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+バージョン管理の状態は、location のリポジトリ情報を提供します。
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+エージェント、コマンド、連携、モデル、プロバイダー、参照、スキル、MCP のデータは、`list`、`sync`、`invalidate` のメソッドを共有します。
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## 通知
+
+ターミナルにフォーカスがあるかどうかに応じて、システム通知を表示したり、設定されたサウンドを再生したり、その両方を行ったりできます。
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## テーマとレンダラー
+
+OpenTUI の要素にはセマンティックなテーマトークンを使用し、レンダラー固有のヘルパーには `context.renderer` を渡します。
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+レンダラーが描画する OpenTUI のリソースには、所有者として `context.renderer.nativeScene` が必要です。たとえば `<markdown>` と `<code>` には `SyntaxStyle` が必要です。リソースは、それを描画する最後のフレームの後、レンダラーがアイドルになったときに破棄します。
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+レンダラブルのレイアウトスタイルを読むには、Yoga Node のゲッターと同じ名前のメソッドを呼び出します（`box.getPadding(Yoga.Edge.Bottom)` や `box.getMaxWidth()` など）。ホストのレンダラブルはプラグイン API の一部ではありません。その構造とスタイルは任意のリリースで変更される可能性があります。
+
+### OpenTUI 0.5 向けに作られたプラグイン
+
+OpenCode は独自の OpenTUI でプラグインを実行します。OpenTUI 0.6 以降は次のとおりです。
+
+- `SyntaxStyle.create()`、`SyntaxStyle.fromStyles()`、`SyntaxStyle.fromTheme()`、`TextBuffer.create()`、`EditBuffer.create()` は、最後の引数で所有者を受け取ります。`OptimizedBuffer.create()` は `owner` オプションで受け取ります。`context.renderer.nativeScene` を渡してください。OpenTUI 0.5 は余分な引数を無視するため、プラグインは古い OpenCode のリリースでも動作します。
+- `@opencode/theme/tui` の `generateSyntax()` は 2 番目の引数で所有者を受け取ります（`generateSyntax(context.theme, context.renderer.nativeScene)`）。古い `@opencode/theme` のバージョンは所有者なしでスタイルを構築するため、パッケージも更新してください。
+- `getLayoutNode()` は削除されました。`getLayoutNode().getMaxWidth()` などのスタイルのゲッターは、OpenTUI 0.6.5 以降では同じ名前のレンダラブルのメソッドに置き換えてください。`getComputedLayout()` などの計算済みの位置とサイズのゲッターは `getLayout()` に、`markDirty()` は `invalidateIntrinsicSize()` に置き換えます。計算済みのパディング、マージン、境界線には代替がなく、`getPadding(edge)` はそのエッジに設定されたパディングのみを読み取ります。ゲッターが未設定（`Unit.Undefined`）と報告するスタイルを復元するには、OpenTUI 0.6.6 以降でプロパティに `undefined` を代入します。
+
+[OpenTUI 0.6.0 のリリースノート](https://opentui.com/docs/releases/0.6.0)にすべての変更が記載されています。
+
+## Solid コンポーネント
+
+ルート、ダイアログ、スロットがレンダリングする JSX の内部で現在のコンテキストにアクセスするには `usePlugin` を使用します。
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+言語ごとにフェンス付きコードのレンダラーを登録します。返された関数で登録を解除できます。
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## コマンドとキーマップ
+
+パレット、スラッシュ、キーボードのコマンドを、リアクティブなキーマップレイヤーに登録します。
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+`layer` は `setup` から（`await` の後でも）、またはコンポーネントから呼び出します。各レイヤーは次のいずれか早い方で削除されます。
+
+- プラグインが無効化、再読み込み、または setup に失敗したとき。
+- それを作成したコンポーネントまたはリアクティブな計算（スロット、ルート、ダイアログなど）が破棄されたとき。
+
+レイヤーのファクトリは純粋である必要があります。OpenCode は初期のコマンドの形を検証するために依存関係の追跡なしで一度評価し、その後はリアクティブに評価します。ID のないパレットコマンドなど、初期のコマンドの形のエラーは `layer()` から throw されます。バインディングの解析エラーは OpenTUI が処理します。以降のリアクティブな更新のエラーは Solid のエラー処理に従います。
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+レイヤーは 1 つの OpenTUI レンダラブルを対象にでき、コマンドから `false` を返してキーボードのディスパッチを続行できます。
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+コマンドをディスパッチし、ショートカットとコマンドの状態を確認し、一時的な入力モードをプッシュします。
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## ストレージ
+
+永続ストレージは、再起動をまたいで JSON を保持し、TUI インスタンス間で同期します。
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+メモリストレージはプラグインの再読み込みをまたいで残りますが、TUI の終了時に破棄されます。
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## ダイアログとトースト
+
+アラート、確認、テキスト入力、選択には Promise ベースのダイアログを使用します。
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### 選択肢の検索
+
+マッチングと結果の順序を自分で制御するには `search` を渡します。空のクエリを含むすべてのクエリで実行され、有効なオプションのみを受け取ります。結果は返された順序で一覧表示され、各カテゴリはインラインで表示されます。
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### 選択ダイアログのアクション
+
+アクションはフッターに表示され、キーボードのバインド、クリック、または Tab でフォーカスして Enter で実行されます。デフォルトでは選択された値を受け取り、選択がない場合は利用できません。選択を必要としないアクションには `selection: "none"` を使用します。
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- アクションを実行しても、ダイアログは閉じず、Promise は未確定のままです。
+- Enter を押すか選択肢をクリックすると、Promise の結果として選択した値が返ります。
+- Escape を押すか、`clear()` を呼び出すか、別のダイアログを表示すると、Promise の結果として `undefined` が返ります。
+- `ctrl+n` や `ctrl+p` はバインドしないでください。ダイアログがナビゲーション用に予約しており、ダイアログ自身のバインドが優先されます。
+
+カスタムの JSX ダイアログは、サイズを設定したり、自身を閉じたりできます。`set` は `show` の後に呼び出してください。ダイアログを表示すると、サイズは `medium` に戻り、中央揃えも解除されます。`medium`、`large`、`xlarge` の幅は、それぞれ 60、88、116 列です。
+
+```tsx
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.clear()
+```
+
+トーストはタイトル、メッセージ、バリアント、期間に対応しています。
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## ルートとタブ
+
+JSX のルートを登録し、現在のルートを確認し、ホーム、セッション、プラグインのページに移動します。
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+セッションタブが有効な場合、タブは一覧表示、オープン、フォーカス、移動、クローズができます。`open` はフォーカスを変えず、`focus` は必要に応じてタブを開きます。
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## モデル
+
+プロンプトで選択されているモデルを読み取り、そのバリアントを変更します。`current()` と `variant.list()` は Solid の計算内で読み取るとリアクティブになります。`variant` が `undefined` の場合はモデルのデフォルトです。
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set` は、モデルが選択されていない場合やそのモデルにそのバリアントがない場合に `false` を返します。組み込みのバリアントの循環を置き換えるにはコマンドにバインドします。たとえば、モデルのデフォルトをスキップするには次のようにします。
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## スロット
+
+スロットは `app`、`home.footer`、`home.footer.status`、`prompt.footer`、`prompt.footer.status`、`prompt.footer.file`、`session.composer.top`、`sidebar.content`、`sidebar.footer` に JSX を挿入または置換します。
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+配置には `prepend`、`append`、`before`、`after`、`replace` を使用します。
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+組み込みのフッター行を置き換えずにコンテンツを追加するには `home.footer.status` を使用します。追加したステータス表示は、OpenCode の稼働状況インジケーターとバージョン表示の間に表示されます。
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### セッションパネル
+
+`session.panel` に表示内容を登録し、コマンドからパネルを開きます。サイズ、フォーカス、全画面表示はホストが管理し、表示内容はプラグインが管理します。選択された名前は、登録された各項目に `panel.name` として渡され、各項目がレンダリングするかどうかを判断します。
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- セッションの外で開くと `false` を返します。
+- これは通常のスロットであり、5 つの配置と既存の置換の順序のルールがすべて適用されます。
+- 個別に選択できる項目は `append` で追加すると共存できます。`replace` を使うと、このスロットの内容全体が置き換わります。
+- 名前は各項目で共有される選択値であり、登録時に予約されるものではありません。名前の衝突を避けるため、`acme.review` のようにプラグインのプレフィックスを付けてください。一致するレンダラーがない名前を開くと、スロットは空のままです。
+- 表示形式を切り替えても、各項目はマウントされたままです。パネルを閉じると破棄されます。プラグインを無効にした場合は、通常のスロットのクリーンアップによって、そのプラグインが追加した項目が削除されます。
+- そのキーボードレイヤーと入力モードは、パネルが入力を所有している間だけ有効です。
+
+スロットは、リアクティブな `name`、`sessionID`、`width`、`presentation`、`focused` のプロパティと、`focus`、`close`、`toggleFullscreen` のアクションを受け取ります。ホストは狭いターミナルでは全画面を維持し、サイドパネルの余地ができるまで `toggleFullscreen` は効果がありません。
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+最初から全画面表示を要求したり、アクティブなパネルを確認したり、他のプラグインのパネルに影響を与えずに閉じたりできます。
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## フォーマット
+
+ホームディレクトリの省略を含め、表示用にファイルシステムのパスをフォーマットします。
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## 公開と読み込み
+
+TUI プラグインは `./tui` で公開します。プラグインが JSX をレンダリングする場合は OpenTUI のピアを追加します。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+自動読み込みのために、[サーバー部分](/build/plugins/server)または [GUI 部分](/build/plugins/gui)の隣で `./tui` をエクスポートします。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+TUI 専用のパッケージは、リモートサーバーに対しても有効なままになるよう [`cli.json`](/cli/plugins) で設定します。
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

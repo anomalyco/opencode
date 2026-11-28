@@ -12,25 +12,26 @@ export const docsVersions = [
 
 export type DocsVersion = (typeof docsVersions)[number]["id"]
 
-/** A docs section's name in the page's language: "Docs" and "Build" translate, the product names don't. */
+/** A docs section's name in the page's language: "Docs", "Build" and "Console" translate, the other product names don't. */
 export function docsSectionName(i18n: I18n, section: string) {
   if (section === "Docs") return i18n.t("nav.docs")
   if (section === "Build") return i18n.t("docs.section.build")
+  if (section === "Console") return i18n.t("docs.nav.console")
   return section
 }
 
 /**
  * The docs lockup word beside the OpenCode mark ("DOCS"): a plain link to the docs home with no
  * dropdown, matching the Data and Console headers. Rendered server-side in both the sidebar and
- * the phone top bar so docs pages never hydrate.
+ * the phone top bar so docs pages never hydrate. `home` is the home in the page's language.
  */
-export function DocsLockup(props: { inline?: "sidebar" | "topbar" }) {
+export function DocsLockup(props: { inline?: "sidebar" | "topbar"; home?: string }) {
   const i18n = useI18n()
   const label = () => docsSectionName(i18n, "Docs")
 
   return (
     <div data-component="docs-lockup" data-host={props.inline}>
-      <a data-slot="word" href={docsUrl()} aria-label={i18n.t("docs.lockup.home", { name: label() })}>
+      <a data-slot="word" href={props.home ?? docsUrl()} aria-label={i18n.t("docs.lockup.home", { name: label() })}>
         {label()}
       </a>
     </div>
@@ -42,7 +43,14 @@ export function DocsLockup(props: { inline?: "sidebar" | "topbar" }) {
  * aligned with the article column on desktop, and a sticky horizontal strip under the top bar on
  * phones and tablets.
  */
-export function DocsSectionLinks(props: { current: string; v1?: boolean; v1Href?: string }) {
+export function DocsSectionLinks(props: {
+  /** The current section's key (`docs`, `cli`, `build`, `api`, `console`), not its translated name. */
+  current: string
+  v1?: boolean
+  v1Href?: string
+  /** The sections' links in the page's language (the latest docs have prefixed languages). */
+  hrefs?: Record<string, string>
+}) {
   const i18n = useI18n()
   const sections = () => docsProducts.filter((product) => product.label !== "V1")
   const linkLabel = (label: string) =>
@@ -55,7 +63,10 @@ export function DocsSectionLinks(props: { current: string; v1?: boolean; v1Href?
           <For each={sections()}>
             {(product) => (
               <li>
-                <a href={product.href} aria-current={!props.v1 && props.current === product.label ? "page" : undefined}>
+                <a
+                  href={props.hrefs?.[product.label] ?? product.href}
+                  aria-current={!props.v1 && props.current === product.label.toLowerCase() ? "page" : undefined}
+                >
                   {linkLabel(product.label)}
                 </a>
               </li>

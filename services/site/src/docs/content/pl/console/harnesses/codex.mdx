@@ -1,0 +1,94 @@
+---
+title: "Codex"
+description: "Korzystaj z modeli Console i Go w Codex."
+---
+
+Codex posługuje się API OpenAI Responses. Skieruj go do Console i używaj dowolnego płatnego modelu lub modelu Go,
+w tym Claude, Gemini i modeli otwartych. Console tłumaczy żądanie dla modeli, które nie obsługują Responses.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) konfiguruje Codex jednym poleceniem, wraz z zasadami obszaru roboczego,
+  serwerami MCP, skillami i instrukcjami. Uruchom `npx @opencode/console setup codex`. Poniższe kroki opisują ręczną konfigurację.
+</Callout>
+
+## Konfiguracja
+
+Dodaj Console jako dostawcę modeli w `~/.codex/config.toml` i ustaw go jako domyślnego.
+
+```toml title="~/.codex/config.toml"
+model = "gpt-6.1-sol"
+model_provider = "opencode"
+
+[model_providers.opencode]
+name = "OpenCode Console"
+base_url = "https://opencode.ai/inference/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+Codex dopisuje `/responses` do bazowego URL i odczytuje klucz z `env_key`. Utwórz
+[osobisty klucz API](/console/harnesses#get-an-api-key), a następnie wyeksportuj go.
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+codex
+```
+
+<Callout>
+  Codex odczytuje dostawców modeli tylko z `~/.codex/config.toml`. Plik `.codex/config.toml` projektu nie może ich ustawić.
+</Callout>
+
+## Go
+
+Użyj bazowego URL Go i klucza z obszaru roboczego z subskrypcją [Go](/console/go).
+
+```toml title="~/.codex/config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+
+[model_providers.opencode-go]
+name = "OpenCode Go"
+base_url = "https://opencode.ai/inference/go/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+## Modele
+
+Ustaw `model` na dowolny identyfikator modelu z tabeli [Console](/console/models#endpoints) lub [Go](/console/go#endpoints).
+Nadpisz go dla pojedynczego uruchomienia opcją `--model`.
+
+```bash
+codex --model claude-sonnet-5-5
+```
+
+Codex nie zna okna kontekstu ani ustawień rozumowania modeli spoza swojego katalogu. Używa dla nich ogólnych wartości
+domyślnych i wypisuje ostrzeżenie, które możesz zignorować.
+
+## Profile
+
+Użyj profilu, aby móc korzystać zarówno z rozliczeń za użycie, jak i z Go. Zdefiniuj obu dostawców w `~/.codex/config.toml`,
+a następnie dodaj plik profilu, który przełącza na Go.
+
+```toml title="~/.codex/go.config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+```
+
+```bash
+codex --profile go
+```
+
+## Console MCP
+
+Dodaj serwer [Console MCP](/console/harnesses#console-mcp) i zaloguj się w przeglądarce.
+
+```bash
+codex mcp add opencode-console --url https://opencode.ai/console/mcp
+```
+
+Jeśli logowanie nie rozpocznie się automatycznie, uruchom je samodzielnie.
+
+```bash
+codex mcp login opencode-console
+```

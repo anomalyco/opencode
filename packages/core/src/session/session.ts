@@ -11,7 +11,14 @@ import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
-import { BusyError, CompactionConflictError, InboxConflictError, NotFoundError, PromptConflictError } from "./error.js"
+import {
+  BusyError,
+  CompactionConflictError,
+  InboxConflictError,
+  NotFoundError,
+  PromptConflictError,
+  ShellStartError,
+} from "./error.js"
 import { SessionEvent } from "./event.js"
 import { SessionExecution } from "./execution.js"
 import { SessionInbox } from "./inbox.js"
@@ -205,9 +212,12 @@ export const make = Effect.fn("Session.make")(function* () {
             description: input.command,
             metadata: { source: "shell", state: "error" },
             resume: false,
-          }),
+          }).pipe(
+            Effect.catchTag("Session.NotFoundError", () => Effect.void),
+            Effect.orDie,
+          ),
         ),
-        Effect.orDie,
+        Effect.mapError((error) => new ShellStartError({ sessionID, message: error.message })),
       )
       yield* bus.publish(
         SessionEvent.Shell.Started,

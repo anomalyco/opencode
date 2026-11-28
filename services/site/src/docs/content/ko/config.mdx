@@ -1,0 +1,650 @@
+---
+title: "구성"
+description: "opencode.json 또는 opencode.jsonc에서 OpenCode를 구성하고, 구성 파일 위치와 우선순위, 변수 치환 방법을 확인하세요."
+---
+
+프로젝트에 `opencode.jsonc`를 만들어 OpenCode를 구성하세요. 편집기 검증을 위해 스키마를 추가한 다음 필요한 옵션만 설정하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+OpenCode에 이 파일을 대신 업데이트해 달라고 요청할 수도 있습니다.
+
+## 형식
+
+OpenCode는 JSON과 JSONC를 지원합니다. 주석이나 후행 쉼표를 쓰려면 JSONC를 사용하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+## 위치
+
+기기 전체에 적용할 관리형 설정은 시스템 구성 디렉터리에 두세요.
+
+| 플랫폼  | 디렉터리                                |
+| ------- | --------------------------------------- |
+| macOS   | `/Library/Application Support/opencode` |
+| Linux   | `/etc/opencode`                         |
+| Windows | `%ProgramData%\opencode`                |
+
+시스템 디렉터리는 전역 디렉터리처럼 동작합니다. `opencode.json(c)` 외에도 머신의 모든 사용자에 대해 `agents/`,
+`commands/`, `skills/`, `plugins/`를 로드합니다.
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+macOS에서는 MDM 도구가 `ai.opencode.managed` 도메인에 배포한 관리형 기본 설정도 읽습니다. 사용자별 프로필은
+머신 전체 프로필을 대체합니다.
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+관리형 설정은 우선순위가 가장 높으므로 사용자나 프로젝트에서 관리형 설정에 지정된 값을 재정의할 수 없고, 관리형 기본 설정은 시스템
+디렉터리보다 우선합니다. 설정만으로는 사용자가 제공자, MCP 서버, 에이전트, 플러그인을 추가하는 것을 막을 수
+없습니다. 제한을 적용하려면 관리형 구성의 [정책](/policies#precedence)을 사용하세요.
+
+모든 프로젝트에 적용할 사용자 설정은 전역 구성에 두세요.
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+프로젝트 설정은 다음 파일 중 하나에 두세요.
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode는 현재 디렉터리에서 파일 시스템 루트까지 검색합니다. 먼저 먼 디렉터리에서 가까운 디렉터리 순서로 각 디렉터리에 바로 놓인 `opencode.json(c)` 파일을 병합하고, 그다음 같은 순서로 `.opencode` 디렉터리 안의 파일을 병합합니다. 따라서
+발견된 모든 `.opencode` 구성이 모든 직접 구성을 재정의합니다. 그런 동작이 필요하지 않다면 디렉터리 트리 전체에서
+한 형식만 사용하세요.
+
+예를 들어 `/home/user/projects/acme/packages/web`에서 OpenCode를 시작합니다.
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode는 다음 파일을 우선순위가 낮은 것부터 높은 것 순서로 적용합니다.
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+패키지 구성은 저장소 구성의 일치하는 설정을, 저장소 구성은 전역 구성을 재정의합니다. 시스템 구성은 이 모두를
+재정의합니다. 충돌하지 않는 설정은 유지됩니다. 전역 및 프로젝트 파일의 [정책](/policies#precedence)은 반대 순서로
+평가되며, 시스템 정책이 모두보다 우선합니다.
+
+## 스키마
+
+전체 OpenCode 구성 스키마는 [opencode.ai/config.json](https://opencode.ai/config.json)에서 확인할 수 있습니다.
+
+JSON 스키마를 지원하는 편집기에서 검증과 자동 완성을 사용하려면 구성 파일에 `$schema` 필드를 추가하세요.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+사용 가능한 필드, 허용되는 값, 중첩 구성 형태의 기준은 스키마를 따르세요.
+
+### 셸
+
+터미널과 셸 도구가 사용하는 셸을 설정합니다.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### 모델
+
+기본 모델을 `provider/model` 형식으로 설정합니다. 현재 루트 기본값은 `#variant`를 유지하지 않으며, 에이전트와
+명령어의 모델 참조는 변형을 선택할 수 있습니다.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+모델 선택과 로컬 모델은 [모델 가이드](/models)를 참고하세요.
+
+### 에이전트
+
+세션이 명시적으로 선택하지 않았을 때 사용할 기본 에이전트를 고릅니다.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+내장 및 커스텀 에이전트는 [에이전트 가이드](/agents)를 참고하세요.
+
+### 업데이트
+
+전역 구성에서 업데이트 확인을 제어합니다. `update`를 `"disable"`로 설정하면 건너뛰고, `"notify"`는 설치 전에
+사용 가능한 업데이트를 보여 주며, `"auto"`는 자동으로 설치합니다. 생략하면 `update`의 기본값은 `"notify"`입니다.
+
+자동 설치는 실행 중인 서버를 다시 시작하지 않습니다. 설치된 업데이트를 적용하려면 직접 다시 시작하세요.
+프로젝트 수준 값은 무시됩니다.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### 사용자 이름
+
+사용자 이름을 설정합니다. OpenCode는 이 필드를 받아들이지만 대화에 표시하지는 않습니다.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### 권한
+
+에이전트가 일치하는 리소스에 도구를 사용하기 전에 허용, 거부, 확인하는 순서 있는 규칙을 정의합니다.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+규칙 일치와 사용 가능한 액션은 [권한 가이드](/permissions)를 참고하세요.
+
+### 정책
+
+더 넓은 구성이 재정의할 수 있는 순서 있는 선언으로 제공자 사용을 허용하거나 거부하고, 권한 검사를 강제로
+거부하고, MCP 서버, 스킬, 플러그인을 차단합니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+일치 방식, 구성 파일 간 우선순위, Console 관리 정책은 [정책 가이드](/policies)를 참고하세요.
+
+### 에이전트
+
+내장 에이전트를 재정의하거나 자체 모델, 지침, 모드, 권한을 가진 특화 에이전트를 정의합니다.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+모든 에이전트 옵션과 파일 기반 에이전트는 [에이전트 가이드](/agents)를 참고하세요.
+
+### 스냅샷
+
+실행 취소와 되돌리기 동작에 사용하는 파일 시스템 스냅샷을 활성화하거나 비활성화합니다.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+실행 취소와 재실행 동작은 [스냅샷 가이드](/snapshots)를 참고하세요.
+
+### 감시자
+
+파일 시스템 업데이트를 트리거하지 않아야 하는 파일과 디렉터리를 무시합니다.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### 포매터
+
+`write`, `edit`, `patch` 도구로 파일을 변경한 뒤 서식을 지정합니다. `formatter`를 `true`로 설정하면 사용 가능한
+내장 포매터가 활성화됩니다.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+내장 및 커스텀 포매터는 [포매터 가이드](/formatters)를 참고하세요.
+
+### 미디어
+
+`read` 도구가 불러온 크기가 큰 이미지를 모델에 보내기 전에 크기 조정하거나 거부하는 방식을 제어합니다.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+이미지 처리와 한도는 [첨부 파일 가이드](/attachments)를 참고하세요.
+
+### 출력
+
+도구 결과에서 유지할 최대 줄 수와 바이트를 설정합니다.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### 검색
+
+OpenCode가 웹을 검색하는 방식을 고릅니다. `"random"`을 사용하면 사용 가능한 제공자를 자동으로 선택합니다.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+제공자, 자격 증명, 선택, 요청 한도, 검색 비활성화는 [웹 검색 가이드](/websearch)를 참고하세요.
+
+### MCP
+
+로컬 및 원격 Model Context Protocol 서버를 구성합니다. 전역 `mcp.timeout` 값은 구성 파일에 정의된 서버에
+적용되며, 각 서버의 `timeout`이 이를 재정의합니다.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+원격 서버, OAuth, 환경 변수, 타임아웃은 [MCP 가이드](/mcp-servers)를 참고하세요.
+
+### 압축
+
+자동 컨텍스트 압축과 유지할 최근 컨텍스트 양을 제어합니다.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": "15%",
+  },
+}
+```
+
+`buffer`는 자동 압축이 시작되기 전에 비워 두는 모델 컨텍스트 윈도의 비율입니다.
+
+로컬 요약이 계속 기본값입니다. 제공자나 모델 정책으로 자동 및 수동 요청 모두에 제공자의 네이티브 압축을 선택할 수
+있습니다.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+모델 설정은 제공자 설정을 재정의합니다. 자동 압축은 선택한 모델의 사용 가능한 입력 예산을 사용합니다. 제공자
+체크포인트는 로컬 요약이 최근 대화를 남길 때 쓰는 것과 동일한 `compaction.keep.tokens` 한도 내에서 최근 사용자 메시지를 유지합니다. 최상위 `compaction.auto: false`는 설치된 체크포인트를 버리지 않고 새 자동 압축을
+비활성화합니다. 예산 산정과 넘침 복구는 [압축 가이드](/compaction)를 참고하세요.
+
+### 워밍
+
+최근에 사용한 모델 세션에 임시 요청을 주기적으로 보내 캐시를 유지합니다. 워밍은 기본적으로 비활성화되어 있으며,
+`true`로 설정하면 각 모델의 캐시가 만료되기 직전에 최대 30분 동안 워밍합니다.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "auto",
+    "duration": "30 minutes",
+  },
+}
+```
+
+제공자나 모델의 `settings.cache.warming`이 이를 재정의하며, `settings.cache.ttl`은 제공자가 캐시를 유지하는 기간을
+설정합니다. 요청 동작, 커스터마이즈, 비용 고려 사항은 [워밍 가이드](/warming)를, `cache.ttl`은
+[캐시 수명](/models#cache-lifetime)을 참고하세요.
+
+### 스킬
+
+OpenCode가 에이전트 스킬을 검색할 디렉터리나 URL을 추가합니다.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+스킬 구조와 `.opencode/skills/`의 자동 탐색은 [스킬 가이드](/skills)를 참고하세요.
+
+### 명령어
+
+재사용 가능한 슬래시 명령어를 이름 있는 프롬프트 템플릿으로 정의합니다.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+인수, 모델, 에이전트, 파일 기반 명령어는 [명령어 가이드](/commands)를 참고하세요.
+
+### 지침
+
+추가 지침 파일, 글롭, HTTP(S) URL을 선언합니다. OpenCode는 발견된 `AGENTS.md` 파일과 함께 이를 로드합니다.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+프로젝트 지침과 `AGENTS.md`는 [지침 가이드](/instructions)를 참고하세요.
+
+### 참조
+
+로컬 디렉터리나 Git 저장소를 이름 있는 보조 컨텍스트로 사용할 수 있게 합니다.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+단축 형식, 표시 여부, 경로 확인은 [참조 가이드](/references)를 참고하세요.
+
+### 워크트리
+
+새 로컬 워크트리의 상위 디렉터리를 설정합니다. OpenCode가 요청했거나 생성한 워크트리 이름을 뒤에 붙입니다.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+상대 경로는 프로젝트에 저장된 표준 체크아웃 기준으로 확인됩니다. 전역 및 프로젝트 구성 모두에 적용되며, 절대
+경로는 그대로 사용되고 `~/`는 사용자의 홈 디렉터리 기준으로 확인됩니다.
+
+예를 들어 이 전역 구성은 새 워크트리를 각 프로젝트의 `.lane/trees/` 디렉터리 아래에 둡니다.
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+이 설정이 없으면 서버의 데이터 디렉터리 아래 `worktree/<first-six-project-ID-characters>`를 사용합니다. 워크트리 생성과
+갱신은 다른 클론이 같은 프로젝트 ID를 공유하는 경우에도 프로젝트에 저장된 표준 체크아웃에서 구성을 로드합니다.
+설정을 바꿔도 기존 워크트리는 이동하지 않습니다.
+
+Git이 내장 기본값입니다. 전략을 등록하는 [플러그인](/build/plugins/server#worktrees)은 해당 플러그인 런타임에서
+자동으로 기본값이 됩니다. 프로젝트 작업은 표준 체크아웃의 런타임을 사용합니다. 전략별 옵션은 `worktree` 구성
+객체가 아니라 해당 플러그인에 속합니다.
+
+### 플러그인
+
+패키지나 로컬 플러그인 디렉터리에서 플러그인을 로드합니다. 플러그인이 옵션을 받으면 객체 형식을 사용하세요.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+플러그인 로드와 구성은 [플러그인 가이드](/plugins)를 참고하세요.
+
+### 제공자
+
+제공자를 구성하고 그 모델, 요청 설정, 헤더, 모델 변형을 추가하거나 재정의합니다.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+제공자의 `settings.transport: "websocket"`은 세션 WebSocket을 선택합니다.
+
+자격 증명, 커스텀 엔드포인트, 제공자 패키지, WebSocket 전송, 모델 구성은 [제공자 가이드](/providers)를 참고하세요.
+
+## 변수
+
+구성 파일에서 변수 치환으로 환경 변수와 파일 내용을 참조할 수 있습니다. 참조는 JSON 문자열 안에 넣으세요.
+
+### 환경 변수
+
+환경 변수를 치환하려면 `{env:VARIABLE_NAME}`을 사용하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+환경 변수가 설정되어 있지 않으면 빈 문자열로 대체됩니다.
+
+### 파일
+
+파일 내용을 치환하려면 `{file:path/to/file}`을 사용하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}
+```
+
+파일 경로는 다음과 같습니다.
+
+- 구성 파일 디렉터리 기준
+- 절대 경로, 또는 홈 디렉터리를 가리키는 `~/`로 시작
+
+파일이 없으면 빈 문자열로 대체됩니다.
+
+다음에 유용합니다.
+
+- API 키 같은 민감한 데이터를 별도 파일에 두기.
+- 공통 구성 스니펫을 여러 구성 파일에서 공유하기.
+
+## 실험
+
+<Callout type="warning">
+  실험 설정은 예고 없이 릴리스에서 변경, 중단, 제거될 수 있습니다. 안정적인 워크플로를 위해 의존하지 마세요.
+</Callout>
+
+모든 실험 설정은 `experimental` 키 아래에 있습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "image_generate": { "model": "openai/gpt-image-2" },
+    "location_idle_timeout": "4 hours",
+  },
+}
+```
+
+### Todos
+
+`todo`를 `true`로 설정하면 에이전트에 여러 단계 작업을 추적하는 `todowrite` 도구가 추가됩니다. 기본값은 `false`입니다.
+
+### 서브에이전트 깊이
+
+`subagent_depth`는 서브에이전트가 자체 서브에이전트를 시작할 수 있는 깊이를 설정합니다. 기본값은 `1`이므로
+서브에이전트는 다른 서브에이전트를 시작할 수 없습니다.
+
+### 이미지 생성
+
+`image_generate`는 [`generate_image`](/tools#image-generate) 도구의 기본 모델을 `providerID/modelID` 형식으로,
+선택적으로 `#variant`와 함께 설정합니다. 해당 모델을 사용할 수 없거나 요청을 처리할 수 없으면 OpenCode가 다른
+이미지 모델을 자동으로 고릅니다.
+
+```jsonc
+{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
+  },
+}
+```
+
+### Location 유휴 타임아웃
+
+`location_idle_timeout`은 세션 활동 없이 얼마나 지나면 OpenCode가 프로젝트 Location의 서비스를 내리는지
+제어합니다. `"2 hours"` 같은 기간을 받으며 기본값은 `"60 minutes"`입니다. 실행 중인 세션과 백그라운드 작업이
+있으면 Location은 로드된 상태로 유지됩니다. `false`로 설정하면 유휴 Location을 절대 내리지 않습니다. 프로젝트
+구성이 전역 값을 재정의할 수 있습니다.
+
+```jsonc
+{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}
+```
+
+### 이전 정책 키
+
+`experimental.policies`는 더 이상 권장하지 않습니다. 대신 최상위 [`policies`](/policies)를 사용하세요. 이전 키도 계속
+동작하며 `policies`에 병합됩니다.
+

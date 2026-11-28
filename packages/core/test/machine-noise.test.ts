@@ -397,8 +397,8 @@ describe("Noise", () => {
   })
 
   test("refuses a low-order key share", () => {
-    // This runtime's X25519 refuses all of these; snow's default resolver returns the all-zero output instead. The
-    // spec permits either, and it only matters against a peer that is already cheating.
+    // x25519.ts gives the all-zero output for each, which noise.ts refuses; snow's default resolver uses it instead.
+    // The spec permits either, and it only matters against a peer that is already cheating.
     // Zero, one, and a point of order 8: each gives an all-zero X25519 output for every private key.
     for (const point of [
       new Uint8Array(32),

@@ -1,0 +1,320 @@
+---
+title: "Berechtigungen"
+description: "Lege mit allow-, deny- und ask-Regeln fest, welche Aktionen OpenCode-Agenten für bestimmte Ressourcen wie Pfade und Befehle ausführen dürfen. Die Reihenfolge der Regeln ist entscheidend."
+---
+
+Berechtigungen legen fest, ob ein Agent eine Aktion für eine bestimmte Ressource ausführen darf.
+
+## Konfigurieren
+
+Eine gängige Einstellung: vor Shell-Befehlen nachfragen, Git-Abfragen zulassen und Pushes immer blockieren.
+Füge die Regeln in dieser Reihenfolge zu `opencode.jsonc` hinzu:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+Die letzte passende Regel hat Vorrang. Setze die konkreten Ausnahmen deshalb hinter die allgemeine Regel.
+
+<Callout type="warning">
+  V1 verwendet andere Feld- und Aktionsnamen. Nutze in V2 `permissions`, `shell` und `subagent` statt `permission`,
+  `bash` und `task`.
+</Callout>
+
+## Regeln
+
+Jede Regel erfordert drei String-Felder:
+
+| Feld       | Bedeutung                                                                   |
+| ---------- | --------------------------------------------------------------------------- |
+| `action`   | Aktion des Tools, für die die Regel gilt                                    |
+| `resource` | Wert, auf den sich die Aktion bezieht, etwa ein Pfad, ein Befehl, eine URL, eine Abfrage, eine Skill-ID oder eine Agent-ID |
+| `effect`   | `allow`, `deny` oder `ask`                                                  |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| Wirkung | Ergebnis                              |
+| ------- | ------------------------------------- |
+| `allow` | Ohne Nachfrage fortfahren             |
+| `deny`  | Die Operation blockieren              |
+| `ask`   | Auf eine Entscheidung des Clients warten |
+
+Wenn keine Regel passt, verwendet OpenCode `ask`.
+
+## Übereinstimmung
+
+Für Aktionen und Ressourcen gelten einfache Platzhalter, die den gesamten Wert abgleichen:
+
+| Muster | Passt auf                                   |
+| ------ | ------------------------------------------- |
+| `*`    | Null oder mehr Zeichen, einschließlich `/`  |
+| `?`    | Genau ein Zeichen                           |
+| Andere | Das Zeichen selbst                          |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+Dieses Muster passt auf den gesamten normalisierten Pfad. Backslashes werden zu
+Schrägstrichen normalisiert. Unter Windows spielt die Groß- und Kleinschreibung beim Abgleich keine Rolle.
+
+Ein Shell-Muster, das auf ` *` endet, passt auch auf den Befehl ohne Argumente:
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+Das passt sowohl auf `git status` als auch auf `git status --short`.
+
+OpenCode führt die Regeln in einer festen Reihenfolge zusammen. Es lädt zuerst die Konfiguration mit niedrigerer
+Priorität, dann die globalen Regeln und zuletzt die Agentenregeln. Die letzte passende Regel hat Vorrang.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+Eine Operation kann mehrere Ressourcen betreffen, etwa wenn ein Patch mehrere Dateien ändert. Sobald für eine
+Ressource `deny` gilt, ist die Operation gesperrt. Andernfalls genügt ein `ask`, damit OpenCode nachfragt.
+In allen anderen Fällen ist die Operation erlaubt.
+
+## Aktionen
+
+V2-Aktionsnamen sind Strings, daher können Plugins weitere Aktionen definieren. Eingebaute Tools verwenden derzeit diese
+Aktionen und Ressourcen:
+
+| Aktion               | Ressource                                                                    |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `read`               | Interner Pfad relativ zur Location oder kanonischer absoluter Pfad außerhalb der Location |
+| `edit`               | Zielpfad für `edit`, `write` und `patch`                                     |
+| `glob`               | Angefordertes Glob-Muster                                                    |
+| `grep`               | Angeforderter regulärer Ausdruck, nicht der Suchpfad                         |
+| `shell`              | Befehlstext aus dem Scanner. Bei zusammengesetzten Befehlen kann der Scanner mehrere Texte liefern. |
+| `subagent`           | ID des Zielagenten                                                           |
+| `skill`              | Skill-ID                                                                     |
+| `question`           | `*`                                                                          |
+| `webfetch`           | Angeforderte URL                                                             |
+| `websearch`          | Suchabfrage                                                                  |
+| `generate_image` | Gewähltes Bildmodell als `providerID/modelID`, plus `#variant`, wenn gesetzt |
+| `external_directory` | Kanonischer Verzeichnispfad, der den externen Bereich abgrenzt und in der Regel auf `/*` endet |
+| `<server>_<tool>`    | `*` für ein MCP-Tool. In beiden Namen bleiben Buchstaben, Ziffern, `_` und `-` erhalten. Alle anderen Zeichen werden durch `_` ersetzt. |
+| `opencode_list_mcp_resources` | MCP-Servername                                                     |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
+| `execute`            | `*`. Eine deny-Regel blendet Code Mode aus und listet dessen Tools direkt auf. Für verschachtelte Tool-Aufrufe gelten weiterhin die jeweiligen Regeln. |
+
+MCP-Aktionen behalten Bindestriche bei. Die Tools eines Servers namens `mcp-atlassian` passen daher zu `mcp-atlassian_*`,
+nicht zu `mcp_atlassian_*`.
+
+Erlaube zum Beispiel einen Skill und verweigere alle anderen Skills:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` und `lsp` sind keine aktuellen V2-Core-Berechtigungsaktionen.
+
+## Verzeichnisse
+
+Bei Pfaden außerhalb der aktiven Location prüft OpenCode zuerst `external_directory` und dann die Regeln
+für `read` oder `edit`. Die erste Prüfung entfällt, wenn der Pfad im zugehörigen Projekt-Worktree liegt und
+der Worktree nicht das Wurzelverzeichnis ist. Standardmäßig ist `external_directory` erlaubt. Ohne eigene Regel
+fragt OpenCode bei externen Pfaden daher nicht nach. Mit dieser Regel fragt OpenCode vor jedem Zugriff außerhalb
+des Projekts nach:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+Mit anschließenden, spezifischeren Regeln kannst du einzelne Verzeichnisse zulassen oder sperren:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+Das gilt für externe Pfade bei `read`, `edit`, `write` und `patch`.
+Bei Shell-Befehlen prüft OpenCode zuerst das externe Arbeitsverzeichnis und die Verzeichnisse, die der Scanner
+aus dem Befehl ermittelt. Danach prüft es die `shell`-Ressourcen.
+
+Bei `external_directory`, `read` und `edit` ersetzt OpenCode ein führendes `~`, `~/`, `$HOME` oder
+`$HOME/` beim Laden der Konfiguration durch den entsprechenden Pfad zum Home-Verzeichnis:
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+Bei Shell-Ressourcen bleibt der Befehlstext unverändert. Das Home-Verzeichnis wird nicht eingesetzt.
+
+<Callout type="warning">
+  `shell` läuft mit den Dateisystem-, Prozess- und Netzwerkrechten des Host-Benutzers. Der Scanner kann nicht
+  alle Verzeichnisse aus dem Befehlstext ermitteln. Gib deshalb lieber nur bestimmte Shell-Befehle frei, statt
+  mit Mustern jeden gefährlichen Befehl abfangen zu wollen.
+</Callout>
+
+Relative Pfade in Schreib- und Änderungsoperationen können aus der aktiven Location hinausführen und trotzdem
+im zugehörigen Projekt-Worktree liegen. OpenCode bringt ausdrücklich angegebene externe Pfade vor dem Abgleich
+in ihre kanonische Form. Erlaube daher nur den Zugriff auf vertrauenswürdige Verzeichnisbereiche.
+
+## Scanner
+
+Shell-Berechtigungsprüfungen nutzen den eingebauten Shell-Scanner von OpenCode für Bash, Zsh, POSIX `sh` und PowerShell.
+Manche Befehle lassen sich nicht zuverlässig analysieren, etwa wenn sie Syntaxfehler enthalten oder Code
+dynamisch auswerten, wie mit `eval`. Gilt eine deny-Regel für `shell`, meldet der Scanner einen Fehler, weil er
+die Unterbefehle nicht gegen die deny-Regel prüfen kann. Andernfalls braucht es zwei Zustimmungen: eine für den
+gesamten Befehl als einzelne `shell`-Ressource und eine für `external_directory` `*`. Die zweite kann nur der
+Nutzer persönlich erteilen oder eine Regel, die alle Verzeichnisse erlaubt. Keine der beiden Zustimmungen wird
+als Muster gespeichert.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}
+```
+
+Berechtigungsregeln, gespeicherte Zustimmungsmuster und die Verzeichniserkennung (soweit möglich) gelten für jeden
+ermittelten Unterbefehl und jedes `cd`-Ziel. Es gibt keinen zusätzlichen Zustimmungsmodus und keine pauschale
+Sperre für unbekannte Verzeichnisse.
+
+## Standardwerte
+
+Für alle Agenten, auch selbst erstellte, gelten zuerst diese Regeln in der angegebenen Reihenfolge:
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+Bei den mitgelieferten Agenten kommen danach diese Regeln hinzu:
+
+| Agent        | Zusätzliche Policy                                                             |
+| ------------ | ------------------------------------------------------------------------------ |
+| `build`      | Erlaubt Fragen                                                                 |
+| `plan`       | Erlaubt Fragen; sperrt Änderungen an Dateien außerhalb von `~/.opencode/plan` |
+| `general`    | Verweigert Fragen und das Starten von Subagenten                               |
+| `explore`    | Erlaubt nur Shell, Dateizugriffe zum Lesen, Glob- und Grep-Suchen, Webabrufe, Websuche und externe Verzeichnisse; fragt beim Lesen von `.env` nach |
+| `title`      | Verweigert alle Aktionen                                                       |
+| `summary`    | Verweigert alle Aktionen                                                       |
+| `compaction` | Behält die Grundregeln bei                                                     |
+
+Da für `external_directory` standardmäßig keine Rückfrage vorgesehen ist, kann OpenCode außerhalb der Location und
+des Worktrees ohne Rückfrage lesen und Dateien bearbeiten. Füge wie unter [Verzeichnisse](#directories) gezeigt eine
+`external_directory`-Regel mit `ask` oder `deny` hinzu, damit OpenCode bei externen Zugriffen nachfragt oder sie
+sperrt. Spätere globale Regeln und Agentenregeln haben Vorrang vor diesen Vorgaben.
+
+## Agenten
+
+Lege gemeinsame Regeln auf der obersten Ebene und spezifischere Regeln unter
+`agents.<id>.permissions` ab:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+Agentenregeln folgen auf globale Regeln, statt das globale Array zu ersetzen. Ein selbst erstellter Subagent
+hat eigene Berechtigungen; sie sind keine Teilmenge der Berechtigungen des übergeordneten Agenten.
+
+## Zustimmungen
+
+Wenn `ask` gilt, können Clients so antworten:
+
+| Auswahl      | Antwort    | Ergebnis                                                             |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| Einmal erlauben | `once`  | Nur die ausstehende Anfrage genehmigen                               |
+| Immer erlauben | `always` | Die Anfrage genehmigen und die vom Tool vorgeschlagenen Muster für das Projekt speichern |
+| Ablehnen     | `reject`   | Diese und alle anderen offenen Berechtigungsanfragen der Session ablehnen |
+
+Wenn du zum Beispiel **Allow always** für `git status --short` wählst, kann ein
+Shell-Präfix gespeichert werden, das spätere `git status`-Befehle abdeckt:
+
+```text
+shell: git status * → allow
+```
+
+Gespeicherte Zustimmungen sind dauerhafte, projektspezifische `allow`-Regeln. Sie überschreiben
+nie ein konfiguriertes `deny`. Jedes Tool schlägt selbst ein Muster zum Speichern vor. Bei manchen ist es `*`,
+bei Shell sind es Befehlspräfixe und bei Webabrufen die Website zur URL (etwa
+`https://opencode.ai/*`). Bei Skills und Subagenten sind es deren IDs.
+Prüfe weitreichende Zustimmungen und entferne sie, wenn du sie nicht mehr brauchst.
+
+Clients können beim Ablehnen eine Rückmeldung mitsenden. Nicht interaktive Clients müssen selbst entscheiden,
+wie sie mit Zustimmungsanfragen umgehen. Konfigurierte `deny`-Regeln gelten in jedem Fall.
+
+## Policies
+
+Eine [Policy](/policies) kann eine Aktion auch dann sperren, wenn sie nach den Regeln und gespeicherten Zustimmungen zulässig wäre.
+Sie macht `allow` oder `ask` zu `deny` und gewährt nie Zugriff.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+Globale und in der Console verwaltete Policies haben Vorrang vor der Projektkonfiguration. So kann eine
+Organisation einen Befehl sperren, den ein Repository sonst zulassen würde.

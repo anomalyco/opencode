@@ -142,6 +142,22 @@ mod tests {
     }
 
     #[test]
+    fn default_registration_file_follows_xdg_state_home() {
+        let resolve = |state: Option<&str>| {
+            let paths = Paths::from_vars(|name| match name {
+                "HOME" => Some(OsString::from("/h")),
+                "XDG_STATE_HOME" => state.map(OsString::from),
+                _ => None,
+            })
+            .unwrap();
+            Files::new(&paths, channel::DEFAULT).file
+        };
+        assert_eq!(resolve(None), PathBuf::from("/h/.local/state/opencode/service.json"));
+        assert_eq!(resolve(Some("")), PathBuf::from("/h/.local/state/opencode/service.json"));
+        assert_eq!(resolve(Some("/tmp/opencode-state")), PathBuf::from("/tmp/opencode-state/opencode/service.json"));
+    }
+
+    #[test]
     fn files_per_channel() {
         let dir = opencode_util::temp::tempdir().unwrap();
         let p = paths(dir.path());

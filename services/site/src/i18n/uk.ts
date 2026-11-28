@@ -32,7 +32,6 @@ export const dict = {
   "legal.englishOnly": "Цей документ доступний лише англійською мовою.",
   "notFound.title": "Не знайдено | OpenCode",
   "notFound.heading": "404 — Сторінку не знайдено",
-  "notFound.home": "Головна",
   "notFound.docs": "Документація",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
@@ -49,7 +48,6 @@ export const dict = {
   "home.title": "OpenCode | Відкритий агент для кодування з будь-якою моделлю",
   "temp.title": "opencode | Агент для кодування, створений для термінала",
   "temp.hero.title": "Агент для кодування, створений для термінала",
-  "temp.zen": "OpenCode Models",
   "temp.feature.models.beforeLink": "Підтримує 200+ LLM-провайдерів через",
   "home.banner.badge": "Нове",
   "home.promo.title": "Вкладки в OpenCode Desktop",
@@ -191,7 +189,6 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "обліковому записі",
   "go.faq.a4.p3": "Скасуйте в будь-який час.",
   "go.faq.q5": "А як щодо даних та конфіденційності?",
-  "go.faq.a5.model": "Модель",
   "go.faq.a5.training": "Навчання моделей",
   "go.faq.a5.retention": "Зберігання даних",
   "go.faq.a5.retention30": "30 днів",
@@ -213,7 +210,6 @@ export const dict = {
   "go.faq.q9": "Яка різниця між безкоштовними моделями та Go?",
   "go.faq.a9":
     "Безкоштовні моделі включають Big Pickle та доступні на той момент акційні моделі. Go пропонує добірку моделей із вищими квотами запитів протягом ковзних періодів: 20% місячного ліміту за 5 годин, 50% за тиждень і 100% за місяць. Ліміти для окремих моделей можуть відрізнятися (фактична кількість запитів залежить від моделі та використання).",
-  "workspace.nav.zen": "OpenCode Models",
   "workspace.newUser.feature.lockin.body":
     "Підключайте OpenCode Models до будь-якого агента й користуйтеся іншими провайдерами в opencode, коли забажаєте.",
   "download.hero.title": "Завантажити OpenCode Desktop",
@@ -340,6 +336,11 @@ export const dict = {
   "site.contents": "Зміст",
   "docs.section.overview": "Огляд",
   "docs.section.build": "Розробка",
+  "docs.nav.configure": "Налаштування",
+  "docs.nav.plugins": "Плагіни",
+  "docs.nav.client": "Клієнт",
+  "docs.nav.workspace": "Робочий простір",
+  "docs.nav.console": "Console",
   "docs.lockup.sectionDocs": "Документація {{section}}",
   "docs.lockup.switchLabel": "{{name}}, змінити документацію",
   "docs.lockup.home": "{{name}}, головна",
@@ -376,6 +377,7 @@ export const dict = {
   "docs.callout.danger": "Небезпека",
   "docs.v1.markdownNote":
     "Це документація OpenCode V1. Актуальна документація для OpenCode V2 доступна за адресою https://opencode.ai/docs/llms.txt.",
+  "docs.translation.missing": "Цю сторінку ще не перекладено. Показано англійську версію.",
   "site.companions": "Чудово працює з OpenCode",
   "site.notFound.title": "Сторінку не знайдено",
   "site.arcade.alt":
@@ -663,8 +665,6 @@ export const dict = {
   "go.referral.ended.label": "Попередження",
   "go.referral.ended":
     "Реферальну програму завершено. Кредити за реферальними посиланнями більше не нараховуються ні вам, ні тим, хто ними поділився.",
-  "nav.subscription": "Підписка",
-  "nav.console": "Console",
   "legal.status.operational": "Усі системи працюють",
   "legal.status.degraded": "Знижена продуктивність",
   "legal.status.outage": "Збій сервісу",

@@ -1,0 +1,191 @@
+---
+title: "워밍"
+description: "프롬프트 사이에 멈춰 있는 동안 세션의 제공자 프롬프트 캐시가 만료되지 않도록 주기적 요청을 보냅니다."
+---
+
+세션 워밍은 프롬프트 사이에 멈춰 있는 동안 제공자 측 프롬프트 캐시나 기타 수명이 짧은 상태를 보존하기 위해
+주기적으로 모델 요청을 보냅니다. 기본적으로 비활성화되어 있습니다.
+
+[OpenCode 구성 파일](/config) 중 원하는 곳에서 워밍을 활성화하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+이 구성에서는 OpenCode가 최근에 사용한 세션의 프롬프트 캐시가 만료되기 직전에 워밍 요청을 보냅니다. 간격은 모델의 [`cache.ttl`](/models#cache-lifetime)의 90%이며, 이 값이 없으면 4분입니다. 워밍이 아닌 마지막 요청을 보낸 뒤 30분이 지날 때까지 계속합니다.
+
+## 옵션
+
+객체 형식으로 워밍 프롬프트, 유휴 간격, 워밍이 유지되는 기간을 변경하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| 필드 | 기본값 | 용도 |
+| --- | --- | --- |
+| `prompt` | Keep-alive 지침 | 워밍 요청마다 일시적 사용자 메시지로 덧붙입니다. 기본값은 모델에 작업을 하지 말고 도구를 쓰지 말고 `OK`로 답하라고 요청합니다. |
+| `interval` | `"auto"` | 다음 워밍 요청까지의 유휴 시간. `"auto"`는 모델의 `cache.ttl`의 90%를 쓰고, 없으면 4분입니다. |
+| `duration` | `"30 minutes"` | 워밍이 아닌 마지막 모델 요청부터 워밍을 유지하는 기간입니다. |
+
+생략한 객체 필드는 기본값을 유지합니다. 예를 들어 다음은 간격만 바꿉니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## 자동 간격
+
+기본적으로 `interval`은 `"auto"`이며, 각 모델의 프롬프트 캐시가 만료되기 직전에 워밍합니다. OpenCode는 모델의
+[`cache.ttl`](/models#cache-lifetime) 설정의 90%를 사용하므로 `"5m"` 캐시는 4.5분마다 워밍합니다.
+`cache.ttl`이 없는 모델은 4분마다 워밍합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+`duration`보다 오래 유지되는 캐시(예: 30분 기본값에서 `"1h"`)는 워밍 기간이 끝난 뒤에도 유지되므로 워밍하지 않습니다. OpenCode는 이를 세션마다 한 번 기록합니다. 워밍하려면 `duration`을 늘리세요.
+
+## 제공자 및 모델별
+
+`settings.cache.warming`을 제공자나 모델에 설정하면 해당 세션만 워밍하거나 자체 타이밍을 줄 수 있습니다. 최상위
+`warming`과 같은 값을 받고 이를 재정의하며, `prompt`는 받지 않습니다. 모델 설정은 제공자 설정을
+재정의합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+여기서는 Anthropic 세션이 Claude Haiku 5.5를 제외하고 4.5분마다 워밍되며, 다른 제공자는 워밍하지 않습니다. 객체
+형식에서 생략한 필드는 최상위 `warming`, 그다음 기본값에서 가져옵니다. 잘못된 설정은 경고를 기록하고 최상위
+`warming`으로 대체합니다.
+
+## 기간
+
+`interval`과 `duration`은 기간 문자열을 받습니다. 둘 다 0보다 큰 유한 값으로 해석되어야 하고 `interval`은
+`duration`보다 짧아야 합니다. 그렇지 않으면 OpenCode는 워밍을 건너뛰고 경고를 기록합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## 타이밍
+
+최상위 세션에서 워밍이 아닌 모델 요청을 보낸 뒤에 워밍을 시작합니다. 서브에이전트 세션은 워밍하지 않습니다. 각 간격은
+응답이 끝난 때가 아니라 마지막 요청이나 워밍 요청을 보낸 때부터 셉니다. 제공자의 캐시 수명은 요청이 도달할 때
+시작되기 때문입니다. 워밍 요청은 워밍 기간을 연장하지 않습니다.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+압축을 포함해 워밍이 아닌 모델 활동이 새로 발생하면 두 타이머를 모두 초기화합니다. 직접 지정한 간격이 duration 이상이면 경고를 남기고 해당 값을 거부합니다. `"auto"`에서 계산한 간격이 duration 이상이면 캐시가 워밍 기간보다 오래 유지되므로 워밍을 건너뜁니다.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode는 압축을 포함한 모델 요청이 실행 중일 때 워밍 요청을 보내지 않습니다. 간격이 도래했을 때 요청이 아직
+실행 중이면 워밍은 완료를 기다린 뒤, 그 요청의 캐시가 만료되지 않았다면 바로 보냅니다. 만료되었다면 다음 정상
+요청까지 워밍을 중단합니다.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## 요청
+
+워밍 요청은 세션의 현재 모델, 에이전트, 지침, 대화 컨텍스트를 사용합니다. OpenCode는 구성된 프롬프트를
+일시적으로 덧붙이고 모델을 한 번 호출한 뒤 응답을 버립니다.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+이 요청은 입력을 받아들이지 않고, 기록에 메시지를 추가하지 않으며, 영구 세션 상태를 변경하지 않습니다. OpenCode는
+로컬 도구 호출을 실행하거나 도구 루프를 계속하지 않으며, 기본 프롬프트도 모델에 도구를 쓰지 말라고 지시합니다.
+
+## 실패
+
+워밍에 실패하면 로그만 남기며, 세션은 실패하거나 변경되지 않습니다. OpenCode는 다음 워밍 시점에 다시 시도하며, 원래 정해진 워밍 종료 시점은 그대로 유지됩니다.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+워밍 요청이 캐시 미스로 처리되면, 즉 캐시에서 읽은 양이 쓴 양보다 적으면 워밍이 아닌 다음 요청까지 해당 세션의 워밍을 중단합니다. 제공자가 캐시 사용량을 보고하지 않으면 캐시 미스로 처리하지 않습니다.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## 비용
+
+워밍 요청은 실제 제공자 요청입니다. 토큰을 소비하고, 비용을 발생시키고, 요청 한도에 포함되고, 다른 모델
+요청처럼 실패할 수 있습니다.
+
+- 간격이 짧을수록 요청량이 늘어납니다.
+- 기간이 길수록 워밍 요청이 더 많이 허용됩니다.
+- 제공자 측 이점이 추가 사용량을 정당화할 때만 워밍을 켜세요.
+
+예를 들어 `cache.ttl`이 없는 모델에서 기본값은 연속된 30분 동안 최대 일곱 번의 워밍 시도를 허용합니다.
+4, 8, 12, 16, 20, 24, 28분입니다.
+
+## 비활성화
+
+`warming`을 `false`로 설정하면 명시적으로 비활성화됩니다. 필드를 생략해도 워밍은 비활성 상태로 유지됩니다.
+
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

@@ -1,0 +1,155 @@
+---
+title: "عميل Effect"
+description: "استدعِ واجهة HTTP API في OpenCode من Effect باستخدام @opencode/client/effect، الذي يعيد Effects وStreams محدّدة الأنواع."
+---
+
+`@opencode/client/effect` هو عميل Effect الأصلي لواجهة HTTP API في OpenCode. ويعيد Effects وStreams محدّدة الأنواع
+ويفكّ ترميز الاستجابات إلى قيم مخطط OpenCode.
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## إنشاء عميل
+
+أنشئ عميلًا بعنوان URL للخادم، ثم استدعِ الطرق مجمّعة حسب مورد API.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## الترويسات والطلبات
+
+أعدّ الترويسات الافتراضية على `HttpClient` المقدّم. وتستخدم العمليات الأصلية
+مقاطعة Effect العادية للإلغاء. وتقبل طرق RPC إضافةً إلى ذلك
+خيارات الموقع والترويسة والإشارة لكل استدعاء.
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## بثّ الأحداث
+
+تعيد العمليات المتدفقة مثل `event.subscribe()` و`experimental.session.log()` تدفقات Effect.
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+تتشارك عمليات بثّ الأحداث الأصلية وأحداث RPC اتصالًا واحدًا لكل عميل. لا يُفتح الاتصال بمجرد إنشاء
+البثّ، بل عند بدء قراءته. ويمكن إيقاف قارئ من دون التأثير على الآخرين، ويُغلق المصدر عند توقّف
+آخر قارئ. وعند بلوغ نهاية المصدر (EOF) أو تعطّله، تنتهي الاشتراكات الحالية بلا إعادة محاولة
+تلقائية أو إعادة إرسال للأحداث السابقة. ومن يبدأ قراءة الأحداث الأصلية بعد بدء الاتصال
+يتلقّى علامة الاتصال الحالية قبل الأحداث المباشرة.
+
+## RPC الملحقات
+
+استخدم العقد المشترك نفسه الذي يستخدمه عملاء Promise وملحقات الخادم:
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+وتُستنتج وسائط الطريقة ونتائجها من العقد. ويحمل الوسيط الاختياري الثاني
+`location` و`signal` و`headers`؛ ويستخدم الموقع المغفل
+افتراضيات الطلب العادية. وتُقاطع الاستدعاءات مع Effect المستهلك لها.
+وتُستنتج خرائط أخطاء الطرق في قناة أخطاء Effect. وتُفكّ الأخطاء المعلنة
+عبر مخططات بياناتها. ويُزيل العميل الفرعي المحدّد النوع غلاف خطأ HTTP
+RPC العام؛ وتحدّد الأنواع المحجوزة `rpc.*` إخفاقات إطار العمل.
+
+وأحداث RPC تدفقات محدّدة النوع، لا مستمعات `on` بنمط رد النداء. وتتلقى
+أحداث RPC من كل المواقع، ولكل منها `location` مطلوب ونوع مسبوق
+عادي مثل `rpc.acme.updated`. ويختلف ذلك عن مقابض ملحقات الخادم،
+المثبّتة على موقعها. راجع [RPC ملحقات Effect](/build/plugins/effect/rpc)
+للتعريفات والمخططات والتسجيل ودلالات الاشتراك الحي.
+
+## الخدمة الخلفية المحلية
+
+تكتشف نقطة الدخول `@opencode/client/effect/service` الخاصة بـNode، وتبدأ، وتصادق، وتوقف
+الخدمة الخلفية المحلية كـEffects.
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+أنشئ عميلًا مُصادَقًا عليه للخدمة بعد التأكّد من تشغيلها.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+اكتشف دون بدء، أو أوقف الخدمة المسجّلة تحديدًا.
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

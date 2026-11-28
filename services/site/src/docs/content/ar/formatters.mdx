@@ -1,0 +1,202 @@
+---
+title: "المنسّقات"
+description: "نسّق الملفات بعد أن يحرّرها OpenCode، بمنسّقات مدمجة مثل Prettier وBiome وgofmt وRuff، أو بأوامرك الخاصة."
+---
+
+يمكن لـ OpenCode تنسيق الملفات بعد أن تغيّرها أدوات `write` أو `edit` أو `patch`.
+والمنسّقات متوقفة افتراضيًا، ففعّلها في إعدادك:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## التفعيل
+
+اضبط `formatter` على `true` لتفعيل جميع المنسّقات المدمجة. ولا يشغّل OpenCode أي منسّق مدمج
+إلا إذا كان ملفه التنفيذي متاحًا وتوفّرت أي متطلبات خاصة بالمشروع.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+وصيغة الكائن تفعّل المدمجات أيضًا وتتيح تجاوزها أو إضافة منسّقات
+مخصّصة. والكائن الفارغ يحفظ إعدادات المنسّقات الموروثة، بينما تعيد `true`
+ضبطها على المدمجات.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## المدمجة
+
+يتضمن OpenCode تعريفات المنسّقات هذه. ومعظمها يشترط توفر الأمر
+المسمّى؛ والتعريفات ذات قواعد الكشف الإضافية مذكورة أدناه.
+
+| المنسّق | الامتدادات | الشرط |
+| --- | --- | --- |
+| `gofmt` | `.go` | الأمر `gofmt` |
+| `mix` | `.ex` و`.exs` و`.eex` و`.heex` و`.leex` و`.neex` و`.sface` | الأمر `mix` |
+| `oxfmt` | `.js` و`.jsx` و`.mjs` و`.cjs` و`.ts` و`.tsx` و`.mts` و`.cts` | تبعية `oxfmt` في `package.json` |
+| `prettier` | `.js` و`.jsx` و`.mjs` و`.cjs` و`.ts` و`.tsx` و`.mts` و`.cts` و`.html` و`.htm` و`.css` و`.scss` و`.sass` و`.less` و`.vue` و`.svelte` و`.json` و`.jsonc` و`.yaml` و`.yml` و`.toml` و`.xml` و`.md` و`.mdx` و`.graphql` و`.gql` | تبعية `prettier` في `package.json` |
+| `biome` | الامتدادات نفسها المذكورة لـ`prettier` أعلاه | `biome.json` أو `biome.jsonc` مع ملف `@biomejs/biome` التنفيذي مثبّتًا |
+| `zig` | `.zig` و`.zon` | الأمر `zig` |
+| `clang-format` | `.c` و`.cc` و`.cpp` و`.cxx` و`.c++` و`.h` و`.hh` و`.hpp` و`.hxx` و`.h++` و`.ino` و`.C` و`.H` | الأمر `clang-format` و`.clang-format` |
+| `ktlint` | `.kt` و`.kts` | الأمر `ktlint` |
+| `ruff` | `.py` و`.pyi` | الأمر `ruff` مع إعداد Ruff أو إعلان تبعية |
+| `air` | `.R` | الأمر `air` الذي يعرّف نفسه منسّق R |
+| `uv` | `.py` و`.pyi` | الأمر `uv` مع دعم `uv format` |
+| `rubocop` | `.rb` و`.rake` و`.gemspec` و`.ru` | الأمر `rubocop` |
+| `standardrb` | `.rb` و`.rake` و`.gemspec` و`.ru` | الأمر `standardrb` |
+| `htmlbeautifier` | `.erb` | الأمر `htmlbeautifier` |
+| `dart` | `.dart` | الأمر `dart` |
+| `ocamlformat` | `.ml` و`.mli` | الأمر `ocamlformat` و`.ocamlformat` |
+| `terraform` | `.tf` و`.tfvars` | الأمر `terraform` |
+| `latexindent` | `.tex` | الأمر `latexindent` |
+| `gleam` | `.gleam` | الأمر `gleam` |
+| `shfmt` | `.sh` و`.bash` | الأمر `shfmt` |
+| `nixfmt` | `.nix` | الأمر `nixfmt` |
+| `rustfmt` | `.rs` | الأمر `rustfmt` |
+| `pint` | `.php` | `laravel/pint` في `composer.json` |
+| `ormolu` | `.hs` | الأمر `ormolu` |
+| `cljfmt` | `.clj` و`.cljs` و`.cljc` و`.edn` | الأمر `cljfmt` |
+| `dfmt` | `.d` | الأمر `dfmt` |
+
+مثلًا، تفعيل المدمجات يتيح لـ OpenCode اكتشاف تبعية Prettier محلية في المشروع
+وتشغيلها للملفات المطابقة:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## التخصيص
+
+أضف إدخالًا مسمّى لتغيير منسّق مدمج أو تعريف منسّق مخصّص. ويحتاج المنسّق المخصّص
+إلى `command` و`extensions` معًا ليعمل.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| الحقل | النوع | السلوك |
+| --- | --- | --- |
+| `disabled` | `boolean` | يزيل المنسّق المسمّى عندما يكون `true`. |
+| `command` | `string[]` | يحل محل الأمر المدمج أو يعرّف أمرًا مخصّصًا. |
+| `environment` | `Record<string, string>` | يضيف متغيّرات بيئة مع الحفاظ على بيئة الوالد. |
+| `extensions` | `string[]` | يحل محل قائمة الامتدادات المدمجة أو يعرّف القائمة المخصّصة. أدرج النقطة البادئة. |
+
+كل الحقول اختيارية. فالإدخال المدمج يرث القيم المُغفلة، بينما الإدخال الجديد
+الذي بلا أمر أو امتدادات لا يستطيع العمل.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## الأوامر
+
+`command` مصفوفة وسائط، لا سلسلة أمر shell. فيستبدل OpenCode
+`$FILE` بالمسار المطلق للملف ويشغّل الأمر من مجلد
+المشروع النشط.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## المطابقة
+
+يقارن OpenCode امتداد الملف الأخير بـ`extensions`. والمطابقة
+حساسة لحالة الأحرف، والإدخالات المركبة مثل `.part.md` لا تطابق
+`notes.part.md` لأن امتداده الأخير `.md`.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+وعندما تطابق عدة منسّقات، يجرّبها OpenCode بترتيب التسجيل
+ويتوقف بعد أول أمر ناجح. وتحتفظ المدمجات بترتيبها
+المدمج؛ وتتبع الإدخالات المخصّصة بترتيب الكائن. وإذا فشل أحدها،
+يسجّل OpenCode الفشل ويجرّب المطابقة التالية.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## التعطيل
+
+يكون التنسيق متوقفًا عندما لا يضبط أي ملف الإعداد `formatter`. ولتعطيل
+تنسيق فعّله ملف أقل أولوية، اضبطه على `false`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+ولتعطيل منسّق مدمج واحد مع إبقاء الآخرين مفعّلين، علّم إدخاله المسمّى
+معطّلًا.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

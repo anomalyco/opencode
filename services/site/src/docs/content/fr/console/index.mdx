@@ -1,0 +1,37 @@
+---
+title: "Présentation de la Console"
+description: "OpenCode Console est un service optionnel qui ajoute des espaces de travail d’équipe, l’inférence de modèles, des budgets, des politiques et une recherche web hébergée."
+---
+
+[OpenCode Console](https://opencode.ai/console) est un service facultatif qui étend les fonctionnalités d’OpenCode, que vous l’utilisiez seul ou en équipe.
+
+- [Espaces de travail](/console/workspaces) pour partager l’accès avec votre [équipe](/console/members)
+- [Inférence](/console/models) pour les modèles propriétaires et open source
+- [Fournisseurs](/console/providers) pour connecter vos propres comptes de fournisseur via la passerelle Console
+- Suivi de l’utilisation et gestion des [budgets](/console/budgets)
+- Déploiement de politiques pour encadrer le comportement d’OpenCode au sein de toute l’équipe
+- [Recherche web](/console/websearch)
+- [Harnesses](/console/harnesses) pour utiliser les modèles Console depuis Claude Code, Codex et d’autres agents
+- [OpenCode Go, Go Plus et Go Teams](/console/go), des abonnements mensuels à 10 $, 40 $ et 20 $/membre pour accéder aux modèles open source
+
+## Premiers pas
+
+Pas besoin d’équipe pour utiliser la Console. Chaque compte dispose au départ d’un espace de travail **Personal** où vous êtes le seul
+membre.
+
+1. Connectez-vous à la [Console](https://opencode.ai/console).
+2. Abonnez-vous à [Go](/console/go), ajoutez des [crédits](/console/billing#add-credits) ou connectez un [fournisseur](/console/providers).
+3. Lancez `/connect` dans OpenCode et choisissez l’espace de travail.
+4. Si besoin, [invitez](/console/members#invite-members) votre équipe.
+
+```text
+/connect
+```
+
+## Politiques
+
+Les règles relatives aux fournisseurs et aux outils, définies dans la page Policies, s’appliquent à chaque client OpenCode
+connecté à l’espace de travail. Elles sont transmises sous forme de directives de [politique](/policies#console)
+qui priment sur la configuration du membre et celle de ses projets et prennent effet
+en une minute environ. Les préférences gérées et le fichier de configuration système
+priment toujours sur l’espace de travail ; consultez l’[ordre de priorité](/policies#precedence).

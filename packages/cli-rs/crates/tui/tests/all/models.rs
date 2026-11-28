@@ -619,6 +619,50 @@ fn a_speed_switch_uses_the_targets_legacy_variant_instead_of_its_siblings() {
 }
 
 #[test]
+fn a_session_switched_to_a_hidden_agent_reports_it_as_current_without_listing_it() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let dir = "/project";
+    let location = json!({ "directory": dir, "project": { "id": "p", "directory": dir, "canonical": dir } });
+    let list = |data: Value| json!({ "location": location, "data": data });
+    let session = json!({
+        "id": "ses_hidden", "title": "Hidden", "agent": "helper", "projectID": "p", "cost": 0,
+        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+        "time": { "created": 1, "updated": 1 }, "location": { "directory": dir },
+    });
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/location", 200, &location),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [session], "cursor": {} })),
+        MemoryRoute::json(
+            "GET",
+            "/api/agent",
+            200,
+            &list(json!([
+                support::agent("build", "primary", false),
+                support::agent("plan", "primary", false),
+                support::agent("helper", "primary", true),
+            ])),
+        ),
+        MemoryRoute::json("GET", "/api/provider", 200, &list(json!([{ "id": "demo", "name": "Demo" }]))),
+        MemoryRoute::json("GET", "/api/model", 200, &list(json!([support::model("demo", "first", "First")]))),
+        MemoryRoute::body("POST", "/api/session/ses_hidden/agent", 204, None, ""),
+        MemoryRoute::body("POST", "/api/session/ses_hidden/model", 204, None, ""),
+    ];
+    routes.extend(support::session_routes(&session));
+    let deps = Deps {
+        directory: dir.into(),
+        route: support::session_route("ses_hidden"),
+        events: true,
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let h = support::mount(100, 30, deps);
+    h.wait("hidden agent is active", || h.tui.local.agent().is_some_and(|agent| agent.id.0 == "helper"));
+    let listed: Vec<String> = h.tui.local.agents().into_iter().map(|agent| agent.id.0).collect();
+    assert_eq!(listed, ["build", "plan"]);
+    h.tui.local.move_agent(1);
+    assert_eq!(h.tui.local.agent().map(|agent| agent.id.0).as_deref(), Some("build"));
+}
+
+#[test]
 fn leader_a_switches_the_agent() {
     let h = mount();
     h.app.press("ctrl+x");
