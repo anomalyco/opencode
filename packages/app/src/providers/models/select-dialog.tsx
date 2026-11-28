@@ -475,7 +475,7 @@ function ModelDrawer(props: {
   )
 }
 
-function createModelSelectorController(input: {
+export function createModelSelectorController(input: {
   provider: () => string | undefined
   model?: ModelState
   onSelect: () => void
@@ -518,11 +518,25 @@ function createModelSelectorController(input: {
       })
     },
     variant: (item: ModelItem) => model.variant.current({ providerID: item.provider.id, modelID: item.id }),
-    favorites: () => model.favorite.list().filter((item) => !input.provider() || item.provider.id === input.provider()),
+    favorites: () =>
+      model
+        .favorite
+        .list()
+        .filter(
+          (item) =>
+            model.visible({ modelID: item.id, providerID: item.provider.id }) &&
+            (!input.provider() || item.provider.id === input.provider()),
+        ),
     recent: () =>
       model
         .recent()
-        .flatMap((item) => (item && (!input.provider() || item.provider.id === input.provider()) ? [item] : [])),
+        .flatMap((item) =>
+          item &&
+          model.visible({ modelID: item.id, providerID: item.provider.id }) &&
+          (!input.provider() || item.provider.id === input.provider())
+            ? [item]
+            : [],
+        ),
     toggleFavorite: (item: ModelItem) => model.favorite.toggle({ providerID: item.provider.id, modelID: item.id }),
   }
 }
