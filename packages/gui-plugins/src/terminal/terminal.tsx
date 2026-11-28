@@ -9,6 +9,7 @@ import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "sol
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { uuid } from "@opencode/util/uuid"
 import { terminalConnection } from "./connection"
+import { createCursorShapeReader } from "./cursor-shape"
 import {
   createPaneDispatch,
   initialPaneState,
@@ -94,6 +95,7 @@ const useTerminalUiBindings = (input: {
   handlePointerDown: () => void
   handleLinkClick: (event: MouseEvent) => void
   handleFocus: () => void
+  cursorBlink: () => boolean
 }) => {
   const handleCopy = (event: ClipboardEvent) => {
     const selection = input.term.getSelection()
@@ -120,7 +122,7 @@ const useTerminalUiBindings = (input: {
   }
 
   const handleTextareaFocus = () => {
-    input.term.options.cursorBlink = true
+    input.term.options.cursorBlink = input.cursorBlink()
     input.handleFocus()
   }
 
@@ -168,6 +170,18 @@ export const Terminal = (props: TerminalProps) => {
   const handles: PaneHandles = { cleanups: [] }
   const [paneState, setPaneState] = createSignal<PaneState<Term>>(initialPaneState)
   const [written, setWritten] = createSignal(0)
+  let requestedBlink = true
+
+  const cursorShape = createCursorShapeReader((shape) => {
+    requestedBlink = shape.blink
+
+    const term = paneTerm(untrack(paneState))
+
+    if (!term) return
+
+    term.options.cursorStyle = shape.style
+    term.options.cursorBlink = shape.blink
+  })
 
   const dispatch = createPaneDispatch<Loaded, Term>({
     read: () => untrack(paneState),
@@ -189,6 +203,7 @@ export const Terminal = (props: TerminalProps) => {
         return
       }
 
+      cursorShape(data)
       term.write(data, () => {
         setWritten((value) => value + 1)
         done()
@@ -505,6 +520,7 @@ export const Terminal = (props: TerminalProps) => {
       handlePointerDown: () => handlePointerDown(t),
       handleLinkClick: (event) => handleLinkClick(t, event),
       handleFocus: () => connection.interact(),
+      cursorBlink: () => requestedBlink,
     })
 
     // onAutoFocus consumes the request, which flips autoFocus, so read it once, now that the terminal opened: the
