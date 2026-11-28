@@ -21,6 +21,15 @@ const context: PickerComboboxContext = {
   committed: "",
 }
 
+const windows: PickerComboboxContext = {
+  policy: pickerMode("directory"),
+  home: "C:\\Users\\luke",
+  root: "C:\\Users\\luke\\src",
+  fallback: "C:\\Users\\luke",
+  locationDirectory: "C:\\Users\\luke\\src",
+  committed: "",
+}
+
 const key = (name: string, options: { shiftKey?: boolean; composing?: boolean } = {}): PickerComboboxEvent => ({
   type: "key.down",
   key: name,
@@ -180,6 +189,33 @@ test("Tab completes a folder and searches inside it, and chooses a file", () => 
   }
 })
 
+test("Tab completes a Windows folder with a backslash", () => {
+  const typed = run(
+    [{ type: "input.changed", value: "C:\\Users\\luke\\src\\pack" }],
+    createPickerComboboxState(),
+    windows,
+  )
+
+  const listed = run(
+    [{ type: "search.resolved", attempt: attempt(typed.state), items: [directory("C:/Users/luke/src/packages")] }],
+    typed.state,
+    windows,
+  )
+
+  const tabbed = run([key("Tab")], listed.state, windows)
+
+  expect(tabbed.preventDefault).toBeTrue()
+  expect(tabbed.state).toMatchObject({ status: "loading", input: "C:\\Users\\luke\\src\\packages\\" })
+  expect(tabbed.effects).toEqual([
+    {
+      type: "search.start",
+      attempt: attempt(listed.state) + 1,
+      query: "C:\\Users\\luke\\src\\packages\\",
+      timeoutMs: 10_000,
+    },
+  ])
+})
+
 test("clicking a folder suggestion chooses it and shows it as the input", () => {
   const state = opened("~/op", [directory("/home/luke/opencode")])
   const clicked = run([{ type: "item.clicked", index: 0 }], state)
@@ -227,8 +263,16 @@ test("clearing, dismissing and disposing cancel a running search", () => {
 test("input equal to the open root has nothing to suggest", () => {
   const typed = run([{ type: "input.changed", value: "/projects/" }])
 
+  const trailingBackslash = run(
+    [{ type: "input.changed", value: "C:\\Users\\luke\\src\\" }],
+    createPickerComboboxState(),
+    windows,
+  )
+
   expect(typed.state).toMatchObject({ status: "open", items: [] })
   expect(typed.effects).toEqual([])
+  expect(trailingBackslash.state).toMatchObject({ status: "open", items: [] })
+  expect(trailingBackslash.effects).toEqual([])
 })
 
 const selected = { ...context, committed: "/projects/acme/" }
