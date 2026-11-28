@@ -2403,7 +2403,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             syntaxStyle={syntax()}
             renderBlock={plugins.markdown()}
             streaming={status() === "running"}
-            content={content()}
+            content={plugins.preprocessMarkdown(content(), { streaming: status() === "running" })}
             tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}

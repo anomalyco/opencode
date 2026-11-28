@@ -225,7 +225,11 @@ export function TextPart(props: {
           }}
           syntaxStyle={syntax()}
           renderBlock={plugins.markdown()}
-          content={props.part.text.trim()}
+          content={plugins.preprocessMarkdown(props.part.text.trim(), {
+            streaming: props.message.time.completed === undefined,
+            messageID: props.message.id,
+            partID: props.partID,
+          })}
           streaming={props.message.time.completed === undefined}
           tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
           conceal={ctx.markdownMode() === "rendered"}

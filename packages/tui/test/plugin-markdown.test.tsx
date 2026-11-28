@@ -9,7 +9,8 @@ import {
 import { createTestRenderer } from "@opentui/core/testing"
 import { render } from "@opentui/solid"
 import { createRoot, createSignal } from "solid-js"
-import { createMarkdownRenderer } from "../src/plugin/markdown"
+import { createMarkdownPreprocessor, createMarkdownRenderer } from "../src/plugin/markdown"
+import type { MarkdownPreprocessor } from "@opencode/plugin/tui/context"
 
 test("unrelated plugin toggles preserve mounted Markdown blocks", async () => {
   const output = await createTestRenderer({ width: 80, height: 12, remote: true })
@@ -114,6 +115,64 @@ test("changing and removing a Markdown handler refreshes existing messages", asy
 
     setSources([{ example: second }])
     await output.waitForFrame((frame) => frame.includes("Second renderer"))
+  } finally {
+    output.renderer.destroy()
+  }
+})
+
+test("markdown preprocessors chain in order, ignore undefined, and stay resilient on throw", () => {
+  createRoot((dispose) => {
+    try {
+      const first: MarkdownPreprocessor = (text) => text.replace(/\\\((.*?)\\\)/g, (_, inner) => inner.trim())
+      const noop: MarkdownPreprocessor = () => undefined
+      const throwing: MarkdownPreprocessor = () => {
+        throw new Error("boom")
+      }
+      const second: MarkdownPreprocessor = (text, input) =>
+        input.streaming ? text : text.replace(/\\pi/g, "π")
+
+      const [sources, setSources] = createSignal<ReadonlyArray<ReadonlyArray<MarkdownPreprocessor>>>([
+        [first, noop],
+        [throwing, second],
+      ])
+      const preprocess = createMarkdownPreprocessor(sources)
+
+      expect(preprocess("Explore \\( \\pi \\)", { streaming: false, sessionID: "ses_1" })).toBe("Explore π")
+      expect(preprocess("Explore \\( \\pi \\)", { streaming: true, sessionID: "ses_1" })).toBe("Explore \\pi")
+
+      setSources([])
+      expect(preprocess("Explore \\( \\pi \\)", { streaming: false })).toBe("Explore \\( \\pi \\)")
+    } finally {
+      dispose()
+    }
+  })
+})
+
+test("markdown preprocessors transform inline math before TUI rendering", async () => {
+  const output = await createTestRenderer({ width: 80, height: 12, remote: true })
+  const mathPreprocessor: MarkdownPreprocessor = (text) =>
+    text.replace(/\\\((.*?)\\\)/g, (_, inner) => inner.trim().replace(/\\pi/g, "π"))
+  const [sources, setSources] = createSignal<ReadonlyArray<ReadonlyArray<MarkdownPreprocessor>>>([[mathPreprocessor]])
+
+  await render(() => {
+    const preprocess = createMarkdownPreprocessor(sources)
+    return (
+      <markdown
+        syntaxStyle={SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, output.renderer.nativeScene)}
+        content={preprocess("Value is \\( \\pi \\)", { streaming: false })}
+        streaming={false}
+      />
+    )
+  }, output.renderer)
+
+  try {
+    output.renderer.start()
+    await output.waitForFrame((frame) => frame.includes("Value is π"))
+    expect(output.captureCharFrame()).toContain("Value is π")
+
+    setSources([])
+    await output.waitForFrame((frame) => frame.includes("Value is ( \\pi )"))
+    expect(output.captureCharFrame()).toContain("Value is ( \\pi )")
   } finally {
     output.renderer.destroy()
   }
