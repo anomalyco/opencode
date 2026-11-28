@@ -61,9 +61,12 @@ export type MediaPartInput = Omit<MediaPart, "media"> & {
   readonly mediaType?: string
 }
 
-const mediaPart = (input: MediaPartInput): MediaPart => {
-  const { mediaType, ...part } = input
-  return { ...part, media: Media.make(input.media, mediaType) }
+/** Older plugins write the data beside `mediaType` instead of under `media`; accepted at runtime, never by the type. */
+type MediaPartHookInput = MediaPartInput & { readonly data?: Media.Input }
+
+const mediaPart = (input: MediaPartHookInput): MediaPart => {
+  const { mediaType, media, data, ...part } = input
+  return { ...part, media: Media.make(media ?? data, mediaType) }
 }
 
 const toolResultValueSchema = Schema.Union([

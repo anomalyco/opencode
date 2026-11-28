@@ -347,13 +347,15 @@ export const image = (input: Input, mediaType?: string): ImageAsset => {
 
 /**
  * Normalize file input into an `Asset`. Data URLs carry their media type and bytes or base64 are sniffed from magic
- * bytes; `mediaType` is required when sniffing fails. Assets pass through unchanged.
+ * bytes; `mediaType` is required when sniffing fails. Assets pass through unchanged. Input with no data at all is
+ * rejected, so a plugin that omits the payload cannot leave an asset that fails later.
  */
-export const make = (input: Input, mediaType?: string): Asset => {
+export const make = (input: Input | null | undefined, mediaType?: string): Asset => {
   if (input instanceof Asset) return input
   if (input instanceof ArrayBuffer) return make(new Uint8Array(input), mediaType)
   if (input instanceof Uint8Array) return bytes(input, mediaType ?? requireMediaType(detectMediaType(input)))
   const value = input instanceof URL ? input.href : input
+  if (typeof value !== "string") throw invalid("Media input must be bytes, a URL or a base64 string")
   if (/^data:/i.test(value)) {
     const match = DATA_URL.exec(value)
     if (match === null) throw invalid("Media data URLs must contain a MIME type and base64 data")

@@ -52,6 +52,11 @@ describe("Media.make", () => {
     expect(() => Media.make("./photo.png", "image/png")).toThrow("Media.file")
   })
 
+  test("rejects a value that is not data at all", () => {
+    expect(() => Media.make(undefined as never, "image/png")).toThrow("Media input must be bytes")
+    expect(() => Media.make(null as never)).toThrow("Media input must be bytes")
+  })
+
   test("matches the data URL scheme in any case", () => {
     expect(Media.make(`DATA:image/png;base64,${PNG_BASE64}`).mediaType).toBe("image/png")
   })
@@ -72,6 +77,14 @@ describe("plain file input", () => {
     expect(parts[1]).toEqual({ type: "media", media: Media.bytes(PNG, "image/png"), filename: "a.png" })
     expect(parts[2]).toEqual({ type: "media", media: Media.base64("AQID", "application/pdf") })
     expect(parts[3]).toEqual({ type: "media", media: Media.url("https://example.test/a.png") })
+  })
+
+  test("request media parts accept the flat shape older plugins emit", () => {
+    const request = ai.request({
+      model: OpenAI.configure({ apiKey: "test" }).chat("gpt-4o-mini"),
+      prompt: [{ type: "media", mediaType: "image/png", data: "AQID" } as never],
+    })
+    expect(request.messages[0].content[0]).toEqual({ type: "media", media: Media.base64("AQID", "image/png") })
   })
 
   test("image edit inputs accept plain data", () => {
