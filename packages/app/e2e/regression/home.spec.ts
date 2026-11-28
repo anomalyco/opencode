@@ -523,6 +523,35 @@ test("Home migrates the directories an older build listed to the server's curren
   await expect(view.rows).toHaveText(["api", "web"])
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")))
+    .toMatchObject({
+      usedProjectIDs: { local: ["proj_api", "proj_web"] },
+      projects: { local: [{ worktree: "C:/OpenCode/gone" }] },
+    })
+})
+
+test("Home preserves legacy projects absent from the first catalog and migrates them when they arrive", async ({ page }) => {
+  const projects = [entry("api", 2)]
+  const later = entry("web", 1)
+  const view = await homeProjects(page, projects)
+  await seed(page, {
+    legacyProjects: {
+      local: [{ worktree: "C:/OpenCode/api" }, { worktree: "C:/OpenCode/web/packages/app", expanded: true }],
+    },
+  })
+  await page.goto("/")
+  await expect(view.rows).toHaveText(["api"])
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}").usedProjectIDs))
+    .toEqual({ local: ["proj_api"] })
+
+  projects.push(later)
+  await view.server.push([{ id: "evt_late_project", created: T0, type: "project.updated", data: later }])
+  await expect(view.rows).toHaveText(["api", "web"])
+
+  await page.reload()
+  await expect(view.rows).toHaveText(["api", "web"])
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")))
     .toMatchObject({ usedProjectIDs: { local: ["proj_api", "proj_web"] }, projects: {} })
 })
 
