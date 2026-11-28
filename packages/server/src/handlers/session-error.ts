@@ -15,6 +15,13 @@ export function skillLoadFailed(error: Skill.LoadError) {
   return new SkillLoadError({ skill: Skill.ID.make(error.skill), message: error.message })
 }
 
+export function unmigratedSession(error: Session.UnmigratedError) {
+  return new SessionNotFoundError({
+    sessionID: error.sessionID,
+    message: error.message,
+  })
+}
+
 export function missingMessage(error: Session.MessageNotFoundError) {
   return new MessageNotFoundError({
     sessionID: error.sessionID,
