@@ -28,6 +28,7 @@ export const docsInstalls = [
   { label: "bun", code: installs[2].command },
   { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
   { label: "yarn", code: "yarn global add @opencode/cli" },
+  { label: "vlt", code: "vlt install -g --allow-scripts='#@opencode/cli' @opencode/cli" },
   { label: "vite+", code: "vp install -g @opencode/cli" },
   { label: "aur", code: installs[4].command },
   { label: "mise", code: "mise use -g opencode" },
