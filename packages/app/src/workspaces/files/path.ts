@@ -1,7 +1,28 @@
-export function stripFileProtocol(input: string) {
+import { encodeFilePath } from "@opencode/util/path"
+
+const wslPath = /^\/\/wsl(?:\.localhost|\$|%24)\//i
+
+const isWindowsPath = (path: string) => /^[A-Za-z]:/.test(path) || path.startsWith("\\\\") || wslPath.test(path)
+
+export function toFileUri(path: string, directory: string) {
+  const encoded = encodeFilePath(path)
+  // A double leading slash can also be part of a POSIX path.
+  const windows = path.startsWith("\\\\") || isWindowsPath(directory || path)
+
+  return windows && /^\/\/[^/]+\/[^/]/.test(encoded) ? `file:${encoded}` : `file://${encoded}`
+}
+
+export function stripFileProtocol(input: string, directory = "") {
   if (!input.startsWith("file://")) return input
 
-  return input.slice("file://".length)
+  const path = input.slice("file://".length)
+
+  // A UNC authority belongs to the path. Legacy file://C:/... values already have a drive prefix.
+  if (!/^[^/:\\]+\/[^/]/.test(path)) return path
+
+  const unc = `//${path}`
+
+  return (directory ? isWindowsPath(directory) : wslPath.test(unc)) ? unc : path
 }
 
 export function stripQueryAndHash(input: string) {
@@ -93,7 +114,7 @@ export function createPathHelpers(scope: () => string, home: () => string = () =
     const root = scope()
 
     // file:///C:/dir becomes /C:/dir once the protocol is gone; restore the drive form.
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input, root)))).replace(
       /^[/\\]([A-Za-z]:)/,
       "$1",
     )
@@ -103,7 +124,7 @@ export function createPathHelpers(scope: () => string, home: () => string = () =
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)
-    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+    const windows = isWindowsPath(root)
     const canonRoot = windows ? root.replace(/\\/g, "/").toLowerCase() : root.replace(/\\/g, "/")
     const canonPath = windows ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
 
@@ -130,7 +151,7 @@ export function createPathHelpers(scope: () => string, home: () => string = () =
   const normalizeDir = (input: string) => {
     const path = normalize(input)
     const root = scope()
-    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+    const windows = isWindowsPath(root)
 
     return (windows ? path.replace(/\\/g, "/") : path).replace(/\/+$/, "")
   }

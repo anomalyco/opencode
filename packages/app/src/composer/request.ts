@@ -1,7 +1,8 @@
-import { encodeFilePath, getFilename } from "@opencode/util/path"
+import { getFilename } from "@opencode/util/path"
 import { parseSessionMention } from "@opencode/util/session-mention"
 import { serializePrompt } from "./prompt-parts"
 import type { FileSelection } from "@/workspaces/files/model"
+import { toFileUri } from "@/workspaces/files/path"
 import type {
   AgentPart,
   ContextItem,
@@ -61,8 +62,11 @@ const absolute = (directory: string, path: string) => {
   return `${directory.replace(/[\\/]+$/, "")}/${path}`
 }
 
-const fileQuery = (selection: FileSelection | undefined) =>
-  selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
+const fileUri = (directory: string, path: string, selection?: FileSelection) => {
+  const uri = toFileUri(absolute(directory, path), directory)
+
+  return selection ? `${uri}?start=${selection.startLine}&end=${selection.endLine}` : uri
+}
 
 const mention = /(^|[\s([{"'])@(\S+)/g
 
@@ -137,10 +141,8 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
   }))
 
   const files = prompt.filter(isFileAttachment).map((attachment) => {
-    const path = absolute(input.sessionDirectory, attachment.path)
-
     return {
-      uri: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
+      uri: attachment.url ?? fileUri(input.sessionDirectory, attachment.path, attachment.selection),
       mime: attachment.mime ?? "text/plain",
       name: attachment.filename ?? getFilename(attachment.path),
       description: attachment.description,
@@ -160,7 +162,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     parseCommentMentions(comment).flatMap((path) => {
       if (input.existingMentions && !input.existingMentions.has(path)) return []
 
-      const uri = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+      const uri = fileUri(input.sessionDirectory, path)
 
       if (used.has(uri)) return []
       used.add(uri)
@@ -184,8 +186,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
       return quote.comment ? mentioned(quote.comment) : []
     }
 
-    const path = absolute(input.sessionDirectory, item.path)
-    const uri = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
+    const uri = fileUri(input.sessionDirectory, item.path, item.selection)
     const comment = item.comment?.trim()
 
     if (!comment && used.has(uri)) return []

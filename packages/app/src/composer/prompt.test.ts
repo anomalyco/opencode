@@ -238,6 +238,38 @@ describe("extractPromptFromMessage", () => {
     ])
   })
 
+  test.each([
+    { directory: "\\\\wsl.localhost\\Ubuntu-24.04\\project", path: "src/a.ts" },
+    { directory: "//wsl.localhost/Ubuntu-24.04/project", path: "src/a.ts" },
+    { directory: undefined, path: "//wsl.localhost/Ubuntu-24.04/project/src/a.ts" },
+  ])("restores WSL UNC context files for resubmission with directory $directory", ({ directory, path }) => {
+    const uris = [
+      "file://wsl.localhost/Ubuntu-24.04/project/src/a.ts?start=3&end=7",
+      "file://wsl.localhost/Ubuntu-24.04/other.ts",
+    ]
+
+    const message = {
+      id: "msg_1",
+      type: "user",
+      text: "",
+      files: uris.map((uri) => ({ data: "", mime: "text/plain", source: { type: "uri" as const, uri } })),
+      time: { created: 1 },
+    } satisfies SessionMessageUser
+
+    const context = extractPromptContext(message, { directory })
+
+    expect(context.files.map((file) => file.path)).toEqual([path, "//wsl.localhost/Ubuntu-24.04/other.ts"])
+    expect(
+      buildPromptRequest({
+        prompt: [],
+        context: context.files.map((item) => ({ ...item, key: contextItemKey(item) })),
+        images: [],
+        text: "",
+        sessionDirectory: directory ?? "",
+      }).files.map((file) => file.uri),
+    ).toEqual(uris)
+  })
+
   test("restores skill mentions as structured Composer parts", () => {
     const message = {
       id: "msg_1",

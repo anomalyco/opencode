@@ -1,9 +1,9 @@
 import { Context, Duration, Effect, Exit, Layer, LayerMap, Option, RcMap, Scope } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
+import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
 import path from "path"
-import { Location } from "./location.js"
 import type { Instance } from "./instance.js"
 
 export interface Interface {
@@ -91,7 +91,8 @@ export const settle = Effect.fnUntraced(function* <E>(builds: readonly Effect.Ef
 /** Normalize equivalent placements before they become resource-cache keys. */
 export function canonical(ref: Location.Ref) {
   // Workspace refs can hold remote POSIX paths even on a Windows host.
-  const flavor = process.platform === "win32" && !ref.directory.startsWith("/") ? path.win32 : path.posix
+  const windows = !ref.directory.startsWith("/") || /^\/\/wsl(?:\.localhost|\$)[/\\]/i.test(ref.directory)
+  const flavor = process.platform === "win32" && windows ? path.win32 : path.posix
   const normalized = flavor.normalize(ref.directory)
   const trailing = normalized.endsWith(flavor.sep) && normalized.length > flavor.parse(normalized).root.length
   return Location.Ref.make({

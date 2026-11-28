@@ -316,6 +316,7 @@ describe("buildPromptRequest", () => {
       uri: "file:///C:/Users/test/Documents/file%23name.txt",
     },
     { dir: "/home/user/project", path: "src/app.ts", uri: "file:///home/user/project/src/app.ts" },
+    { dir: "/repo", path: "//tmp/readme.txt", uri: "file:////tmp/readme.txt" },
     { dir: "C:\\current\\project", path: "D:\\other\\project\\file.ts", uri: "file:///D:/other/project/file.ts" },
     {
       dir: "C:\\project",
@@ -334,6 +335,17 @@ describe("buildPromptRequest", () => {
       path: "src\\utils\\helper.ts",
       context: true,
       uri: "file:///D:/workspace/app/src/utils/helper.ts",
+    },
+    {
+      dir: "\\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\project",
+      path: "src\\[id]\\",
+      uri: "file://wsl.localhost/Ubuntu-24.04/home/user/project/src/%5Bid%5D/",
+    },
+    {
+      dir: "C:\\project",
+      path: "//server/share/a #.ts",
+      context: true,
+      uri: "file://server/share/a%20%23.ts",
     },
   ])("resolves $path in $dir to a file URI", (row) => {
     const result = buildPromptRequest({

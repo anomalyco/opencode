@@ -216,7 +216,10 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
 
     if (regenerated.has(source.uri)) return []
 
-    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(source.uri))).replace(/^\/([A-Za-z]:)/, "$1")
+    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(source.uri, directory))).replace(
+      /^\/([A-Za-z]:)/,
+      "$1",
+    )
 
     return [
       {
