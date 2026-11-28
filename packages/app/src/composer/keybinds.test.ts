@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { matchPromptKeybind, promptKeybindOptions } from "./keybinds"
+import { promptKeybindOptions, promptKeyMatcher, resolvePromptKeybinds } from "./keybinds"
 import { matchKeybind, parseKeybind } from "@/shell/commands/command"
 
 function keyEvent(input: KeyboardEventInit = {}) {
   return new KeyboardEvent("keydown", { key: "Enter", ...input })
+}
+
+function matchPromptKeybind(
+  id: keyof ReturnType<typeof resolvePromptKeybinds>,
+  overrides: Parameters<typeof resolvePromptKeybinds>[0],
+  event: KeyboardEvent,
+) {
+  return promptKeyMatcher(resolvePromptKeybinds(overrides)[id])(event)
 }
 
 describe("prompt keybind matching", () => {

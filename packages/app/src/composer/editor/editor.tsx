@@ -50,6 +50,7 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment, promptLength } from "../prompt-parts"
 import { handleComposerKeyDown, type ComposerKeybinds } from "./keybind"
+import type { createPromptKeybinds } from "../keybinds"
 import { INITIAL_COMPOSITION_STATE, isComposing, transitionComposition } from "./composition-machine"
 import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
 import {
@@ -101,12 +102,12 @@ export type ComposerEditorProps = {
   queueFirstLabel?: string
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
-  keybinds?: ComposerKeybinds
+  keybinds?: ReturnType<typeof createPromptKeybinds>
   submitKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
-  let composition = INITIAL_COMPOSITION_STATE
+  const [composition, setComposition] = createSignal(INITIAL_COMPOSITION_STATE)
   const i18n = useI18n()
   const markdown = useMarkdown()
   const state = props.controller.state
@@ -226,6 +227,47 @@ export function ComposerEditor(props: ComposerEditorProps) {
       onKeyDown: props.controller.onKeyDown,
     }
   }
+
+  const keyDown = (event: KeyboardEvent, sequence?: keyof ComposerKeybinds) => {
+    // iOS may report Shift on a soft Return. Only hardware Cmd/Ctrl+Return sends on touch.
+    if (touch() && event.key === "Enter" && !event.metaKey && !event.ctrlKey) return
+
+    const height =
+      !isComposerPopoverOpen(state) && event.shiftKey && event.key === "ArrowUp"
+        ? composer?.getBoundingClientRect().height
+        : undefined
+
+    handleComposerKeyDown({
+      event,
+      sequence,
+      keybinds: props.keybinds,
+      composing: isComposing(composition()),
+      selectSuggestion: () => {
+        if (!isComposerPopoverOpen(state)) return false
+        props.controller.onKeyDown(event, height)
+
+        return true
+      },
+      handleController: () => !view.draftOnly && props.controller.onKeyDown(event, height),
+      editFirst: view.submit.queue?.editFirst,
+      insertNewline: props.controller.insertNewline,
+      submit: (action) =>
+        props.controller.submit(
+          !touch() && action === "first"
+            ? { first: true }
+            : !touch() && action === "alternate"
+              ? { alternate: true }
+              : undefined,
+        ),
+    })
+  }
+
+  createEffect(() => {
+    if (!editor || props.disabled || props.readOnly || isComposing(composition())) return
+    const release = props.keybinds?.sequences(editor, touch(), keyDown)
+
+    if (release) onCleanup(release)
+  })
 
   return (
     <div class={`relative size-full flex flex-col gap-0 ${props.class ?? ""}`}>
@@ -366,47 +408,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   cursor,
                 )
               }}
-              onKeyDown={(event) => {
-                // A touch keyboard's Return only ever adds a line, even over suggestions; the touch bar sends. iOS
-                // also reports Shift on Return whenever autocapitalization arms it, which used to flip Return
-                // between sending and a newline. Only a hardware keyboard (an iPad's) has Cmd or Ctrl, and
-                // Cmd+Return sends there.
-                if (touch() && event.key === "Enter" && !event.metaKey && !event.ctrlKey) return
-
-                // Capture the opening footprint before the controller applies its first history preview.
-                const height =
-                  !isComposerPopoverOpen(state) && event.shiftKey && event.key === "ArrowUp"
-                    ? composer?.getBoundingClientRect().height
-                    : undefined
-
-                handleComposerKeyDown({
-                  event,
-                  keybinds: props.keybinds,
-                  composing: isComposing(composition),
-                  selectSuggestion: () => {
-                    if (!isComposerPopoverOpen(state)) return false
-                    props.controller.onKeyDown(event, height)
-
-                    return true
-                  },
-                  handleController: () => !view.draftOnly && props.controller.onKeyDown(event, height),
-                  editFirst: view.submit.queue?.editFirst,
-                  insertNewline: props.controller.insertNewline,
-                  // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
-                  submit: (action) =>
-                    props.controller.submit(
-                      !touch() && action === "first"
-                        ? { first: true }
-                        : action === "alternate" && !touch()
-                          ? { alternate: true }
-                          : undefined,
-                    ),
-                })
-              }}
+              onKeyDown={(event) => keyDown(event)}
               onCompositionStart={() =>
-                (composition = transitionComposition(composition, { type: "composition.start" }))
+                setComposition((state) => transitionComposition(state, { type: "composition.start" }))
               }
-              onCompositionEnd={() => (composition = transitionComposition(composition, { type: "composition.end" }))}
+              onCompositionEnd={() =>
+                setComposition((state) => transitionComposition(state, { type: "composition.end" }))
+              }
               // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
               // paragraph, which would wrap the next line in a <div> the parser joins without a newline; replace it
               // with the line break Shift+Enter inserts. Only beforeinput is cancelled, so iOS still applies its

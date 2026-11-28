@@ -19,6 +19,7 @@ export function resolveComposerKeyAction(event: KeyboardEvent, keybinds: Compose
 
 export function handleComposerKeyDown(input: {
   event: KeyboardEvent
+  sequence?: keyof ComposerKeybinds
   keybinds?: ComposerKeybinds
   composing: boolean
   selectSuggestion: () => boolean
@@ -36,7 +37,11 @@ export function handleComposerKeyDown(input: {
   }
 
   const ime = input.event.isComposing || input.composing || input.event.keyCode === 229
-  const action = input.keybinds ? resolveComposerKeyAction(input.event, input.keybinds, ime) : undefined
+
+  if (ime) return
+
+  const action =
+    input.sequence ?? (input.keybinds ? resolveComposerKeyAction(input.event, input.keybinds, false) : undefined)
 
   if (action === "newline") {
     input.event.preventDefault()
@@ -47,8 +52,6 @@ export function handleComposerKeyDown(input: {
 
     return
   }
-
-  if (ime) return
 
   if (action === "submit" || action === "alternate" || action === "first") return submit(action)
 

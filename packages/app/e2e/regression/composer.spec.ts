@@ -963,6 +963,42 @@ test("prompt shortcuts rebind through Settings and preserve selected newline und
   await expect.poll(() => prompts).toEqual([{ text: "hello", delivery: "steer" }])
 })
 
+test("a recorded prompt sequence waits for its last key and leaves composition alone", async ({ page }) => {
+  const sent: unknown[] = []
+
+  const { editor } = await openSession(page, {
+    name: "ComposerSequence",
+    onPrompt: ({ body }) => void sent.push(body.text),
+  })
+
+  await editor.fill("send this once")
+  const shortcuts = await promptShortcuts(page)
+  await shortcuts.record("submit", "Control+F8", /F8$/)
+  await shortcuts.settings.getByRole("button", { name: "Add a key", exact: true }).click()
+  await page.keyboard.press("Enter")
+  await expect(shortcuts.binding("submit")).toHaveText(/F8 Enter$/)
+  await shortcuts.close()
+
+  const hint = page.getByRole("status").filter({ hasText: "Submit prompt" })
+  await editor.press("Control+F8")
+  await expect(hint).toBeVisible()
+  await editor.press("Escape")
+  await expect(hint).toHaveCount(0)
+  await editor.press("Control+F8")
+  await expect(hint).toBeVisible()
+  await editor.dispatchEvent("compositionstart")
+  await expect(hint).toHaveCount(0)
+  await editor.press("Control+F8")
+  await expect(hint).toHaveCount(0)
+  await editor.dispatchEvent("compositionend")
+  await editor.press("Control+F8")
+  await expect(hint).toBeVisible()
+  await expect(editor).toHaveText("send this once")
+  await editor.press("Enter")
+  await expect.poll(() => sent).toEqual(["send this once"])
+  await expect(editor).toBeEmpty()
+})
+
 test("prompt shortcuts support Alt+Enter, alternate delivery, disabling, and reset", async ({ page }) => {
   const prompts: { text: unknown; delivery: unknown }[] = []
 

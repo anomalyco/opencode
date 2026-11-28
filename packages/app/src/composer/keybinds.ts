@@ -1,4 +1,6 @@
-import { matchKeybind, parseKeybind } from "@/shell/commands/command"
+import { createMemo } from "solid-js"
+import { matchKeybind, parseKeybind, useCommand } from "@/shell/commands/command"
+import { chordStrokes, keymapKey } from "@/shell/commands/keymap"
 import { useSettings } from "@/settings/model"
 
 export const PROMPT_KEYBINDS = {
@@ -26,7 +28,9 @@ export const PROMPT_KEYBINDS = {
 } as const
 
 export function resolvePromptKeybinds(overrides: Partial<Record<keyof typeof PROMPT_KEYBINDS, string>>) {
-  const taken = Object.values(overrides).flatMap((value) => (value === undefined ? [] : parseKeybind(value)))
+  const taken = Object.values(overrides).flatMap(
+    (value) => value?.split(",").flatMap((combo) => parseKeybind(chordStrokes(combo)[0] ?? "")) ?? [],
+  )
 
   const effective = (id: keyof typeof PROMPT_KEYBINDS) => {
     const override = overrides[id]
@@ -62,16 +66,15 @@ export function resolvePromptKeybinds(overrides: Partial<Record<keyof typeof PRO
   }
 }
 
-export function matchPromptKeybind(
-  id: keyof typeof PROMPT_KEYBINDS,
-  overrides: Partial<Record<keyof typeof PROMPT_KEYBINDS, string>>,
-  event: KeyboardEvent,
-) {
-  return matchKeybind(parseKeybind(resolvePromptKeybinds(overrides)[id]), event)
+export function promptKeyMatcher(config: string) {
+  const strokes = parseKeybind(config)
+
+  return (event: KeyboardEvent) => matchKeybind(strokes, event)
 }
 
 export function createPromptKeybinds() {
   const settings = useSettings()
+  const command = useCommand()
 
   const overrides = () => ({
     submit: settings.keybinds.get(PROMPT_KEYBINDS.submit.id),
@@ -80,11 +83,58 @@ export function createPromptKeybinds() {
     first: settings.keybinds.get(PROMPT_KEYBINDS.first.id),
   })
 
+  const effective = createMemo(() => resolvePromptKeybinds(overrides()))
+
+  const matcher = (action: keyof typeof PROMPT_KEYBINDS) => {
+    const match = createMemo(() => promptKeyMatcher(effective()[action]))
+
+    return (event: KeyboardEvent) => match()(event)
+  }
+
   return {
-    submit: (event: KeyboardEvent) => matchPromptKeybind("submit", overrides(), event),
-    newline: (event: KeyboardEvent) => matchPromptKeybind("newline", overrides(), event),
-    alternate: (event: KeyboardEvent) => matchPromptKeybind("alternate", overrides(), event),
-    first: (event: KeyboardEvent) => matchPromptKeybind("first", overrides(), event),
+    submit: matcher("submit"),
+    newline: matcher("newline"),
+    alternate: matcher("alternate"),
+    first: matcher("first"),
+    sequences(
+      target: HTMLElement,
+      touch: boolean,
+      run: (event: KeyboardEvent, action: keyof typeof PROMPT_KEYBINDS) => void,
+    ) {
+      const actions = ["submit", "newline", "alternate", "first"] as const
+      const configs = effective()
+
+      const bindings = actions.flatMap((action) =>
+        configs[action].split(",").flatMap((combo) => {
+          const strokes = chordStrokes(combo)
+
+          if (strokes.length < 2) return []
+
+          // A soft keyboard's Return always edits the draft, even when a sequence includes it.
+          if (
+            touch &&
+            strokes.some((stroke) => parseKeybind(stroke).some((kb) => kb.key === "enter" && !kb.ctrl && !kb.meta))
+          )
+            return []
+
+          return [{ key: keymapKey(combo), cmd: PROMPT_KEYBINDS[action].id }]
+        }),
+      )
+
+      if (!bindings.length) return
+
+      return command.registerKeyLayer({
+        target,
+        priority: 1,
+        bindings,
+        commands: actions.map((action) => ({
+          name: PROMPT_KEYBINDS[action].id,
+          run: ({ event }) => {
+            if (event.originalEvent) run(event.originalEvent, action)
+          },
+        })),
+      })
+    },
     options: (titles: Parameters<typeof promptKeybindOptions>[0]) => promptKeybindOptions(titles, overrides()),
   }
 }
