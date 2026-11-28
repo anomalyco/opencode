@@ -385,13 +385,64 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
-  it.live("reloads configured sources on config updates and keeps the last fetched URL", () =>
+  it.live("fetches a remote instruction once, retries a failed one, and forgets a removed one", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const cached = "https://example.test/cached.md"
+        const retry = "https://example.test/retry.md"
+        const calls = new Map<string, number>()
+        return Effect.gen(function* () {
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const config = yield* Config.Test
+          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          const update = () => triggerAndWait(PubSub.publish(events, configUpdated()).pipe(Effect.asVoid))
+          expect(yield* discovery.list()).toEqual([file(cached, "cached")])
+          expect(Object.fromEntries(calls)).toEqual({ [cached]: 1, [retry]: 1 })
+
+          // The source list is unchanged: retry the failed URL, not the successful one.
+          yield* update()
+          expect(yield* discovery.list()).toEqual([file(cached, "cached"), file(retry, "recovered")])
+          expect(Object.fromEntries(calls)).toEqual({ [cached]: 1, [retry]: 2 })
+
+          yield* config.setEntries([configured([retry])])
+          yield* update()
+          expect(yield* discovery.list()).toEqual([file(retry, "recovered")])
+          expect(Object.fromEntries(calls)).toEqual({ [cached]: 1, [retry]: 2 })
+
+          // A URL that left config was forgotten, so adding it back fetches it again.
+          yield* config.setEntries([configured([cached, retry])])
+          yield* update()
+          expect(yield* discovery.list()).toEqual([file(cached, "cached"), file(retry, "recovered")])
+          expect(Object.fromEntries(calls)).toEqual({ [cached]: 2, [retry]: 2 })
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: [cached, retry],
+              http: respond((url) => {
+                const count = (calls.get(url) ?? 0) + 1
+                calls.set(url, count)
+                if (url === retry && count === 1) return new Response(null, { status: 503 })
+                return new Response(url === cached ? "cached" : "recovered")
+              }),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("reloads configured local sources without refetching a cached URL", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {
         const first = path.join(tmp.path, "first.md")
         const second = path.join(tmp.path, "second.md")
         const remote = "https://example.test/instructions.md"
-        const responses = [new Response("remote"), new Response(null, { status: 500 })]
+        let fetches = 0
         return Effect.gen(function* () {
           yield* Effect.promise(async () => {
             await fs.writeFile(first, "first")
@@ -410,12 +461,16 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           expect((yield* readInitial(yield* discovery.load())).text).toBe(
             [`Instructions from: ${second}\nsecond`, `Instructions from: ${remote}\nremote`].join("\n\n"),
           )
+          expect(fetches).toBe(1)
         }).pipe(
           Effect.provide(
             instructionLayer({
               config: path.join(tmp.path, "global"),
               instructions: [first, remote],
-              http: respond(() => responses.shift() ?? new Response(null, { status: 500 })),
+              http: respond(() => {
+                fetches++
+                return new Response("remote")
+              }),
               locationServiceLayer: Layer.succeed(
                 Location.Service,
                 Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
