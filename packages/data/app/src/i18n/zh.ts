@@ -393,4 +393,4 @@ export const dict = {
   "share.calendar.previous": "上个月",
   "share.calendar.next": "下个月",
   "share.calendar.wholeRange": "整个范围",
-} satisfies Partial<Record<Key, string>>
+} satisfies Record<Key, string>

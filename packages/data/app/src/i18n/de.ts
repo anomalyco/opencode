@@ -1,3 +1,5 @@
+import type { Key } from "../i18n"
+
 export const dict = {
   "app.title": "KI-Modellnutzungs-Rankings | OpenCode Data",
   "app.description":
@@ -125,6 +127,29 @@ export const dict = {
   "home.noSessionCostTitle": "Keine Sitzungskostendaten",
   "home.noSessionCostDescription": "Keine Modellzeilen mit Sitzungen passten zu diesem Produkt.",
   "home.costSession": "Kosten/Sitzung",
+  "home.newModelsTitle": "Neue Modelle",
+  "home.newModelsDescription": "Die größte Modellveröffentlichung der letzten 30 Tage.",
+  "home.retentionDescription": "Nutzer, die in der Folgewoche zurückkehren.",
+  "home.noRetentionTitle": "Keine Bindungsdaten",
+  "home.noRetentionDescription": "Nutzerbindung erscheint, sobald eine vollständige Folgewoche verfügbar ist.",
+  "home.comparisonsTitle": "Modellvergleiche",
+  "home.comparisonsDescription": "Beliebte Modellpaare aus der Bestenliste.",
+  "table.rank": "Rang",
+  "newModels.releasedBy": "{{author}}, veröffentlicht am {{date}}",
+  "newModels.released": "Veröffentlicht am {{date}}",
+  "newModels.free": "Kostenlos auf OpenCode",
+  "newModels.tokensSinceLaunch": "Tokens seit Veröffentlichung",
+  "newModels.usersTried": "Nutzer haben es getestet",
+  "newModels.alsoNew": "Ebenfalls neu",
+  "newModels.dailyUsage": "Tägliche Nutzung von {{model}}",
+  "retention.marker": "Bindung",
+  "retention.rate": "Quote",
+  "retention.eligible": "Qualifizierte",
+  "retention.aria": "{{model}}, {{rate}} wöchentliche Nutzerbindung, {{users}} qualifizierte Nutzerwochen",
+  "compare.detail.topTwo": "Top 2 nach aktueller Nutzung",
+  "compare.detail.leaderChallenger": "Spitzenreiter vs. Herausforderer",
+  "compare.detail.adjacent": "Benachbartes Bestenlistenpaar",
+  "compare.detail.topAlternative": "Topmodell-Alternative",
   "lab.title": "{{lab}} KI-Modellnutzung und Rankings | OpenCode Data",
   "lab.description":
     "Vergleiche {{lab}}-Modelle, die in OpenCode verwendet werden, einschließlich Tokennutzung, Modellrankings, Kontextfenstern, Veröffentlichungsdaten, Kosten und modellspezifischen Daten.",
@@ -378,4 +403,4 @@ export const dict = {
   "share.calendar.previous": "Vorheriger Monat",
   "share.calendar.next": "Nächster Monat",
   "share.calendar.wholeRange": "Ganzer Zeitraum",
-} as const
+} satisfies Record<Key, string>

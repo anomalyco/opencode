@@ -1,3 +1,5 @@
+import type { Key } from "../i18n"
+
 export const dict = {
   "app.title": "Rangeringer for bruk av AI-modeller | OpenCode Data",
   "app.description":
@@ -125,6 +127,29 @@ export const dict = {
   "home.noSessionCostTitle": "Ingen øktkostnadsdata",
   "home.noSessionCostDescription": "Ingen modellrader med økter matchet dette produktet.",
   "home.costSession": "Kostnad/økt",
+  "home.newModelsTitle": "Nye modeller",
+  "home.newModelsDescription": "Den største lanseringen de siste 30 dagene.",
+  "home.retentionDescription": "Andel brukere som kommer tilbake uken etter.",
+  "home.noRetentionTitle": "Ingen retensjonsdata",
+  "home.noRetentionDescription": "Retensjon vises når en hel returuke er tilgjengelig.",
+  "home.comparisonsTitle": "Modellsammenligninger",
+  "home.comparisonsDescription": "Populære modellpar fra rangeringen.",
+  "table.rank": "Rang",
+  "newModels.releasedBy": "{{author}}, utgitt {{date}}",
+  "newModels.released": "Utgitt {{date}}",
+  "newModels.free": "Gratis på OpenCode",
+  "newModels.tokensSinceLaunch": "tokens siden lansering",
+  "newModels.usersTried": "brukere har prøvd den",
+  "newModels.alsoNew": "Også nye",
+  "newModels.dailyUsage": "Daglig bruk av {{model}}",
+  "retention.marker": "Retensjon",
+  "retention.rate": "Andel",
+  "retention.eligible": "Kvalifiserte",
+  "retention.aria": "{{model}}, {{rate}} i ukentlig retensjon, {{users}} kvalifiserte brukeruker",
+  "compare.detail.topTwo": "De to øverste etter nylig bruk",
+  "compare.detail.leaderChallenger": "Leder mot utfordrer",
+  "compare.detail.adjacent": "Nabopar på rangeringen",
+  "compare.detail.topAlternative": "Alternativ til toppmodellen",
   "lab.title": "{{lab}} AI-modellbruk og rangeringer | OpenCode Data",
   "lab.description":
     "Sammenlign {{lab}}-modeller brukt i OpenCode, inkludert tokenbruk, modellrangeringer, kontekstvinduer, utgivelsesdatoer, kostnader og modellspesifikke data.",
@@ -303,7 +328,7 @@ export const dict = {
   "share.comparison.cache": "Inndata fra cache",
   "share.card.outro": "Den største inferensen\ni verden",
   "share.card.tokens": "Tokens",
-  "share.card.versus": "vs",
+  "share.card.versus": "mot",
   "share.card.updated": "Oppdatert {{date}}",
   "share.embed.missing": "Denne innbyggingen finnes ikke.",
   "share.embed.open": "{{title}} på OpenCode Data",
@@ -374,4 +399,4 @@ export const dict = {
   "share.calendar.previous": "Forrige måned",
   "share.calendar.next": "Neste måned",
   "share.calendar.wholeRange": "Hele perioden",
-} as const
+} satisfies Record<Key, string>

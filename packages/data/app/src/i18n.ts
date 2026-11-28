@@ -433,10 +433,9 @@ const en = {
 } as const
 
 export type Key = keyof typeof en
-// Locales translate incrementally; any key a locale hasn't reached yet falls back to English.
-export type Dict = Partial<Record<Key, string>>
+export type Dict = Record<Key, string>
 
-const dictionaries: Record<Locale, Dict> = {
+const dictionaries = {
   ar,
   br,
   da,
@@ -455,14 +454,14 @@ const dictionaries: Record<Locale, Dict> = {
   uk,
   zh,
   zht,
-}
+} satisfies Record<Locale, Dict>
 
 export function dict(locale: Locale) {
   return dictionaries[locale]
 }
 
 export function translate(locale: Locale, key: Key, params?: Record<string, string | number>) {
-  const text = dictionaries[locale][key] ?? en[key]
+  const text = dictionaries[locale][key]
   if (!params) return text
   return (
     text
