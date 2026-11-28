@@ -1,4 +1,5 @@
 import { Locale } from "./locale"
+import { I18n } from "../i18n"
 import { canonicalToolName, finiteNumber, webSearchProviderLabel } from "./tool-display"
 
 type Dict = Record<string, unknown>
@@ -45,21 +46,21 @@ export function permissionPresentation(
 
   if (action === "read" || action === "list") {
     const value = text(input.path) || resources[0] || ""
-    const title = action === "read" ? "Read" : "List"
+    const title = I18n.t(action === "read" ? "permission.action.read" : "permission.action.list")
     return {
       icon: "→",
       title: `${title} ${formatPath(value)}`,
-      lines: value ? [`Path: ${formatPath(value)}`] : [],
+      lines: value ? [I18n.t("permission.field.path", { path: formatPath(value) })] : [],
     }
   }
 
   if (action === "glob" || action === "grep") {
     const pattern = text(input.pattern) || resources[0] || ""
-    const title = action === "glob" ? "Glob" : "Grep"
+    const title = I18n.t(action === "glob" ? "permission.action.glob" : "permission.action.grep")
     return {
       icon: "✱",
       title: `${title} "${pattern}"`,
-      lines: pattern ? [`Pattern: ${pattern}`] : [],
+      lines: pattern ? [I18n.t("permission.field.pattern", { pattern })] : [],
     }
   }
 
@@ -67,7 +68,7 @@ export function permissionPresentation(
     const command = text(input.command)
     return {
       icon: "#",
-      title: "Shell command",
+      title: I18n.t("permission.action.shell"),
       lines: command ? [`$ ${command}`] : resources.map((item) => `- ${item}`),
     }
   }
@@ -154,17 +155,17 @@ function wildcardDirectory(value: string) {
 export function permissionAlwaysLines(input: { action: string; save?: ReadonlyArray<string> }): string[] {
   const save = input.save ?? []
   if (save.length === 1 && save[0] === "*") {
-    return [`This will always allow ${input.action} for this project.`]
+    return [I18n.t("permission.always.wildcard", { action: input.action })]
   }
-  return ["This will always allow the following patterns for this project.", ...save.map((item) => `- ${item}`)]
+  return [I18n.t("permission.always.patterns"), ...save.map((item) => `- ${item}`)]
 }
 
 export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel") {
-  if (option === "once") return "Allow once"
-  if (option === "always") return "Always allow"
-  if (option === "reject") return "Reject"
-  if (option === "confirm") return "Confirm"
-  return "Cancel"
+  if (option === "once") return I18n.t("permission.option.once")
+  if (option === "always") return I18n.t("permission.option.always")
+  if (option === "reject") return I18n.t("permission.option.reject")
+  if (option === "confirm") return I18n.t("permission.option.confirm")
+  return I18n.t("permission.option.cancel")
 }
 
 function normalizeInput(action: string, value: unknown): Dict {
