@@ -276,8 +276,10 @@ pub(super) fn fade(color: Color, background: Color, index: usize, length: usize,
     let step = |position: f64| {
         if position <= 0.0 { 0.0 } else { 0.2 + 0.72 * ((position - 1.0) / (FADE_WIDTH as f64 - 1.0).max(1.0)) }
     };
-    let start = if index < FADE_WIDTH { (FADE_WIDTH - index) as f64 } else { 0.0 };
-    let end = index as f64 - (length as f64 - FADE_WIDTH as f64) + 1.0;
+    // Narrow titles shorten both fades so they never overlap and the middle cell stays fully opaque.
+    let width = FADE_WIDTH.min(length.saturating_sub(1) / 2);
+    let start = if index < width { (FADE_WIDTH - index) as f64 } else { 0.0 };
+    let end = if index >= length - width { index as f64 - (length as f64 - FADE_WIDTH as f64) + 1.0 } else { 0.0 };
     let opacity = (step(start) * leading).max(step(end));
     if opacity == 0.0 { color } else { tint(color, background, opacity) }
 }
@@ -726,11 +728,26 @@ mod tests {
 
     use opentui::prelude::Color;
 
-    use super::{MarkerFade, Status, Unread, indicator};
+    use super::{MarkerFade, Status, Unread, fade, indicator};
 
     const BG: Color = Color::rgb(30, 30, 30);
     const FLASH: Color = Color::rgb(238, 238, 238);
     const UNREAD: Color = Color::rgb(157, 124, 216);
+
+    #[test]
+    fn narrow_scrolling_titles_keep_the_middle_opaque() {
+        let opaque = |length: usize, leading: f64| -> Vec<bool> {
+            (0..length).map(|index| fade(FLASH, BG, index, length, leading) == FLASH).collect()
+        };
+        assert_eq!(opaque(5, 1.0), [false, false, true, false, false]);
+        assert_eq!(opaque(6, 1.0), [false, false, true, true, false, false]);
+        assert_eq!(opaque(7, 1.0), [false, false, false, true, false, false, false]);
+        assert_eq!(opaque(8, 1.0), [false, false, false, true, true, false, false, false]);
+        assert_eq!(fade(FLASH, BG, 0, 5, 1.0), fade(FLASH, BG, 0, 12, 1.0));
+        assert_eq!(fade(FLASH, BG, 4, 5, 1.0), fade(FLASH, BG, 11, 12, 1.0));
+        assert_eq!(opaque(12, 1.0), [false, false, false, false, true, true, true, true, false, false, false, false]);
+        assert_eq!(opaque(12, 0.0), [true, true, true, true, true, true, true, true, false, false, false, false]);
+    }
 
     fn unread() -> Status {
         Status { unread: Some(Unread::Activity), ..Status::default() }

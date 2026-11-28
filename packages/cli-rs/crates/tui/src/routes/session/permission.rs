@@ -176,8 +176,14 @@ impl Permission {
             inner.auto_approve(tui, &requests);
             return;
         }
-        let head = requests.into_iter().next();
+        // The shown request stays until it is answered, so a newer one can't take its place under the cursor.
         let current = inner.prompt.borrow().request().map(|request| request.id.clone());
+        let mut requests = requests;
+        let head = current
+            .as_ref()
+            .and_then(|id| requests.iter().position(|request| &request.id == id))
+            .map(|index| requests.remove(index))
+            .or_else(|| requests.into_iter().next());
         if head.as_ref().map(|request| &request.id) != current.as_ref() {
             inner.ask(tui, head);
             return;

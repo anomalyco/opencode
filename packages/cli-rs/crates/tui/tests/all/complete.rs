@@ -148,7 +148,8 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
 }
 
 /// Commands absent from this fixture's session route. `/speed` needs a model with other speeds
-/// (`models::a_speed_switches_the_model_and_shows_beside_its_name`). `/restart` and `/find` are not ported (K04).
+/// (`models::a_speed_switches_the_model_and_shows_beside_its_name`); `/find` needs the `session-find`
+/// experiment (`find::session_find_is_gated_by_experiment_and_opens_via_keybinds_and_slash`).
 const SLASH_ELSEWHERE: &[&str] = &["restart", "update", "highlights", "redo", "terminal", "speed", "find"];
 
 // Compare registered slash names and aliases with their declarations in the reference client.
@@ -499,6 +500,26 @@ fn an_open_cd_picker_shows_the_recents_a_write_merges_back() {
     recents.release().unwrap();
     setup.wait("the merged recents show", || setup.tui.prompt.complete.recents("project").len() == 2);
     setup.wait_for("/legacy-dir");
+}
+
+#[test]
+fn the_hidden_autocomplete_popup_mounts_no_option_rows() {
+    let setup = Setup::new();
+    setup.app.type_text("/theme");
+    setup.wait_for("Switch theme");
+    let marker = std::rc::Rc::new(());
+    support::mark_at(&setup.app, "Switch theme", 1, &marker);
+    assert!(std::rc::Rc::strong_count(&marker) > 1, "expected option rows to mount while visible");
+
+    setup.app.press("escape");
+    setup.wait_gone("Switch theme");
+    setup.app.render();
+    assert_eq!(std::rc::Rc::strong_count(&marker), 1, "hidden autocomplete popup still has mounted option rows");
+
+    setup.app.press("backspace");
+    setup.wait_for("Switch theme");
+    setup.app.press("return");
+    setup.wait_for("Search themes");
 }
 
 #[test]

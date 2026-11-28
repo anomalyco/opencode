@@ -790,7 +790,7 @@ impl Fences {
         };
         let widget = match render(fence) {
             Fenced::Code => None,
-            Fenced::Keep => block.previous.cloned(),
+            Fenced::Keep => shown.and_then(|_| block.previous.cloned()),
             Fenced::Lines { lines, fg, drag } => {
                 let scroll = if drag { Scroll::Drag } else { Scroll::Wheel };
                 let widget = lines_widget(block.app, theme, &lines, fg.as_ref(), scroll);
@@ -1158,6 +1158,11 @@ mod tests {
         for _ in 0..3 {
             assert!(fences.render(&block(&app, None), &theme, |_| Fenced::Code).is_none());
         }
+        assert_eq!(gone.borrow().len(), 2);
+        // Keep with no previous widget, or with a foreign widget this Fences instance never drew, falls back to code.
+        assert!(fences.render(&block(&app, None), &theme, |_| Fenced::Keep).is_none());
+        let foreign = opentui::widget::Text::new(&app, "foreign").as_any();
+        assert!(fences.render(&block(&app, Some(&foreign)), &theme, |_| Fenced::Keep).is_none());
         assert_eq!(gone.borrow().len(), 2);
     }
 }

@@ -3545,6 +3545,9 @@ pub type RouteMountFn = Rc<dyn Fn(&dyn Host, bool)>;
 pub type WakeFn = Rc<dyn Fn(&dyn Host)>;
 /// A handler of [`Setup::on_fence_gone`].
 pub type FenceGoneFn = Rc<dyn Fn(u64)>;
+/// Pure predicate of [`Setup::code_block_draws`]: returns `true` when a completed fence draws a
+/// custom view at terminal `width` and `false` when it falls back to the code view.
+pub type FenceDrawsFn = Rc<dyn Fn(&str, u16) -> bool>;
 /// A handler of [`Setup::on_cancelled`].
 pub type CancelledFn = Rc<dyn Fn(&dyn Host, RequestId)>;
 /// A handler of [`Setup::on_deltas`].
@@ -3664,6 +3667,14 @@ impl Setup<'_> {
     pub fn code_block(&mut self, language: &str, render: impl Fn(&dyn Read, &Fence) -> Fenced + 'static) {
         self.registered.manifest.fences.push(language.to_owned());
         self.registered.fences.push((language.to_owned(), Rc::new(render)));
+    }
+
+    /// Pure predicate telling whether a completed fence of `language` draws a custom view (`true`)
+    /// or falls back to the code view (`false`) at terminal `width`, without calling the renderer
+    /// or touching plugin state. In-process built-ins (Mermaid, LaTeX) use this so Find-in-session
+    /// counts unmounted blocks statically without mounting them; other loaders do not carry it.
+    pub fn code_block_draws(&mut self, language: &str, draws: impl Fn(&str, u16) -> bool + 'static) {
+        self.registered.fence_draws.push((language.to_owned(), Rc::new(draws)));
     }
 
     /// Renders inline Markdown math, `$…$` and `\(…\)`: `render` gets the TeX without its delimiters and returns
@@ -3882,6 +3893,7 @@ pub struct Registered {
     host: HostHandle,
     waker: Option<Waker>,
     fences: Vec<(String, FenceFn)>,
+    fence_draws: Vec<(String, FenceDrawsFn)>,
     inline_math: Vec<InlineMathFn>,
     slots: Vec<RenderFn>,
     views: Vec<(String, RouteFn)>,
@@ -3993,6 +4005,11 @@ impl Registered {
 
     pub fn fences(&self) -> &[(String, FenceFn)] {
         &self.fences
+    }
+
+    /// The static draw predicates of [`Setup::code_block_draws`].
+    pub fn fence_draws(&self) -> &[(String, FenceDrawsFn)] {
+        &self.fence_draws
     }
 
     /// The renders of [`Setup::inline_math`].

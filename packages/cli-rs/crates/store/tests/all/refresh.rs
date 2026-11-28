@@ -373,3 +373,55 @@ async fn delayed_metadata_and_family_reads_do_not_resurrect_sessions_deleted_whi
         tokio::time::timeout(Duration::from_secs(2), data.session_sync(&child, false)).await.unwrap().unwrap_err();
     assert_eq!(error.declared().unwrap().tag.as_deref(), Some("SessionNotFoundError"));
 }
+
+#[tokio::test(flavor = "local")]
+async fn an_agent_update_without_a_location_refreshes_the_agents_of_every_loaded_location() {
+    let requests = Log::<String>::default();
+    let current = Arc::new(Mutex::new("build".to_owned()));
+    let (log, name) = (requests.clone(), current.clone());
+    let data = data(
+        handler(move |req: Req| {
+            let directory = req.param("location[directory]").unwrap_or("/project").to_owned();
+            log.push(format!("{} {directory}", req.path));
+            let agent_name = name.lock().unwrap().clone();
+            async move {
+                assert_eq!(req.path, "/api/agent");
+                ok(json!({
+                    "location": {
+                        "directory": directory,
+                        "project": { "id": directory, "directory": directory, "canonical": directory },
+                    },
+                    "data": [agent(&agent_name)],
+                }))
+            }
+        }),
+        Options::default(),
+    );
+    let project = opencode_store::Location::new("/project");
+    let other = opencode_store::Location::new("/other");
+    futures_util::future::try_join(
+        data.catalog_sync(Catalog::Agent, Some(&project)),
+        data.catalog_sync(Catalog::Agent, Some(&other)),
+    )
+    .await
+    .unwrap();
+    requests.0.lock().unwrap().clear();
+    *current.lock().unwrap() = "orchestrator".into();
+    emit(&data, json!({ "id": "evt_agents_registered", "created": 1, "type": "agent.updated", "data": {} }));
+    wait(|| {
+        data.read(|state| {
+            let first = |loc: &opencode_store::Location| {
+                state
+                    .location(Some(loc))
+                    .and_then(|data| data.agent.as_deref())
+                    .and_then(|agents| agents.first())
+                    .map(|agent| agent.id.0.as_str())
+            };
+            first(&project) == Some("orchestrator") && first(&other) == Some("orchestrator")
+        })
+    })
+    .await;
+    let mut seen = requests.get();
+    seen.sort();
+    assert_eq!(seen, ["/api/agent /other", "/api/agent /project"]);
+}

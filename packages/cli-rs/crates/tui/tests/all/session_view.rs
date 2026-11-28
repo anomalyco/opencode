@@ -594,3 +594,66 @@ fn a_session_view_lets_go_of_its_settings_listeners() {
     }
     assert_eq!(h.tui.settings.listener_count(), mounted);
 }
+
+#[test]
+fn collapsing_details_that_no_longer_overflow_hides_jump_to_latest() {
+    let mut content: Vec<Value> = (0..24)
+        .map(|index| {
+            json!({
+                "type": "tool", "id": format!("shell-tall-{index}"), "name": "shell",
+                "time": { "created": 201, "completed": 202 },
+                "state": {
+                    "status": "completed",
+                    "input": { "command": format!("echo tall step {index}") },
+                    "content": [{ "type": "text", "text": format!("tall step {index} output") }],
+                    "metadata": {},
+                },
+            })
+        })
+        .collect();
+    content.push(json!({ "type": "text", "text": "Tall answer" }));
+    let tall = vec![
+        json!({
+            "type": "assistant", "id": "assistant-tall", "agent": "build",
+            "model": { "providerID": "opencode", "id": "big" }, "finish": "stop",
+            "time": { "created": 201, "completed": 203 }, "content": content,
+        }),
+        json!({ "type": "user", "id": "user-tall", "text": "Tall prompt", "time": { "created": 200 } }),
+    ];
+    let mut routes = location_routes("/a", None, 10.0);
+    routes.extend([
+        MemoryRoute::json(
+            "GET",
+            "/api/session",
+            200,
+            &json!({ "data": [session("ses_tall", "/a", "Tall")], "cursor": {} }),
+        ),
+        MemoryRoute::json("GET", "/api/session/ses_tall", 200, &json!({ "data": session("ses_tall", "/a", "Tall") })),
+        MemoryRoute::json("GET", "/api/session/ses_tall/message", 200, &json!({ "data": tall, "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/ses_tall/inbox", 200, &json!({ "data": [] })),
+        MemoryRoute::json("GET", "/api/session/ses_tall/permission", 200, &json!({ "data": [] })),
+    ]);
+    let h = mount_with(100, "ses_tall", json!({ "animations": false, "session": { "verbosity": "low" } }), routes);
+    h.wait_for("Tall answer");
+    h.wait_for("24 commands");
+    assert!(!h.app.text().contains("Jump to latest"), "{}", h.app.text());
+
+    let click_group = || {
+        h.app.advance(std::time::Duration::from_millis(600));
+        let (x, y) = support::at(&h.app.text(), "24 commands").unwrap();
+        h.app.click(x, y);
+    };
+    click_group();
+    h.wait_for("echo tall step 23");
+    h.wait("scrolled to top with Jump to latest", || {
+        h.app.scroll(30, 10, false);
+        let text = h.app.text();
+        text.contains("Tall prompt") && text.contains("Jump to latest")
+    });
+
+    click_group();
+    h.wait("Jump to latest clears after collapse", || {
+        let text = h.app.text();
+        text.contains("Tall answer") && !text.contains("Jump to latest")
+    });
+}

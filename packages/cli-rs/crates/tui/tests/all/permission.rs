@@ -123,6 +123,56 @@ fn always_shows_the_saved_patterns_and_replies_always() {
 }
 
 #[test]
+fn a_newer_root_permission_does_not_replace_the_shown_subagent_permission() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let root = session("ses_permission_root", None);
+    let child = session("ses_permission_child", Some("ses_permission_root"));
+    let child_req = request("per_child", "ses_permission_child", "shell", &["echo CHILD_FIRST"], &[]);
+    let root_req = request("per_root", "ses_permission_root", "shell", &["echo ROOT_SECOND"], &[]);
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [&root, &child], "cursor": {} })),
+        MemoryRoute::body("POST", "/api/session/ses_permission_child/permission/per_child/reply", 204, None, ""),
+        MemoryRoute::body("POST", "/api/session/ses_permission_root/permission/per_root/reply", 204, None, ""),
+    ];
+    routes.extend(support::session_routes(&root));
+    routes.extend(support::session_routes(&child));
+    let memory = Memory::new(routes);
+    let deps = Deps {
+        directory: "/project".into(),
+        route: support::session_route("ses_permission_root"),
+        events: true,
+        config: support::config(support::decode(r#"{ "animations": false, "tabs": { "mode": "off" } }"#)),
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let h = support::mount(100, 30, deps);
+    h.wait("child permission synced", || {
+        memory.requests().iter().any(|seen| seen.path == "/api/session/ses_permission_child/permission")
+    });
+
+    memory.emit(&json!({ "id": "evt_child", "created": 1, "type": "permission.asked", "data": child_req }));
+    h.wait_for("echo CHILD_FIRST");
+
+    memory.emit(&json!({ "id": "evt_root", "created": 2, "type": "permission.asked", "data": root_req }));
+    h.app.advance(std::time::Duration::from_millis(50));
+    let screen = h.app.text();
+    assert!(screen.contains("echo CHILD_FIRST"), "{screen}");
+    assert!(!screen.contains("echo ROOT_SECOND"), "{screen}");
+
+    h.app.press("return");
+    h.wait("child replied", || {
+        memory.requests().iter().any(|seen| seen.path == "/api/session/ses_permission_child/permission/per_child/reply")
+    });
+    assert!(
+        !memory.requests().iter().any(|seen| seen.path == "/api/session/ses_permission_root/permission/per_root/reply")
+    );
+    memory.emit(&json!({
+        "id": "evt_child_replied", "created": 3, "type": "permission.replied",
+        "data": { "sessionID": "ses_permission_child", "requestID": "per_child", "reply": "once" },
+    }));
+    h.wait_for("echo ROOT_SECOND");
+}
+
+#[test]
 fn escape_rejects_a_root_request() {
     let harness = mount(
         Fixture { root: vec![request("per_1", "ses_root", "read", &["/etc/hosts"], &[])], ..Fixture::default() },
@@ -508,7 +558,7 @@ mod model {
         }
 
         /// Settles after a change. In `autoaccept` the prompt is empty and every request is answered once;
-        /// otherwise the first request shows, from the start when it is a different one.
+        /// otherwise the shown request stays until answered, falling back to the first request in the queue.
         fn settle(&mut self) -> Vec<Replied> {
             if self.auto {
                 self.shown = Shown::Hidden;
@@ -516,11 +566,16 @@ mod model {
                 self.pending.retain(|ask| !sent.iter().any(|sent| sent.id == ask.id));
                 return sent;
             }
-            let head = self.queue().first().map(|ask| ask.id.clone());
+            let queue = self.queue();
             let current = match &self.shown {
                 Shown::Hidden => None,
                 Shown::Asking { id, .. } | Shown::Rejecting { id, .. } => Some(id.clone()),
             };
+            let head = current
+                .as_ref()
+                .and_then(|id| queue.iter().find(|ask| ask.id == *id))
+                .or_else(|| queue.first())
+                .map(|ask| ask.id.clone());
             if head != current {
                 self.shown = head.map_or(Shown::Hidden, |id| Shown::Asking { id, selected: 0, expanded: false });
             }

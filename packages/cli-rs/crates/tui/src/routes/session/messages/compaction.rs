@@ -4,6 +4,8 @@ use opencode_api::generated::{SessionMessageCompaction, TokenUsageInfo};
 use opencode_ui::motion::Spinner;
 use opentui::widget::Markdown;
 
+use super::super::find::FindPartId;
+use super::super::find_view::FindMarkdown;
 use super::list::Context;
 use crate::features::session_links::{self, Links};
 use crate::prelude::*;
@@ -16,6 +18,7 @@ pub struct Compaction {
     body: View,
     markdown: Markdown,
     _links: Rc<Links>,
+    find: FindMarkdown,
     rendered: RefCell<Option<Rendered>>,
     stale: Cell<bool>,
 }
@@ -53,6 +56,7 @@ impl Compaction {
             body,
             markdown,
             _links: links,
+            find: FindMarkdown::default(),
             rendered: RefCell::default(),
             stale: Cell::new(false),
         }
@@ -64,11 +68,11 @@ impl Compaction {
 
     pub fn restyle(&self, cx: &Context<'_>) {
         let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
-        opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
+        opencode_ui::markdown::restyle(&self.markdown, cx.theme, colors, cx.syntax);
         self.stale.set(true);
     }
 
-    pub fn update(&self, cx: &Context<'_>, message: &SessionMessageCompaction) {
+    pub fn update(&self, cx: &Context<'_>, message_id: &str, message: &SessionMessageCompaction) {
         let (status, text, tokens, native) = match message {
             SessionMessageCompaction::Running(_) => (Status::Running, "", None, false),
             SessionMessageCompaction::Completed(done) => (
@@ -93,6 +97,9 @@ impl Compaction {
         };
         self.markdown.conceal(cx.conceal);
         if !self.stale.replace(false) && self.rendered.borrow().as_ref() == Some(&rendered) {
+            if !rendered.content.is_empty() {
+                self.find.sync(cx, &self.markdown, &self._links, message_id, FindPartId::Message, &rendered.content);
+            }
             return;
         }
         let theme = cx.theme;
@@ -119,11 +126,23 @@ impl Compaction {
         // Streams only while it runs, so a finished summary's last line is final (#63989).
         self.markdown.streaming(status == Status::Running);
         let previous = self.rendered.borrow().as_ref().map(|r| r.content.clone());
-        if previous.as_deref() != Some(rendered.content.as_str()) {
-            self.markdown.set_markdown(rendered.content.as_str());
+        let defer_feed =
+            cx.find.is_some() && !rendered.content.is_empty() && self.markdown.with_markdown(str::is_empty);
+        if !defer_feed && previous.as_deref() != Some(rendered.content.as_str()) {
+            self.find.feed(&self.markdown, rendered.content.as_str(), cx.find.is_some());
         }
         self.body.visible(!rendered.content.is_empty());
+        if !rendered.content.is_empty() {
+            self.find.sync(cx, &self.markdown, &self._links, message_id, FindPartId::Message, &rendered.content);
+        }
         *self.rendered.borrow_mut() = Some(rendered);
+    }
+
+    pub fn update_find(&self, cx: &Context<'_>, message_id: &str) {
+        let content = self.rendered.borrow().as_ref().map(|r| r.content.clone()).unwrap_or_default();
+        if !content.is_empty() {
+            self.find.sync(cx, &self.markdown, &self._links, message_id, FindPartId::Message, &content);
+        }
     }
 }
 

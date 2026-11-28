@@ -153,6 +153,82 @@ fn picking_a_worktree_goes_home_there() {
 }
 
 #[test]
+fn switching_home_between_worktrees_loads_the_branch_of_each() {
+    let alpha = "/tmp/wt-alpha";
+    let beta = "/tmp/wt-beta";
+    let fake = Fake::new(move |seen| {
+        let dir = {
+            let value = seen.param("location[directory]");
+            if value.is_empty() { DIRECTORY.to_owned() } else { value }
+        };
+        let project = json!({ "id": "project", "directory": DIRECTORY, "canonical": DIRECTORY });
+        match (seen.method.as_str(), seen.path.as_str()) {
+            ("GET", "/api/location") => (200, json!({ "directory": dir, "project": project })),
+            ("GET", "/api/vcs") => {
+                let branch = dir.rsplit('/').next().unwrap_or("main").trim_start_matches("wt-");
+                (
+                    200,
+                    json!({
+                        "location": { "directory": dir, "project": project },
+                        "data": { "branch": { "current": branch, "default": "main" } },
+                    }),
+                )
+            }
+            ("GET", "/api/worktree") => (
+                200,
+                json!([
+                    { "directory": DIRECTORY },
+                    { "directory": alpha, "strategy": "git" },
+                    { "directory": beta, "strategy": "git" },
+                ]),
+            ),
+            ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+            ("POST", "/api/worktree/refresh") => (204, Value::Null),
+            _ => support::base(seen, &dir),
+        }
+    });
+    let seen = fake.log();
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        route: Route::Home,
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(120, 30, deps);
+    opencode_tui::features::overlays::connection_changed(
+        &h.tui,
+        &opencode_api::events::State { status: opencode_api::events::Status::Connected, attempt: 0, error: None },
+    );
+    h.wait_for("/project");
+
+    let select = |filter: &str, other: &str| {
+        h.app.type_text("/worktrees");
+        h.app.press("return");
+        h.wait("worktrees listed", || {
+            let text = h.app.text();
+            text.contains(alpha) && text.contains(beta)
+        });
+        h.app.type_text(filter);
+        h.wait("filtered worktrees", || !h.app.text().contains(other));
+        h.app.press("return");
+    };
+
+    select("alpha", beta);
+    h.wait_for(&format!("{alpha}:alpha"));
+    select("beta", alpha);
+    let screen = h.wait_for(&format!("{beta}:beta"));
+    assert!(screen.contains(&format!("{beta}:beta")), "{screen}");
+    let vcs_dirs: Vec<String> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|req| req.path == "/api/vcs")
+        .map(|req| req.param("location[directory]"))
+        .collect();
+    assert!(vcs_dirs.iter().any(|dir| dir == beta), "{vcs_dirs:?}");
+}
+
+#[test]
 fn going_home_from_home_works_in_the_new_location() {
     let setup = Setup::new(Route::Home, &[]);
     let location = || opencode_tui::features::location::current(&setup.tui).map(|location| location.directory);

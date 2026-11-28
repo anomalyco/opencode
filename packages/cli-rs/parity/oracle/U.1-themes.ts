@@ -11,7 +11,7 @@ import { generateSystem, terminalMode } from "../../../tui/src/theme/system.ts"
 import { records } from "../lib/records"
 
 const output = new URL("../fixtures/U.1/tokens.json", import.meta.url).pathname
-const sections = ["text", "background", "border", "scrollbar", "diff", "syntax", "markdown"] as const
+const sections = ["text", "background", "border", "scrollbar", "diff", "find", "syntax", "markdown"] as const
 
 type Color = { toInts(): [number, number, number, number] }
 type TerminalColors = Parameters<typeof generateSystem>[0]
