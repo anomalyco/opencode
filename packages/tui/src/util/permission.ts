@@ -78,7 +78,10 @@ export function permissionPresentation(
     return {
       icon: "#",
       title: `${Locale.titlecase(agent)} Subagent`,
-      lines: description ? [`◉ ${description}`] : [],
+      lines: [
+        ...(description ? [`◉ ${description}`] : []),
+        `Will launch ${Locale.titlecase(agent)} subagent`,
+      ],
     }
   }
 
