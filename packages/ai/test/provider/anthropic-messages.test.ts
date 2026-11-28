@@ -1418,6 +1418,30 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("finishes the step with the service tier Anthropic served it on", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5, service_tier: "priority" } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: "X" },
+                usage: { output_tokens: 2 },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "step-finish")).toMatchObject({
+        providerMetadata: { anthropic: { stopSequence: "X", serviceTier: "priority" } },
+      })
+    }),
+  )
+
   it.effect("requires message_stop before completing a streamed message", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
