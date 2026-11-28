@@ -18,9 +18,12 @@ export function LocationProvider(props: ParentProps) {
   const [ref, setRef] = createSignal<LocationRef>()
   const [error, setError] = createSignal<{ readonly location: LocationRef; readonly cause: unknown }>()
   let generation = 0
+  let recheck: ReturnType<typeof setTimeout> | undefined
   const current = createMemo(() => data.location.info(ref()))
 
-  function sync(location?: LocationRef) {
+  // `missing` re-checks a location already reported missing, keeping its error until the folder is back.
+  function sync(location?: LocationRef, missing = false) {
+    clearTimeout(recheck)
     if (!location) return
     const attempt = ++generation
     const defaultLocation = data.location.default()
@@ -28,22 +31,29 @@ export function LocationProvider(props: ParentProps) {
       location.directory === defaultLocation.directory && location.workspaceID === defaultLocation.workspaceID
         ? undefined
         : location
-    setError(undefined)
+    if (!missing) setError(undefined)
     // Only the server's typed LocationNotFoundError proves the folder is gone. Other failures, such as
     // plugins still activating after a restart, are retried and never block the composer.
     void retry(() => (generation === attempt ? data.location.sync(target) : Promise.resolve()), {
       retryIf: (cause) => generation === attempt && !isLocationNotFoundError(cause),
-    }).catch((cause) => {
-      const current = ref()
-      if (
-        !isLocationNotFoundError(cause) ||
-        generation !== attempt ||
-        current?.directory !== location.directory ||
-        current.workspaceID !== location.workspaceID
-      )
-        return
-      setError({ location, cause })
-    })
+    }).then(
+      () => {
+        if (generation === attempt) setError(undefined)
+      },
+      (cause) => {
+        const current = ref()
+        if (
+          (!missing && !isLocationNotFoundError(cause)) ||
+          generation !== attempt ||
+          current?.directory !== location.directory ||
+          current.workspaceID !== location.workspaceID
+        )
+          return
+        if (!missing) setError({ location, cause })
+        // A folder on a drive mounted late or a network share comes back, so keep checking while it is missing.
+        recheck = setTimeout(() => sync(location, true), 15_000)
+      },
+    )
   }
 
   function set(location?: LocationRef) {
@@ -52,6 +62,7 @@ export function LocationProvider(props: ParentProps) {
   }
 
   onCleanup(client.event.on("server.connected", () => sync(ref())))
+  onCleanup(() => clearTimeout(recheck))
 
   return (
     <context.Provider
