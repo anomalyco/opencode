@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Formatter, Logger, Option, Schedule, Stream, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global.js"
+import { isRedacted, redactSecrets } from "../redact.js"
 import { runID } from "./shared.js"
 
 // One log file is shared by every opencode process on the machine and only ever appended to, so it
@@ -17,16 +18,16 @@ function formatter(id: string = runID()) {
   return Logger.map(Logger.formatStructured, (output) => {
     const messages = Array.isArray(output.message) ? output.message : [output.message]
     return [
-      ["timestamp", output.timestamp],
-      ["level", output.level],
-      ["run", id],
-      ...messages.flatMap((value) => (plain(value) ? flatten(value) : [["message", value] as const])),
-      ...(output.cause === undefined ? [] : [["cause", output.cause] as const]),
-      ...flatten(output.spans),
-      ...flatten(output.annotations),
-    ]
-      .map(([key, value]) => `${key}=${format(value)}`)
-      .join(" ")
+      `timestamp=${formatRaw(output.timestamp)}`,
+      `level=${formatRaw(output.level)}`,
+      `run=${formatRaw(id)}`,
+      ...[
+        ...messages.flatMap((value) => (plain(value) ? flatten(value) : [["message", value] as const])),
+        ...(output.cause === undefined ? [] : [["cause", output.cause] as const]),
+        ...flatten(output.spans),
+        ...flatten(output.annotations),
+      ].map(([key, value]) => `${key}=${format(value)}`),
+    ].join(" ")
   })
 }
 
@@ -51,9 +52,15 @@ function plain(input: unknown): input is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-function format(input: unknown) {
-  const value = typeof input === "string" ? input : Formatter.format(input)
+function formatRaw(value: string) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
+}
+
+function format(input: unknown) {
+  if (typeof input === "string") return formatRaw(redactSecrets(input))
+  const value = Formatter.format(input)
+  if (typeof input !== "object" || input === null || isRedacted(input)) return formatRaw(value)
+  return formatRaw(redactSecrets(value))
 }
 
 export function file(local = true, channel = "local") {
