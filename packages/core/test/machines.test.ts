@@ -92,8 +92,12 @@ const holdWrites = (db: Database.Interface["db"], gate: Deferred.Deferred<void>,
       const value = (target as unknown as Record<PropertyKey, unknown>)[property]
       if (typeof value !== "function") return value
       const call = value as (...args: unknown[]) => unknown
+      // KV writes pass through: a join spends its join string before it reaches the machine table.
       if (property === "update" || property === "delete")
-        return (...args: unknown[]) => holdBuilder(call.apply(target, args) as object, gate, entered)
+        return (...args: unknown[]) =>
+          args[0] === MachineTable
+            ? holdBuilder(call.apply(target, args) as object, gate, entered)
+            : call.apply(target, args)
       return call.bind(target)
     },
   })
@@ -390,6 +394,90 @@ it.effect("pairs a machine from a printed join string and identifies it after a 
       expect(yield* machines.identify(key)).toBe(machineID("gpu"))
       expect((yield* machines.list())[0]?.paired).toBe(true)
     }).pipe(Effect.provide(layers, { local: true }))
+  }),
+)
+
+it.effect("honours a join string printed before the service was rebuilt and spends it once", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const layers = tempLayers(tmp.path)
+    const key = new Uint8Array(32).fill(9)
+    const printed = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        const id = yield* machines.add("gpu")
+        return yield* invite(machines, id)
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
+    // A cold service, as after a Durable Object eviction, still honours the string the old one printed.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        expect(yield* machines.join({ secret: printed.secret, key })).toBe(machineID("gpu"))
+        expect(
+          yield* machines.join({ secret: printed.secret, key: new Uint8Array(32).fill(7) }).pipe(Effect.flip),
+        ).toBeInstanceOf(Machines.InvalidJoin)
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
+    // Spent on the KV side too: a third service cannot redeem it again.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        expect(yield* machines.identify(key)).toBe(machineID("gpu"))
+        expect(
+          yield* machines.join({ secret: printed.secret, key: new Uint8Array(32).fill(7) }).pipe(Effect.flip),
+        ).toBeInstanceOf(Machines.InvalidJoin)
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
+  }),
+)
+
+it.effect("clears a stored join string when its machine is removed", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const layers = tempLayers(tmp.path)
+    const printed = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        const id = yield* machines.add("gpu")
+        const printed = yield* invite(machines, id)
+        yield* machines.remove(id)
+        return printed
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        yield* machines.add("gpu")
+        expect(
+          yield* machines.join({ secret: printed.secret, key: new Uint8Array(32).fill(9) }).pipe(Effect.flip),
+        ).toBeInstanceOf(Machines.InvalidJoin)
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
+  }),
+)
+
+it.effect("refuses a stored join string that expired while the service was away", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const layers = tempLayers(tmp.path)
+    const printed = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        const id = yield* machines.add("gpu")
+        const printed = yield* invite(machines, id)
+        yield* TestClock.adjust("6 minutes")
+        return printed
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        expect(
+          yield* machines.join({ secret: printed.secret, key: new Uint8Array(32).fill(9) }).pipe(Effect.flip),
+        ).toBeInstanceOf(Machines.InvalidJoin)
+      }),
+    ).pipe(Effect.provide(layers, { local: true }))
   }),
 )
 
