@@ -1,5 +1,12 @@
 import { APICallError } from "@ai-sdk/provider"
-import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import type {
+  LanguageModelV2,
+  LanguageModelV2FinishReason,
+  LanguageModelV2StreamPart,
+  LanguageModelV2Usage,
+  LanguageModelV3,
+  LanguageModelV3StreamPart,
+} from "@ai-sdk/provider"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { AISDK } from "@opencode/core/aisdk"
 import { ModelRetry } from "@opencode/core/model-retry"
@@ -11,6 +18,7 @@ import {
   ai,
   AIError,
   CompactionPart,
+  type FinishReason,
   HttpContext,
   InvalidRequestError,
   isContextOverflowFailure,
@@ -857,6 +865,101 @@ it.effect("fails with a retryable transport error when response headers time out
       message: "Response headers timed out",
     })
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+const streamModelV2 = (finishReason: LanguageModelV2FinishReason, usage: LanguageModelV2Usage): LanguageModelV2 => ({
+  specificationVersion: "v2",
+  provider: "test",
+  modelId: "test",
+  supportedUrls: {},
+  doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
+  doStream: () =>
+    Promise.resolve({
+      stream: new ReadableStream<LanguageModelV2StreamPart>({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "t1" })
+          controller.enqueue({ type: "text-delta", id: "t1", delta: "PONG" })
+          controller.enqueue({ type: "text-end", id: "t1" })
+          controller.enqueue({ type: "finish", finishReason, usage })
+          controller.close()
+        },
+      }),
+    }),
+})
+
+const generateV2 = (finishReason: LanguageModelV2FinishReason, usage: LanguageModelV2Usage) =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => streamModelV2(finishReason, usage) }
+    })
+    const resolved = yield* aisdk.model(model("@jerome-benoit/sap-ai-provider-v2"))
+    return yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Ping" })).pipe(Effect.provide(client))
+  })
+
+Object.entries({
+  stop: "stop",
+  length: "length",
+  "content-filter": "content-filter",
+  "tool-calls": "tool-calls",
+  error: "error",
+  other: "unknown",
+  unknown: "unknown",
+} satisfies Record<LanguageModelV2FinishReason, FinishReason>).forEach(([reason, normalized]) =>
+  it.effect(`normalizes the AI SDK V2 "${reason}" finish reason`, () =>
+    Effect.gen(function* () {
+      const response = yield* generateV2(reason as LanguageModelV2FinishReason, {
+        inputTokens: 3,
+        outputTokens: 1,
+        totalTokens: 4,
+      })
+      expect(response.events.find(LLMEvent.is.textDelta)).toMatchObject({ text: "PONG" })
+      expect(response.finishReason).toEqual({ normalized, raw: undefined })
+    }),
+  ),
+)
+
+;["model_length", undefined, null].forEach((reason) =>
+  it.effect(`normalizes the AI SDK V2 finish reason ${JSON.stringify(reason)} outside the enum to unknown`, () =>
+    Effect.gen(function* () {
+      const response = yield* generateV2(reason as unknown as LanguageModelV2FinishReason, {
+        inputTokens: 3,
+        outputTokens: 1,
+        totalTokens: 4,
+      })
+      expect(response.finishReason).toEqual({ normalized: "unknown", raw: undefined })
+    }),
+  ),
+)
+
+it.effect("reads AI SDK V2 flat usage", () =>
+  Effect.gen(function* () {
+    const response = yield* generateV2("stop", {
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      reasoningTokens: 2,
+      cachedInputTokens: 4,
+    })
+    expect(response.usage).toMatchObject({
+      inputTokens: 10,
+      cacheReadInputTokens: 4,
+      outputTokens: 5,
+      reasoningTokens: 2,
+      totalTokens: 15,
+    })
+  }),
+)
+
+it.effect("drops AI SDK V2 usage without counts", () =>
+  Effect.gen(function* () {
+    const response = yield* generateV2("stop", {
+      inputTokens: undefined,
+      outputTokens: undefined,
+      totalTokens: undefined,
+    })
+    expect(response.usage).toBeUndefined()
   }),
 )
 
