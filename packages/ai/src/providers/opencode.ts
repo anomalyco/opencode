@@ -37,7 +37,8 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 
-export const decisionModel = (modelID: string, settings?: Settings) => {
+// `provider` is the identity core gives the Console's compatible provider; Zen rejects it as a body field.
+export const decisionModel = (modelID: string, { provider: _, ...settings }: Settings = {}) => {
   const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }

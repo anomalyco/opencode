@@ -605,6 +605,24 @@ describe("decision entrypoints", () => {
         expectRequest(yield* sentDecision(model), model, entry)
       }),
     )
+
+  // Core gives a signed-in Console's decision models the provider's `provider: "opencode"` identity setting.
+  it.effect("providers/opencode/decisions keeps the provider identity out of the request body", () =>
+    Effect.gen(function* () {
+      const { model } = yield* Effect.promise(() => import("@opencode/ai/providers/opencode/decisions"))
+      const calls = yield* sentDecision(
+        model("jev", {
+          ...shared,
+          apiKey: "zen-key",
+          baseURL: "https://opencode.ai/inference/systemone/v1",
+          provider: "opencode",
+        }),
+      )
+      const body = JSON.parse(calls[0].body)
+      expect(body.extra).toBe(true)
+      expect(body).not.toHaveProperty("provider")
+    }),
+  )
 })
 
 describe("embedding entrypoints", () => {
