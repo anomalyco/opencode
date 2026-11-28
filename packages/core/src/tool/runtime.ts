@@ -4,6 +4,7 @@ import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Effect, JsonPointer, JsonSchema, Result, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
+import { canonicalize } from "../util/canonical-json.js"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -181,13 +182,15 @@ const cached = (cache: WeakMap<object, JsonSchema.JsonSchema>, schema: object, m
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (schema === undefined || schema === null) return {}
   if (isStandardSchema(schema)) return cached(inputJsonSchemas, schema, () => standardJsonSchema(schema, "input"))
-  if (!Schema.isSchema(schema)) return schema
+  if (!Schema.isSchema(schema)) return cached(inputJsonSchemas, schema, () => canonicalize(schema))
   return cached(inputJsonSchemas, schema, () => emptyInputJsonSchema(schema) ?? toJsonSchema(schema))
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
   if (isStandardSchema(schema)) return cached(outputJsonSchemas, schema, () => standardJsonSchema(schema, "output"))
-  return Schema.isSchema(schema) ? cached(outputJsonSchemas, schema, () => toJsonSchema(schema)) : schema
+  return Schema.isSchema(schema)
+    ? cached(outputJsonSchemas, schema, () => toJsonSchema(schema))
+    : cached(outputJsonSchemas, schema, () => canonicalize(schema))
 }
 
 const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {

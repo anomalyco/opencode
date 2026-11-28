@@ -48,6 +48,7 @@ import {
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
+import { canonicalize } from "../util/canonical-json.js"
 import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
 import { McpTarget } from "./target.js"
@@ -879,16 +880,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                       title: typeof tool.title === "string" ? tool.title : undefined,
                       description: typeof tool.description === "string" ? tool.description : undefined,
                       // Providers that check tool parameters against the JSON Schema metaschema reject the
-                      // whole request over a malformed top level. Nested property schemas are left as sent.
-                      inputSchema: {
+                      // whole request over a malformed top level, and non-deterministic member order across
+                      // list calls would churn Code Mode signatures and prompt caches.
+                      inputSchema: canonicalize({
                         ...inputSchema,
                         type: "object",
                         ...(isRecord(properties) ? { properties } : {}),
                         ...(Array.isArray(required) && required.every((key): key is string => typeof key === "string")
                           ? { required }
                           : {}),
-                      },
-                      outputSchema: isRecord(tool.outputSchema) ? tool.outputSchema : undefined,
+                      }),
+                      outputSchema: isRecord(tool.outputSchema) ? canonicalize(tool.outputSchema) : undefined,
                       annotations: isRecord(tool.annotations) ? tool.annotations : undefined,
                       execution: isRecord(tool.execution) ? tool.execution : undefined,
                       _meta: isRecord(tool._meta) ? tool._meta : undefined,

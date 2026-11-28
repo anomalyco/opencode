@@ -1482,6 +1482,69 @@ describe.each([
   })
 })
 
+test("canonicalizes MCP tool inputSchema and outputSchema object key order across list calls", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ modern: true, resources: false })
+        server.state.extraTools = [
+          {
+            name: "info",
+            inputSchema: {
+              type: "object",
+              properties: {
+                includeEngines: { type: "boolean" },
+                category: { type: "string", enum: ["a", "b"], default: { z: 1, a: 2 } },
+                refresh: { type: "boolean" },
+              },
+              required: ["category"],
+            },
+            outputSchema: {
+              type: "object",
+              properties: { status: { type: "string" }, ok: { type: "boolean" } },
+            },
+          },
+        ]
+        const connection = yield* connect(
+          "reordered",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+          import.meta.dir,
+        )
+        const first = yield* connection.tools()
+
+        server.state.extraTools = [
+          {
+            name: "info",
+            inputSchema: {
+              required: ["category"],
+              properties: {
+                refresh: { type: "boolean" },
+                category: { default: { a: 2, z: 1 }, enum: ["a", "b"], type: "string" },
+                includeEngines: { type: "boolean" },
+              },
+              type: "object",
+            } as unknown as ListToolsResult["tools"][number]["inputSchema"],
+            outputSchema: {
+              properties: { ok: { type: "boolean" }, status: { type: "string" } },
+              type: "object",
+            },
+          },
+        ]
+        const second = yield* connection.tools()
+
+        expect(server.state.toolLists).toBe(2)
+        expect(JSON.stringify(first)).toBe(JSON.stringify(second))
+        const firstInfo = first.find((tool) => tool.name === "info")
+        expect(Object.keys(firstInfo?.inputSchema.properties ?? {})).toEqual(["category", "includeEngines", "refresh"])
+        expect(Object.keys((firstInfo?.outputSchema?.properties as Record<string, unknown>) ?? {})).toEqual([
+          "ok",
+          "status",
+        ])
+      }),
+    ),
+  )
+})
+
 test("retries a modern MCP tool call whose listed header declaration went stale", async () => {
   await Effect.runPromise(
     Effect.scoped(

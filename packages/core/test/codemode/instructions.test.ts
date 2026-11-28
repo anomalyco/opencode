@@ -120,4 +120,123 @@ describe("CodeModeInstructions", () => {
       expect(reordered.text).toBe("")
     }).pipe(Effect.provide(layer))
   })
+
+  it.effect("ignores JSON object member order in raw JSON schemas while detecting semantic changes", () => {
+    const layer = AppNodeBuilder.build(Tool.node, [
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    ])
+    const makeInfoTool = (
+      input: Record<string, unknown>,
+      output: Record<string, unknown> = {
+        type: "object",
+        properties: { ok: { type: "boolean" }, items: { type: "array", items: { type: "string" } } },
+      },
+    ) => ({
+      name: "info",
+      description: "Inspect tools",
+      input,
+      output,
+      execute: () => Effect.succeed({ output: { ok: true, items: [] } }),
+    })
+
+    return Effect.gen(function* () {
+      const tools = yield* Tool.Service
+      const initial = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "example", description: "Example tools" })
+            editor.add({
+              ...makeInfoTool({
+                type: "object",
+                $defs: {
+                  Filter: {
+                    type: "object",
+                    properties: { tag: { type: "string" }, active: { type: "boolean" } },
+                  },
+                },
+                properties: {
+                  includeEngines: { type: "boolean" },
+                  includeDisabled: { type: "boolean" },
+                  category: { type: "string", enum: ["a", "b"], default: { z: 1, a: 2 } },
+                  filter: { $ref: "#/$defs/Filter" },
+                },
+                required: ["category"],
+              }),
+              options: { namespace: "example" },
+            })
+          })
+          return yield* readInitial(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog))
+        }),
+      )
+
+      const reordered = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "example", description: "Example tools" })
+            editor.add({
+              ...makeInfoTool(
+                {
+                  required: ["category"],
+                  properties: {
+                    filter: { $ref: "#/$defs/Filter" },
+                    category: { default: { a: 2, z: 1 }, enum: ["a", "b"], type: "string" },
+                    includeDisabled: { type: "boolean" },
+                    includeEngines: { type: "boolean" },
+                  },
+                  $defs: {
+                    Filter: {
+                      properties: { active: { type: "boolean" }, tag: { type: "string" } },
+                      type: "object",
+                    },
+                  },
+                  type: "object",
+                },
+                {
+                  properties: { items: { items: { type: "string" }, type: "array" }, ok: { type: "boolean" } },
+                  type: "object",
+                },
+              ),
+              options: { namespace: "example" },
+            })
+          })
+          return yield* readUpdate(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog), initial)
+        }),
+      )
+
+      expect(reordered.changed).toBe(false)
+      expect(reordered.text).toBe("")
+
+      const semanticChange = yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* tools.transform((editor) => {
+            editor.namespace({ name: "example", description: "Example tools" })
+            editor.add({
+              ...makeInfoTool({
+                type: "object",
+                $defs: {
+                  Filter: {
+                    type: "object",
+                    properties: { tag: { type: "string" }, active: { type: "boolean" } },
+                  },
+                },
+                properties: {
+                  includeEngines: { type: "boolean" },
+                  includeDisabled: { type: "boolean" },
+                  category: { type: "string", enum: ["b", "a"], default: { a: 2, z: 1 } },
+                  filter: { $ref: "#/$defs/Filter" },
+                },
+                required: ["category"],
+              }),
+              options: { namespace: "example" },
+            })
+          })
+          return yield* readUpdate(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog), initial)
+        }),
+      )
+
+      expect(semanticChange.changed).toBe(true)
+      expect(semanticChange.text).toContain("Changed tool listings supersede the previously listed ones:")
+      expect(semanticChange.text).toContain('"b" | "a"')
+    }).pipe(Effect.provide(layer))
+  })
 })
