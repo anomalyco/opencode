@@ -1,5 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import { HttpClient } from "effect/http"
+import { NpmConfig } from "@opencode/util/npm-config"
+import { homedir } from "node:os"
 import { parseTarget, quote, runSsh, sshArgs, SshFailure } from "./command"
 import { RemoteCli } from "./remote-cli"
 
@@ -115,11 +117,12 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
       .findLast((line) => line.startsWith("OPENCODE_REMOTE_TARGET="))
       ?.split("=")[1]
 
-    const url = yield* Effect.try({ try: () => RemoteCli.archiveUrl(target ?? "", version), catch: SshFailure.from })
-    yield* run(RemoteCli.installScript({ ...setup, source: { type: "download", url } })).pipe(
+    const path = yield* Effect.try({ try: () => RemoteCli.archivePath(target ?? "", version), catch: SshFailure.from })
+    yield* run(RemoteCli.installScript({ ...setup, source: { type: "download", path } })).pipe(
       Effect.catch(
         Effect.fnUntraced(function* (error) {
           const http = yield* HttpClient.HttpClient
+          const url = `${yield* NpmConfig.registry(homedir())}${path}`
           const response = yield* http.get(url).pipe(Effect.mapError(SshFailure.from))
 
           if (response.status < 200 || response.status >= 300)

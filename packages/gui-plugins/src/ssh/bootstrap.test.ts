@@ -16,9 +16,9 @@ test("ignores stopped services and registrations that do not match the healthy e
 
 test("rejects unsafe versions and platforms in remote installation paths", () => {
   expect(() => binaryPath('2.0.0"; whoami')).toThrow()
-  expect(RemoteCli.archiveUrl("linux-x64-baseline-musl", "2.0.0-beta.1")).toBe(
-    "https://registry.npmjs.org/@opencode/cli-linux-x64-baseline-musl/-/cli-linux-x64-baseline-musl-2.0.0-beta.1.tgz",
+  expect(RemoteCli.archivePath("linux-x64-baseline-musl", "2.0.0-beta.1")).toBe(
+    "/@opencode/cli-linux-x64-baseline-musl/-/cli-linux-x64-baseline-musl-2.0.0-beta.1.tgz",
   )
   expect(() => RemoteCli.installScript({ version: '2.0.0"; whoami', source: { type: "installer" } })).toThrow()
-  expect(() => RemoteCli.archiveUrl("linux-x64;whoami", "2.0.0")).toThrow()
+  expect(() => RemoteCli.archivePath("linux-x64;whoami", "2.0.0")).toThrow()
 })
