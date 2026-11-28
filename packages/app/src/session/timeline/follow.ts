@@ -1,13 +1,13 @@
 import { createMemo, createSignal, untrack, type Accessor } from "solid-js"
 import { createFollowState, followAnchor, isFollowing, transitionFollow, type FollowEvent } from "./machine"
+import { recallScroll, rememberScroll } from "./scroll-memory"
 
-// Each session gets a fresh machine. Reading the state recomputes it for a changed key, so a view that mounts for the
-// new session starts out following, whatever order the flush runs its computations in.
+// Each session gets a fresh machine, restored from what that session remembered: a view that comes back to a session
+// the reader had scrolled up in stays where they left it instead of following the newest content. Reading the state
+// recomputes it for a changed key, whatever order the flush runs its computations in.
 export function createTimelineFollow(sessionKey: Accessor<string>) {
   const machine = createMemo(() => {
-    sessionKey()
-
-    return createSignal(createFollowState())
+    return createSignal(createFollowState(recallScroll(sessionKey())?.following !== false))
   })
 
   const state = () => machine()[0]()
@@ -18,7 +18,14 @@ export function createTimelineFollow(sessionKey: Accessor<string>) {
 
   // The signal skips an unchanged state, which the transition returns as the same object.
   const dispatch = (event: FollowEvent) => {
-    untrack(machine)[1](transitionFollow(peek(), event))
+    const current = peek()
+    const next = transitionFollow(current, event)
+
+    if (next === current) return
+    // Remember whether this session follows, so coming back to it resumes the same reading position.
+    if (isFollowing(next) !== isFollowing(current))
+      rememberScroll(untrack(sessionKey), { following: isFollowing(next) })
+    untrack(machine)[1](next)
   }
 
   return {

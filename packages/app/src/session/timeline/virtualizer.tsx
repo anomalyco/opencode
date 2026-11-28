@@ -49,6 +49,7 @@ import {
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { holdLandingWidth } from "@/shell/panel-motion"
 import type { TimelineFollow } from "./follow"
+import { anchorAt, forgetScroll, recallScroll, rememberScroll } from "./scroll-memory"
 import {
   CONTACT_LOST_EVENT,
   defersAdjustments,
@@ -354,7 +355,15 @@ export function createTimelineVirtualizer(input: Input) {
         dispatchCold(CHECK_REQUESTED)
       })
     },
-    initialOffset: () => (input.follow.following() ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => {
+      if (input.follow.following()) return Number.MAX_SAFE_INTEGER
+      const saved = recallScroll(ownerSessionKey)
+      const item = saved?.anchorKey
+        ? initialMeasurements?.find((item) => String(item.key) === saved.anchorKey)
+        : undefined
+
+      return item && saved?.delta !== undefined ? Math.max(0, item.start - saved.delta) : 0
+    },
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => fallbackItemSize,
     // A newly observed element gets a real ResizeObserver box before paint. Reuse
@@ -420,6 +429,26 @@ export function createTimelineVirtualizer(input: Input) {
       return rangeExtractor()
     },
   })
+
+  // Where the reader left the viewport, remembered per session so a view that comes back restores it, not the end.
+  const rememberPosition = () => {
+    const anchor = anchorAt(virtualizer.getVirtualItems(), virtualizer.scrollOffset ?? scrollTop)
+
+    if (anchor) rememberScroll(ownerSessionKey, anchor)
+  }
+
+  // Puts the remembered row back at the viewport top. Returns false when it cannot, which lets the caller fall back.
+  const restorePosition = () => {
+    const saved = recallScroll(ownerSessionKey)
+
+    if (!saved?.anchorKey || saved.delta === undefined) return false
+    const item = virtualizer.measurementsCache.find((item) => String(item.key) === saved.anchorKey)
+
+    if (!item) return false
+    virtualizer.scrollToOffset(Math.max(0, item.start - saved.delta))
+
+    return true
+  }
 
   const resizeItem = virtualizer.resizeItem
   const pendingSizes = new Map<number, { key: string; size: number }>()
@@ -681,6 +710,13 @@ export function createTimelineVirtualizer(input: Input) {
       if (reveal) input.reveal?.consume(reveal.entryKey)
 
       if (!revealed && input.follow.following()) virtualizer.scrollToEnd()
+      // A session the reader had scrolled up in resumes its own row. A row the transcript dropped (a revert, a
+      // compaction, paged history) leaves the end as the fallback, as it was before this change.
+      else if (!revealed && !restorePosition()) {
+        forgetScroll(ownerSessionKey)
+        input.follow.dispatch({ type: "follow" })
+        virtualizer.scrollToEnd()
+      }
 
       reportOffset?.(root.scrollTop, false)
       dispatchCold(CHECK_REQUESTED)
@@ -910,6 +946,7 @@ export function createTimelineVirtualizer(input: Input) {
         dispatchCold(value ? ACTIVATED : DEACTIVATED)
 
         if (value) return
+        rememberPosition()
         // A view that goes inactive mid-touch never sees its finger lift; its translation would outlive the gesture.
         clearTouchTarget()
         flushTouchAdjustment()
@@ -1286,6 +1323,7 @@ export function createTimelineVirtualizer(input: Input) {
   }
 
   onCleanup(() => {
+    rememberPosition()
     cache.delete(ownerSessionKey)
     cache.set(ownerSessionKey, {
       measurements: virtualizer.takeSnapshot(),
