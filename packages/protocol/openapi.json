@@ -137,8 +137,50 @@
             }
           }
         },
-        "description": "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+        "description": "Show a confirmation form to browsers without spending the pairing code. Requests that accept JSON redeem the code for a session token to use as the password.",
         "summary": "Redeem pairing code"
+      },
+      "post": {
+        "tags": ["server"],
+        "operationId": "server.confirm",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Redeem a pairing code from the same-origin confirmation form, set a session cookie, and redirect to the web app.",
+        "summary": "Confirm browser pairing"
       }
     },
     "/api/location": {
