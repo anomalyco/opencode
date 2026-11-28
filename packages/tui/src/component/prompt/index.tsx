@@ -33,6 +33,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type ChipData, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { appendToSessionPrompt, registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { usePromptRestore } from "../../prompt/restore"
+import type { ProjectedPrompt } from "../../prompt/codec"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -356,6 +357,10 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPart: Map<number, PromptPartRef>
     interrupt: number
+    // A cancel requested while the prompt is still being prepared: the first interrupt can arrive before
+    // the server owns an execution, so keep the intent and interrupt again as soon as it starts.
+    cancel: string | undefined
+    aborting: boolean
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -363,7 +368,20 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPart: new Map(),
     interrupt: 0,
+    cancel: undefined,
+    aborting: false,
   })
+  // A prompt the server has not started yet: it is still being prepared on a cold location, so the session
+  // reports idle and there is no execution to interrupt. A single Escape cancels it instead of arming the
+  // two-press interrupt.
+  const starting = createMemo(() => {
+    const sessionID = props.sessionID
+    if (!sessionID || status() !== "idle") return false
+    return data.session.pending
+      .list(sessionID)
+      .some((item) => item.type === "user" && data.session.pending.status(sessionID, item.id) === "starting")
+  })
+  const busy = createMemo(() => status() === "running" || starting())
   const history = usePromptHistory(() => ({ ...unwrap(store.prompt), mode: store.mode }))
   let disposed = false
   let pasteQueue = Promise.resolve()
@@ -393,16 +411,19 @@ export function Prompt(props: PromptProps) {
   // Interrupting before the model has answered with text or a tool call takes the prompt back, as /undo does: the
   // likeliest reason to stop that early is to reword what was just sent. A draft or a pending prompt means the user
   // has moved on to something else, so those keep the plain interrupt.
-  async function interrupt(sessionID: string) {
-    const takeBack = !store.prompt.text.trim() && data.session.pending.list(sessionID).length === 0
-    const result = await client.api.session.interrupt({ sessionID, resume: true })
+  async function interrupt(sessionID: string, options: { resume?: boolean; restore?: boolean } = {}) {
+    const takeBack =
+      (options.restore ?? true) &&
+      !store.prompt.text.trim() &&
+      data.session.pending.list(sessionID).length === 0
+    const result = await client.api.session.interrupt({ sessionID, resume: options.resume ?? true })
     // A repeated press finds the execution already stopping and reports nothing interrupted.
-    if (!takeBack || !result.interrupted) return
+    if (!takeBack || !result.interrupted) return result.interrupted
     await client.api.experimental.session.wait({ sessionID })
     const messages = data.session.message.list(sessionID)
     const index = messages.findLastIndex((message) => message.type === "user")
     const message = messages[index]
-    if (message?.type !== "user") return
+    if (message?.type !== "user") return result.interrupted
     // A shell command, a compaction and a synthetic prompt each start a run of their own, so the one just stopped
     // wasn't this prompt's.
     const answered = messages.slice(index + 1).some((item) => {
@@ -412,7 +433,7 @@ export function Prompt(props: PromptProps) {
         item.content.some((part) => part.type === "tool" || (part.type === "text" && part.text.trim()))
       )
     })
-    if (answered) return
+    if (answered) return result.interrupted
     const restored = await restorePrompt(message)
     // The model called no tool, so any file that changed meanwhile is the user's own edit.
     await client.api.session.revert.stage({ sessionID, messageID: message.id, files: false })
@@ -420,7 +441,128 @@ export function Prompt(props: PromptProps) {
     // "reverted" notice to redo from.
     await client.api.session.revert.commit({ sessionID })
     appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+    return result.interrupted
   }
+
+  function abortFailed(error: unknown) {
+    cancelling.clear()
+    setStore("aborting", false)
+    setStore("cancel", undefined)
+    toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+  }
+
+  type CancelEntry = { id: string; prompt: ProjectedPrompt }
+  // The composer input of each inbox row this cancel is dropping, so a successful cancel can put the text back.
+  const cancelling = new Map<string, ProjectedPrompt>()
+
+  function startingEntries(sessionID: string): CancelEntry[] {
+    return data.session.pending.list(sessionID).flatMap((item) => {
+      if (item.type !== "user" || data.session.pending.status(sessionID, item.id) !== "starting") return []
+      const message = data.session.message.list(sessionID).find((entry) => entry.id === item.id)
+      return message?.type === "user" ? [{ id: item.id, prompt: message }] : []
+    })
+  }
+
+  // A cancel is explicit: once the run was interrupted, take the prompt back even when the model already produced
+  // some output, because the inbox cancel could not land after the prompt was promoted. Revert removes the promoted
+  // message and the partial reply before the text returns to the composer.
+  async function takeBackCancelled(sessionID: string, entries: CancelEntry[]) {
+    await client.api.experimental.session.wait({ sessionID })
+    const messages = data.session.message.list(sessionID)
+    const entry = entries.find((item) => messages.some((message) => message.id === item.id && message.type === "user"))
+    const position = entry ? messages.findIndex((item) => item.id === entry.id && item.type === "user") : -1
+    const message = position < 0 ? undefined : messages[position]
+    // A tool call may have edited files. Reverting only the transcript would leave those edits behind, so keep
+    // the plain interrupt unless the turn is still without a tool call.
+    if (
+      message?.type === "user" &&
+      messages
+        .slice(position + 1)
+        .some((item) => item.type === "assistant" && item.content.some((part) => part.type === "tool"))
+    )
+      return
+    const prompt = message?.type === "user" ? message : entry?.prompt
+    if (!prompt) return
+    const restored = await restorePrompt(prompt)
+    if (message) {
+      await client.api.session.revert.stage({ sessionID, messageID: message.id, files: false })
+      await client.api.session.revert.commit({ sessionID })
+    }
+    if (store.prompt.text.trim()) return
+    appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+  }
+
+  // Stop a run that has not started yet without resuming the input it was about to deliver. A run that did start
+  // is taken back; rows that are still pending are cancelled instead.
+  async function cancelStarting(sessionID: string, entries: CancelEntry[]) {
+    setStore("aborting", true)
+    if (await interrupt(sessionID, { resume: false, restore: false })) {
+      await takeBackCancelled(sessionID, entries)
+      cancelling.clear()
+      return
+    }
+    await Promise.all(
+      entries.map((entry) =>
+        client.api.session
+          .inbox.cancel({ sessionID, inboxID: entry.id })
+          .catch(() => undefined),
+      ),
+    )
+  }
+
+  // The intent is tied to the inbox rows being cancelled, not to a time window: it only covers the execution
+  // those rows would start. A row the server cancels is removed from it; the first running transition spends
+  // it. Nothing else in the session can be interrupted by it.
+  function requestCancel(sessionID: string, entries: CancelEntry[]) {
+    cancelling.clear()
+    for (const entry of entries) cancelling.set(entry.id, entry.prompt)
+    setStore("aborting", true)
+    setStore("cancel", sessionID)
+  }
+
+  onCleanup(
+    event.on("session.inbox.cancelled", (evt) => {
+      const prompt = cancelling.get(evt.data.inboxID)
+      if (!prompt) return
+      cancelling.delete(evt.data.inboxID)
+      if (cancelling.size === 0) setStore("cancel", undefined)
+      if (store.prompt.text.trim()) return
+      void restorePrompt(prompt)
+        .then((restored) => {
+          if (store.prompt.text.trim()) return
+          appendToSessionPrompt(evt.data.sessionID, restored, renderer.widthMethod)
+        })
+        .catch(abortFailed)
+    }),
+  )
+
+  // A successor run can start from the same interrupt (resume), so the footer must not wait for an idle edge.
+  onCleanup(
+    event.on("session.execution.interrupted", (evt) => {
+      if (evt.data.sessionID === props.sessionID) setStore("aborting", false)
+    }),
+  )
+
+  // A cancel requested while the prompt was still being prepared arrives before an execution exists. Keep
+  // the intent and interrupt again once the server starts it.
+  createEffect(
+    on(
+      () => (status() === "running" ? store.cancel : undefined),
+      (sessionID) => {
+        if (!sessionID) return
+        const entries = [...cancelling.entries()].map(([id, prompt]) => ({ id, prompt }))
+        setStore("cancel", undefined)
+        void cancelStarting(sessionID, entries).catch(abortFailed)
+      },
+    ),
+  )
+
+  // Preparation can end without an execution: the prompt was rejected or cancelled by someone else. Clear
+  // the abort feedback once the session is idle and nothing is starting.
+  createEffect(() => {
+    if (status() !== "idle" || starting()) return
+    if (store.aborting) setStore("aborting", false)
+  })
 
   const imageAttachments = createMemo(() =>
     (deduplicatePromptImages(store.prompt.files) ?? []).filter((file) => file.uri.startsWith("data:image/")),
@@ -532,16 +674,28 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         palette: undefined,
-        enabled: status() === "running",
+        enabled: busy(),
         run: () => {
           if (auto()?.visible) return
-          if (!input.focused) return
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
             return
           }
           if (!props.sessionID) return
+
+          // Nothing is executing yet, so there is nothing to interrupt. Cancel the send on one press and
+          // keep the intent for when the server starts it.
+          if (starting()) {
+            if (store.cancel === props.sessionID) return
+            const entries = startingEntries(props.sessionID)
+            if (entries.length === 0) return
+            setStore("interrupt", 0)
+            requestCancel(props.sessionID, entries)
+            void cancelStarting(props.sessionID, entries).catch(abortFailed)
+            dialog.clear()
+            return
+          }
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -550,9 +704,8 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void interrupt(props.sessionID).catch((error) =>
-              toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }),
-            )
+            setStore("aborting", true)
+            void interrupt(props.sessionID).catch(abortFailed)
             setStore("interrupt", 0)
           }
           dialog.clear()
@@ -1244,6 +1397,9 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
     if (trimmed) {
+      cancelling.clear()
+      setStore("cancel", undefined)
+      setStore("aborting", false)
       resetComposer()
       props.onSubmit?.()
     }
@@ -1973,6 +2129,27 @@ export function Prompt(props: PromptProps) {
                 }}
               >
                 <Switch>
+                  <Match when={starting()}>
+                    <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
+                      <box marginLeft={1}>
+                        <Show when={config.animations ?? true} fallback={<text fg={theme.text.muted}>[⋯]</text>}>
+                          <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                        </Show>
+                      </box>
+                      <Show
+                        when={store.aborting}
+                        fallback={
+                          <text fg={theme.text.base} wrapMode="none" truncate flexShrink={1}>
+                            esc <span style={{ fg: theme.text.muted }}>cancel</span>
+                          </text>
+                        }
+                      >
+                        <text fg={theme.text.feedback.warning.base} wrapMode="none" truncate flexShrink={1}>
+                          aborting…
+                        </text>
+                      </Show>
+                    </box>
+                  </Match>
                   <Match when={status() === "running"}>
                     <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                       <box marginLeft={1}>
@@ -1980,14 +2157,23 @@ export function Prompt(props: PromptProps) {
                           <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                         </Show>
                       </box>
-                      <PromptInterruptStatus
-                        armed={store.interrupt > 0}
-                        animations={animationsEnabled()}
-                        text={theme.text.base}
-                        subdued={theme.text.muted}
-                        warning={theme.text.feedback.warning.base}
-                        flash={theme.decrease(theme.text.feedback.warning.base, 2)}
-                      />
+                      <Show
+                        when={store.aborting}
+                        fallback={
+                          <PromptInterruptStatus
+                            armed={store.interrupt > 0}
+                            animations={animationsEnabled()}
+                            text={theme.text.base}
+                            subdued={theme.text.muted}
+                            warning={theme.text.feedback.warning.base}
+                            flash={theme.decrease(theme.text.feedback.warning.base, 2)}
+                          />
+                        }
+                      >
+                        <text fg={theme.text.feedback.warning.base} wrapMode="none" truncate flexShrink={1}>
+                          aborting…
+                        </text>
+                      </Show>
                     </box>
                   </Match>
                   <Match when={move.progress()}>
