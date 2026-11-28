@@ -3,10 +3,11 @@ export * as Machines from "./machines.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { createHash, randomBytes } from "node:crypto"
 import { eq } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
+import { KV } from "../kv.js"
 import { Identity } from "./identity.js"
 import { Machine } from "./index.js"
 import { Join } from "./join.js"
@@ -145,6 +146,16 @@ const SECRET_BYTES = 32
 const KEY_BYTES = 32
 /** How long a printed join string stays good. */
 const INVITE_TTL = 5 * 60 * 1000
+/** Where a pending join string waits in KV, one entry per machine: `machine.invite:<id>`. */
+const INVITE_PREFIX = "machine.invite:"
+const inviteKey = (id: Environment.ID) => `${INVITE_PREFIX}${id}`
+/** What the home remembers about one printed join string: only the secret's hash, never the secret. */
+const Invitation = Schema.Struct({
+  hash: Schema.String,
+  expires: Schema.Finite,
+  replace: Schema.Boolean,
+})
+const decodeInvitation = Schema.decodeUnknownOption(Invitation)
 const digest = (secret: Uint8Array) => createHash("sha256").update(secret).digest("base64url")
 const token = () => randomBytes(SECRET_BYTES).toString("base64url")
 
@@ -153,6 +164,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const identity = yield* Identity.Service
+    const kv = yield* KV.Service
     // The work under each name's lock is uninterruptible, so an interruption, such as a dropped connection mid-join,
     // never leaves a row written without memory updated to match; waiting for the lock stays interruptible.
     const locks = KeyedMutex.makeUnsafe<Environment.ID>()
@@ -169,12 +181,11 @@ const layer = Layer.effect(
     const keys = new Map<Environment.ID, string>(
       rows.flatMap((row) => (row.key === null ? [] : [[row.id, row.key] as const])),
     )
-    // Pending invitations are per process, like live connections: the home that printed a join string is the one that
-    // receives the worker, until clustering. One per name, holding only the secret's hash, never the secret.
-    const invitations = new Map<
-      Environment.ID,
-      { readonly hash: string; readonly expires: number; readonly replace: boolean }
-    >()
+    // Pending invitations live in KV, not memory: a Durable Object evicted or a server restarted between printing a
+    // join string and receiving its worker must still honour it. One entry per name, holding only the secret's hash.
+    // This lock serializes inviting, redeeming, and removing one name's entry; `locks` still serializes the pairing
+    // itself, so an invite can land mid-join, as it always could, without either join string being spent twice.
+    const inviteLocks = KeyedMutex.makeUnsafe<Environment.ID>()
     // The peer link between two machines, by the pair. It counts only while both workers report it up.
     const links = new Map<string, Machine.PeerLink>()
     const linking = KeyedMutex.makeUnsafe<string>()
@@ -193,6 +204,36 @@ const layer = Layer.effect(
         const key = keys.get(id)
         if (!key) return yield* new Machine.PeerFailed({ machine: id, reason: "not paired" })
         return { machine, key }
+      })
+
+    // The machine a secret's hash was printed for, if any. Only a first look: the entry is read again, under the name's
+    // invitation lock, before it is spent. Corrupt entries are ignored, and expired ones are forgotten now rather than
+    // waiting for a redemption that can only fail. Every removal re-reads the entry under its lock, so a fresh invite
+    // for the same name is never deleted by a stale scan.
+    const findInvitation = (hash: string) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis
+        let after: string | undefined
+        for (;;) {
+          const page = yield* kv.scan({ prefix: INVITE_PREFIX, limit: 1000, after })
+          for (const entry of page.entries) {
+            const invitation = decodeInvitation(entry.value)
+            if (Option.isNone(invitation)) continue
+            const id = Environment.ID.make(entry.key.slice(INVITE_PREFIX.length))
+            if (invitation.value.expires <= now) {
+              yield* inviteLocks.withLock(id)(
+                Effect.gen(function* () {
+                  const current = decodeInvitation(yield* kv.get(inviteKey(id)))
+                  if (Option.isSome(current) && current.value.expires <= now) yield* kv.remove(inviteKey(id))
+                }).pipe(Effect.uninterruptible),
+              )
+              continue
+            }
+            if (invitation.value.hash === hash) return id
+          }
+          if (page.next === undefined) return undefined
+          after = page.next
+        }
       })
 
     // The link `from` dials and `to` accepts, reused while both still have it.
@@ -262,10 +303,12 @@ const layer = Layer.effect(
             const machine = instances.get(id)
             if (!machine) return false
             yield* db.delete(MachineTable).where(eq(MachineTable.id, id)).run().pipe(Effect.orDie)
-            invitations.delete(id)
+            // Forget the machine before its join string, so an invite that still saw it is cleaned up by the delete
+            // below instead of leaving a join string for a name that no longer exists.
             keys.delete(id)
             instances.delete(id)
             machine.close(new NotFound({ machine: id }))
+            yield* inviteLocks.withLock(id)(kv.remove(inviteKey(id)))
             return true
           }).pipe(Effect.uninterruptible),
         )
@@ -306,31 +349,39 @@ const layer = Layer.effect(
         yield* machine.connect(connection)
       }),
       invite: Effect.fn("Machines.invite")(function* (id, options) {
-        // The two yields come first, so every check and the `set` below run without one between them.
+        // The yields come first, so only the checks and the `set` below hold the name's invitation lock.
         const home = yield* identity.publicKey()
         const now = yield* Clock.currentTimeMillis
-        if (!instances.has(id)) return yield* new NotFound({ machine: id })
-        if (keys.has(id) && !options.replace) return yield* new AlreadyPaired({ machine: id })
         const secret = randomBytes(SECRET_BYTES)
         const expires = now + INVITE_TTL
-        invitations.set(id, { hash: digest(secret), expires, replace: options.replace === true })
+        yield* inviteLocks.withLock(id)(
+          Effect.gen(function* () {
+            if (!instances.has(id)) return yield* new NotFound({ machine: id })
+            if (keys.has(id) && !options.replace) return yield* new AlreadyPaired({ machine: id })
+            yield* kv.set(inviteKey(id), { hash: digest(secret), expires, replace: options.replace === true })
+          }).pipe(Effect.uninterruptible),
+        )
         return Join.encode({ v: 1, home, secret, expires, reach: options.reach })
       }),
       join: Effect.fn("Machines.join")(function* (input) {
         // Only an Ed25519 public key is ever stored as a machine's key. The secret is not spent on a malformed call.
         if (input.key.length !== KEY_BYTES) return yield* new InvalidJoin()
         const hash = digest(input.secret)
-        const found = [...invitations].find(([, invitation]) => invitation.hash === hash)
-        if (!found) return yield* new InvalidJoin()
-        const id = found[0]
+        const id = yield* findInvitation(hash)
+        if (id === undefined) return yield* new InvalidJoin()
         const key = Buffer.from(input.key).toString("base64url")
         yield* locks.withLock(id)(
           Effect.gen(function* () {
-            const invitation = invitations.get(id)
-            // Read again under the name's lock: an invite or removal since the scan above invalidates this one.
-            if (!invitation || invitation.hash !== hash) return yield* new InvalidJoin()
-            // Spent on the try, not on success: one join string pairs one worker, whatever happens next.
-            invitations.delete(id)
+            const invitation = yield* inviteLocks.withLock(id)(
+              Effect.gen(function* () {
+                const stored = decodeInvitation(yield* kv.get(inviteKey(id)))
+                // Read again under the name's invitation lock: an invite or removal since the scan invalidates this.
+                if (Option.isNone(stored) || stored.value.hash !== hash) return yield* new InvalidJoin()
+                // Spent on the try, not on success: one join string pairs one worker, whatever happens next.
+                yield* kv.remove(inviteKey(id))
+                return stored.value
+              }).pipe(Effect.uninterruptible),
+            )
             const now = yield* Clock.currentTimeMillis
             if (now >= invitation.expires) return yield* new InvalidJoin()
             if (keys.has(id) && !invitation.replace) return yield* new InvalidJoin()
@@ -397,4 +448,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Identity.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Identity.node, KV.node] })
