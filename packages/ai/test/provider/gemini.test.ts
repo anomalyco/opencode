@@ -676,6 +676,87 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("nests inline audio and video fileData inside parallel function responses for gemini 4", () =>
+    Effect.gen(function* () {
+      const videoUri = "gs://bucket/clip.mp4"
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: Gemini.route
+            .with({
+              endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+              auth: Auth.header("x-goog-api-key", "test"),
+            })
+            .model({ id: "gemini-4-neon" }),
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_audio", name: "read", input: { path: "clip.wav" } }),
+              ToolCallPart.make({ id: "call_video", name: "read", input: { uri: videoUri } }),
+            ]),
+            Message.tool({
+              id: "call_audio",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Audio clip loaded" },
+                  { type: "file", uri: "data:audio/wav;base64,AAEC", mime: "audio/wav" },
+                ],
+              },
+            }),
+            Message.tool({
+              id: "call_video",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Video clip loaded" },
+                  { type: "file", uri: videoUri, mime: "video/mp4" },
+                ],
+              },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: "call_audio", name: "read", args: { path: "clip.wav" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+            {
+              functionCall: { id: "call_video", name: "read", args: { uri: videoUri } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: "call_audio",
+                name: "read",
+                response: { name: "read", content: "Audio clip loaded" },
+                parts: [{ inlineData: { mimeType: "audio/wav", data: "AAEC" } }],
+              },
+            },
+            {
+              functionResponse: {
+                id: "call_video",
+                name: "read",
+                response: { name: "read", content: "Video clip loaded" },
+                parts: [{ fileData: { mimeType: "video/mp4", fileUri: videoUri } }],
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("flushes pending media before system update text", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
