@@ -77,7 +77,7 @@ import { permissionLayer } from "./lib/permission"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
   codeModeListings,
@@ -486,6 +486,18 @@ const settled = (service: Mcp.Interface, name = "resources") =>
     if (status?.status === "pending") return yield* Effect.fail(status)
     return status
   }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
+
+// Lets fixture/mcp-era-locked.ts start once its first process has outlived the version probe, and before the
+// initialize sent in place times out. With the 1.5 s startup timeout the tests give it, the probe gives up 1.5 s
+// after that process starts, and that initialize 1.5 s later.
+const releaseEraLocked = (pids: string, release: string) =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => fs.readFile(pids, "utf8")).pipe(
+      Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
+    )
+    yield* Effect.sleep("2100 millis")
+    yield* Effect.promise(() => Bun.write(release, ""))
+  })
 
 const mcp = Layer.mock(Mcp.Service, {
   awaitStartup: () => Effect.void,
@@ -1016,6 +1028,36 @@ testEffect(Layer.empty).live("falls back to legacy when a remote server answers 
     expect(server.state.initializations).toBe(1)
   }),
 )
+
+test("respawns for legacy when a slow modern stdio server refuses the initialize sent in place", async () => {
+  await using tmp = await tmpdir()
+  const release = path.join(tmp.path, "release")
+  const pids = path.join(tmp.path, "pids")
+  const connected = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* connect(
+          "era-locked",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-era-locked.ts")],
+            environment: { MCP_PID_FILE: pids, MCP_RELEASE_FILE: release },
+            protocol: "auto",
+            // The probe gives up at the 1.5 s startup timeout; the initialize sent in place gets another 1.5 s.
+            timeout: new ConfigMCP.Timeout({ startup: 1_500 }),
+          }),
+          import.meta.dir,
+        )
+        return { modern: connection.modern, tools: yield* connection.tools() }
+      }),
+    ),
+  )
+  const [{ modern, tools }] = await Promise.all([connected, Effect.runPromise(releaseEraLocked(pids, release))])
+
+  expect(modern).toBe(false)
+  expect(tools.map((tool) => tool.name)).toEqual(["echo"])
+  expect((await fs.readFile(pids, "utf8")).trim().split("\n")).toHaveLength(2)
+})
 
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
@@ -3782,6 +3824,31 @@ describe("MCP pool", () => {
       // during the handshake, which can't be told apart from a server refusing it, so it connects on its own.
       // That exit also looks like a legacy server quitting on the version probe, so it respawns once for initialize.
       expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
+    }),
+  )
+
+  live("connects a slow modern stdio server on its own after the shared connection is refused", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const release = path.join(tmp.path, "release")
+      const pids = path.join(tmp.path, "pids")
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-era-locked.ts")],
+        cwd: directories[0],
+        environment: { MCP_PID_FILE: pids, MCP_RELEASE_FILE: release },
+        pool: true,
+        // The probe gives up at the 1.5 s startup timeout; the initialize sent in place gets another 1.5 s.
+        timeout: new ConfigMCP.Timeout({ startup: 1_500 }),
+      })
+      const pool = yield* makePool
+      yield* releaseEraLocked(pids, release).pipe(Effect.forkChild({ startImmediately: true }))
+      const a = yield* open(config, pool, directories[0])
+
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      expect((yield* a.mcp.tools()).map((tool) => tool.name)).toEqual(["echo"])
+      // The shared attempt, then this Location's own connection, which answers the probe now that the server is up.
+      expect((yield* Effect.promise(() => fs.readFile(pids, "utf8"))).trim().split("\n")).toHaveLength(2)
     }),
   )
 

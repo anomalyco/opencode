@@ -547,14 +547,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           },
         }).pipe(Effect.flatMap((transport) => initialize(transport, protocol)))
       // Some legacy servers exit on the auto probe's unknown request (Python SDK 1.3 does), so respawn for initialize.
+      // A server still starting when the probe times out reads the probe late, which moves the probed connection to
+      // 2026-07-28. It then refuses the initialize sent in place, but accepts one sent first (Python SDK 2.3 does).
       // A shared connection (no roots) can't be legacy, so the pool opens its own private one instead.
       return yield* spawn(protocol).pipe(
         Effect.catchIf(
           (error) =>
             protocol === "auto" &&
             options.roots !== false &&
-            error instanceof SdkError &&
-            (error.code === SdkErrorCode.ConnectionClosed || error.code === SdkErrorCode.EraNegotiationFailed),
+            (error instanceof UnsupportedProtocolVersionError ||
+              (error instanceof SdkError &&
+                (error.code === SdkErrorCode.ConnectionClosed || error.code === SdkErrorCode.EraNegotiationFailed))),
           () => spawn("legacy"),
         ),
       )
@@ -1033,10 +1036,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError || error instanceof InsufficientScopeError)
     return yield* new NeedsAuthError({ server, message: error.message })
+  // The server answered, so a pooled server still gets a try on the Location's own connection.
   if (error instanceof UnsupportedProtocolVersionError)
     return yield* new ConnectError({
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
+      answered: true,
     })
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
