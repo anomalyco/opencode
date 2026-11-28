@@ -1,17 +1,17 @@
 import { LLMEvent, type FinishReasonDetails, type ProviderMetadata, type Usage } from "../../schema/index.js"
 
 export interface State {
-  readonly stepStarted: boolean
+  readonly phase: "idle" | "active" | "finished"
   readonly text: ReadonlySet<string>
   readonly reasoning: ReadonlySet<string>
 }
 
-export const initial = (): State => ({ stepStarted: false, text: new Set(), reasoning: new Set() })
+export const initial = (): State => ({ phase: "idle", text: new Set(), reasoning: new Set() })
 
 export const stepStart = (state: State, events: LLMEvent[]): State => {
-  if (state.stepStarted) return state
+  if (state.phase !== "idle") return state
   events.push(LLMEvent.stepStart({ index: 0 }))
-  return { ...state, stepStarted: true }
+  return { ...state, phase: "active" }
 }
 
 export const textStart = (state: State, events: LLMEvent[], id: string, providerMetadata?: ProviderMetadata): State => {
@@ -104,6 +104,11 @@ export const finish = (
     readonly providerMetadata?: ProviderMetadata
   },
 ): State => {
+  if (state.phase === "finished") {
+    // Let the route reject the duplicate finish without inventing another step.
+    events.push(LLMEvent.finish(input))
+    return state
+  }
   const stepped = closeOpenBlocks(stepStart(state, events), events)
   events.push(
     LLMEvent.stepFinish({
@@ -114,7 +119,7 @@ export const finish = (
     }),
     LLMEvent.finish(input),
   )
-  return { ...stepped, stepStarted: false }
+  return { ...stepped, phase: "finished" }
 }
 
 export * as Lifecycle from "./lifecycle.js"
