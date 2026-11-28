@@ -186,6 +186,38 @@ function formatInitError(error: InitError, t: Translator): string {
   }
 }
 
+type ErrorLike = { name: string; message: string; stack?: string; cause?: unknown }
+
+type ErrorJson = { message: string; name?: unknown; stack?: unknown; cause?: unknown }
+
+// An error that crossed an IPC or JSON boundary as a plain `{ name, message, cause }` object.
+function isErrorJson(value: unknown): value is ErrorJson {
+  return (
+    Predicate.isObjectKeyword(value) &&
+    !Predicate.isFunction(value) &&
+    Predicate.hasProperty(value, "message") &&
+    Predicate.isString(value.message)
+  )
+}
+
+function fromErrorJson(value: ErrorJson): ErrorLike {
+  return {
+    name: Predicate.isString(value.name) ? value.name : "Error",
+    message: value.message,
+    stack: Predicate.isString(value.stack) ? value.stack : undefined,
+    cause: value.cause,
+  }
+}
+
+// Effect's `try`/`tryPromise` wrap a thrown error in an UnknownError that only names the combinator.
+function isEffectTryWrapper(error: ErrorLike) {
+  return (
+    error.name === "UnknownError" &&
+    error.cause !== undefined &&
+    /^An error occurred in Effect\.try(Promise)?$/.test(error.message)
+  )
+}
+
 function formatErrorChain(cause: unknown, t: Translator, depth = 0, parentMessage?: string): string {
   if (!cause) return t("error.chain.unknown")
 
@@ -199,13 +231,17 @@ function formatErrorChain(cause: unknown, t: Translator, depth = 0, parentMessag
     return indent + `${cause.name}\n${message}`
   }
 
-  if (cause instanceof Error) {
-    const isDuplicate = depth > 0 && parentMessage === cause.message
+  const error = cause instanceof Error ? cause : isErrorJson(cause) ? fromErrorJson(cause) : undefined
+
+  if (error && isEffectTryWrapper(error)) return formatErrorChain(error.cause, t, depth, parentMessage)
+
+  if (error) {
+    const isDuplicate = depth > 0 && parentMessage === error.message
     const parts: string[] = []
     const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
 
-    const header = `${cause.name}${cause.message ? `: ${cause.message}` : ""}`
-    const stack = cause.stack?.trim()
+    const header = `${error.name}${error.message ? `: ${error.message}` : ""}`
+    const stack = error.stack?.trim()
 
     if (stack) {
       const startsWithHeader = stack.startsWith(header)
@@ -235,8 +271,8 @@ function formatErrorChain(cause: unknown, t: Translator, depth = 0, parentMessag
       parts.push(indent + header)
     }
 
-    if (cause.cause) {
-      const causeResult = formatErrorChain(cause.cause, t, depth + 1, cause.message)
+    if (error.cause) {
+      const causeResult = formatErrorChain(error.cause, t, depth + 1, error.message)
 
       if (causeResult) {
         parts.push(causeResult)
@@ -259,7 +295,7 @@ function formatErrorChain(cause: unknown, t: Translator, depth = 0, parentMessag
   return indent + safeJson(cause, t("error.page.circular"))
 }
 
-function formatError(cause: unknown, t: Translator): string {
+export function formatError(cause: unknown, t: Translator): string {
   return formatErrorChain(cause, t, 0)
 }
 
