@@ -13,6 +13,8 @@ import { filesystem } from "@opencode/util/effect/app-node-platform"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
+import { CodeModeJob } from "@opencode/core/codemode/job"
+import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -291,6 +293,30 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
   })
+
+// Runs a full Code Mode script as a job, as a session drain does, so the script's own timeout and background apply.
+const runScript = (
+  registry: Tool.Interface,
+  id: string,
+  input: { code: string; timeout?: number; background?: boolean },
+) =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const jobs = yield* CodeModeJob.make(yield* Job.Service, sessions.synthetic, yield* Effect.scope)
+    return yield* executeTool(
+      registry,
+      { sessionID, ...toolIdentity, call: { type: "tool-call", id, name: "execute", input } },
+      { services: yield* CodeModeTool.services },
+    ).pipe(Effect.provideService(CodeModeJob.Current, jobs))
+  })
+
+// A script can move to the background before its shell has started, so wait for the command to be running.
+const runningShell = (command: string) =>
+  Shell.Service.use((shell) => shell.list()).pipe(
+    Effect.map((list) => list.find((info) => info.command === command)),
+    Effect.repeat({ until: (info) => info !== undefined, schedule: Schedule.spaced("20 millis") }),
+    Effect.map((info) => info!),
+  )
 
 const withScanner = <A, E, R>(
   body: (registry: Tool.Interface, fixture: { active: string; outside: string }) => Effect.Effect<A, E, R>,
@@ -955,7 +981,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  codeModeIt.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
+  codeModeIt.live("gives Code Mode shells no timeout or background parameter", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -967,13 +993,40 @@ describe("ShellTool", () => {
             (namespace) => namespace.entries,
           )
           expect(pinned.map((entry) => entry.path)).toEqual(["shell"])
-          expect(pinned[0]!.line).toContain("600000")
           expect(pinned[0]!.line).toContain("Execute a shell command and return its output.")
-          // No background parameter in Code Mode.
-          expect(pinned[0]!.line).not.toContain("background?: boolean")
+          expect(pinned[0]!.line).toContain("Commands run until they exit.")
+          expect(pinned[0]!.line).not.toContain("timeout?:")
+          expect(pinned[0]!.line).not.toContain("background?:")
+          expect(pinned[0]!.line).not.toContain("after their timeout move to the background")
           expect(pinned[0]!.line).not.toContain("Background commands return immediately")
           expect(pinned[0]!.line).toContain("A result without shellID is final")
           expect(pinned[0]!.line).toContain("there are no separate stdout or stderr fields")
+        }),
+      )
+    }),
+  )
+
+  it.live("keeps the direct shell's timeout and background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const direct = (yield* toolDefinitions(registry)).find((tool) => tool.name === "shell")
+          expect(direct?.inputSchema).toHaveProperty("properties.timeout")
+          expect(direct?.inputSchema).toHaveProperty("properties.background")
+          expect(direct?.description).toContain("Commands still running after their timeout move to the background.")
+          expect(direct?.description).not.toContain("Commands run until they exit")
+          expect(JSON.stringify(direct?.inputSchema)).toContain("a foreground command moves to the background")
+        }),
+      )
+    }),
+  )
+
+  codeModeIt.live("runs Code Mode shells until they exit, moving only the script to the background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
           const timeouts: number[] = []
           const hooks = yield* PluginHooks.Service
           yield* hooks.register("shell", "create.before", (event) =>
@@ -988,45 +1041,54 @@ describe("ShellTool", () => {
             Effect.forkScoped({ startImmediately: true }),
           )
           const quick = JSON.stringify({ command: bodyExitCommand })
-          const long = JSON.stringify({ command: progressOverflowCommand(6, "release"), timeout: 10 })
-          const result = yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-parallel-shells",
-              name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])` },
-            },
-          }).pipe(Effect.timeout("3 seconds"))
+          const long = JSON.stringify({ command: progressOverflowCommand(6, "release") })
+          const result = yield* runScript(registry, "call-parallel-shells", {
+            code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])`,
+            timeout: 300,
+          }).pipe(Effect.timeout("5 seconds"))
           expect(result.status).toBe("completed")
-          const [completed, running] = JSON.parse(result.output.output)
-          expect(completed).toEqual({
-            output: "body",
-            exitCode: 7,
-            wallTimeSeconds: expect.any(Number),
-          })
-          expect(running).toEqual({
-            output: expect.stringContaining("did not finish within its timeout of 0.01 seconds"),
-            exitCode: null,
-            shellID: expect.stringMatching(/^sh_/),
-            pid: expect.any(Number),
-            outputPath: expect.any(String),
-            wallTimeSeconds: expect.any(Number),
-          })
-          expect(timeouts.toSorted((a, b) => a - b)).toEqual([10, 600_000])
+          const jobID = String(result.metadata?.jobID)
+          expect(result.output.output).toBe(`Script ${jobID} is still running; its result will arrive in this session.`)
+          const running = yield* runningShell(progressOverflowCommand(6, "release"))
           // A script's shell names the execute call, the one clients have in the transcript.
-          const shell = yield* Shell.Service
-          expect((yield* shell.get(running.shellID)).metadata.callID).toBe("call-parallel-shells")
+          expect(running.metadata.callID).toBe("call-parallel-shells")
           yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
-          expect((yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("xxxxxx"),
-            metadata: { source: "shell", shellID: running.shellID, state: "completed", exit: 0 },
+          // The shell finished inside the script, so the script's result holds its final output.
+          const payload = (yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload
+          expect(payload).toMatchObject({
+            text: expect.stringMatching(/\{"exitCode":0,"wallTimeSeconds":[\d.]+,"output":"xxxxxx"\}\]/),
+            metadata: { source: "codemode", jobID, state: "completed" },
           })
+          expect(timeouts).toEqual([0, 0])
         }),
       )
     }),
   )
+
+  for (const target of ["script", "session"] as const)
+    codeModeIt.live(`stops a Code Mode shell when its ${target} is cancelled after the script's timeout`, () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const command = progressOverflowCommand(0, "release")
+            const result = yield* runScript(registry, `call-cancelled-${target}`, {
+              code: `return await tools.shell(${JSON.stringify({ command })})`,
+              timeout: 100,
+            })
+            const jobID = String(result.metadata?.jobID)
+            expect(jobID).toStartWith("cm_")
+            const shell = yield* Shell.Service
+            const running = yield* runningShell(command)
+            const jobs = yield* Job.Service
+            if (target === "script") yield* jobs.cancel(jobID)
+            else yield* jobs.cancelSession(sessionID)
+            expect((yield* shell.wait(running.id)).status).toBe("killed")
+            expect(yield* shell.list()).toEqual([])
+          }),
+        )
+      }),
+    )
 
   productionIt.live(
     "registers and returns real successful output from the active Location",

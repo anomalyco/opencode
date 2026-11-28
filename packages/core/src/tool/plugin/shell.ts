@@ -26,7 +26,6 @@ import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
-const CODE_MODE_TIMEOUT_MS = 10 * 60 * 1_000
 // How long a call the user interrupted waits for its stopped command to exit before settling with the output so far.
 const INTERRUPT_WAIT = "500 millis"
 
@@ -48,16 +47,15 @@ const description = (shell?: string, codeMode = false) =>
     "Prefer dedicated tools over shell commands when possible.",
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
     "Rely on automatic truncation unless filtering the output is more useful.",
-    "Commands still running after their timeout move to the background.",
-    // Code Mode has no background parameter.
-    ...(codeMode ? [] : ["Background commands return immediately, and you will be notified when they complete."]),
+    // Code Mode has no timeout or background parameter.
+    ...(codeMode
+      ? ["Commands run until they exit."]
+      : [
+          "Commands still running after their timeout move to the background.",
+          "Background commands return immediately, and you will be notified when they complete.",
+        ]),
     "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
   ].join(" ")
-
-const timeoutInput = (foreground: number) =>
-  Schema.optionalKey(NonNegativeInt).annotate({
-    description: `Optional timeout in milliseconds (default ${foreground}). When it expires, a foreground command moves to the background and a background command is stopped.`,
-  })
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
@@ -65,17 +63,44 @@ export const Input = Schema.Struct({
     description:
       "Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.",
   }),
-  timeout: timeoutInput(DEFAULT_TIMEOUT_MS),
+  timeout: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Optional timeout in milliseconds (default ${DEFAULT_TIMEOUT_MS}). When it expires, a foreground command moves to the background and a background command is stopped.`,
+  }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
   }),
 })
 
-const CodeModeInput = Schema.Struct({
-  ...Struct.omit(Input.fields, ["background"]),
-  timeout: timeoutInput(CODE_MODE_TIMEOUT_MS),
-})
+export const CodeModeInput = Schema.Struct(Struct.omit(Input.fields, ["timeout", "background"]))
+
+const UNSUPPORTED: Record<string, string> = {
+  timeout: "`timeout` isn't supported here; the command runs until it exits. Use `timeout N <command>` to bound it.",
+  background:
+    "`background` isn't supported here; the command runs until it exits. execute's `background` option runs a whole script in the background.",
+}
+
+// Keys other harnesses' shells take that change nothing about how the command runs, so dropping them is harmless.
+const IGNORED_KEYS = new Set(["description"])
+
+/**
+ * The `<tool-repair>` note for a full Code Mode shell call with keys its input doesn't take, which then doesn't run:
+ * silently dropping `timeout` or `background` would run the command without the limit or detachment it asked for.
+ */
+export const unknownInputRepair = (dropped: ReadonlyArray<string>) => {
+  const keys = dropped.filter((key) => !IGNORED_KEYS.has(key))
+  if (keys.length === 0) return undefined
+  const unknown = keys.filter((key) => !Object.hasOwn(UNSUPPORTED, key))
+  return [
+    "<tool-repair>",
+    `tools.shell takes only ${Object.keys(CodeModeInput.fields)
+      .map((key) => `\`${key}\``)
+      .join(" and ")} in Code Mode, so this call did not run.`,
+    ...keys.flatMap((key) => (Object.hasOwn(UNSUPPORTED, key) ? [UNSUPPORTED[key]] : [])),
+    ...(unknown.length === 0 ? [] : [`${unknown.map((key) => `\`${key}\``).join(", ")} isn't supported here.`]),
+    "</tool-repair>",
+  ].join("\n")
+}
 
 const StructuredOutput = Schema.Struct({
   shellID: Schema.optionalKey(Schema.String).annotate({
@@ -427,11 +452,15 @@ export const Plugin = {
           input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
-            // Code Mode input has no background parameter.
+            // Code Mode input has no timeout or background parameter.
             const background = "background" in input && input.background === true
-            // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || (context.codemode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
-            const timeout = background ? (input.timeout ?? 0) : foreground
+            // A background command's timeout stops it. A Code Mode command has no timeout and runs until it exits: only
+            // the script's own timeout moves the script, with the command, to the background. An automation's has no one
+            // to move it to, so it runs until it exits or the automation's time limit stops the program.
+            const stops = background || context.codemode === true
+            // A direct call's foreground timeout of 0 falls back to the default, so it can't block until the command exits.
+            const requested = "timeout" in input ? input.timeout : undefined
+            const timeout = stops ? (requested ?? 0) : requested || DEFAULT_TIMEOUT_MS
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
             return Effect.uninterruptibleMask((restore) =>
@@ -455,7 +484,7 @@ export const Plugin = {
                 // An automation's code has nobody to hear how a backgrounded command ends. There a timeout stops the
                 // command and fails the call, and the command gets no job the session could move to the background or
                 // be told about.
-                const timeoutBackgrounds = !background && context.automation === undefined
+                const timeoutBackgrounds = !stops && context.automation === undefined
                 return yield* Effect.gen(function* () {
                   const workingDirectory = yield* currentWorkingDirectory
                   // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
@@ -498,7 +527,7 @@ export const Plugin = {
                         finalTimeout = yield* restore(
                           Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
                         )
-                        // A foreground timeout moves the command to the background instead of stopping it.
+                        // A direct foreground timeout moves the command to the background instead of stopping it.
                         if (timeoutBackgrounds) invocation.timeout = 0
                       }),
                   )
@@ -529,7 +558,7 @@ export const Plugin = {
 
                   const waiting = jobs.block({ id: job.id, sessionID: context.sessionID })
                   const blocked =
-                    finalTimeout > 0
+                    timeoutBackgrounds && finalTimeout > 0
                       ? waiting.pipe(
                           Effect.timeoutOption(finalTimeout),
                           Effect.flatMap((result) =>
