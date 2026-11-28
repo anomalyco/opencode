@@ -1,0 +1,136 @@
+---
+title: "ネットワーク"
+description: "プロキシ、カスタムの証明書認証局、クライアント証明書を設定します。"
+---
+
+標準のプロキシ用環境変数を設定します。OpenCode は CLI とバックグラウンドサービスの間でローカルの HTTP 接続を使います。CLI はループバックアドレスをプロキシの対象から自動で除外します。
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+`HTTP_PROXY` は HTTP の宛先に、`HTTPS_PROXY` は HTTPS の宛先に適用されます。どちらの変数でも、プロキシ URL 自体に `http://` を使えます。CLI は起動時に `127.0.0.1`、`localhost`、`::1` を `NO_PROXY` と `no_proxy` の両方に追加します。ほかにも直接接続する必要があるホストがあれば、`NO_PROXY` にカンマ区切りで指定してください。
+
+## サービス
+
+シェルで export した環境変数がバックグラウンドサービスに反映されるのは、そのシェルからサービスを起動した場合だけです。次回以降の起動でも同じネットワーク設定を使うには、マネージドサービスの設定に変数を保存します。
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+サービスに保存した環境変数を変更すると、実行中のサービスが停止します。`service start` を実行すると、新しい環境変数で起動します。サービスに保存した変数はサーバープロセスにしか適用されないため、CLI を起動するシェルにもプロキシ用の環境変数を設定してください。ループバックアドレスはどちらのプロセスでも自動で除外されます。
+
+永続化した変数を削除するには `service unset env` を使用します。
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## 認証
+
+URL の認証情報を受け付けるプロキシでは、認証が必要な各プロキシ URL にユーザー名とパスワードを含めます。`@`、`:`、`/` などの文字は、どちらの認証情報でもパーセントエンコードします。
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+バックグラウンドサービスの場合は URL 全体を永続化します。値はプライベートなサービス設定に保存され、`opencode service get env` で表示されるため、その出力を共有しないでください。
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## 証明書
+
+プロキシまたは宛先がプライベートの証明書認証局によって署名された証明書を使用する場合は、`NODE_EXTRA_CA_CERTS` に PEM ファイルを設定します。追加の認証局は、プロセスの起動時にランタイムのトラストストアに追加されます。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+バックグラウンドサービスのためにファイルパスを永続化し、再起動します。
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## ウイルス対策と HTTPS 検査
+
+ウイルス対策ソフトの「HTTPS スキャン」や「暗号化接続のスキャン」（Kaspersky、Avast、ESET など）や、企業の SSL 検査プロキシは、サーバーの証明書を独自のものに置き換えます。OpenCode はそれを拒否し、リクエストは次のようなエラーで失敗します。
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+次のいずれかの方法で解決します。
+
+- ウイルス対策の設定で `opencode.ai` と `*.opencode.ai` を HTTPS スキャンから除外します。プロバイダーに直接接続する場合は、その API ホスト（`api.anthropic.com` など）も追加します。
+- 検査用の証明書認証局を PEM ファイルとしてエクスポートし、[証明書](#certificates)に示すように `NODE_EXTRA_CA_CERTS` で信頼します。
+
+## クライアント証明書
+
+ゲートウェイが相互 TLS を要求するプロバイダーでは、`settings.tls` を設定します。そのプロバイダーのモデルリクエストが証明書を提示し、TLS ハンドシェイクは証明書を要求するサーバーにのみそれを送信します。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` と `key` は PEM のテキストです。ファイルから読み取るには `{file:...}` を使用します。読み取れないファイルがある場合、`tls` は未設定のままです。
+- `passphrase` は暗号化されたキーにのみ必要です。
+- Bun と Node のビルドで機能します。Cloudflare Workers 上のサーバーは、`fetch` でクライアント証明書を提示できません。
+- クライアント証明書を使用するリクエストはリダイレクトに従わないため、証明書が別のホストに提示されることはありません。
+
+そのプロバイダーのすべてのモデルリクエスト（チャット、コンパクション、画像、Decision モデル）が証明書を提示します。`tls` を設定したプロバイダーは WebSocket ではなく HTTP を使用します。webfetch、リモートの MCP サーバー、プラグインのインストールなどのツールは証明書を提示しません。
+
+## フォアグラウンド
+
+`--standalone` と `serve` は自身のプロセスの環境を使用します。`opencode service set env` はこれらのプロセスを設定しません。
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+フォアグラウンドサーバーにも同じパターンを適用します。
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## 確認
+
+設定を適用した後、CLI がバックグラウンドサービスに到達できることを確認します。
+
+```bash
+opencode api get /api/info
+```
+
+ヘルスチェックが成功すれば、ローカルクライアントからサービスに接続できています。サービスから外部への接続でプロキシと証明書が機能するかは、通常のプロバイダーリクエストを送って確認します。

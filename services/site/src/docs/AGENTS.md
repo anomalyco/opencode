@@ -18,7 +18,7 @@
 - A translated page reuses the English page's heading ids in order (`rehype-headings.ts`, `vite.ts`), so `#anchors` work in every language. Keep the English heading structure (order, depth and count) when translating. A translation whose heading depths no longer match is stale: the build warns, the page shows the English fallback with the notice, and it is left out of hreflang and the sitemap until it matches (`lib/heading-structure.ts`).
 - Links in content stay docs-root-relative (`/config`): `remark-links.ts` prefixes the page's language, and the Markdown twins do too. Sidebar, pagination, the section links, the language picker and the footer follow the page's language.
 - Every language is prerendered (`script/build.ts`), with its own Pagefind index beside its pages. `docs.translation.missing` in `src/i18n/<locale>.ts` is the fallback notice.
-- Check translations from `services/site` with `bun src/docs/script/check-translations.ts [locale ...] [--stamp]`; stamps live in `src/docs/i18n/stamps/<locale>.json`. The translator subagent (`.opencode/agent/translator.md`) has the page rules and review checklist; `src/docs/i18n/glossary.md` has the shared terms.
+- Check translations from `services/site` with `bun src/docs/script/check-translations.ts [locale ...] [--stamp]`; stamps live in `src/docs/i18n/stamps/<locale>.json`. The translator subagent (`.opencode/agent/translator.md`) has the page rules and review checklist; `src/docs/i18n/glossary.md` has the shared rules and an index of each language's glossaries in `src/docs/i18n/glossary/<locale>.md`.
 
 ## Rendering
 

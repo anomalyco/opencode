@@ -1,0 +1,105 @@
+---
+title: "Introdução à CLI"
+description: "Inicie a interface de terminal do OpenCode, execute prompts de scripts e CI e gerencie o serviço compartilhado em segundo plano."
+---
+
+Execute a CLI em um projeto para abrir a interface de terminal em tela cheia:
+
+```bash
+opencode
+```
+
+Passe um diretório para trabalhar em outro projeto:
+
+```bash
+opencode ~/code/my-project
+```
+
+Terminais recomendados:
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+Terminais com suporte a truecolor exibem as cores dos temas com mais fidelidade. Sem esse suporte, o terminal usa as cores mais
+próximas da paleta disponível.
+
+## Automação
+
+Use `opencode run` para enviar um prompt sem abrir a interface interativa. Ele é pensado para scripts, jobs de CI e
+outros fluxos de trabalho que precisam da saída do modelo diretamente no terminal.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+Use `opencode mini` para iniciar a interface interativa mínima do OpenCode em vez da TUI em tela cheia.
+
+```bash
+opencode mini
+```
+
+Execute `opencode mini --help` para ver as opções de sessão, modelo, agente, prompt e replay.
+
+## Serviço em segundo plano
+
+Por padrão, o OpenCode descobre ou inicia um servidor em segundo plano compartilhado para a sua conta de usuário. Todo cliente local do OpenCode
+se conecta a esse servidor, que gerencia sessões, configuração, integrações, permissões e a execução de ferramentas.
+
+Use `--standalone` para rodar com um servidor privado, ou `--server` para se conectar a uma URL de servidor específica:
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+Para tornar servidores privados o padrão dos comandos da CLI em vez de iniciar o serviço compartilhado, desative-o:
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+Isso interrompe o serviço em segundo plano se ele estiver em execução. Com `--server`, ainda é possível indicar um servidor específico.
+Para iniciar o serviço compartilhado manualmente, use `opencode service start`. Para voltar ao uso automático, execute `opencode service unset disabled`.
+O pareamento exige o serviço compartilhado e fica indisponível enquanto ele está desativado.
+
+Consulte [Solução de problemas](/troubleshooting) para diagnósticos do serviço compartilhado e a [referência da API](/api) para endpoints do servidor.
+
+## Caminhos
+
+Imprima um caminho local específico para usar com outras ferramentas:
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+O seletor opcional aceita `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log` ou `repos` e imprime
+apenas o caminho seguido de uma quebra de linha. O caminho do banco de dados leva em conta o canal de distribuição e `OPENCODE_DB`.
+Um caminho relativo é resolvido a partir do diretório de dados, e `:memory:` é exibido literalmente. O comando não inicia um servidor nem abre o banco de dados.
+
+Omita o seletor para mostrar todos os caminhos com rótulos:
+
+```bash
+opencode debug paths
+```
+
+## Desinstalar
+
+Veja quais arquivos e qual instalação serão removidos:
+
+```bash
+opencode uninstall --dry-run
+```
+
+Execute `opencode uninstall` para confirmar a remoção. O OpenCode para os serviços em segundo plano registrados e os terminais persistentes antes de
+remover o diretório de cache global, que é compartilhado por versões e canais do OpenCode. Os dados de sessão, a configuração e o
+estado nunca são removidos.
+
+- `--force` (`-f`) pula a confirmação; use-o para remoção não interativa.
+- Instalações por gerenciador de pacotes usam o gerenciador de pacotes detectado. Instalações curl imprimem o comando final para remover
+  o executável manualmente.

@@ -1,0 +1,150 @@
+---
+title: "Web"
+description: "OpenCode をブラウザで実行します。"
+---
+
+OpenCode の Web UI は、TUI と同じサーバーで動作します。デフォルトで利用でき、パスワードで保護されています。
+
+## アクセス
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+ブラウザでリンクを開くと、セッション Cookie でサインインして Web UI が読み込まれます。OpenCode アプリで QR コードをスキャンするか、サーバーアドレスの欄にリンクを貼り付けると、同じようにアプリが接続されます。セッションは 30 日間続きます。サーバーのパスワードを変更すると、すべてのセッションがサインアウトされます。
+
+### SSH 経由
+
+サーバーが localhost でのみ待ち受けている場合は、お使いのマシンからそのポートを転送し、出力されたリンクをローカルで開きます。
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+デフォルトでは、サーバーは localhost でのみ待ち受けます。ポートはプラットフォームによって異なります。
+
+| プラットフォーム      | デフォルトのポート |
+| --------------------- | ------------------ |
+| macOS、Linux、WSL     | 49374              |
+| Windows               | 28894              |
+
+Windows は 49152 以降のポートを予約しており、WSL のミラーネットワーキングはさらにその下の範囲を予約します。現在のアドレスは `opencode service status` で出力できます。
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+この設定は `opencode service` コマンドで変更できます。
+
+### リモートアクセス
+
+どこからでも接続するには、[OpenTunnel](https://github.com/anomalyco/opentunnel) のリモートアドレス経由でペアリングします。
+
+```bash
+$ opencode pair --remote
+```
+
+初めてリモートアクセスを有効にするときは、実行前に確認を求めます。
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+対話的なターミナルがない場合、`--yes` を渡して承諾しない限りコマンドは失敗します。一度承諾すると、以降の実行ではプロンプトがスキップされます。`opencode service set remote false` でリモートアクセスをオフにした後でも同様です。
+
+## 設定
+
+任意のオプションは `opencode service set` で設定します。
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+設定を変更するとバックグラウンドサーバーが停止します。新しい設定を適用するには再度起動します。
+
+```bash
+$ opencode service start
+```
+
+## スタンドアロン
+
+`opencode serve` は、共有のバックグラウンドサービスではなく、同じサーバーをフォアグラウンドで実行します。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+次のような場合に使用します。
+
+- 共有ホスト、常時稼働するホスト、またはリモートホストで OpenCode を実行し、`opencode --server <url>` でクライアントを接続する。
+- 単一のプロセスでホスト名、ポート、CORS のオリジンを制御する。
+- systemd や Docker の管理下など、フォアグラウンドプロセスを前提とする環境で実行する。
+- 共有のバックグラウンドサービスの代わりに専用のサーバーを維持する。
+
+`--server` でクライアントを接続します。
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### 認証
+
+生成されたパスワードの代わりに固定のパスワードを使うには、`OPENCODE_PASSWORD` を設定します。同じ変数で `opencode --server` にパスワードを渡せます。
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+他の HTTP クライアントは Basic 認証を使用します。ユーザー名は常に `opencode` で、変更できるのはパスワードだけです。
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+`opencode service set password` が適用されるのは、マネージドのバックグラウンドサービスだけです。`opencode serve` は `OPENCODE_PASSWORD` を読み取り、未設定の場合は起動のたびに新しいパスワードを生成します。
+
+### Docker
+
+リリースごとに、バージョンをタグに付けたイメージが `ghcr.io/anomalyco/opencode` に公開されます。イメージのエントリーポイントは `opencode` です。そのままでは TUI が起動するため、`serve` を渡します。デフォルトの `127.0.0.1` ではコンテナ内からしか接続できないので、`0.0.0.0` で待ち受けるようにします。
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 再起動後も同じパスワードを使えるよう、`OPENCODE_PASSWORD` を設定します。
+- データディレクトリ `/root/.local/share/opencode` をマウントします。セッションを保存するデータベースがここにあり、マウントしないとコンテナの削除時にセッションも失われます。グローバル設定を保持するには、設定ディレクトリ `/root/.config/opencode` もマウントします。
+- `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info` で、サーバーがリクエストに応答できる状態か確認します。

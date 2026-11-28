@@ -1,0 +1,180 @@
+---
+title: "Claude Agent"
+description: "Claude Agent ile OpenCode'da Claude aboneliğinizi veya Claude Code hesabınızı kullanın. Claude Code kendi bilgisayarınızda çalışır."
+noindex: true
+---
+
+Claude aboneliğinizi veya başka bir Claude Code hesabını kullanın. Claude Agent, Claude Code'u kendi bilgisayarınızda
+çalıştırır. Önce Claude Code 2.1.248 veya daha yeni bir sürümünü kurup oturum açın.
+
+```bash
+claude auth login
+```
+
+Ardından **Claude Agent** seçeneğiyle bağlanın ve bir model seçin. Model listesi Claude Code'dan gelir.
+Akıl yürütme düzeyleri `claude-agent/opus#high` gibi model varyantlarıyla belirtilir.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+CLI'dan `auth login claude-agent` ile de bağlanabilirsiniz.
+
+OpenCode, `claude` komutunu `PATH` üzerinde arar. Başka bir kopya kullanmak için sunucuda `OPENCODE_CLAUDE_PATH` ayarlayın.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## Nasıl çalışır
+
+Modeli Claude Code çağırır, diğer her şeyi OpenCode yapar.
+
+- Claude, Claude Code'un sistem promptunun yanı sıra agent'ınızın promptunu, `AGENTS.md` dosyalarını, skill'leri ve MCP talimatlarını alır.
+- Claude, Claude Code'un yerleşik araçları yerine OpenCode'un araçlarını ve izinlerini kullanır.
+- Claude Code ayarlarınız, `CLAUDE.md` dosyalarınız, kancalar, MCP sunucuları, skill'ler ve bellek yüklenmez.
+- Sıkıştırmayı ve subagent'ları OpenCode yürütür.
+- Aynı oturumda Claude Agent ile diğer modeller arasında geçiş yapabilirsiniz.
+
+## Maliyet
+
+Maliyet, Claude Code'a nasıl oturum açıldığına bağlıdır.
+
+| Oturum | Gösterilen maliyet |
+| --- | --- |
+| Claude aboneliği | Yok, planınız karşılar |
+| Anthropic API anahtarı veya AWS ya da Google Cloud üzerinde Claude Platform | Anthropic fiyatları |
+| Amazon Bedrock | Bedrock fiyatları veya Bedrock Mantle üzerinde Anthropic fiyatları |
+| Google Vertex | Vertex fiyatları |
+| Microsoft Foundry | Azure fiyatları |
+| Özel base URL | Yok |
+
+## Yapılandırma
+
+`claude-agent` sağlayıcısındaki bağlantı ayarları Claude Code'a iletilir. Kabuğunuzda ayarlanmış aynı değişkenleri geçersiz
+kılarlar.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Yapılandırma | Claude Code değişkeni |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+Sağlayıcının değerlerini o model için geçersiz kılmak üzere bunları bir modelde ayarlayın.
+
+## İkinci bir Claude hesabı kullanma
+
+İkinci hesapta kendi klasöründe oturum açın. Her zamanki oturumunuz değişmeden kalır.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+PowerShell'de:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+Ardından o klasörü kullanan modeller ekleyin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+Bir projedeki her model için tek bir hesap kullanmak isterseniz bunun yerine o projenin yapılandırmasında sağlayıcıda
+`settings.configDir` ayarlayın.
+
+## Hesaplar arasında geçiş
+
+Birbiriyle değiştirilebilir birkaç hesabınız varsa OpenCode, bir hesap kullanım limitine ulaştığında bir sonrakine
+geçebilir. Her ek hesapta kendi klasöründe oturum açın. `~/.claude` içindeki mevcut oturumunuz olduğu gibi kalabilir:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Ardından klasörleri listeleyin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+Bir sohbet en son yanıt veren hesapta kalır ve yeni sohbetler en son çalışan hesapta başlar. Geçiş yalnızca Claude aboneliği
+oturumları için geçerlidir; `apiKey` veya `authToken` için geçerli değildir.
+
+## Web araması
+
+Claude Agent, OpenCode'daki web aramalarını Claude Code'un WebSearch özelliğiyle de yapabilir. Bu durumda aramalar Claude
+planınızın kullanımına dahil edilir ve arama için ayrı bir API anahtarı gerekmez. Bu özelliği her model kullanabilir.
+`opencode.jsonc` dosyasından seçin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+Ayrıntılar için [Web araması](/websearch#claude-agent) sayfasına bakın.
+
+## Sınırlamalar
+
+- Claude Code, OpenCode sunucusuyla aynı makineye kurulmalıdır. Claude Agent uzak çalışma alanlarında kullanılamaz.
+- Claude Code'un sistem promptu OpenCode'un yerleşik promptunun yerini alır. Özel agent promptları yine de uygulanır.
+- Temperature, top-p, top-k, seed ve durdurma dizileri desteklenmez.
+- API çağrılarını Claude Code yaptığı için eklenti `http.request` ve `http.response` kancaları çalışmaz.
+- `/usage`, `/loop`, otomatik mod ve agent ekipleri gibi Claude Code özellikleri kullanılamaz.
+
+## Hatalar
+
+| Hata veya belirti | Denetlenecek |
+| --- | --- |
+| `Claude Code is not installed` | Claude Code'u kurun veya `OPENCODE_CLAUDE_PATH` değerini onun yoluna ayarlayın. |
+| `Claude Code is not logged in` | `claude auth login` çalıştırın, ardından Claude Agent'ı yeniden bağlayın. `configDir` kullanıyorsanız hatanın o klasör için gösterdiği komutu çalıştırın. |
+| `Claude Code ... is too old` | `claude update` çalıştırın. |

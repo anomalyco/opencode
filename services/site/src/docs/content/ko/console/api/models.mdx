@@ -1,0 +1,200 @@
+---
+title: "모델 목록 API"
+description: "워크스페이스에서 사용할 수 있는 모델의 한도, 가격, 기능과 각 모델을 호출할 Console URL을 확인하세요."
+---
+
+모델 목록에는 두 종류가 있습니다. [Console 목록](#console-model-list)은 워크스페이스에서 사용할 수 있는 모든 모델과
+제공자를 반환합니다. 직접 연결한 제공자도 포함됩니다. [추론 목록](#inference-model-lists)은 공개 OpenCode Models 및 Go 카탈로그를 OpenAI
+목록 형식으로 반환합니다.
+
+| 목록                                                | 반환 내용                                                                                        | 키      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| [`/console/api/v1/models`](#console-model-list)     | 호출자가 사용할 수 있는 모든 제공자와 모델. 워크스페이스의 수정이 적용됩니다.               | 필수 |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models. 키가 없으면 모든 공개 모델, 있으면 그 워크스페이스가 사용할 수 있는 모델. | 선택 |
+| [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go) 모델. 같은 형태입니다.                                                  | 선택 |
+
+클라이언트가 OpenCode와 같은 모델을 제공해야 한다면 Console 목록을 사용하세요. 연결한 제공자도 포함됩니다. OpenCode
+Models나 Go만 필요하거나, 아직 키가 없어 공개 카탈로그가 필요할 때는 추론 목록을 사용하세요.
+
+## Console 모델 목록
+
+`GET https://opencode.ai/console/api/v1/models`는 호출자가 사용할 수 있는 모든 제공자와 각 제공자 아래에서 호출할 수
+있는 모델을 반환합니다.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+워크스페이스 멤버라면 누구나 호출할 수 있습니다. 브라우저 세션, OpenCode 로그인, [개인 API 키](/console/api#personal-api-keys), 또는 **Models › Read** 권한이 있는 [서비스 계정 키](/console/api#service-accounts)를 사용합니다. Console이 생성하는 OpenCode 구성과 같은 규칙을 사용하므로 목록은 OpenCode의 `/models`에 표시되는 것과 일치합니다. 응답은 절대 캐시되지 않습니다(`Cache-Control: private, no-store`).
+
+### 제공자
+
+응답은 제공자 ID를 키로 하는 객체이며, 이 ID는 OpenCode가 사용하는 ID입니다.
+
+| 제공자 ID                 | 제공자                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models). 워크스페이스 크레딧으로 결제합니다.                                                                 |
+| `opencode-go`               | [Go](/console/go) 모델. Go 구독이 있을 때만 있습니다.                                                                   |
+| `console-<connection slug>` | 워크스페이스가 추가한 [연결](/console/providers). 예: `console-openai`, `console-anthropic`, `console-aws-bedrock`. |
+
+각 제공자에는 `id`, `name`, `models`가 있습니다. `name`은 OpenCode가 표시하는 이름이며, 보통 워크스페이스 이름 뒤에
+제공자 이름이 붙습니다. `models`는 모델 ID를 키로 하는 객체입니다.
+
+### 예제
+
+제공자 하나와 모델 하나만 남긴 예제입니다.
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 필드
+
+각 모델은 워크스페이스의 수정이 적용된 [models.dev](https://models.dev)의 v2 항목이므로, 필드는
+[models.dev가 게시하는](https://models.dev/experimental/v2.0/api.json) 것과 같습니다. 비활성화된 모델과 models.dev가
+더 이상 권장하지 않는 것으로 표시한 모델은 제외됩니다.
+
+| 필드          | 의미                                                                                                                                                                                                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | `chat`, `embedding`, `image`, `decision` 같은 모델 종류.                                                                                                                                                                                                             |
+| `id`           | 요청에 보낼 모델 ID. `models`의 키이기도 합니다.                                                                                                                                                                                                                   |
+| `name`         | 표시 이름.                                                                                                                                                                                                                                                                       |
+| `limit`        | `context`는 컨텍스트 윈도입니다. 모델이 입력 한도를 정하면 `input`이 요청 입력을 제한합니다. `output`은 응답을 제한합니다.                                                                                                                                                                |
+| `cost`         | 1M 토큰당 미국 달러: `text.input.price`, `text.input.cache.read`, `text.input.cache.write`, `text.output.price`. `0`은 무료입니다. 캐시 필드가 없으면 모델에 캐시 가격이 없습니다. 일부 모델은 `cost.multipliers`를 추가해 지정한 시간대에 가격을 올립니다. |
+| `capabilities` | 도구 호출, 추론 강도처럼 모델이 할 수 있는 일.                                                                                                                                                                                                                     |
+| `modalities`   | 허용되는 입력 유형(`text`, `image/png`, `application/pdf` 등)과 출력 유형.                                                                                                                                                                                          |
+| `api`          | 이 모델에 사용할 Console URL과 SDK. [모델 API](#model-api)를 참고하세요.                                                                                                                                                                                                         |
+
+### 모델 API
+
+`api`에는 모델이 사용하는 프로토콜을 키로 하는 항목이 하나 있습니다. OpenAI Chat Completions는 `chat-completions`,
+OpenAI Responses는 `responses`, Anthropic Messages는 `messages`, Gemini는 `generate-content`,
+[OpenAI Embeddings](/console/models#embedding-models)는 `embeddings`입니다. 해당 프로토콜의 models.dev 항목에서
+공급자 URL을 Console URL로 바꾸고 다른 프로토콜은 제외한 형태입니다.
+
+| 필드            | 의미                                                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | 이 모델의 요청을 보낼 위치. OpenCode Models는 `https://opencode.ai/inference/...`, Go는 `https://opencode.ai/inference/go/...`, 연결은 Console API URL인 `https://opencode.ai/inference/custom/<connection_id>`를 사용합니다. |
+| `sdk.aisdk`      | 해당 프로토콜의 AI SDK 패키지. [모델 엔드포인트](/console/models#endpoints) 표와 같습니다.                                                                                                                                       |
+| `sdk.opencodeai` | OpenCode가 로드하는 해당 제공자 모듈.                                                                                                                                                                                                       |
+
+직접 추가한 연결의 모델은 다음과 같습니다. [Providers API](/console/api/providers#endpoints)에 설명된 대로
+`/chat/completions`나 `/responses` 같은 프로토콜 경로를 뒤에 붙이세요.
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## 추론 모델 목록
+
+`GET https://opencode.ai/inference/v1/models`는 OpenCode Models를, `GET https://opencode.ai/inference/go/v1/models`는
+Go 모델을 나열합니다. 둘 다 OpenAI 목록 형식을 반환합니다.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+모델 하나와 공통 필드만 남긴 예제입니다.
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+키가 없으면 목록에 모든 공개 모델이 포함됩니다. 키가 있으면 해당 키의 워크스페이스에서 사용할 수 있는 모델만
+포함되므로 서비스 계정 키에는 **Models › Read**가 필요합니다. 키는 `Authorization: Bearer` 또는 `x-api-key`로
+보내세요. 비공개 모델과 더 이상 권장하지 않는 모델은 제외됩니다.
+
+각 항목은 OpenAI의 `id`, `object`, `created`, `owned_by`로 시작하고, 이어서 [Console 목록](#fields)이 사용하는 것과
+같은 models.dev 필드인 `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`, `api`, `family`,
+`release_date` 등이 옵니다. Console 목록과 달리 추론 목록에는 워크스페이스의 연결이 포함되지 않습니다. models.dev
+데이터를 일시적으로 사용할 수 없으면 항목은 OpenAI 필드만으로 표시되며 `name`은 ID와 같습니다.
+
+각 Go 모델에는 `go` 필드도 있습니다. 요금제별 월 사용 한도(`monthly_usage`), 요청 데이터의 학습 사용 여부(`training`),
+데이터 보존 없음 여부(`zdr`), 일부 국가에서의 이용 제한 여부(`limited_regions`)를 담습니다.
+
+## 오류
+
+| 상태 | 의미                                                                                |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | 자격 증명이 없거나 키가 만료 또는 폐기되었습니다.                                          |
+| `403`  | 키에 모델을 나열할 권한이 없습니다. 서비스 계정 및 제한 키에는 **Models › Read**가 필요합니다. |

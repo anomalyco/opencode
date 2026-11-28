@@ -1,0 +1,63 @@
+---
+title: "Pluginy CLI"
+description: "Wczytuj pluginy TUI z konfiguracji OpenCode w CLI i dodawaj pluginy dostępne tylko w CLI oraz ich opcje w cli.json."
+---
+
+Pluginy skonfigurowane w `opencode.json(c)`, które udostępniają komponent TUI, są automatycznie wczytywane przez CLI.
+Aby dowiedzieć się, jak tworzyć pluginy, zobacz [Tworzenie pluginów](/build/plugins). Nie musisz dodawać tego samego
+pakietu do `cli.json`. CLI pobiera listę aktywnych pluginów z podłączonego serwera OpenCode, więc działa to też przy
+zdalnym serwerze.
+
+Używaj `cli.json` dla pluginów dostępnych tylko w CLI. Te pluginy działają lokalnie w terminalu i pozostają aktywne, gdy
+CLI łączy się ze zdalnym serwerem:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Wpisy są przetwarzane po kolei. Poprzedź ID lub symbol wieloznaczny znakiem `-`, aby wyłączyć pasujące pluginy:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Przekazuj opcje pluginu w formie obiektu:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode wyszukuje też pluginy w globalnym katalogu konfiguracji i w katalogach `.opencode` projektu. Każdy plugin ma
+taki sam układ jak opublikowany pakiet: punkty wejścia serwera i TUI są obok siebie.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+Znalezione pluginy mogą importować `@opencode/plugin/tui` bezpośrednio. OpenCode odnajduje pakiet w czasie działania.
+Przykłady znajdziesz w [Tworzeniu pluginów TUI](/build/plugins/cli).

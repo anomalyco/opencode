@@ -1,0 +1,44 @@
+---
+title: "Ricerca web di Console"
+description: "Ricerca web ospitata per OpenCode tramite Console."
+---
+
+Console offre una ricerca web ospitata agli utenti OpenCode collegati. Il proprietario o un amministratore dello spazio di lavoro la abilita una volta per lo spazio di lavoro, senza dare ai membri una chiave separata per un provider di ricerca.
+
+Ogni ricerca riuscita costa **$0.01**: l'importo viene detratto dal saldo dello spazio di lavoro e concorre ai limiti di spesa dei membri.
+
+## Abilitazione
+
+1. Accedi alla [Console](https://opencode.ai/console) come proprietario o amministratore dello spazio di lavoro.
+2. Apri **Integrations** e fai clic su **Set up** in **Hosted Web Search**.
+3. Fai clic su **Enable**.
+
+Ogni membro collega poi OpenCode allo spazio di lavoro con `/connect`.
+
+```text
+/connect
+```
+
+La configurazione dello spazio di lavoro seleziona **OpenCode Web Search** come provider predefinito. I membri non devono impostare `websearch.provider` né aggiungere una chiave API del provider. Un membro che imposta un proprio `websearch.provider` mantiene invece quella scelta.
+
+## Ricerca
+
+Chiedi a OpenCode informazioni aggiornate in un prompt. Le ricerche partono da OpenCode, non da una pagina interattiva in Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Il provider ospitato cerca sul web pubblico e restituisce fino a otto risultati. OpenCode usa i risultati per rispondere al prompt e citare le fonti.
+
+Vedi la [guida alla ricerca web](/websearch) per configurare i permessi o disattivare lo strumento.
+
+## Fatturazione
+
+Console addebita **$0.01** quando una ricerca restituisce risultati validi. Non addebita le ricerche non riuscite né quelle bloccate dai limiti di frequenza.
+
+La ricerca web compare separatamente dall'utilizzo dei modelli in **Activity › Usage**, **Activity › Overview**, nell'attività dei membri, nelle fatture e nelle esportazioni CSV. Le policy di budget applicabili a tutte le spese includono gli addebiti per la ricerca web.
+
+## Privacy
+
+La ricerca web ospitata non conserva dati. Console e il suo provider di ricerca ospitato elaborano ogni query e i relativi risultati senza memorizzarne il contenuto.

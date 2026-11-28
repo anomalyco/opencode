@@ -1,0 +1,53 @@
+---
+title: "Websuche in der Console"
+description: "Gehostete Websuche für OpenCode über die Console."
+---
+
+Die Console stellt verbundenen OpenCode-Nutzern eine gehostete Websuche bereit. Ein Owner oder Admin aktiviert
+sie einmal für den gesamten Workspace. Mitglieder brauchen keinen eigenen Schlüssel bei einem Suchanbieter.
+
+Jede erfolgreiche Suche kostet **$0.01**. Der Betrag wird vom Workspace-Guthaben abgezogen und auf die
+Ausgabenlimits der Mitglieder angerechnet.
+
+## Aktivieren
+
+1. Melde dich als Owner oder Admin des Workspace in der [Console](https://opencode.ai/console) an.
+2. Öffne **Integrations** und klicke bei **Hosted Web Search** auf **Set up**.
+3. Klicke auf **Enable**.
+
+Jedes Mitglied verbindet OpenCode dann mit `/connect` mit dem Workspace.
+
+```text
+/connect
+```
+
+Die Workspace-Konfiguration legt **OpenCode Web Search** als Standardanbieter fest. Mitglieder müssen weder
+`websearch.provider` festlegen noch einen API-Schlüssel eines Anbieters hinzufügen. Wer selbst
+`websearch.provider` festlegt, behält seine Auswahl.
+
+## Suchen
+
+Bitte OpenCode in einem Prompt um aktuelle Informationen. Die Suche läuft direkt in OpenCode, nicht auf einer
+interaktiven Seite in der Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Der gehostete Anbieter durchsucht das öffentliche Web und gibt bis zu acht Ergebnisse zurück. OpenCode nutzt die Ergebnisse, um den Prompt zu beantworten und Quellen anzugeben.
+
+Siehe die [Anleitung zur Websuche](/websearch), um Berechtigungen zu konfigurieren oder das Tool zu deaktivieren.
+
+## Abrechnung
+
+Die Console berechnet **$0.01**, sobald eine Suche gültige Ergebnisse liefert. Fehlgeschlagene oder wegen
+eines Anfragelimits abgewiesene Suchen sind kostenlos.
+
+Die Websuche erscheint getrennt von der Modellnutzung in **Activity › Usage**, **Activity › Overview**, der
+Mitgliederaktivität, Rechnungen und CSV-Exporten. Zutreffende Budget-Policies für alle Ausgaben schließen
+Websuche-Kosten ein.
+
+## Datenschutz
+
+Die gehostete Websuche speichert keine Daten. Die Console und ihr gehosteter Suchanbieter verarbeiten jede
+Anfrage und ihre Ergebnisse, ohne deren Inhalte zu speichern.

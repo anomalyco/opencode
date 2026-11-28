@@ -1,0 +1,134 @@
+---
+title: "Snapshots"
+description: "Mach die letzten Änderungen an Unterhaltung und Dateien mit /undo rückgängig und stelle sie mit /redo wieder her. Erfahre, welche Dateien Snapshots erfassen."
+---
+
+Mit Snapshots kannst du die letzten Änderungen an Unterhaltung und Dateien gemeinsam rückgängig machen. Nutze sie für
+Korrekturen an deiner jüngsten Arbeit, sichere wichtige Änderungen aber mit Git-Commits oder Backups.
+
+## Workflow
+
+Führe `/undo` nach einer Antwort aus, die du überarbeiten willst. OpenCode bereitet das Zurücknehmen vor, stellt die
+betroffenen Dateien wieder her und setzt den entfernten Prompt zurück ins Eingabefeld, damit du ihn bearbeiten kannst.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Das Absenden des bearbeiteten Prompts schließt das vorbereitete Zurücknehmen ab. Führe vor dem Absenden `/redo` aus, um
+es abzubrechen und die Unterhaltung und Dateien wiederherzustellen, die du vor `/undo` hattest.
+
+```text
+/redo
+```
+
+Das Terminal bietet außerdem Standard-Tastenkürzel:
+
+| Aktion | Befehl | Tastenkürzel |
+| --- | --- | --- |
+| Zurücknehmen der vorherigen Nachricht vorbereiten | `/undo` | `<leader>u` |
+| Das vorbereitete Zurücknehmen abbrechen | `/redo` | `<leader>r` |
+
+Du kannst auch eine frühere Nachricht wählen und **Revert** wählen, um ein Zurücknehmen bis zu diesem Punkt
+vorzubereiten.
+
+## Erfassung
+
+Für jeden Modellschritt versucht OpenCode einen Snapshot unmittelbar vor dem Modellaufruf und einen weiteren, wenn der
+Schritt einen aufgezeichneten Erfolg oder Fehler erreicht. Die Assistenten-Nachricht zeichnet auf, welche Pfade sich
+zwischen diesen Snapshots geändert haben.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+Die Erfassung ist Best-Effort. Wenn einer der Snapshots nicht verfügbar ist, läuft die Unterhaltung weiter, aber für
+diesen Schritt sind möglicherweise keine Dateiänderungen zum Wiederherstellen verfügbar.
+
+## Geltungsbereich
+
+Snapshots decken das aktive Verzeichnis der Session innerhalb eines Git-Worktrees ab. Eine in `packages/app` geöffnete
+Session erfasst zum Beispiel passende Dateien unterhalb von `packages/app`, nicht Änderungen anderswo im Repository.
+
+| Inhalt | Erfasst | Beispiel |
+| --- | --- | --- |
+| Verfolgte Dateien im aktiven Verzeichnis | Ja | `packages/app/src/app.tsx` |
+| Nicht ignorierte unverfolgte Dateien bis 2 MiB je Datei | Ja | `packages/app/notes.txt` |
+| Von Git ignorierte Dateien | Nein | `packages/app/dist/app.js` |
+| Einzelne unverfolgte Dateien größer als 2 MiB | Nein | `packages/app/debug.log` |
+| Dateien außerhalb des aktiven Verzeichnisses | Nein | `packages/server/src/index.ts` |
+| Git-Metadaten und andere Nebenwirkungen | Nein | Commits, Branches, Datenbanken oder Prozesse |
+
+Dateisystem-Snapshots erfordern ein Git-Repository. Außerhalb eines solchen kann `/undo` weiterhin den
+Unterhaltungsverlauf zurücknehmen, aber keine Dateien wiederherstellen.
+
+## Wiederherstellen
+
+OpenCode stellt nur Pfade wieder her, die zu Assistentenschritten nach dem gewählten Punkt in der Unterhaltung gehören.
+Jeder Pfad wird auf den Stand vor dem ersten rückgängig gemachten Schritt zurückgesetzt. Dateien, die erst durch diese
+Schritte entstanden sind, werden entfernt, wenn es sie zu diesem Zeitpunkt noch nicht gab.
+
+| Zeitlinie | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Gewählte Grenze | Version A | fehlt |
+| Spätere Assistenten-Schritte | Version B | erstellt |
+| Nach dem Zurücknehmen | Version A | entfernt |
+
+Pfade, die diesen Schritten nicht zugeordnet sind, bleiben unberührt. Aktuelle Änderungen an einem betroffenen Pfad
+können überschrieben werden, prüfe also die Zusammenfassung der Wiederherstellung und `git diff`, bevor du fortfährst.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Speicherung
+
+OpenCode speichert Snapshots lokal in einer separaten internen Git-Objektdatenbank unter seinem Datenverzeichnis. Die
+Snapshot-Erfassung erstellt keine Commits, verschiebt keine Branches und ändert nicht absichtlich den Index deines
+Repositorys.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Snapshot-Objekte können die vollständigen Inhalte verfolgter und passender unverfolgter Dateien enthalten. Behandle das
+OpenCode-Datenverzeichnis als sensible lokale Daten.
+
+## Einstellungen
+
+Snapshots sind standardmäßig aktiviert. Setze `snapshots` in deiner [Konfiguration](/config#snapshots) auf `false`, um
+künftige Dateisystem-Erfassung zu stoppen.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Das Deaktivieren von Snapshots löscht bereits gespeicherte Snapshots nicht. Das Zurücknehmen von Unterhaltungen bleibt
+verfügbar, kann aber ohne erfassten Dateisystemzustand keine zugehörigen Dateiänderungen wiederherstellen.
+
+## Sicherheit
+
+Snapshots erleichtern das Rückgängigmachen, sind aber weder Transaktion noch Backup:
+
+- Shell-Befehle können Dienste, Prozesse, Netzwerkressourcen, Datenbanken, Git-Zustand, ignorierte Ausgaben oder Dateien
+  außerhalb des aktiven Verzeichnisses ändern. Das Wiederherstellen eines Snapshots macht diese Wirkungen nicht rückgängig.
+- Unterbrochene oder fehlgeschlagene Arbeit kann Änderungen hinterlassen, wenn die Erfassung fehlschlägt oder kein
+  nutzbares Snapshot-Paar existiert.
+- Das Wiederherstellen betroffener Pfade überschreibt ihren aktuellen Inhalt. Das Abbrechen eines vorbereiteten
+  Zurücknehmens kann ebenfalls spätere Änderungen überschreiben.
+- OpenCode lehnt Zurücknahmeoperationen ab, während die Session läuft, aber externe Editoren und Befehle können den
+  Worktree zwischen Erfassung und Wiederherstellung weiterhin ändern.
+- Das Abschließen eines Zurücknehmens entfernt Nachrichten aus der aktiven Unterhaltungsansicht, nicht aus dem
+  dauerhaften Session-Verlauf oder dem vorhandenen Snapshot-Speicher. Es ist keine sichere Löschung.
+
+Committe oder sichere wichtige Arbeit, bevor du `/undo` in einem geänderten Worktree nutzt.

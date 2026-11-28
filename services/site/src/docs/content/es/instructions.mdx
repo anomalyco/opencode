@@ -1,0 +1,139 @@
+---
+title: "Instrucciones"
+description: "Define instrucciones permanentes para OpenCode con archivos AGENTS.md. Consulta dónde se aplican, en qué orden se cargan y cuándo se usa CLAUDE.md como alternativa."
+---
+
+Agrega un archivo `AGENTS.md` con las instrucciones permanentes del proyecto para OpenCode. Incluye comandos de compilación, notas de arquitectura, convenciones de código y requisitos de verificación.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Incluye los archivos de instrucciones del proyecto en un commit para que todo el equipo que trabaja en el repositorio tenga las mismas instrucciones.
+
+## Alcance
+
+Coloca `AGENTS.md` en el directorio donde deban aplicarse sus instrucciones. OpenCode carga el archivo global y luego cada `AGENTS.md` que encuentre al subir desde el espacio de trabajo actual hasta el directorio personal. Si el espacio de trabajo está fuera del directorio personal, se detiene en la raíz del proyecto.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+En este ejemplo, se cargan los cuatro archivos. Se combinan en este orden:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Mantén en el archivo global la orientación que se aplica en todas partes. Pon la orientación de todo el repositorio en la raíz del proyecto y la más específica más cerca del código que cubre. OpenCode combina los archivos y no resuelve los conflictos entre ellos.
+
+Si el espacio de trabajo está fuera de la raíz del proyecto, solo se carga el archivo global. Define `OPENCODE_DISABLE_PROJECT_CONFIG=1` para omitir el descubrimiento de `AGENTS.md` del proyecto sin deshabilitar el archivo global.
+
+### Alternativa CLAUDE.md
+
+En cualquier directorio sin `AGENTS.md`, OpenCode lee `CLAUDE.md` en su lugar. Sin un
+`~/.config/opencode/AGENTS.md` global, lee `~/.claude/CLAUDE.md`. El `AGENTS.md` de un directorio siempre gana sobre su
+`CLAUDE.md`, así que un enlace simbólico entre ambos se carga una vez.
+
+Define `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` para omitir todos los `CLAUDE.md`, o `OPENCODE_DISABLE_CLAUDE_CODE=1` para omitir también
+las skills de `.claude`. El servidor lee ambas al arrancar. Para el servicio en segundo plano, guárdalas con
+`opencode service set env` y ejecuta `opencode service restart`.
+
+## Descubrimiento
+
+Los archivos de instrucciones bajo el espacio de trabajo se descubren a medida que el agente explora el proyecto. Leer un archivo o listar un directorio carga los `AGENTS.md` entre ese destino y el espacio de trabajo.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Los archivos anidados se cargan empezando por el más cercano y se deduplican mientras su entrada de instrucciones permanezca en el historial visible para el modelo. Volver a leer la misma zona normalmente no los inyecta de nuevo. Si la compactación o una reversión elimina esa entrada, una lectura posterior puede volver a cargar el archivo.
+
+Las ediciones de un archivo anidado no se detectan automáticamente después de que se cargue. Inicia una sesión nueva cuando el texto actualizado deba aplicarse de inmediato.
+
+## Orden
+
+El prompt de sistema del agente o proveedor seleccionado se envía primero. OpenCode ensambla luego las instrucciones iniciales en este orden:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+Estas fuentes se combinan en lugar de usarse como sobrescrituras. Los `AGENTS.md` anidados descubiertos más tarde se agregan al historial de la sesión en el orden de descubrimiento.
+
+## Actualizaciones
+
+Para actualizar las instrucciones durante una sesión, edita un `AGENTS.md` global o uno que OpenCode haya encontrado al subir por el árbol de directorios.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Antes de la siguiente solicitud al modelo, OpenCode detecta el cambio y agrega una actualización de instrucciones antes de entregar la entrada pendiente:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Eliminar todos los `AGENTS.md` ambientales indica a la sesión que las instrucciones ambientales anteriores ya no se aplican.
+- Un fallo de lectura temporal conserva las últimas instrucciones conocidas en lugar de tratarlas como eliminadas.
+- Mover una sesión conserva su estado de instrucciones, así que la orientación del destino se introduce como una actualización.
+- Confirmar una reversión de sesión borra su estado de instrucciones y vuelve a cargar las instrucciones antes del siguiente prompt.
+
+Los valores de las instrucciones siguen siendo privilegiados. Los clientes pueden ver qué fuentes cambiaron, pero no su contenido.
+
+## Configuración
+
+Usa el array `instructions` para agregar archivos, patrones glob o URL HTTP(S) junto a los `AGENTS.md` descubiertos:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Las instrucciones configuradas se cargan después de los archivos `AGENTS.md`, en el orden en que aparecen. Las entradas de todos los documentos de configuración se combinan.
+
+| Entrada                 | Resolución                                                           |
+| ----------------------- | -------------------------------------------------------------------- |
+| Ruta relativa o glob    | Se busca en cada directorio desde el espacio de trabajo hasta la raíz del proyecto |
+| Ruta `~/`               | Se resuelve desde tu directorio home                                 |
+| Ruta absoluta           | Se usa tal como se escribe; el nombre de archivo puede ser un glob   |
+| `http://` o `https://`  | Se obtiene al cargar la configuración, con un tiempo de espera de cinco segundos |
+
+- Los archivos locales se actualizan como `AGENTS.md` cuando cambian. Los archivos nuevos que coinciden con un glob se cargan en el siguiente cambio de configuración.
+- Los archivos que faltan se omiten. Una URL que no se puede obtener se omite o conserva su último contenido obtenido.
+- Con `OPENCODE_DISABLE_PROJECT_CONFIG=1`, o cuando el espacio de trabajo está fuera del proyecto, las entradas relativas se resuelven contra el directorio de configuración global.
+
+Un espacio de trabajo de [OpenCode Console](/console) conectado también puede compartir instrucciones.
+
+Consulta [Configuración](/config) para las ubicaciones y la precedencia de la configuración.

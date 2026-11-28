@@ -1,0 +1,412 @@
+---
+title: Raccourcis clavier
+description: Personnalisez les raccourcis clavier du CLI OpenCode dans cli.json et retrouvez l’ID de chaque commande ainsi que son raccourci par défaut.
+---
+
+Personnalisez les raccourcis dans `cli.json` :
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+Utilisez une chaîne pour une seule touche :
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+Séparez les alternatives par des virgules :
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+Désactivez une liaison avec `"none"` ou `false` :
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+Utilisez un objet pour le comportement des événements :
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` vaut `ctrl+x` par défaut. `<leader>` dans une autre liaison fait référence à cette touche.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+Les ID de commande inconnus sont ignorés.
+
+## Application
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `leader`                   | `ctrl+x`                  | Touche leader des combinaisons de raccourcis |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | Quitter l’application |
+| `app.debug`                | `none`                    | Afficher ou masquer le panneau de débogage |
+| `app.console`              | `none`                    | Afficher ou masquer la console |
+| `app.scrap`                | `none`                    | Ouvrir l’écran de brouillon |
+| `app.toggle.animations`    | `none`                    | Activer ou désactiver les animations |
+| `app.toggle.file_context`  | `none`                    | Afficher ou masquer le contexte de fichier |
+| `app.toggle.diffwrap`      | `none`                    | Activer ou désactiver le retour à la ligne des diffs |
+| `app.toggle.paste_summary` | `none`                    | Afficher ou masquer le résumé des collages |
+| `command.palette.show`     | `ctrl+p`                  | Lister les commandes disponibles |
+| `help.show`                | `none`                    | Ouvrir la boîte de dialogue d’aide |
+| `docs.open`                | `none`                    | Ouvrir la documentation |
+| `opencode.settings`        | `none`                    | Ouvrir les réglages |
+| `server.pair`              | `none`                    | Associer un appareil |
+| `service.restart`          | `none`                    | Redémarrer le service |
+| `location.reload`          | `none`                    | Recharger la configuration |
+
+## Mini
+
+La commande `app.clear` ne fonctionne que dans [`opencode mini`](/cli). Appuyez sur `ctrl+l` pour effacer l’écran visible et redessiner le prompt. Le terminal conserve l’historique de défilement.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `app.clear` | `ctrl+l` | Effacer l’écran |
+
+## Visionneuse Diff
+
+Appuyez sur `d` (`diff.switch_source`) pour choisir **All**, **Committed**, **Uncommitted** ou **Last turn** (dans une session), ou sélectionnez **Base** pour changer la branche de comparaison. Les choix sont mémorisés jusqu’à la fermeture du TUI. Définissez le périmètre initial avec [`diffs.source` dans `cli.json`](/cli/config#diffs).
+
+Le défilement, la pagination et les raccourcis de début/fin contrôlent toujours le diff. Il n’y a pas de bascule de focus au clavier : cliquez sur les fichiers pour les ouvrir, sur les dossiers pour les déplier ou les replier, et utilisez la molette pour faire défiler l’arborescence.
+
+Utilisez `n` / `p` ou `alt+down` / `alt+up` (Option sur macOS) pour passer d’un fichier à l’autre. Dans la visionneuse de diff, les raccourcis Alt naviguent entre les fichiers plutôt qu’entre les onglets de session.
+
+Appuyez sur `m` pour marquer un fichier comme relu et replier son patch. Dans la vue tous les fichiers, appuyez à nouveau sur `m` pour le démarquer et rouvrir le patch. La vue d’un seul fichier passe automatiquement au fichier suivant lorsque vous marquez comme relu, mais reste sur le dernier fichier au lieu de boucler. Démarquer un fichier ne fait jamais avancer.
+
+Faites un clic droit sur un fichier dans la barre latérale ou sur son en-tête de diff pour **Mark complete** (ou **Mark incomplete**). Cela modifie le même état de relecture que `m`. Terminer un autre fichier depuis son menu ne le sélectionne pas et ne fait pas avancer le fichier en cours de lecture.
+
+Les alternatives `diff.help` avec Maj prennent en charge les terminaux qui signalent le modificateur Shift lorsque vous appuyez sur `?`.
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `diff.open`              | `none`              | Ouvrir la visionneuse de diff |
+| `diff.close`             | `escape,q`          | Fermer la visionneuse de diff |
+| `diff.down`              | `j,down`            | Descendre dans la visionneuse de diff |
+| `diff.up`                | `k,up`              | Monter dans la visionneuse de diff |
+| `diff.page.down`         | `pagedown,ctrl+f`   | Page suivante dans la visionneuse de diff |
+| `diff.page.up`           | `pageup,ctrl+b`     | Page précédente dans la visionneuse de diff |
+| `diff.half_page.down`    | `ctrl+d`            | Faire défiler d’une demi-page vers le bas |
+| `diff.half_page.up`      | `ctrl+u`            | Faire défiler d’une demi-page vers le haut |
+| `diff.first`             | `gg,home`           | Aller au début du diff |
+| `diff.last`              | `shift+g,end`       | Aller à la fin du diff |
+| `diff.next_hunk`         | `]`                 | Aller au bloc de diff suivant |
+| `diff.previous_hunk`     | `[`                 | Aller au bloc de diff précédent |
+| `diff.next_file`         | `n,alt+down`        | Aller au fichier de diff suivant |
+| `diff.previous_file`     | `p,alt+up`          | Aller au fichier de diff précédent |
+| `diff.toggle_file_tree`  | `b`                 | Afficher ou masquer l’arborescence des fichiers du diff |
+| `diff.single_patch`      | `s`                 | Afficher ou masquer la vue d’un seul patch |
+| `diff.switch_source`     | `d`                 | Choisir le périmètre de revue du diff |
+| `diff.toggle_view`       | `v`                 | Basculer entre vue côte à côte et unifiée |
+| `diff.toggle_fullscreen` | `f`                 | Afficher ou masquer le diff en plein écran |
+| `diff.mark_reviewed`     | `m`                 | Marquer le fichier sélectionné comme relu ou annuler ce marquage |
+| `diff.help`              | `?,shift+?,shift+/` | Afficher plus de raccourcis de la visionneuse de diff |
+
+Les anciennes entrées de configuration `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse` et `diff.switch_focus` restent acceptées, mais n’enregistrent plus de raccourcis.
+
+## Apparence et navigation
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `prompt.editor`            | `<leader>e`     | Ouvrir l’éditeur externe |
+| `theme.switch`             | `none`          | Lister les thèmes disponibles |
+| `theme.switch_mode`        | `none`          | Basculer entre le mode clair et le mode sombre |
+| `theme.mode.lock`          | `none`          | Verrouiller ou déverrouiller le mode du thème |
+| `session.sidebar.toggle`   | `<leader>b`     | Afficher ou masquer la barre latérale |
+| `pane.focus.left`          | `<leader>left`  | Donner le focus au panneau de session |
+| `pane.focus.right`         | `<leader>right` | Donner le focus au panneau de droite |
+| `terminal.select`          | `<leader>down`  | Sélectionner le terminal |
+| `terminal.toggle`          | `<leader>t`     | Afficher ou masquer le panneau terminal |
+| `terminal.close`           | `<leader>up`    | Fermer le panneau terminal |
+| `session.toggle.scrollbar` | `none`          | Afficher ou masquer la barre de défilement de la session |
+| `opencode.status`          | `<leader>s`     | Afficher l’état |
+| `opencode.debug`           | `none`          | Afficher les informations de débogage |
+
+## Sessions
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `session.export`                      | `<leader>x`             | Exporter la session vers l’éditeur |
+| `session.copy`                        | `none`                  | Copier la transcription de la session |
+| `session.copy.id`                     | `none`                  | Copier l’ID de session |
+| `session.move`                        | `none`                  | Déplacer la session |
+| `session.new`                         | `<leader>n`             | Créer une nouvelle session |
+| `session.list`                        | `<leader>l`             | Lister toutes les sessions |
+| `open.menu`                           | `ctrl+o`                | Ouvrir les sessions et projets récents |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | Passer à l’onglet de session suivant |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | Passer à l’onglet de session précédent |
+| `session.tab.history.back`            | `none`                  | Reculer dans l’historique des onglets de session |
+| `session.tab.history.forward`         | `ctrl+i`                | Avancer dans l’historique des onglets de session |
+| `session.tab.next_unread`             | `alt+shift+down`        | Passer à l’onglet de session non lu suivant |
+| `session.tab.previous_unread`         | `alt+shift+up`          | Passer à l’onglet de session non lu précédent |
+| `session.tab.close`                   | `<leader>w`             | Fermer l’onglet de session actuel |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | Rouvrir le dernier onglet de session fermé |
+| `session.timeline`                    | `<leader>g`             | Afficher la chronologie de la session |
+| `session.find`                        | `<leader>f,super+f`     | Rechercher dans la session |
+| `session.fork`                        | `none`                  | Dupliquer la session depuis un message |
+| `session.rename`                      | `ctrl+r`                | Renommer la session |
+| `session.delete`                      | `ctrl+d`                | Supprimer la session |
+| `session.interrupt`                   | `escape`                | Interrompre la session actuelle |
+| `session.background`                  | `ctrl+b`                | Mettre en arrière-plan les outils bloquants de la session |
+| `session.compact`                     | `<leader>c`             | Compacter la session |
+| `session.aside`                       | `none`                  | Poser une question annexe |
+| `session.cd`                          | `none`                  | Changer le répertoire de travail |
+| `session.queued_prompts`              | `<leader>q`             | Gérer les prompts en file d’attente |
+| `queued_prompt.undo`                  | `ctrl+u`                | Annuler le prompt en file d’attente |
+| `queued_prompt.delete`                | `ctrl+d`                | Supprimer le prompt en file d’attente |
+| `session.toggle.exploration_grouping` | `none`                  | Activer ou désactiver le regroupement des appels d’outils liés |
+| `session.verbosity.cycle`             | `none`                  | Changer le niveau de détail de la transcription |
+| `session.child.first`                 | `down`                  | Afficher ou masquer le sélecteur de subagents |
+| `session.child.next`                  | `right`                 | Aller à la session enfant suivante |
+| `session.child.previous`              | `left`                  | Aller à la session enfant précédente |
+| `session.parent`                      | `up`                    | Aller à la session parente |
+| `session.pin.toggle`                  | `ctrl+f`                | Épingler ou désépingler la session dans la liste des sessions |
+| `session.quick_switch.1`              | `<leader>1`             | Passer à la session de l’emplacement rapide 1 |
+| `session.quick_switch.2`              | `<leader>2`             | Passer à la session de l’emplacement rapide 2 |
+| `session.quick_switch.3`              | `<leader>3`             | Passer à la session de l’emplacement rapide 3 |
+| `session.quick_switch.4`              | `<leader>4`             | Passer à la session de l’emplacement rapide 4 |
+| `session.quick_switch.5`              | `<leader>5`             | Passer à la session de l’emplacement rapide 5 |
+| `session.quick_switch.6`              | `<leader>6`             | Passer à la session de l’emplacement rapide 6 |
+| `session.quick_switch.7`              | `<leader>7`             | Passer à la session de l’emplacement rapide 7 |
+| `session.quick_switch.8`              | `<leader>8`             | Passer à la session de l’emplacement rapide 8 |
+| `session.quick_switch.9`              | `<leader>9`             | Passer à la session de l’emplacement rapide 9 |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | Passer à l’onglet de session 1 |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | Passer à l’onglet de session 2 |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | Passer à l’onglet de session 3 |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | Passer à l’onglet de session 4 |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | Passer à l’onglet de session 5 |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | Passer à l’onglet de session 6 |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | Passer à l’onglet de session 7 |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | Passer à l’onglet de session 8 |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | Passer à l’onglet de session 9 |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | Passer à l’onglet de session 10 |
+
+## Modèles et agents
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `stash.delete`                 | `ctrl+d`    | Supprimer le prompt mis de côté |
+| `model.dialog.provider`        | `ctrl+a`    | Ouvrir la liste des fournisseurs depuis la boîte de dialogue des modèles |
+| `model.dialog.favorite`        | `ctrl+f`    | Ajouter ou retirer le modèle des favoris |
+| `model.dialog.usage`           | `ctrl+u`    | Afficher les limites d’utilisation depuis la boîte de dialogue des modèles |
+| `model.list`                   | `<leader>m` | Lister les modèles disponibles |
+| `model.cycle_recent`           | `f2`        | Modèle récemment utilisé suivant |
+| `model.cycle_recent_reverse`   | `shift+f2`  | Modèle récemment utilisé précédent |
+| `model.cycle_favorite`         | `none`      | Modèle favori suivant |
+| `model.cycle_favorite_reverse` | `none`      | Modèle favori précédent |
+| `mcp.list`                     | `none`      | Lister les serveurs MCP |
+| `usage.show`                   | `none`      | Afficher les limites d’utilisation |
+| `provider.connect`             | `none`      | Connecter une intégration |
+| `agent.list`                   | `<leader>a` | Lister les agents |
+| `agent.cycle`                  | `shift+tab` | Agent suivant |
+| `agent.cycle.reverse`          | `none`      | Agent précédent |
+| `variant.cycle`                | `ctrl+t`    | Parcourir les variantes de modèle |
+| `variant.list`                 | `none`      | Lister les variantes de modèle |
+| `speed.cycle`                  | `none`      | Parcourir les vitesses de modèle |
+| `speed.list`                   | `none`      | Lister les vitesses de modèle |
+
+## Navigation dans la session
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | Remonter d’une page dans les messages |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | Descendre d’une page dans les messages |
+| `session.line.up`               | `ctrl+alt+y`           | Remonter d’une ligne dans les messages |
+| `session.line.down`             | `ctrl+alt+e`           | Descendre d’une ligne dans les messages |
+| `session.half.page.up`          | `ctrl+alt+u`           | Remonter d’une demi-page dans les messages |
+| `session.half.page.down`        | `ctrl+alt+d`           | Descendre d’une demi-page dans les messages |
+| `session.first`                 | `ctrl+g,home,alt+home` | Aller au premier message |
+| `session.last`                  | `ctrl+alt+g,end`       | Aller au dernier message |
+| `session.message.next`          | `none`                 | Aller au message suivant |
+| `session.message.previous`      | `none`                 | Aller au message précédent |
+| `session.message.user.next`     | `none`                 | Aller au message utilisateur suivant |
+| `session.message.user.previous` | `none`                 | Aller au message utilisateur précédent |
+| `session.messages_last_user`    | `alt+end`              | Aller au dernier message utilisateur |
+| `messages.copy`                 | `<leader>y`            | Copier le message |
+| `session.undo`                  | `<leader>u`            | Annuler le message |
+| `session.redo`                  | `<leader>r`            | Rétablir le message |
+| `session.toggle.thinking`       | `none`                 | Afficher ou masquer les blocs de réflexion |
+
+## Commandes de prompt
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `prompt.submit`               | `none`           | Soumettre le prompt |
+| `prompt.queue`                | `<leader>return` | Mettre le prompt en file d’attente |
+| `prompt.editor_context.clear` | `none`           | Effacer le contexte de l’éditeur |
+| `prompt.images.view`          | `<leader>i`      | Afficher les images jointes |
+| `prompt.skills`               | `none`           | Ouvrir le sélecteur de skills |
+| `prompt.stash`                | `none`           | Mettre le prompt de côté |
+| `prompt.stash.pop`            | `none`           | Récupérer le prompt mis de côté |
+| `prompt.stash.list`           | `none`           | Lister les prompts mis de côté |
+
+## Édition de la saisie
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `prompt.clear`                  | `ctrl+c`                                                                      | Effacer le champ de saisie |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Coller depuis le presse-papiers |
+| `input.submit`                  | `return`                                                                      | Soumettre la saisie |
+| `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | Insérer une nouvelle ligne dans la saisie |
+| `input.move.left`               | `left,ctrl+b`                                                                 | Déplacer le curseur vers la gauche |
+| `input.move.right`              | `right,ctrl+f`                                                                | Déplacer le curseur vers la droite |
+| `input.move.up`                 | `up`                                                                          | Déplacer le curseur vers le haut |
+| `input.move.down`               | `down`                                                                        | Déplacer le curseur vers le bas |
+| `input.select.left`             | `shift+left`                                                                  | Sélectionner vers la gauche |
+| `input.select.right`            | `shift+right`                                                                 | Sélectionner vers la droite |
+| `input.select.up`               | `shift+up`                                                                    | Sélectionner vers le haut |
+| `input.select.down`             | `shift+down`                                                                  | Sélectionner vers le bas |
+| `input.line.home`               | `ctrl+a`                                                                      | Aller au début de la ligne |
+| `input.line.end`                | `ctrl+e`                                                                      | Aller à la fin de la ligne |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | Sélectionner jusqu’au début de la ligne |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | Sélectionner jusqu’à la fin de la ligne |
+| `input.visual.line.home`        | `alt+a`                                                                       | Aller au début de la ligne visuelle |
+| `input.visual.line.end`         | `alt+e`                                                                       | Aller à la fin de la ligne visuelle |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | Sélectionner jusqu’au début de la ligne visuelle |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | Sélectionner jusqu’à la fin de la ligne visuelle |
+| `input.buffer.home`             | `none`                                                                        | Aller au début du tampon |
+| `input.buffer.end`              | `none`                                                                        | Aller à la fin du tampon |
+| `input.select.buffer.home`      | `shift+home`                                                                  | Sélectionner jusqu’au début du tampon |
+| `input.select.buffer.end`       | `shift+end`                                                                   | Sélectionner jusqu’à la fin du tampon |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | Supprimer la ligne |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | Supprimer jusqu’à la fin de la ligne |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | Supprimer jusqu’au début de la ligne |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | Retour arrière |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | Supprimer un caractère |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | Annuler dans la saisie |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | Rétablir dans la saisie |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | Mot suivant |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | Mot précédent |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | Sélectionner le mot suivant |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | Sélectionner le mot précédent |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | Supprimer le mot suivant |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | Supprimer le mot précédent |
+| `input.select.all`              | `super+a`                                                                     | Tout sélectionner |
+| `prompt.history.previous`       | `up`                                                                          | Élément précédent de l’historique |
+| `prompt.history.next`           | `down`                                                                        | Élément suivant de l’historique |
+
+## Zone de saisie
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `composer.subagent.up`        | `up`     | Subagent précédent |
+| `composer.subagent.down`      | `down`   | Subagent suivant |
+| `composer.subagent.select`    | `return` | Aller au subagent |
+| `composer.subagent.interrupt` | `ctrl+d` | Interrompre le subagent |
+| `composer.shell.up`           | `up`     | Shell précédent |
+| `composer.shell.down`         | `down`   | Shell suivant |
+| `composer.shell.select`       | `return` | Afficher la sortie du shell |
+| `composer.shell.kill`         | `ctrl+d` | Arrêter la commande shell |
+| `composer.terminal.up`        | `up,k`   | Terminal précédent |
+| `composer.terminal.down`      | `down,j` | Terminal suivant |
+| `composer.terminal.select`    | `return` | Sélectionner le terminal |
+
+Sélectionnez une commande en cours dans l’onglet **Shell** et appuyez sur **Enter**, ou cliquez dessus, pour afficher les sorties stdout et stderr capturées. Utilisez **↑/↓**, **Page Up/Down** ou **Home** pour défiler, **End** pour suivre les nouvelles sorties, et **Esc** pour revenir sans arrêter la commande. La visionneuse affiche les sorties récentes et reste ouverte après la fin ; les sorties redirigées vers un fichier ne sont pas incluses.
+
+## Dialogues et autocomplétion
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `dialog.select.prev`           | `up,ctrl+p`   | Élément de dialogue précédent |
+| `dialog.select.next`           | `down,ctrl+n` | Élément de dialogue suivant |
+| `dialog.select.page_up`        | `pageup`      | Page précédente dans le dialogue |
+| `dialog.select.page_down`      | `pagedown`    | Page suivante dans le dialogue |
+| `dialog.select.home`           | `home`        | Premier élément du dialogue |
+| `dialog.select.end`            | `end`         | Dernier élément du dialogue |
+| `dialog.select.submit`         | `return`      | Valider l’élément sélectionné dans la boîte de dialogue |
+| `dialog.prompt.submit`         | `return`      | Valider le prompt du dialogue |
+| `dialog.integration.rename`    | `ctrl+r`      | Renommer le compte de l’intégration |
+| `dialog.integration.delete`    | `ctrl+d`      | Supprimer le compte de l’intégration |
+| `dialog.integration.copy`      | `tab`         | Copier le lien d’autorisation |
+| `dialog.worktree.generate`     | `tab`         | Générer un nom de worktree |
+| `dialog.move_session.new`      | `ctrl+a`      | Nouveau worktree |
+| `dialog.move_session.move`     | `ctrl+m`      | Déplacer la session vers le worktree |
+| `dialog.move_session.delete`   | `ctrl+d`      | Supprimer le worktree |
+| `dialog.move_session.refresh`  | `ctrl+r`      | Rafraîchir les worktrees |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | Passer à la suggestion précédente |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | Passer à la suggestion suivante |
+| `prompt.autocomplete.hide`     | `escape`      | Masquer l’autocomplétion |
+| `prompt.autocomplete.select`   | `return`      | Sélectionner la suggestion |
+| `prompt.autocomplete.complete` | `tab`         | Compléter la saisie avec la suggestion |
+| `permission.prompt.fullscreen` | `ctrl+f`      | Basculer l’affichage plein écran de la demande d’autorisation |
+| `plugins.toggle`               | `return`      | Activer ou désactiver le plugin |
+| `dialog.mcp.toggle`            | `space`       | Activer ou désactiver le serveur MCP |
+| `dialog.plugins.error`         | `space`       | Afficher l’erreur du plugin |
+| `dialog.plugins.update`        | `ctrl+u`      | Mettre à jour le plugin depuis le dialogue des plugins |
+| `dialog.plugins.check`         | `ctrl+r`      | Rechercher des mises à jour de plugins |
+
+## Terminal et plugins
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `terminal.suspend`      | `ctrl+z` | Suspendre le terminal |
+| `terminal.title.toggle` | `none`   | Afficher ou masquer le titre du terminal |
+| `plugins.list`          | `none`   | Ouvrir le gestionnaire de plugins |
+
+## Which-Key
+
+| ID | Par défaut | Description |
+| --- | --- | --- |
+| `which-key.toggle`         | `ctrl+alt+k`                | Afficher ou masquer le panneau which-key |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`          | Changer la disposition which-key |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`          | Afficher ou masquer l’aperçu de la combinaison en cours |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[`  | Groupe which-key précédent |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | Groupe which-key suivant |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`    | Défiler which-key vers le haut |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n`  | Défiler which-key vers le bas |
+| `which-key.page.up`        | `ctrl+alt+pageup`           | Page précédente which-key |
+| `which-key.page.down`      | `ctrl+alt+pagedown`         | Page suivante which-key |
+| `which-key.home`           | `ctrl+alt+home`             | Première liaison which-key |
+| `which-key.end`            | `ctrl+alt+end`              | Dernière liaison which-key |

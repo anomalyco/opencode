@@ -1,0 +1,152 @@
+---
+title: "API-oversikt"
+description: "Autentiser med OpenCode Console-API-et ved hjelp av personlige API-nøkler eller tjenestekontonøkler, og begrens hva hver nøkkel kan gjøre."
+---
+
+Console-API-et lar skriptene og integrasjonene dine kalle modeller og eksportere bruk. Hver forespørsel autentiseres med en API-nøkkel.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                      | Endepunkter                                       |
+| ----------------------------------------- | ------------------------------------------------- |
+| [Modeller](/console/api/models)          | `https://opencode.ai/console/api/v1/models`       |
+| [Inferens](/console/api/inference)       | `https://opencode.ai/inference/...`               |
+| [Leverandører](/console/api/providers)   | `https://opencode.ai/inference/custom/...`        |
+| [Brukseksport](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## API-nøkler
+
+Både medlemmer av arbeidsområdet og tjenestekontoer kan ha API-nøkler. Send en nøkkel som et bearer-token.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                  | Personlig API-nøkkel                                   | Tjenestekontonøkkel                                                      |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Opprettet av     | Ethvert medlem, for seg selv                           | Eiere og administratorer                                                 |
+| Opprettet i      | **Account › Personal API keys**                        | **Settings › Service accounts**                                          |
+| På vegne av      | Medlemmet som opprettet den                            | Tjenestekontoen                                                          |
+| Bruk belastes    | Medlemmets [budsjett](/console/budgets#member-budgets) | Tjenestekontoens [budsjett](/console/budgets#service-account-budgets)    |
+| Passer best til  | Dine egne skript og [harnesses](/console/harnesses)    | CI, delte maskiner og integrasjoner                                      |
+
+- Hver nøkkel virker i ett arbeidsområde, valgt når den opprettes. Ingen arbeidsområdeheader er nødvendig.
+- Hele nøkkelen vises bare én gang, rett etter at du oppretter den. Etterpå viser Console bare prefikset.
+- **Expiration** er valgfritt: **Never**, **1 day**, **7 days**, **30 days** eller **Custom** (1 til 365 dager). En utløpt
+  nøkkel kan ikke fornyes, så opprett en ny.
+
+## Personlige API-nøkler
+
+En personlig nøkkel opptrer som deg. Rollen din, [budsjettene](/console/budgets#member-budgets) og modellreglene gjelder for den.
+
+1. Åpne **Account** fra kontomenyen og finn **Personal API keys**.
+2. Klikk **Add API key**.
+3. Velg **Workspace**, et **Key name** og en valgfri **Expiration**. Eiere og administratorer velger også
+   **Permissions**.
+4. Klikk **Create** og kopier nøkkelen.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Nøkkelen følger din gjeldende tilgang til arbeidsområdet. Endres rollen din, endres også det nøkkelen kan gjøre. Hvis
+arbeidsområdet håndhever [SSO](/console/sso#sso-enforcement), virker nøkkelen bare mens du har en aktiv SSO-økt, med mindre
+du er eier.
+
+## Tjenestekontoer
+
+En tjenestekonto er et medlem av arbeidsområdet som ikke er en person, med egne API-nøkler, egen bruksstatistikk og eget
+[budsjett](/console/budgets#service-account-budgets). Bruk en tjenestekonto til automatisering, slik at bruken ikke knyttes til en person. Eiere og
+administratorer administrerer tjenestekontoene.
+
+1. Åpne **Settings › Service accounts** og klikk **Add Service Account**, og gi den et navn, for eksempel `CI Pipeline`.
+2. Åpne tjenestekontoen og klikk **Add API Key**.
+3. Velg et **Key name**, en valgfri **Expiration** og **Permissions**, og klikk **Create**.
+4. Kopier nøkkelen.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Eiere og administratorer kan gi en tjenestekontonøkkel nytt navn eller endre tillatelsene senere med **Edit…** i nøkkelens handlingsmeny.
+
+## Tillatelser
+
+Hver nøkkel har et tillatelsesnivå, valgt under **Permissions** når du oppretter den.
+
+| Tillatelser    | Tillater                                                                             |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | Alt medlemmet eller tjenestekontoen kan gjøre, unntatt **This account's API keys**.   |
+| **Restricted** | Bare ressursene du velger.                                                           |
+| **Read only**  | Lesetilgang til alle ressurser. Nøkkelen kan liste modeller, men ikke kalle dem.     |
+
+En nøkkel kan aldri gjøre mer enn medlemmet eller tjenestekontoen den opptrer på vegne av. En personlig nøkkel begrenses av medlemmets gjeldende rolle, og en tjenestekontonøkkel av det [tjenestekontoer kan gjøre](#limitations).
+
+### Begrensede nøkler
+
+Angi hver ressurs til **None**, **Read** eller **Write**. **Write** inkluderer **Read**.
+
+| Ressurs                    | Nivåer                |
+| --------------------------- | --------------------- |
+| **Models**                 | **Read**, **Request** |
+| **Usage**                  | **Read**              |
+| **Budgets**                | **Read**, **Write**   |
+| **Members**                | **Read**, **Write**   |
+| **Providers**              | **Read**, **Write**   |
+| **Billing**                | **Read**, **Write**   |
+| **Workspace settings**     | **Read**, **Write**   |
+| **SSO**                    | **Read**              |
+| **Service accounts**       | **Read**              |
+| **This account's API keys** | **Write**            |
+
+**Models › Read** lister modeller, og **Models › Request** kaller dem også gjennom API-ene [Inference](/console/api/inference)
+og [Providers](/console/api/providers). En nøkkel som bare kaller modeller, trenger for eksempel:
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+Nøkler opprettet som **Inference only** før tillatelser per ressurs vises som **Restricted** med **Models** satt til **Request**.
+
+### Hvem kan gi hva
+
+- **Members** kan bare opprette personlige nøkler som lister og kaller modeller. Console viser «This key can list and call
+  models as you.» i stedet for tillatelsesvalg.
+- **Eiere og administratorer** kan gi sine personlige nøkler **All**, **Restricted** eller **Read only**, opp til sin egen rolle.
+  Standard er **Restricted** med **Models** satt til **Request**. Hvis de senere får en rolle med færre rettigheter,
+  begrenses nøklene deres tilsvarende.
+- **Tjenestekontonøkler** har **All** som standard. Eiere og administratorer velger tillatelsene deres.
+
+### Begrensninger
+
+Noen handlinger krever alltid at en person er logget inn i Console. Det er også strenge begrensninger på bruk av en nøkkel til å opprette andre nøkler.
+
+- Ingen API-nøkkel kan endre SSO-innstillinger eller slette arbeidsområdet.
+- Tjenestekontonøkler kan ikke invitere medlemmer, endre roller, fjerne medlemmer, administrere fakturering, endre arbeidsområdeinnstillinger,
+  administrere modeller eller opprette eller fjerne tjenestekontoer, selv med **All**.
+- **This account's API keys** er bare tilgjengelig på tjenestekontonøkler, og **All** inkluderer det ikke. En nøkkel med det
+  kan opprette og tilbakekalle nøkler bare for sin egen tjenestekonto. Nye nøkler må være **Restricted**, holde seg innenfor den
+  opprettende nøkkelens tillatelser og kan ikke inkludere **This account's API keys**.
+- Personlige nøkler kan aldri få **This account's API keys**, og ingen API-nøkkel kan opprette eller tilbakekalle personlige API-nøkler.
+
+Forespørsler utenfor en nøkkels tillatelser returnerer HTTP `403`.
+
+## Tilbakekalling
+
+| Nøkkel              | Hvem kan tilbakekalle den | Hvor                                                                             |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| Personlig API-nøkkel | Medlemmet som eier den    | **Account › Personal API keys**, deretter **Revoke**                             |
+| Personlig API-nøkkel | Eiere og administratorer  | Medlemmets side i **Settings › Members**, under **API Keys**                     |
+| Tjenestekontonøkkel | Eiere og administratorer  | Tjenestekontoens side i **Settings › Service accounts**, under **API Keys**      |
+
+Nøkler tilbakekalles også automatisk:
+
+- Når noen forlater et arbeidsområde eller fjernes fra det, eller avprovisjoneres gjennom [SCIM](/console/scim), tilbakekalles alle nøkler
+  personen opprettet der, inkludert tjenestekontonøkler. Andre nøkler på samme tjenestekonto fortsetter å virke.
+- Fjerning av en tjenestekonto tilbakekaller alle nøklene dens.
+
+Tilbakekalte og utløpte nøkler slutter å virke umiddelbart og returnerer HTTP `401`.

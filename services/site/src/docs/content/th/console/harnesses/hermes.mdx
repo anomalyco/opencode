@@ -1,0 +1,64 @@
+---
+title: "Hermes"
+description: "ใช้โมเดลของ Console และ Go จาก Hermes Agent"
+---
+
+[Hermes Agent](https://hermes-agent.nousresearch.com) มีผู้ให้บริการ OpenCode สำหรับแบบจ่ายตามการใช้งานและ Go ในตัว จะเลือก
+API ที่ถูกต้องสำหรับโมเดลแบบเสียค่าใช้จ่ายหรือ Go แต่ละตัว โมเดลแชตระดับฟรีต้องใช้ OpenCode และจะคืน HTTP `403` จาก Hermes
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) ตั้งค่า Hermes ได้ด้วยคำสั่งเดียว รวมถึงนโยบายของเวิร์กสเปซ
+  เซิร์ฟเวอร์ MCP สกิล และคำแนะนำ รัน `npx @opencode/console setup hermes` ขั้นตอนด้านล่างเป็น
+  การตั้งค่าด้วยตัวเอง
+</Callout>
+
+| ผู้ให้บริการ   | แพ็กเกจ        | ตัวแปรคีย์            |
+| -------------- | ------------- | ---------------------- |
+| `opencode-zen` | จ่ายตามการใช้งาน | `OPENCODE_ZEN_API_KEY` |
+| `opencode-go`  | Go            | `OPENCODE_GO_API_KEY`  |
+
+## การกำหนดค่า
+
+รันการตั้งค่าโมเดลแล้วเลือก **OpenCode Zen** สำหรับแบบจ่ายตามการใช้งาน หรือ **OpenCode Go** สำหรับ Go
+
+```bash
+hermes model
+```
+
+วาง[คีย์ API ส่วนตัว](/console/harnesses#get-an-api-key) แล้วเลือกโมเดล Hermes จะบันทึก
+คีย์ไว้ที่ `~/.hermes/.env` และตัวเลือกไว้ที่ `~/.hermes/config.yaml`
+
+```yaml title="~/.hermes/config.yaml"
+model:
+  provider: opencode-go
+  default: kimi-k3
+```
+
+<Callout>Go ต้องมี ID เซสชันในทุกคำขอ Hermes v0.21.6 ขึ้นไปส่งให้โดยอัตโนมัติ</Callout>
+
+## โมเดล
+
+ใช้ ID โมเดลจากตาราง [Console](/console/models#endpoints) หรือ [Go](/console/go#endpoints) โดยไม่ต้องมีคำนำหน้า
+สลับโมเดลในเซสชันด้วย `/model` หรือเลือกโมเดลสำหรับการรันครั้งเดียว
+
+```bash
+hermes chat --provider opencode-zen --model claude-sonnet-5-5
+```
+
+## Console MCP
+
+เพิ่มเซิร์ฟเวอร์ [Console MCP](/console/harnesses#console-mcp) ด้วย OAuth แล้วลงชื่อเข้าใช้จากเบราว์เซอร์
+
+```bash
+hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console
+```
+
+หรือเพิ่มลงใน `~/.hermes/config.yaml` แล้วรัน `/reload-mcp` ในเซสชัน
+
+```yaml title="~/.hermes/config.yaml"
+mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth
+```

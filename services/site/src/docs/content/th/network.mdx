@@ -1,0 +1,152 @@
+---
+title: เครือข่าย
+description: กำหนดค่าพร็อกซี หน่วยออกใบรับรองกำหนดเอง และใบรับรองไคลเอนต์
+---
+
+ตั้งตัวแปรพร็อกซีมาตรฐาน OpenCode ใช้ HTTP สำหรับการเชื่อมต่อภายในเครื่องระหว่าง CLI กับบริการเบื้องหลัง โดย CLI
+จะยกเว้นที่อยู่ลูปแบ็กจากการใช้พร็อกซีโดยอัตโนมัติ
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+`HTTP_PROXY` ใช้กับปลายทาง HTTP ส่วน `HTTPS_PROXY` ใช้กับปลายทาง HTTPS ทั้งสองตัวแปรใช้ URL พร็อกซีที่ขึ้นต้นด้วย `http://` ได้
+เมื่อเริ่มทำงาน CLI จะเพิ่ม `127.0.0.1`, `localhost` และ `::1` ลงในทั้ง `NO_PROXY` และ `no_proxy` หากมีโฮสต์อื่นที่ต้องเชื่อมต่อโดยตรง
+ให้ระบุใน `NO_PROXY` โดยคั่นแต่ละรายการด้วยจุลภาค
+
+## บริการ
+
+การ export ในเชลล์มีผลกับบริการเบื้องหลังเฉพาะเมื่อบริการนั้นเริ่มจากเชลล์ ให้บันทึกตัวแปรใน
+การกำหนดค่าบริการแบบมีการจัดการ เพื่อให้การเริ่มบริการครั้งต่อๆ ไปใช้การตั้งค่าเครือข่ายเดียวกัน
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+การเปลี่ยนตัวแปรสภาพแวดล้อมแบบมีการจัดการจะหยุดบริการที่ทำงานอยู่ `service start` จะเริ่มใหม่ด้วยสภาพแวดล้อมใหม่
+เชลล์ที่ใช้รัน CLI ต้องตั้งตัวแปรพร็อกซีแยกต่างหาก เพราะตัวแปรของบริการแบบมีการจัดการมีผลกับโปรเซสเซิร์ฟเวอร์เท่านั้น
+ทั้งสองฝั่งจะเพิ่มข้อยกเว้นสำหรับที่อยู่ลูปแบ็กโดยอัตโนมัติ
+
+ลบตัวแปรที่บันทึกไว้ด้วย `service unset env`
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## การตรวจสอบสิทธิ์
+
+หากพร็อกซีรับข้อมูลรับรองใน URL ให้ใส่ชื่อผู้ใช้และรหัสผ่านใน URL ของพร็อกซีแต่ละตัวที่ต้องยืนยันตัวตน
+ใช้ percent-encoding กับอักขระอย่าง `@`, `:` และ `/` ที่อยู่ในชื่อผู้ใช้หรือรหัสผ่าน
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+สำหรับบริการเบื้องหลัง ให้บันทึก URL ทั้งหมด ค่าจะถูกเก็บในการกำหนดค่าบริการแบบส่วนตัวและ
+แสดงโดย `opencode service get env` จึงไม่ควรแชร์ผลลัพธ์นั้น
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## ใบรับรอง
+
+ตั้ง `NODE_EXTRA_CA_CERTS` เป็นไฟล์ PEM เมื่อพร็อกซีหรือปลายทางใช้ใบรับรองที่ลงนามโดยหน่วยออกใบรับรอง
+ส่วนตัว หน่วยออกใบรับรองเพิ่มเติมจะถูกเพิ่มในที่เก็บความเชื่อถือของรันไทม์เมื่อโปรเซสเริ่ม
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+บันทึกพาธไฟล์สำหรับบริการเบื้องหลัง แล้วรีสตาร์ต
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## แอนติไวรัสและการตรวจ HTTPS
+
+การ "สแกน HTTPS" หรือ "สแกนการเชื่อมต่อที่เข้ารหัส" ของแอนติไวรัส (Kaspersky, Avast, ESET และอื่นๆ) และพร็อกซี
+ตรวจ SSL ขององค์กรจะแทนที่ใบรับรองของเซิร์ฟเวอร์ด้วยของตัวเอง OpenCode จะปฏิเสธและคำขอจะล้มเหลวด้วย
+ข้อผิดพลาดเช่น
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+แก้ไขได้สองวิธี
+
+- ยกเว้น `opencode.ai` และ `*.opencode.ai` จากการสแกน HTTPS ในการตั้งค่าแอนติไวรัส เพิ่มโฮสต์ API ของผู้ให้บริการ
+  ด้วย เช่น `api.anthropic.com` หากคุณเชื่อมต่อกับผู้ให้บริการโดยตรง
+- ส่งออกหน่วยออกใบรับรองสำหรับการตรวจสอบเป็นไฟล์ PEM แล้วเชื่อถือด้วย `NODE_EXTRA_CA_CERTS` ตามที่แสดงใน
+  [ใบรับรอง](#certificates)
+
+## ใบรับรองไคลเอนต์
+
+ตั้ง `settings.tls` หากเกตเวย์ของผู้ให้บริการต้องใช้ mutual TLS ระบบจะใช้ใบรับรองนี้กับคำขอโมเดลของผู้ให้บริการนั้น
+โดยส่งใบรับรองเฉพาะเมื่อเซิร์ฟเวอร์ขอระหว่างการจับมือ TLS
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` และ `key` เป็นข้อความ PEM ใช้ `{file:...}` เพื่ออ่านจากไฟล์ ไฟล์ที่อ่านไม่ได้จะทำให้ `tls` ไม่ถูกตั้งค่า
+- `passphrase` จำเป็นเฉพาะกับคีย์ที่เข้ารหัส
+- ทำงานบนบิลด์ Bun และ Node เซิร์ฟเวอร์บน Cloudflare Workers แสดงใบรับรองไคลเอนต์ผ่าน `fetch` ไม่ได้
+- คำขอที่มีใบรับรองไคลเอนต์จะไม่ตาม redirect ใบรับรองจึงไม่ถูกแสดงต่อโฮสต์อื่น
+
+ทุกคำขอโมเดลของผู้ให้บริการนั้นแสดงใบรับรอง: โมเดลแชต การบีบอัด ภาพ และการตัดสินใจ ผู้ให้บริการ
+ที่มี `tls` ใช้ HTTP แทน WebSocket เครื่องมือเช่น webfetch เซิร์ฟเวอร์ MCP ระยะไกล และการติดตั้งปลั๊กอินจะไม่แสดง
+ใบรับรอง
+
+## โฟร์กราวด์
+
+`--standalone` และ `serve` ใช้สภาพแวดล้อมของโปรเซสตัวเอง `opencode service set env` ไม่ได้กำหนดค่าโปรเซสเหล่านี้
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+ใช้รูปแบบเดียวกันกับเซิร์ฟเวอร์แบบโฟร์กราวด์
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## ตรวจสอบ
+
+ตรวจสอบว่า CLI เข้าถึงบริการเบื้องหลังได้หลังใช้การตั้งค่า
+
+```bash
+opencode api get /api/info
+```
+
+ถ้าคำขอตรวจสถานะบริการสำเร็จ แสดงว่าไคลเอนต์เชื่อมต่อกับบริการในเครื่องได้ ลองส่งคำขอปกติไปยังผู้ให้บริการเพื่อตรวจสอบพร็อกซีขาออกและเส้นทางใบรับรองของบริการ

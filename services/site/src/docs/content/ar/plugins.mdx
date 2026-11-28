@@ -1,0 +1,172 @@
+---
+title: "الملحقات"
+description: "أضف حزم npm أو مجلدات ملحقات محلية إلى OpenCode في opencode.json، وفعّل الملحقات أو عطّلها بالمعرّف أو بأحرف البدل."
+---
+
+أضف حزمًا منشورة أو حزمًا بإصدارات أو حزمًا بنطاق أو مجلدات ملحقات محلية إلى `opencode.json(c)`.
+
+## الإعداد
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+تُفسَّر المسارات النسبية انطلاقًا من ملف الإعدادات الذي يتضمن الإدخال.
+
+ويجب أن تكون المسارات المحلية المضبوطة مجلدات. ويُتخطى المسار إلى ملف واحد. راجع [التحميل](/build/plugins#load)
+لطريقة عثور OpenCode على كل جزء في مجلد.
+
+وتُطبَّق مصفوفات الملحقات من ملفات الإعداد المنطبقة من الأقل أسبقية إلى الأعلى بدل أن يحل أحدها
+محل الآخر.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## الاكتشاف
+
+ويحمّل OpenCode أيضًا ملفات `.ts` و`.js` المباشرة ومجلدات حزم الملحقات المباشرة من كل مجلد
+`.opencode/plugins/` مكتشف.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+يبحث OpenCode عن الملحقات العامة وفق البنية نفسها داخل مجلد OpenCode config.
+
+```text
+~/.config/opencode/plugins/
+```
+
+ولا يُكتشف مجلد `plugins/` بجانب `opencode.json(c)` في جذر المشروع تلقائيًا؛ فاضبط مجلدات
+ملحقاته صراحةً أو انقله تحت `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## التحكم
+
+تُعالج إدخالات الملحقات بالترتيب. وأضف البادئة `-` إلى معرّف أو حرف بدل لتعطيله، واستخدم `*` لكل الملحقات،
+و`.*` لمطابقة بادئة معرّف. ويعيد معرّف لاحق تفعيل ملحق.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+ولتعطيل الإشعار المضاف إلى التفرعات الجديدة، أضف `"-opencode.fork-notice"` إلى `plugins`.
+
+ويتجاهل ملحقان مدمجان الإزالة حتى لا يستطيع مستودع إيقاف فرض
+[السياسة](/policies): `opencode.config.policy` و
+`opencode.provider.opencode`، وهو اتصال Console الذي يسلّم سياسة
+المؤسسة.
+
+## الإدارة
+
+ثبّت ملحقات الحزم العامة أو اسردها أو تحقق منها أو حدّثها أو أزلها بـCLI.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+ويتحقق `plugin check` من تحديثات ملحقات الحزم الخاصة بالخادم وبواجهة GUI وواجهة TUI وحدها. ويحدّث `plugin update` كل حزمة قديمة؛
+ومرّر هدف حزمة مضبوطًا لفحص تلك الحزمة أو تحديثها وحدها. وتُتخطى الملحقات المحلية ومراجعات الحزم
+المحدّدة.
+
+وتحدّث الحزمة نفسها عندما تسمّي ما تتبعه: `name@latest`، أو نطاق إصدار مثل `name@^1.2.0`
+أو `name@~1.2.0` أو `name@1.x` أو `name@>=1.2.0 <2`، أو فرع Git مثل `github:acme/plugin#main`، أو نطاق
+`semver:` في Git. ويتحقق منها OpenCode عند بدء التشغيل وكل 24 ساعة، ويثبّت إصدارًا أحدث، ويعيد تحميله. ولا ينتقل النطاق إلا إلى الإصدارات
+داخله. وإذا فشل تحميل الإصدار الجديد، يستمر السابق في العمل ويبقى مثبّتًا.
+
+أما الاسم المجرد (`name`) أو المستودع (`github:acme/plugin`) فيبقى على الإصدار الذي ثبّته. وكذلك وسوم npm الأخرى مثل
+`name@next` ووسوم Git. ويظل `plugin check` يفيد بتحديثاتها ويثبّتها `plugin update`. والإصدارات الدقيقة و
+تجزئات Commit مثبّتة.
+
+ويقبل تثبيت الحزم أسماء npm بإصدارات أو وسوم أو نطاقات، إضافة إلى مواصفات حزم Git المتوافقة مع npm.
+ويمكن لمستودعات Git استخدام اختصارات المضيفين أو HTTPS أو SSH، بما في ذلك المستودعات الخاصة المتاحة عبر
+بيانات اعتماد Git لديك.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+وتُدعم الفروع والوسوم وتجزئات Commit الكاملة ومحدّدات المجلد الفرعي `::path:` في npm. واضبط
+المسارات المحلية مباشرةً؛ ولا يقبل `plugin add` أهداف ملفات tarball ولا أسماء npm المستعارة.
+
+## إعادة التحميل
+
+تُعاد التغييرات في مجلدات الإعداد المراقبة تلقائيًا. ويحمّل بدء الخادم ملحقات الحزم المخزّنة مؤقتًا فورًا،
+ويثبّت الحزم المفقودة في الخلفية، ويتحقق من ملحقات npm وGit غير المثبّتة بحثًا عن تحديثات. وتبقى إصدارات npm الدقيقة
+وتجزئات Git الكاملة مثبّتة. وقد تتطلب التغييرات في التبعيات المحلية غير المراقبة
+إعادة تشغيل OpenCode مع ذلك.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## سطح المكتب
+
+والملحق الذي يصدّر `./gui-experimental` يضيف أيضًا لوحات أو أوامر أو إعدادات إلى OpenCode Desktop. ويحمّل التطبيق
+الملحقات من الخادم الذي يشغّله، فاضبط الملحق في `opencode.json(c)` العام لاستخدامه في كل نافذة.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+ويسردها **Settings > Extensions > Plugins** عندما يكون خادم التطبيق نفسه مختارًا. ومفتاح الملحق يوقف
+واجهته في سطح المكتب وحدها، ويعيد **Reload** تحميله بعد فشل. ولإيقاف الملحق كاملًا، أضف `-` ومعرّفه إلى
+`plugins`، مثلًا `"-acme"`.
+
+## الطرفية
+
+تُضبط ملحقات TUI وحدها منفصلة وتبقى نشطة عند الاتصال بخادم بعيد.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  أنشئ ملحقات تضيف أدوات وخطافات وتكاملات وأوامر ووكلاء وسلوكًا آخر.
+</Card>

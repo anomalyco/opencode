@@ -1,0 +1,111 @@
+---
+title: "Providers API"
+description: "เรียกผู้ให้บริการที่เชื่อมต่อกับเวิร์กสเปซของคุณผ่านเกตเวย์ของ Console ด้วยคีย์ของ Console"
+---
+
+ทุก[ผู้ให้บริการ](/console/providers)ที่เชื่อมต่อกับเวิร์กสเปซของคุณให้บริการผ่านเกตเวย์ของ Console ที่ URL ของตัวเอง
+OpenCode จะใช้ URL นี้โดยอัตโนมัติหลังจาก `/connect` หากต้องการใช้ผู้ให้บริการเดียวกันจากเครื่องมือของคุณ ให้ส่งคำขอมาที่ URL นี้โดยตรง
+Console จะเพิ่มข้อมูลรับรองของผู้ให้บริการก่อนส่งต่อ ความลับของผู้ให้บริการจึงไม่ออกจากเวิร์กสเปซ
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## URL ของผู้ให้บริการ
+
+คัดลอก **Console API URL** จากหน้าของผู้ให้บริการภายใต้ **Providers**
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## การตรวจสอบสิทธิ์
+
+แทนที่ `<token>` ด้วย[คีย์บัญชีบริการ](/console/api#service-accounts)ที่สร้างใน Console Console จะสลับเป็น
+ข้อมูลรับรองของการเชื่อมต่อก่อนส่งต่อ
+
+```text
+Authorization: Bearer <token>
+```
+
+Console ยังอ่านคีย์จาก `x-api-key`, `api-key` หรือ `x-goog-api-key` ด้วย คุณจึงใช้ SDK ของผู้ให้บริการได้โดยตั้งค่าให้ส่งคำขอไปที่ Console API URL
+
+## เอนด์พอยต์
+
+ต่อท้ายพาธ API ของผู้ให้บริการเข้ากับ Console API URL แล้ว Console จะส่งคำขอไปยัง base URL ของการเชื่อมต่อและ
+คืนการตอบกลับของผู้ให้บริการตามเดิม
+
+| รูปแบบ               | พาธ                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+| Embeddings           | `/embeddings`                     |
+
+ส่ง ID โมเดลตามที่แสดงในหน้าผู้ให้บริการ หาก API ของผู้ให้บริการใช้ ID อื่นสำหรับโมเดลเดียวกัน Console จะแก้ ID ให้ตรงก่อนส่งต่อ
+คำขอสำหรับโมเดลที่ไม่ได้เปิดใช้งานบนการเชื่อมต่อจะถูกปฏิเสธ
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens` จำเป็น
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+โมเดลและเมธอดเป็นส่วนหนึ่งของพาธ แทนที่ `:generateContent` ด้วย `:streamGenerateContent` เพื่อสตรีม
+การตอบกลับ
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## การใช้งาน
+
+คำขอจะนับเข้า[งบประมาณ](/console/budgets)โดยใช้ราคาที่ตั้งไว้ในแต่ละโมเดล ผู้ให้บริการ
+จะเรียกเก็บค่าโทเคนจากคุณ

@@ -1,0 +1,305 @@
+---
+title: "權限"
+description: "依序套用允許、拒絕與詢問規則，根據動作及路徑、指令等資源，控制 OpenCode agent 能執行哪些操作。"
+---
+
+權限控制 agent 能否對某個資源執行操作。
+
+## 設定
+
+常見做法是執行 shell 指令前先詢問，但允許例行的 Git 檢查，並一律封鎖推送。請依下列順序將規則加入 `opencode.jsonc`：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+最後一條相符的規則會生效，因此特定的例外會放在範圍較廣的規則之後。
+
+<Callout type="warning">
+  V1 使用不同的欄位與動作名稱。在 V2 中，請使用 `permissions`、`shell` 與 `subagent`，而不是 `permission`、
+  `bash` 與 `task`。
+</Callout>
+
+## 規則
+
+每條規則都需要三個字串欄位：
+
+| 欄位 | 意義 |
+| --- | --- |
+| `action` | 要檢查權限的工具動作 |
+| `resource` | 動作所使用的值，例如路徑、指令、URL、查詢、技能 ID 或 agent ID |
+| `effect` | `allow`、`deny` 或 `ask` |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| 效果 | 結果 |
+| --- | --- |
+| `allow` | 不提示，直接繼續 |
+| `deny` | 封鎖操作 |
+| `ask` | 等待用戶端決定 |
+
+若沒有規則相符，OpenCode 會使用 `ask`。
+
+## 比對
+
+動作和資源都支援簡單的萬用字元，會比對整個值：
+
+| 模式 | 相符 |
+| --- | --- |
+| `*` | 零或多個字元，包括 `/` |
+| `?` | 恰好一個字元 |
+| 其他 | 字面字元 |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+此模式會比對整個標準化路徑。反斜線會標準化為
+斜線，且在 Windows 上比對不區分大小寫。
+
+以 ` *` 結尾的 shell 模式也會比對不帶引數的指令：
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+這同時比對 `git status` 與 `git status --short`。
+
+OpenCode 會依序合併規則，以最後一條相符的規則為準。先載入優先順序較低的設定，再加入全域規則，最後加入 agent 規則。
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+套用涉及多個檔案的修補等操作時，可能要檢查多個資源。只要有一項是 `deny`，就會拒絕整個操作；
+若沒有拒絕項目，但至少一項是 `ask`，就會詢問；兩者皆無才會允許。
+
+## 動作
+
+V2 的動作名稱是字串，因此外掛可以定義更多動作。內建工具
+目前使用這些動作與資源：
+
+| 動作 | 資源 |
+| --- | --- |
+| `read` | 相對於位置的內部路徑，或標準化的絕對外部路徑 |
+| `edit` | `edit`、`write` 與 `patch` 的目標路徑 |
+| `glob` | 請求的 glob 模式 |
+| `grep` | 請求的正規表示式，而非搜尋路徑 |
+| `shell` | 掃描器產生的指令字串；複合指令可能會產生多個 |
+| `subagent` | 目標 agent ID |
+| `skill` | 技能 ID |
+| `question` | `*` |
+| `webfetch` | 請求的 URL |
+| `websearch` | 搜尋查詢 |
+| `generate_image` | 所選圖片模型，格式為 `providerID/modelID`；若已指定變體，會加上 `#variant` |
+| `external_directory` | 標準化的外部目錄邊界，通常以 `/*` 結尾 |
+| `<server>_<tool>` | MCP 工具為 `*`；兩個名稱都保留字母、數字、`_` 和 `-`，其餘字元一律換成 `_` |
+| `opencode_list_mcp_resources` | MCP 伺服器名稱 |
+| `opencode_read_mcp_resource` | `<server>:<uri>` |
+| `execute` | `*`；拒絕時會移除 Code Mode 並直接列出其工具，而巢狀工具則會套用各自的規則 |
+
+MCP 動作名稱會保留連字號，因此名為 `mcp-atlassian` 的伺服器所提供的工具會比對 `mcp-atlassian_*`，而不是 `mcp_atlassian_*`。
+
+例如，允許一個技能並拒絕其他所有技能：
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` 與 `lsp` 不是目前 V2 Core 的權限動作。
+
+## 目錄
+
+如果路徑既不在目前位置內，也不在該專案的 worktree 內（只計入不是根目錄的 worktree），OpenCode 會先檢查
+`external_directory`，再套用 `read` 或 `edit` 規則。預設原則
+允許 `external_directory`，所以除非你另外新增規則，否則存取外部路徑時不會詢問。
+若要在存取專案外部任何內容之前先詢問：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+接著可加入範圍更小的規則，允許或拒絕存取特定目錄：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+這適用於 `read`、`edit`、`write` 與 `patch` 使用的外部路徑。
+shell 會先檢查其外部工作目錄與掃描器推斷的目錄，再檢查
+`shell` 資源。
+
+對於 `external_directory`、`read` 與 `edit`，開頭的 `~`、`~/`、`$HOME` 或
+`$HOME/` 會在載入設定時展開：
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+shell 資源保留指令原文，不會將主目錄寫法展開成實際路徑。
+
+<Callout type="warning">
+  `shell` 會以主機使用者的檔案系統、處理程序與網路權限執行。從指令文字推斷目錄
+  只能盡力而為，因此請優先使用範圍狹窄的 shell 允許清單，而不是試圖辨識所有危險指令的模式。
+</Callout>
+
+修改檔案時，相對路徑可以指向目前位置以外、但仍在專案 worktree 內的路徑。
+明確的外部路徑會先標準化再比對，因此請只授權可信任的目錄
+邊界。
+
+## 掃描器
+
+shell 權限檢查會使用 OpenCode 內建的 shell 掃描器，涵蓋 Bash、Zsh、POSIX `sh` 與 PowerShell。有些指令無法安全分析，例如語法錯誤或 `eval` 等動態求值。若有任何 `shell` 拒絕規則適用，這類指令會因掃描器錯誤而失敗，因為無法依拒絕規則檢查其子指令。否則，它需要以單一 `shell` 資源核准整條指令，並核准 `external_directory` `*`。只有允許所有目錄的規則或使用者才能授予第二項核准，且兩項核准都不會儲存為模式。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [
+    {
+      "permissions": [
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+        { "action": "shell", "resource": "rm *", "effect": "deny" },
+      ],
+    },
+  ],
+}
+```
+
+權限規則、已儲存的核准模式與盡力而為的目錄推斷，會套用至每個擷取出的子指令與 `cd` 目標。未知目錄沒有額外的核准模式或全面限制。
+
+## 預設值
+
+所有 agent（含自訂 agent）都會先依序套用下列基礎原則：
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+內建的 agent 會附加下列原則：
+
+| Agent | 額外原則 |
+| --- | --- |
+| `build` | 允許提問 |
+| `plan` | 允許提問；除 `~/.opencode/plan` 下的檔案外，拒絕編輯 |
+| `general` | 拒絕提問與啟動 subagent |
+| `explore` | 除 shell、讀取、glob、grep、網路擷取、網路搜尋與外部目錄外，拒絕所有動作；讀取 `.env` 時詢問 |
+| `title` | 拒絕所有動作 |
+| `summary` | 拒絕所有動作 |
+| `compaction` | 保留基礎原則 |
+
+由於沒有預設規則會詢問 `external_directory`，位置與 worktree 外部的
+讀取和編輯會直接進行，不會提示。請新增 `external_directory` 的 `ask` 或 `deny`
+規則（如[目錄](#directories)所示），以恢復提示或封鎖外部存取。
+後續的全域與 agent 規則會覆寫這些預設值。
+
+## Agents
+
+把共用規則放在頂層，較窄的規則放在
+`agents.<id>.permissions` 下：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+agent 規則會附加在全域規則之後，不會取代全域陣列。自訂 subagent
+使用自己的權限，而不是父 agent 權限的子集。
+
+## 核准
+
+當規則的結果為 `ask` 時，用戶端可以回覆：
+
+| 選項 | 回覆 | 結果 |
+| --- | --- | --- |
+| 允許一次 | `once` | 只核准待處理的請求 |
+| 一律允許 | `always` | 核准請求，並為專案儲存工具建議的模式 |
+| 拒絕 | `reject` | 拒絕該請求，以及該工作階段中其他所有待處理的權限請求 |
+
+例如，對 `git status --short` 選擇 **Allow always** 可能會儲存一個
+shell 前綴，涵蓋之後的 `git status` 指令：
+
+```text
+shell: git status * → allow
+```
+
+已儲存的核准是持久的專案範圍 `allow` 規則。它們永遠不會覆寫
+已設定的 `deny`。工具會選擇建議儲存的模式：有些建議 `*`，
+shell 建議指令前綴，網路擷取建議 URL 的網站（例如
+`https://opencode.ai/*`），技能與 subagent 則建議其 ID。
+請審查範圍過廣的核准，並移除不再需要的項目。
+
+用戶端拒絕時可以附上意見回饋。非互動式用戶端必須自行決定如何處理核准請求；已設定的 `deny` 規則仍一律適用。
+
+## 原則
+
+[原則](/policies)可以在這些規則與已儲存的核准執行完之後，強制拒絕權限檢查。
+它會把 `allow` 或 `ask` 變成 `deny`，且永遠不會授予存取權。
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+全域與由控制台管理的原則會覆寫專案設定，組織就是藉此
+封鎖儲存庫原本允許的指令。

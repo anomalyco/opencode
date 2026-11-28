@@ -1,0 +1,120 @@
+---
+title: "Eklenti geliştirme"
+description: "Bir OpenCode eklentisi geliştirin: sunucu parçası, TUI parçası, GUI parçası veya bunların herhangi bir birleşimini içeren tek bir paket."
+---
+
+Eklentiler OpenCode'un davranışını değiştirir ve yeni özellikler ekler. Bir eklenti; sunucu parçası, TUI parçası, GUI
+parçası veya bunların herhangi bir birleşimini içeren tek bir pakettir.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+Mevcut bir OpenCode 1 eklentisini mi taşıyorsunuz? [V1 eklenti geçiş rehberini](/build/plugins/migrate-v1) izleyin.
+
+## Parçalar
+
+Her parça paketin bir dışa aktarımıdır. Her parçanın SDK'sı tek `@opencode/plugin` bağımlılığından gelir.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **Sunucu** (`.` veya `./server`), `@opencode/plugin` ile OpenCode sunucusunda çalışır. Araçlar, kancalar,
+  entegrasyonlar, komutlar ve agent'lar ekler. Bkz. [Sunucu](/build/plugins/server) veya Effect API'si için
+  [Effect eklentileri](/build/plugins/effect).
+- **TUI** (`./tui`), `@opencode/plugin/tui` ile terminal arayüzünde çalışır. Bkz. [TUI](/build/plugins/cli).
+- **GUI** (`./gui-experimental`), `setup` bölümünü her OpenCode Desktop penceresinde, `main` bölümünü masaüstü
+  uygulamasının ana sürecinde `@opencode/plugin/gui` ile çalıştırır. Bkz. [GUI](/build/plugins/gui).
+- **RPC** (`./rpc`), sunucu parçasının uyguladığı ve diğer parçaların ve istemcilerin çağırdığı tipli bir sözleşmedir.
+  Bkz. [RPC](/build/plugins/rpc).
+
+Eklentinin `id` değeri sunucu parçasının `Plugin.define` çağrısından gelir. GUI parçası olup sunucu parçası olmayan bir
+paket, paket adını (veya yerel bir dizinin adını) `id` olarak alır. TUI parçası kendi `id` değerini bildirir; GUI parçası
+hiçbirini bildirmez ve eklentinin değerini alır.
+
+## Yükleme
+
+`.opencode/plugins/` altındaki eklentiler, yukarıdaki yerel örnek gibi otomatik olarak yüklenir. Yayımlanmış paketleri
+veya başka konumlardaki eklenti dizinlerini yüklemek için onları `opencode.json(c)` içindeki `plugins` listesine ekleyin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- Tek bir girdi her parçayı yükler. TUI, sunucusunun yüklediği eklentilerin TUI parçalarını yükler ve OpenCode Desktop
+  genel `opencode.json(c)` dosyanızdaki eklentilerin GUI parçalarını yükler.
+- Yalnızca TUI parçası olan bir paket bunun yerine [`cli.json`](/cli/plugins) içine girer.
+- `package.json` içinde `name` ve `exports` olan yerel bir eklenti dizini, parçalarını yayımlanmış paket gibi bunlar
+  üzerinden yükler. Bunlar yoksa kökündeki dosya adlarını kullanır: `.ts`, `.tsx` veya `.js` uzantılı `server` (yoksa
+  `index`), `tui` ve `rpc`, ayrıca `gui-experimental.cjs` (veya `.js`).
+- Daha fazla yükleme ve yapılandırma seçeneği için [Eklentileri yapılandırma](/plugins) sayfasına bakın.
+
+## Yayımlama
+
+Yayımlanmış bir eklenti, yukarıdaki `package.json` dosyasına sahip bir npm paketidir. Parçaları yerel bir eklentiyle aynı
+varsayılan dışa aktarımları kullanır.
+
+```bash
+npm publish
+```
+
+- Diğer eklentilerin ve istemcilerin, uygulama kodunuzu yüklemeden [RPC sözleşmenizi](/build/plugins/rpc) içe aktarabilmesi için `./rpc` giriş noktasını dışa aktarın.
+- GUI paketini yayımlamadan önce derleyin ve `files` üzerinden dahil edin. Bkz.
+  [Paketi derleme](/build/plugins/gui#build-the-bundle).
+- Hedeflediğiniz OpenCode sürümüyle uyumlu sürümler kullanın ve yalnızca çalışma alanına bağlanmış bir kopyayı değil,
+  kurulu paketi test edin. Daha yeni bir API sözleşmesini benimsediğinizde uyumlu bir eklenti güncellemesi yayımlayın.
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    OpenCode sunucusunda araçlar, kancalar, entegrasyonlar, komutlar ve agent'lar ekleyin.
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    Terminal arayüzüne komutlar, rotalar, yuvalar ve Markdown render edicileri ekleyin.
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    OpenCode Desktop'a paneller, komutlar, ayar sayfaları ve yerel entegrasyonlar ekleyin.
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    Sunucu parçasından tipli yöntemleri ve olayları diğer parçalara ve istemcilere sunun.
+  </Card>
+</CardGroup>

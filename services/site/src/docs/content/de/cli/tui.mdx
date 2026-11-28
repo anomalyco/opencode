@@ -1,0 +1,129 @@
+---
+title: "TUI"
+description: "Starte eine Session und lerne die wichtigsten Abläufe in der Terminaloberfläche kennen."
+---
+
+Starte OpenCode in deinem Projekt, gib eine Anfrage ein und drücke **Enter**.
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+Beginne mit **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** oder **Ctrl+J** eine neue Zeile. Während OpenCode arbeitet,
+sendest du mit **Enter** einen Prompt, der die laufende Session steuert. Drücke **Ctrl+X** und dann **Enter**,
+um den Prompt stattdessen für später in die Warteschlange zu stellen.
+
+## Projekte und Verzeichnisse
+
+OpenCode sucht in dem Verzeichnis, in dem du es startest, nach Dateien und führt dort Shell-Befehle aus. Verzeichnisse
+im selben Git-Repository gehören zum selben Projekt, auch wenn sie in unterschiedlichen Worktrees liegen.
+Ein Verzeichnis ohne Versionsverwaltung bildet ein eigenes Projekt.
+
+Gib ein Verzeichnis an, um OpenCode in einem anderen Projekt zu starten:
+
+```bash
+opencode ~/code/another-project
+```
+
+Drücke **Ctrl+O**, um die Liste der zuletzt genutzten Sessions und Projekte zu öffnen. Drücke bei einem Projekt
+**Right**, um seine Worktrees anzuzeigen, und dort **Ctrl+N**, um einen neuen anzulegen.
+
+## Kontext
+
+Tippe `@`, um nach einer Datei zu suchen, und wähle sie dann aus, um sie an den Prompt anzuhängen. Tippe nach `@` weiter,
+um die Ergebnisse einzugrenzen.
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+Du kannst nach dem Pfad eine Zeile oder einen Bereich angeben.
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+Tippe `!` am Anfang eines leeren Prompts, um den Shell-Modus zu öffnen. Gib einen Befehl ein und drücke **Enter**;
+drücke **Esc**, um den Shell-Modus zu verlassen, ohne einen auszuführen.
+
+```text
+!git status
+```
+
+Shell-Befehle laufen im Arbeitsverzeichnis der Session. Die Ausgabe bleibt in der Session.
+
+## Befehle
+
+Tippe `/`, um die Slash-Befehle aufzulisten. Tippe weiter, um die Liste zu filtern, und drücke dann **Enter**, um den
+ausgewählten Befehl auszuführen.
+
+```text
+/models
+```
+
+Häufige Befehle sind `/new`, `/sessions`, `/models`, `/agents`, `/undo`, `/redo` und `/editor`. Drücke **Ctrl+P**, um die
+Befehlspalette mit allen Aktionen zu öffnen, die in der aktuellen Ansicht verfügbar sind.
+
+Nach einem Update zeigt OpenCode die Neuerungen einmal auf dem Startbildschirm an. Mit `/highlights` rufst du sie
+erneut auf. Setze `"highlights": false` in [`cli.json`](/cli/config#alerts), wenn sie nicht automatisch erscheinen sollen.
+
+## Nebenfragen
+
+Stell mit `/btw <question>` eine kurze Frage zur bisherigen Unterhaltung. OpenCode beantwortet sie mit dem aktuellen
+Modell und dem Kontext der Session. Die Antwort landet nicht im Verlauf und beeinflusst spätere Prompts nicht.
+Solange die Antwort aussteht, erscheint unter dem Eingabefeld ein `/btw`-Hinweis. Die Antwort erscheint in einem Dialog.
+Mit **C** kopierst du sie.
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## Modelle
+
+Drücke **Ctrl+X** und dann **M**, um ein Modell zu wählen, oder führe `/models` aus. Mit **F2** wechselst du zwischen
+den zuletzt genutzten Modellen.
+
+Drücke **Ctrl+X** und dann **A**, um einen Agenten zu wählen, oder führe `/agents` aus. Drücke **Shift+Tab**, um Agenten
+zu wechseln.
+
+## Sessions
+
+Jede Session ist eine eigene Unterhaltung mit eigenem Verlauf und Verzeichnis. Führe `/new` aus oder drücke **Ctrl+X**
+und dann **N**, um für eine andere Aufgabe eine neue Session zu starten. Frühere Sessions bleiben verfügbar. Neue
+Sessions beginnen in dem Verzeichnis, in dem du OpenCode gestartet hast. Wenn du
+[`session.new_location`](/cli/config#sessions) auf `inherit` setzt, beginnen sie im Verzeichnis der aktuellen Session.
+
+Drücke **Ctrl+X** und dann **L** oder führe `/sessions` aus, um zu einer bestehenden Session zurückzukehren. Mit
+**Ctrl+A** wechselst du in dieser Liste zwischen den Sessions im aktuellen Verzeichnis und denen in allen Projekten.
+**Ctrl+O** öffnet eine gemeinsame Liste der zuletzt genutzten Sessions und Projekte.
+
+Tabs sind standardmäßig aktiviert. Wechsle mit **Ctrl+Tab** und **Ctrl+Shift+Tab** zwischen ihnen, schließe einen mit
+**Ctrl+X** und dann **W**, und öffne den zuletzt geschlossenen Tab mit **Ctrl+Shift+T** wieder.
+
+## Verlauf
+
+Drücke **Ctrl+X** und dann **U** oder führe `/undo` aus, um die letzte Nutzernachricht und die darauf folgende Arbeit
+zurückzunehmen. Der zurückgenommene Prompt erscheint wieder im Eingabefeld, sodass du ihn bearbeiten kannst.
+
+Drücke **Ctrl+X** und dann **R** oder führe `/redo` aus, um die rückgängig gemachte Arbeit wiederherzustellen. Wenn du
+stattdessen einen neuen Prompt sendest, bleibt die Arbeit rückgängig gemacht und die Session setzt an diesem Punkt fort.
+
+## Editor
+
+Lege mit `VISUAL` oder `EDITOR` fest, welchen Editor du nutzen willst. Drücke **Ctrl+X** und dann **E** oder führe
+`/editor` aus, um den aktuellen Prompt darin zu bearbeiten. Speichere den Text und schließe den Editor, um ihn ins
+Eingabefeld zu übernehmen. Sende ihn mit **Enter**.
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+Die Leader-Taste ist standardmäßig **Ctrl+X**. Siehe [Tastenbelegung](/cli/keybinds), um diese Tastenkürzel zu ändern.

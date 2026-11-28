@@ -34,7 +34,7 @@ Review $ARGUMENTS using the team's checklist.
 
 使用 `/team/review src/auth.ts` 运行这个嵌套命令。旧版的单数目录 `command/` 也会被发现，但新文件请放在 `commands/` 中。
 
-如果命令需要元数据，请添加 YAML frontmatter。去除首尾空白后的 Markdown 正文始终是提示词模板。
+如果命令需要元数据，请在文件开头添加 YAML 元数据块。Markdown 正文去掉首尾空白后就是提示词模板。
 
 ```md title=".opencode/commands/review.md"
 ---
@@ -64,7 +64,7 @@ Review $ARGUMENTS. Report bugs first.
 
 ## 字段
 
-Markdown frontmatter 和 JSON 条目支持相同的字段，只是 Markdown 的 `template` 来自文件正文。
+Markdown 文件头的元数据与 JSON 条目支持相同的字段，只是 Markdown 文件从正文读取 `template`。
 
 | 字段 | 必填 | 行为 |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ Markdown frontmatter 和 JSON 条目支持相同的字段，只是 Markdown 的 
 }
 ```
 
-不要在 Markdown frontmatter 中写 `template`，它由正文提供。
+不要在 Markdown 文件头的元数据中填写 `template`，它由正文提供。
 
 ## 参数
 

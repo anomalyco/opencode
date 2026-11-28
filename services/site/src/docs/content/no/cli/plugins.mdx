@@ -1,0 +1,62 @@
+---
+title: "CLI-plugins"
+description: "Last inn TUI-plugins fra OpenCode-konfigurasjonen i CLI-en, og legg til plugins som bare gjelder CLI-en, med tilhørende alternativer i cli.json."
+---
+
+Plugins som er konfigurert i `opencode.json(c)` og som eksponerer en TUI-komponent, lastes automatisk av CLI-en. For å lære hvordan
+du bygger plugins, se [Bygge plugins](/build/plugins). Du trenger ikke legge samme pakke til i `cli.json`. CLI-en
+henter listen over aktive plugins fra den tilkoblede OpenCode-serveren, så dette fungerer også når serveren er ekstern.
+
+Bruk `cli.json` for plugins som bare gjelder CLI-en. Disse pluginene kjører lokalt i terminalen og forblir aktive når CLI-en kobler
+til en ekstern server:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Oppføringer behandles i rekkefølge. Sett `-` foran en ID eller et jokertegn for å slå av samsvarende plugins:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Send plugin-alternativer med objektformen:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode oppdager også plugins under den globale konfigurasjonskatalogen og prosjektets `.opencode`-kataloger. Hver plugin bruker
+samme oppsett som en publisert pakke, med server- og TUI-inngangspunkter samlet.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+Plugins OpenCode finner på denne måten, kan importere `@opencode/plugin/tui` direkte. OpenCode finner pakken ved kjøring. Se
+[Bygge TUI-plugins](/build/plugins/cli) for eksempler.

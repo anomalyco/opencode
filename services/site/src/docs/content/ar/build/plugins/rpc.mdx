@@ -1,0 +1,262 @@
+---
+title: "RPC الملحقات"
+description: "أتِح طرق الملحق وأحداثه المخصّصة للملحقات والعملاء الآخرين."
+---
+
+يمكن للملحقات إتاحة طرق وأحداث مخصّصة تعمل على الخادم، بحيث يمكن
+استدعاؤها من ملحقات أو عملاء آخرين.
+
+## التعريف
+
+استخدم `Rpc.define` لسرد طرق RPC وأخطائه وأحداثه.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### التحقق
+
+يصف تعريف RPC أشكال إدخال وإخراج الطرق والأحداث
+والأخطاء. ويدعم صيغتي مخطط:
+
+- JSON Schema، بسيط ولا يحتاج تبعيات.
+- أي مدقّق متوافق مع Standard Schema
+  - Zod
+  - Valibot
+  - ArkType
+
+### الإدخال والإخراج
+
+تحتاج كل طريقة إلى مخطط `input` لوسيطها ومخطط `output` للقيمة التي تعيدها. إذا كانت الطريقة لا تأخذ وسيطًا أو لا تعيد قيمة، فاستخدم مخطط كائن فارغ في الحالة المعنية: مرّر `{}` بدل الوسيط أو أعد `{}` بدل القيمة:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+إذا أعادت الطريقة `undefined`، فإنها تفشل بالخطأ `rpc.invalid_output`.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+قيم JSON Schema من النوع `unknown` في TypeScript، لذا ضيّق نطاق نوعها قبل استخدامها.
+ويستنتج Standard Schema نوعي الإدخال والإخراج.
+
+### الأخطاء
+
+أضف خريطة `errors` إلى طريقة للإخفاقات المتوقعة. ويصبح كل مفتاح
+`type` الخطأ، ويحدّد مخططه `data` الخطأ.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+وأسماء الأخطاء التي تبدأ بـ`rpc.` محجوزة لـOpenCode.
+
+### الأحداث
+
+أضف الأحداث إلى خريطة `events` في المستوى الأعلى من التعريف. ولكل حدث مخطط للبيانات
+المرسلة إلى المشتركين. هذه الخريطة إلزامية؛ استخدم `events: {}` إذا لم يعرّف RPC أيّ أحداث.
+
+ويجب أن تكون بيانات الحدث كائنًا. واستخدم مخطط كائن فارغ عندما لا توجد بيانات:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+لا تصلح القيم المفردة ولا المصفوفات ولا `null` ولا `undefined` لتكون بيانات حدث.
+
+## التنفيذ
+
+سجّل التنفيذ داخل `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+بعد تسجيل RPC، يستطيع الملحق نفسه استدعاءه عبر `ctx.rpc(Acme)`.
+
+ويضم الوسيط الثاني `signal` للإلغاء و`context.error(...)`
+للأخطاء المعلنة. ويمكنك إعادة الخطأ أو رفعه.
+
+ويمكن لملحق واحد تسجيل أكثر من RPC. والتخلص من التسجيل يزيله.
+
+## الاستدعاء
+
+وبعد تسجيل RPC، يمكن استدعاؤه عبر HTTP أو من ملحق آخر.
+
+### HTTP
+
+أنشئ عميل OpenCode، ثم استخدم `client.rpc` لإنشاء عميل فرعي
+لـRPC:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### الملحق
+
+تملك الملحقات عميل OpenCode أصلًا. مثلًا، يستطيع ملحق TUI إنشاء
+العميل الفرعي نفسه لـRPC من `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+ويقرأ [ملحق GUI](/build/plugins/gui) عميل خادم تطبيق سطح المكتب نفسه من `ctx.client`:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  setup(ctx) {
+    ctx.add(Command, {
+      id: "search",
+      title: "Search Acme",
+      run: async () => {
+        const result = await ctx.client.rpc(Acme).search({ query: "hello" })
+        console.log(result)
+      },
+    })
+  },
+})
+```
+
+واقرأ `ctx.client` حيث تستدعيه: فهو يتغيّر بعد إعادة تشغيل الخادم. وبينما يتعذّر الوصول إلى الخادم، يُرفض كل
+استدعاء.
+
+### الاشتراك
+
+استخدم `events.on` لرد نداء وألغِ الاشتراك عندما لا يعود المستمع
+لازمًا:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+وللحصول على عنصر قابل للتكرار غير متزامن، استخدم `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+لا تنقل الاشتراكات إلا الأحداث المباشرة؛ فلا يُعاد إرسال الأحداث التي تفوت المشترك أثناء انقطاع اتصاله.
+
+- اشترك بالاسم المحلي، مثل `updated`.
+- والنوع المتلقى مسبوق، مثل `rpc.acme.updated`.
+- ويضم كل حدث `data` و`location`.
+- وتفريغ الملحق يغلق اشتراكاته.
+
+ويتلقى العملاء الخارجيون الأحداث من كل موقع، فتحقق من `event.location`
+عند الحاجة. ولا يزال ملحق الخادم بحاجة إلى الإعداد والتشغيل.

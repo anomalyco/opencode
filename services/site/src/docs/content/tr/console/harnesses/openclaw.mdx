@@ -1,0 +1,90 @@
+---
+title: "OpenClaw"
+description: "Console ve Go modellerini OpenClaw'dan kullanın."
+---
+
+[OpenClaw](https://openclaw.ai), OpenCode'un kullandıkça öde ve Go sağlayıcılarını destekler. Her ücretli model veya Go modeli için uygun API'yi seçer ve her Go isteğinde bir oturum kimliği gönderir. Ücretsiz sohbet modelleri yalnızca OpenCode'da kullanılabilir; OpenClaw'dan bu modellere yapılan istekler HTTP `403` ile reddedilir.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli), OpenClaw'u çalışma alanının politikaları, MCP sunucuları, skill'leri ve talimatlarıyla birlikte tek komutla kurar. `npx @opencode/console setup openclaw` komutunu, ardından `openclaw gateway
+  restart` komutunu çalıştırın. Aşağıdaki adımlar elle kurulum içindir.
+</Callout>
+
+| Sağlayıcı     | Plan           | Model öneki       |
+| ------------- | -------------- | ----------------- |
+| `opencode`    | Kullandıkça öde | `opencode/...`   |
+| `opencode-go` | Go             | `opencode-go/...` |
+
+Go sağlayıcısı OpenClaw ile birlikte gelir. Kullandıkça öde sağlayıcısı bir eklentidir; `openclaw models list` onu
+göstermiyorsa kurun.
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## Oturum açma
+
+Anahtar yapıştırmak yerine tarayıcıdan oturum açın. OpenClaw 2026.11.7 veya üstünü gerektirir.
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+OpenClaw'un yazdırdığı bağlantıyı açın, kodu Console'da onaylayın ve [Go](/console/go) aboneliği olan bir çalışma alanı
+seçin. OpenClaw oturumu kendisi saklar ve yeniler.
+
+Her sağlayıcı için ayrı oturum açmanız gerekir. Kullandıkça öde modelleri için `opencode` sağlayıcısında da oturum açın.
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+`openclaw onboard` sırasında, sohbette `/login` ile veya **Settings › Models › Add account** bölümünden
+**OpenCode Go (browser sign-in)** seçeneğini de seçebilirsiniz.
+
+## API anahtarı kullanma
+
+İki sağlayıcı da aynı anahtarı `OPENCODE_API_KEY` üzerinden okur. Bir
+[kişisel API anahtarı](/console/harnesses#get-an-api-key) oluşturun ve onboarding'e iletin.
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+Veya `~/.openclaw/openclaw.json` içinde ayarlayın.
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+Go aboneliği olmayan bir çalışma alanından alınan anahtar yine Go modellerini listeler, ancak çalışma alanı abone olana
+kadar onlara yapılan istekler başarısız olur.
+
+## Modeller
+
+Bir modeli `<provider>/<model-id>` olarak, [Console](/console/models#endpoints) veya [Go](/console/go#endpoints)
+tablosundaki kimliklerle seçin. OpenClaw model listesini Console'dan okur; bu nedenle yeni modeller güncelleme olmadan
+görünür.
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+Agent'larınız için varsayılan modeli ayarlayın.
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## Console MCP
+
+[Console MCP](/console/harnesses#console-mcp) sunucusunu OAuth ile ekleyin, ardından Gateway çalışırken tarayıcıdan
+oturum açın.
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```

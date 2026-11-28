@@ -1,0 +1,199 @@
+---
+title: "Calentamiento"
+description: "Envía solicitudes periódicas que evitan que la caché de prompts del proveedor de una sesión caduque mientras haces pausas entre prompts."
+---
+
+El calentamiento de sesión envía solicitudes periódicas al modelo para conservar las cachés de prompts del proveedor u otro estado de corta duración
+mientras haces pausas entre prompts. Está desactivado de forma predeterminada.
+
+Habilita el calentamiento en cualquier [archivo de configuración de OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Con esta configuración, OpenCode calienta una sesión activa recientemente justo antes de que caduque su caché de prompts: al 90% del
+[`cache.ttl`](/models#cache-lifetime) del modelo, o cada cuatro minutos cuando el modelo no tiene ninguno. Continúa hasta que pasan 30 minutos
+desde la última solicitud que no era de calentamiento.
+
+## Opciones
+
+Usa la forma de objeto para cambiar el prompt de calentamiento, el intervalo de inactividad o la ventana activa:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Campo | Predeterminado | Propósito |
+| --- | --- | --- |
+| `prompt` | Instrucción de mantenimiento | Se agrega como mensaje de usuario transitorio en cada solicitud de calentamiento. El valor predeterminado pide al modelo que no haga ningún trabajo, no use herramientas y responda `OK`. |
+| `interval` | `"auto"` | Tiempo de inactividad antes de la siguiente solicitud de calentamiento. `"auto"` usa el 90% del `cache.ttl` del modelo, o cuatro minutos si no tiene. |
+| `duration` | `"30 minutes"` | Ventana de calentamiento medida desde la última solicitud al modelo que no era de calentamiento. |
+
+Los campos omitidos del objeto conservan sus valores predeterminados. Por ejemplo, esto solo cambia el intervalo:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Intervalo automático
+
+De forma predeterminada, `interval` es `"auto"`, que calienta justo antes de que caduque la caché de prompts de cada modelo. OpenCode usa el 90% del ajuste
+[`cache.ttl`](/models#cache-lifetime) del modelo, así que una caché de `"5m"` se calienta cada 4.5 minutos. Los modelos sin `cache.ttl` se calientan cada cuatro minutos.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+Una caché que dura más que `duration`, como `"1h"` con el valor predeterminado de 30 minutos, no se calienta, ya que de todos modos
+sobrevive a la ventana de calentamiento. OpenCode lo registra una vez por sesión. Aumenta `duration` para calentarla.
+
+## Por proveedor y modelo
+
+Define `settings.cache.warming` en un proveedor o modelo para calentar solo sus sesiones, o para darles su propia
+temporización. Acepta los mismos valores que el `warming` de nivel superior, excepto `prompt`, y lo sobrescribe. Un ajuste de modelo
+sobrescribe el ajuste de proveedor.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Aquí las sesiones de Anthropic se calientan cada 4.5 minutos, excepto en Claude Haiku
+5.5, y los demás proveedores no se calientan. Los campos omitidos en la forma de objeto vienen
+del `warming` de nivel superior y luego de los valores predeterminados. Un ajuste no válido registra una advertencia y recurre al `warming` de nivel superior.
+
+## Duraciones
+
+`interval` y `duration` aceptan cadenas de duración. Ambas deben resolverse en valores finitos
+mayores que cero, y `interval` debe ser menor que `duration`; de lo contrario, OpenCode omite el calentamiento y registra una advertencia.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Temporización
+
+El calentamiento empieza después de una solicitud al modelo que no era de calentamiento en una sesión de nivel superior.
+Las sesiones de subagente no se calientan. Cada intervalo cuenta desde que se envió la última solicitud o solicitud de calentamiento,
+no desde que terminó la respuesta, porque la duración de la caché se mide desde que el proveedor recibe la solicitud. Una
+solicitud de calentamiento no amplía la ventana activa.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Cualquier nueva actividad del modelo que no sea de calentamiento, incluida una compactación, reinicia ambos temporizadores.
+Un intervalo explícito igual o mayor que la duración se rechaza con una advertencia, y un intervalo `"auto"` así de largo omite el calentamiento porque la caché
+sobrevive a la ventana.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode nunca envía una solicitud de calentamiento mientras se ejecuta una solicitud al modelo, incluida una
+compactación. Si una sigue en ejecución cuando vence el intervalo, el calentamiento espera a que termine y luego envía de inmediato, siempre que la caché
+de esa solicitud no haya caducado. Si ha caducado, el calentamiento se detiene hasta la siguiente solicitud normal.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## Solicitudes
+
+Una solicitud de calentamiento usa el modelo, el agente, las instrucciones y el contexto de conversación actuales de la sesión. OpenCode agrega el prompt configurado
+de forma transitoria, hace una llamada al modelo y descarta la respuesta.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+La solicitud no admite entrada, no agrega mensajes al historial ni modifica el estado duradero de la sesión. OpenCode no despacha llamadas a herramientas
+locales ni continúa un bucle de herramientas; el prompt predeterminado también indica al modelo que no use herramientas.
+
+## Fallos
+
+OpenCode registra los fallos de calentamiento sin interrumpir ni modificar la sesión. No vuelve a intentarlo hasta el siguiente
+intervalo, y el tiempo de la ventana original sigue corriendo.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+Si una solicitud de calentamiento lee menos datos de la caché de los que escribe en ella, el calentamiento de la sesión se detiene
+hasta la siguiente solicitud normal. Si el proveedor no informa del uso de la caché, OpenCode nunca lo considera un fallo de caché.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Costos
+
+Las solicitudes de calentamiento son solicitudes reales al proveedor. Pueden consumir tokens, generar
+costos, computar para los límites de uso por intervalo y fallar como otras solicitudes al modelo.
+
+- Los intervalos más cortos aumentan el volumen de solicitudes.
+- Las duraciones más largas permiten más solicitudes de calentamiento.
+- Habilita el calentamiento solo cuando su beneficio del lado del proveedor merezca el uso adicional.
+
+Por ejemplo, en un modelo sin `cache.ttl`, los valores predeterminados permiten hasta siete
+intentos de calentamiento durante una ventana ininterrumpida de 30 minutos: en los minutos 4, 8,
+12, 16, 20, 24 y 28.
+
+## Deshabilitar
+
+Define `warming` como `false` para deshabilitarlo explícitamente. Omitir el campo también
+deja el calentamiento desactivado.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

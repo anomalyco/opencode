@@ -1,0 +1,95 @@
+---
+title: "Conceptos básicos"
+description: "Crea espacios de trabajo de OpenCode Console, cambia de espacio, cámbiales el nombre o elimínalos y conoce los roles de sus miembros."
+---
+
+Un espacio de trabajo contiene todo lo que hay en [Console](https://opencode.ai/console): miembros, créditos, presupuestos, proveedores,
+políticas y cuentas de servicio. El uso y la facturación se registran por espacio de trabajo.
+
+Un espacio de trabajo puede tener un solo miembro. Puedes usar créditos, [tus propios proveedores](/console/providers), presupuestos y [Go](/console/go) por tu cuenta,
+e [invitar miembros](/console/members) solo cuando lo necesites.
+
+## Tu primer espacio de trabajo
+
+Console crea un espacio de trabajo llamado **Personal** cuando te registras, y tú eres su propietario y único miembro. Si te registras
+desde una invitación, te unes al espacio de trabajo al que te invitaron y no se crea ningún espacio Personal.
+
+## Crear un espacio de trabajo
+
+1. Abre el menú de espacios de trabajo en la barra superior.
+2. Haz clic en **Create Workspace**.
+3. Escribe el nombre en **Workspace name** y haz clic en **Create**.
+
+Te conviertes en el propietario del nuevo espacio de trabajo.
+
+## Cambiar de espacio de trabajo
+
+Elige otro espacio de trabajo en el menú. Console te mantiene en la misma página, así que si cambias desde
+`/acme/settings/members` se abre la página Members del otro espacio de trabajo.
+
+Las invitaciones pendientes aparecen al principio del mismo menú. Consulta [Miembros](/console/members#accept-an-invitation).
+
+## Conectar OpenCode
+
+Ejecuta `/connect` en OpenCode y elige el espacio de trabajo en el navegador. OpenCode usa entonces los modelos,
+las políticas y los presupuestos de ese espacio de trabajo.
+
+```text
+/connect
+```
+
+Ejecuta `/connect` de nuevo para cambiar OpenCode a otro espacio de trabajo. Las [políticas](/policies#console) del espacio de trabajo se sustituyen
+por las del nuevo, y se borran cuando te desconectas.
+
+## Roles
+
+Cada miembro tiene un rol. Los miembros nuevos siempre se unen como **Member**.
+
+| Rol           | Puede hacer                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Miembro       | Usar OpenCode, ver su propio uso, registros y presupuesto.                                                           |
+| Administrador | Todo lo que puede un miembro, además de gestionar miembros, facturación, presupuestos, proveedores, políticas, cuentas de servicio y ajustes. |
+| Propietario   | Todo lo que puede un administrador, además de gestionar SSO y la sincronización de directorios, conceder el rol Owner y eliminar el espacio de trabajo. |
+
+Los miembros ven su propio uso y sus registros en **Activity**, además de la clasificación cuando está visible para los miembros.
+Cuando el espacio de trabajo tiene una suscripción de [Go Teams](/console/go), también ven **Go**, con sus propios límites.
+Abren **Account** desde el menú de la cuenta.
+
+### Reglas de los roles
+
+- Un espacio de trabajo puede tener varios propietarios y siempre conserva al menos uno.
+- No puedes asignar un rol superior al tuyo, así que solo los propietarios pueden nombrar a otro propietario.
+- No puedes cambiar tu propio rol.
+
+### Transferir la propiedad
+
+1. Como propietario, abre **Settings › Members** y define el rol del nuevo propietario como **Owner**.
+2. Pide al nuevo propietario que cambie tu rol a **Admin** o **Member**.
+
+## Eliminar un espacio de trabajo
+
+Solo los propietarios pueden eliminar un espacio de trabajo, y solo si pertenecen al menos a otro espacio de trabajo.
+
+1. Abre **Settings › General** y haz clic en **Delete workspace**.
+2. Marca todas las casillas de confirmación.
+3. Haz clic en **Delete workspace** para confirmar.
+
+La eliminación es inmediata y no se puede deshacer:
+
+- Los miembros pierden el acceso de inmediato.
+- Se revocan todas las claves de API de cuentas de servicio y las invitaciones pendientes.
+- La recarga automática se detiene.
+- Si hay una suscripción de Go activa, se cancela.
+- Se pierde el saldo de créditos que quede.
+
+<Callout type="warning">La eliminación se bloquea mientras se procesa un pago. Inténtalo de nuevo en unos minutos.</Callout>
+
+## Salir de un espacio de trabajo
+
+1. Abre **Account** desde el menú de la cuenta.
+2. En **Connected workspaces**, haz clic en **Leave** junto al espacio de trabajo.
+3. Confirma con **Leave workspace**.
+
+El último propietario no puede salir; primero nombra propietario a otro miembro. En los espacios de trabajo con SSO o
+sincronización de directorios, tu proveedor de identidad gestiona quién pertenece al espacio, por lo que no puedes salir
+desde Console. Si quieres volver, pide otra invitación.

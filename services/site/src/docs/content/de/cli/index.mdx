@@ -1,0 +1,110 @@
+---
+title: "CLI-Einführung"
+description: "Starte die OpenCode-Terminal-Oberfläche, führe Prompts aus Skripten und CI aus und verwalte den gemeinsamen Hintergrunddienst."
+---
+
+Führe die CLI in einem Projekt aus, um die bildschirmfüllende Terminal-Oberfläche zu öffnen:
+
+```bash
+opencode
+```
+
+Übergib ein Verzeichnis, um in einem anderen Projekt zu arbeiten:
+
+```bash
+opencode ~/code/my-project
+```
+
+Empfohlene Terminals:
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+Mit Truecolor zeigt das Terminal die Farben eines Themes originalgetreu an. Ohne Truecolor nähert es die Farben mit
+seiner verfügbaren Palette an.
+
+## Automatisierung
+
+Nutze `opencode run`, um einen Prompt zu übermitteln, ohne die interaktive Oberfläche zu öffnen. Der Befehl ist für Skripte, CI-Jobs und
+andere Workflows gedacht, die Modellausgabe direkt im Terminal brauchen.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+Nutze `opencode mini`, um die minimale interaktive Oberfläche von OpenCode statt der bildschirmfüllenden TUI zu starten.
+
+```bash
+opencode mini
+```
+
+Führe `opencode mini --help` aus, um die Optionen für Session, Modell, Agent, Prompt und Replay zu sehen.
+
+## Hintergrunddienst
+
+Standardmäßig findet OpenCode einen gemeinsamen Hintergrundserver für dein Benutzerkonto oder startet ihn. Jeder lokale
+OpenCode-Client verbindet sich mit diesem Server, der Sessions, Konfiguration, Integrationen, Berechtigungen und
+Tool-Ausführung besitzt.
+
+Nutze `--standalone`, um mit einem privaten Server zu laufen, oder `--server`, um dich mit einer bestimmten Server-URL zu
+verbinden:
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+Um private Server für CLI-Befehle zum Standard zu machen, statt den gemeinsamen Dienst zu starten, deaktiviere ihn:
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+Dadurch wird der laufende Hintergrunddienst gestoppt. `--server` verbindet sich weiterhin mit einem ausdrücklich
+gewählten Server; `opencode service start` kann den gemeinsamen Dienst weiterhin ausdrücklich starten. Um zur
+automatischen Nutzung des Dienstes zurückzukehren, führe `opencode service unset disabled` aus.
+Pairing erfordert den gemeinsamen Dienst und ist nicht verfügbar, solange er deaktiviert ist.
+
+Siehe [Fehlerbehebung](/troubleshooting) für Diagnosen zum gemeinsamen Dienst und die [API-Referenz](/api) für
+Server-Endpunkte.
+
+## Pfade
+
+Gib einen bestimmten lokalen Pfad für die Verwendung mit anderen Tools aus:
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+Der optionale Selektor akzeptiert `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log` oder `repos` und
+gibt nur den Pfad und einen Zeilenumbruch aus. Der Datenbankpfad respektiert den Release-Kanal und `OPENCODE_DB`;
+relative Datenbank-Overrides werden unter dem Datenverzeichnis aufgelöst, und `:memory:` wird unverändert ausgegeben.
+Dieser Befehl startet keinen Server und öffnet die Datenbank nicht.
+
+Lass den Selektor weg, um alle Pfade mit Beschriftungen anzuzeigen:
+
+```bash
+opencode debug paths
+```
+
+## Deinstallieren
+
+Sieh dir vorab an, welche Dateien und Installation entfernt werden:
+
+```bash
+opencode uninstall --dry-run
+```
+
+Führe `opencode uninstall` aus, um das Entfernen zu bestätigen. OpenCode stoppt registrierte Hintergrunddienste und
+persistente Terminals, bevor das globale Cache-Verzeichnis entfernt wird, das von OpenCode-Versionen und -Kanälen
+gemeinsam genutzt wird. Session-Daten, Konfiguration und State werden nie entfernt.
+
+- `--force` (`-f`) überspringt die Bestätigung; nutze es für nicht interaktives Entfernen.
+- Installationen über einen Paketmanager verwenden den erkannten Paketmanager. Curl-Installationen geben den
+  abschließenden Befehl aus, um die ausführbare Datei manuell zu entfernen.

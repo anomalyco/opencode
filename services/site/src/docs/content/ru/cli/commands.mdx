@@ -1,0 +1,630 @@
+---
+title: "Команды CLI"
+description: "Справочник по командной строке opencode."
+---
+
+Чтобы увидеть все флаги команды, передайте `--help`, например `opencode run --help`. Некоторые команды используют сервер и поддерживают `--standalone` для запуска отдельного сервера или `--server <url>` для подключения к заданному серверу. Точный список флагов см. в справке по команде.
+
+## run
+
+Отправляет сообщение и печатает ответ, не открывая интерактивный интерфейс.
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+В CI передайте API-ключ провайдера как секрет и используйте standalone-режим, чтобы частный сервер его получил. Например, эта задача GitHub Actions проверяет извлечённый репозиторий:
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-5-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Выберите модель.
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
+```
+
+Продолжите последнюю сессию.
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+Выведите JSON для скриптов: одна запись на строку.
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+Прикрепите файлы к сообщению.
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+Запустите с конкретным агентом.
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+Продолжите конкретную сессию.
+
+```bash
+$ opencode run --session ses_4f2a1c "Check edge cases"
+```
+
+Автоматически одобряйте разрешения, которые явно не запрещены.
+
+```bash
+$ opencode run --auto "Fix the failing test"
+```
+
+Создайте сессию сразу в архиве, чтобы запуски из скриптов или CI не появлялись в списках сессий и во входящих. Сессия сохраняется: её показывает `opencode session list`, и её можно открыть по ID.
+
+```bash
+$ opencode run --archived "Review this diff"
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+Запускает минимальный интерактивный интерфейс вместо полноэкранного TUI.
+
+```bash
+$ opencode mini
+```
+
+Продолжите последнюю сессию.
+
+```bash
+$ opencode mini --continue
+```
+
+Запустите с моделью и начальным промптом.
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-5-5 --prompt "Summarize this repository"
+```
+
+Продолжите конкретную сессию.
+
+```bash
+$ opencode mini --session ses_4f2a1c
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+Управляет сессиями.
+
+```bash
+$ opencode session list
+```
+
+Ограничьте список и выведите JSON.
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+Удалите сессию и её дочерние сессии.
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+Экспортируйте данные сессии в JSON.
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+Скройте конфиденциальные данные транскрипта и файлов при экспорте.
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+Импортируйте данные сессии из файла JSON или URL.
+
+```bash
+$ opencode session import session.json
+```
+
+Импортируйте в конкретный каталог.
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+Управляет AI-провайдерами и учётными данными.
+
+```bash
+$ opencode auth list
+```
+
+Выведите их как JSON.
+
+```bash
+$ opencode auth list --format json
+```
+
+Войдите в провайдера.
+
+```bash
+$ opencode auth login anthropic
+```
+
+Войдите конкретным способом аутентификации.
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+Выйдите из сохранённого аккаунта.
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+Переключите активный аккаунт интеграции.
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+Экспортируйте сохранённые учётные данные и импортируйте их на другой машине. Файл содержит секреты.
+
+```bash
+$ opencode auth export anthropic > credentials.json
+$ opencode auth import credentials.json
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+Перечисляет все доступные модели.
+
+```bash
+$ opencode models
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+Управляет MCP-серверами (Model Context Protocol).
+
+```bash
+$ opencode mcp list
+```
+
+Добавьте удалённый сервер.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Добавьте локальный сервер в глобальную конфигурацию.
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+Добавьте локальный сервер с переменной окружения.
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+Добавьте удалённый сервер с заголовком.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+Аутентифицируйтесь на удалённом сервере с поддержкой OAuth.
+
+```bash
+$ opencode mcp auth sentry
+```
+
+Удалите сохранённые учётные данные OAuth для сервера.
+
+```bash
+$ opencode mcp logout sentry
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+Управляет плагинами.
+
+```bash
+$ opencode plugin list
+```
+
+Включите встроенные серверные плагины.
+
+```bash
+$ opencode plugin list --builtin
+```
+
+Установите плагин и добавьте его в глобальную конфигурацию.
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+Проверьте обновления пакетных плагинов.
+
+```bash
+$ opencode plugin check
+```
+
+Обновите пакетные плагины.
+
+```bash
+$ opencode plugin update
+```
+
+Удалите плагин из глобальной конфигурации.
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+Показывает статистику использования, которой можно поделиться.
+
+```bash
+$ opencode stats
+```
+
+Покажите последние 7 дней.
+
+```bash
+$ opencode stats --days 7
+```
+
+Покажите использование моделей.
+
+```bash
+$ opencode stats --models
+```
+
+Покажите стоимость и детали токенов.
+
+```bash
+$ opencode stats --cost
+```
+
+Выведите JSON вместо отчёта.
+
+```bash
+$ opencode stats --json
+```
+
+Покажите только текущий проект.
+
+```bash
+$ opencode stats --project .
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+Запускает API и веб-сервер. См. [Веб-интерфейс](/cli/web).
+
+```bash
+$ opencode serve
+```
+
+Привяжитесь ко всем интерфейсам на фиксированном порту.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Разрешите браузерный клиент с другого origin.
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+Выводит одноразовые ссылки для входа на сервер из браузера или приложения и QR-код для первой ссылки. Каждая ссылка действует 5 минут и только до первого входа.
+
+```bash
+$ opencode pair
+```
+
+Используйте внешний URL в ссылках.
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+Сопрягайтесь откуда угодно через удалённый адрес OpenTunnel. Это открывает сервер в интернет, поэтому при первом включении удалённого доступа команда объясняет это и просит согласия. См. [Удалённый доступ](/cli/web#remote-access).
+
+```bash
+$ opencode pair --remote
+```
+
+Согласитесь без запроса, например в скрипте без терминала.
+
+```bash
+$ opencode pair --remote --yes
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+Управляет фоновым сервером. См. [Веб-интерфейс](/cli/web).
+
+```bash
+$ opencode service start
+```
+
+Перезапустите его.
+
+```bash
+$ opencode service restart
+```
+
+Покажите его состояние.
+
+```bash
+$ opencode service status
+```
+
+Остановите его.
+
+```bash
+$ opencode service stop
+```
+
+Прочитайте настройку.
+
+```bash
+$ opencode service get hostname
+```
+
+Задайте настройку.
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+Разрешите дополнительный origin CORS.
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+Передайте переменную окружения процессу сервера.
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Сбросьте настройку к значению по умолчанию.
+
+```bash
+$ opencode service unset hostname
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+Перезагружает конфигурацию без перезапуска сервера. Активные сессии переходят на обновлённые сервисы на ближайшей границе между шагами.
+
+```bash
+$ opencode reload
+```
+
+## api
+
+Выполняет запрос к работающему серверу.
+
+```bash
+$ opencode api GET /api/session
+```
+
+Вызовите ID операции с параметром запроса.
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+Отправьте тело JSON.
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+Добавьте заголовок запроса.
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+Запускает сервер Agent Client Protocol через stdin и stdout для интеграций с редакторами. Он работает, пока клиент не закроет соединение.
+
+```bash
+$ opencode acp
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+Предоставляет инструменты отладки и диагностики.
+
+```bash
+$ opencode debug agents
+```
+
+Перечислите источники конфигурации.
+
+```bash
+$ opencode debug config
+```
+
+Запишите снимок кучи работающего фонового сервера и выведите его путь.
+
+```bash
+$ opencode debug heap-dump
+```
+
+Запишите снимок в выбранный каталог.
+
+```bash
+$ opencode debug heap-dump --directory ./snapshots
+```
+
+Покажите глобальные пути.
+
+```bash
+$ opencode debug paths
+```
+
+Выведите один путь.
+
+```bash
+$ opencode debug paths db
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+Обновляет OpenCode до последней или конкретной версии. Псевдоним: `update`.
+
+```bash
+$ opencode upgrade
+```
+
+Обновитесь до конкретной версии конкретным менеджером пакетов.
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+Останавливает фоновые сервисы, удаляет глобальный кэш и удаляет OpenCode. Данные сессий, конфигурация и состояние не удаляются.
+
+```bash
+$ opencode uninstall
+```
+
+Просмотрите, что будет удалено.
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+Показать все подкоманды и флаги.
+
+```bash
+$ opencode uninstall --help
+```

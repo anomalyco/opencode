@@ -1,0 +1,40 @@
+---
+title: "Raycast"
+description: "Korzystaj z modeli Console i Go w Raycast AI."
+---
+
+Korzystaj z modeli Console i Go w Raycast AI Chat, Quick AI i AI Commands przez
+[rozszerzenie OpenCode](https://www.raycast.com/vimtor/opencode). Modele udostępniane przez rozszerzenia wymagają
+[Raycast Pro](https://www.raycast.com/pro).
+
+## Konfiguracja
+
+Rozszerzenie wczytuje modele włączone w Twoim obszarze roboczym i rozlicza ich użycie na jego koncie. Wybierz model płatny
+lub model Go. Darmowe modele czatu są dostępne tylko w OpenCode. Próba użycia ich w Raycast kończy się błędem HTTP `403`.
+
+1. Zainstaluj rozszerzenie z Raycast Store.
+2. Utwórz [osobisty klucz API](/console/harnesses#get-an-api-key) i wklej go w polu **API Key** w ustawieniach rozszerzenia.
+3. Zezwól rozszerzeniu na dodawanie modeli do listy wyboru w Raycast.
+
+Uruchom **Refresh Models** po włączeniu lub wyłączeniu modeli w Console.
+
+```text
+Refresh Models
+```
+
+## Go
+
+Użyj klucza z obszaru roboczego z subskrypcją [Go](/console/go). Rozszerzenie wyświetli wtedy modele Go w wyborze
+modeli.
+
+## Console MCP
+
+Dodaj serwer [Console MCP](/console/harnesses#console-mcp) poleceniem **Install MCP Server**.
+
+| Pole       | Wartość                           |
+| ---------- | --------------------------------- |
+| Transport  | HTTP                              |
+| URL        | `https://opencode.ai/console/mcp` |
+| OAuth Type | Dynamic                           |
+
+Raycast poprosi o zalogowanie przy pierwszym użyciu serwera.

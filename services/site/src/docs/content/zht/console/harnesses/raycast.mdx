@@ -1,0 +1,38 @@
+---
+title: "Raycast"
+description: "在 Raycast AI 中使用控制台與 Go 模型。"
+---
+
+透過 [OpenCode 擴充功能](https://www.raycast.com/vimtor/opencode)，在 Raycast AI Chat、Quick AI 與 AI Commands 中使用控制台與 Go 模型。
+若要使用擴充功能提供的模型，必須訂閱 [Raycast Pro](https://www.raycast.com/pro)。
+
+## 設定
+
+擴充功能會載入工作區中已啟用的模型，並將費用計入該工作區。請選擇付費或 Go 模型；
+免費方案聊天模型只能在 OpenCode 中使用；從 Raycast 使用會回傳 HTTP `403`。
+
+1. 從 Raycast Store 安裝擴充功能。
+2. 建立[個人 API 金鑰](/console/harnesses#get-an-api-key)，並貼到擴充功能的 **API Key** 偏好設定。
+3. 允許擴充功能在 Raycast 模型選取器中提供模型。
+
+在控制台啟用或停用模型後，執行 **Refresh Models**。
+
+```text
+Refresh Models
+```
+
+## Go
+
+請使用已訂閱 [Go](/console/go) 的工作區金鑰。擴充功能就會在模型選取器中列出 Go 模型。
+
+## 控制台 MCP
+
+使用 **Install MCP Server** 指令新增[控制台 MCP](/console/harnesses#console-mcp) 伺服器。
+
+| 欄位 | 值 |
+| --- | --- |
+| Transport | HTTP |
+| URL | `https://opencode.ai/console/mcp` |
+| OAuth Type | Dynamic |
+
+Raycast 會在第一次使用伺服器時要求你登入。

@@ -1,0 +1,94 @@
+---
+title: "SSO"
+description: "OIDC veya SAML ile kimlik sağlayıcınız üzerinden bir OpenCode Console çalışma alanında oturum açın."
+---
+
+Tek oturum açma (SSO), çalışma alanı üyelerini oturum açtıklarında şirketinizin kimlik sağlayıcısı üzerinden yönlendirir.
+Sahipler bunu **Settings › Security** bölümünde ayarlar ve her çalışma alanına dahildir.
+
+| Protokol       | Sağlayıcılar                                                                           |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity veya herhangi bir OIDC sağlayıcısı |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta veya herhangi bir SAML sağlayıcısı         |
+
+Her çalışma alanının tek bir SSO bağlantısı vardır.
+
+## OIDC ayarlama
+
+1. **Settings › Security** bölümünü açın, **Configure SSO** düğmesine tıklayın ve **OpenID Connect** ile sağlayıcınızı
+   seçin.
+2. Gösterilen adımları izleyerek sağlayıcınızda `openid`, `email` ve `profile` kapsamlarıyla bir uygulama oluşturun.
+3. **Issuer URL** ya da kiracı veya alan adınızı, ayrıca **Client ID**, **Client Secret** ve bir **Display Name** girin,
+   ardından **Save** düğmesine tıklayın.
+4. Bağlantıdaki **Callback URL** değerini sağlayıcınızın izin verilen yönlendirme URI'lerine kopyalayın.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Console, kaydettiğinizde issuer'ın erişilebilir olduğunu denetler. SSO, bağlantı kaydedilir kaydedilmez etkindir.
+
+## SAML ayarlama
+
+1. **Settings › Security** bölümünü açın, **Configure SSO** düğmesine tıklayın ve **SAML 2.0** ile sağlayıcınızı seçin.
+2. **ACS URL** ve **SP Entity ID** değerlerini sağlayıcınıza kopyalayın. Özel sağlayıcılar bunun yerine **SP Metadata
+   URL** kullanabilir veya XML'i indirebilir.
+3. Sağlayıcınızın üst verilerini URL, XML yüklemesi veya yapıştırma ile ekleyin. **IdP Entity ID**, **IdP SSO URL** ve
+   **IdP Certificate** alanlarını elle de girebilirsiniz.
+4. Ayrıntıları gözden geçirin ve **Activate SSO** düğmesine tıklayın.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Sağlayıcınız yanıtı veya assertion'ı imzalamalı ve kullanıcının e-postasını bir `email` özniteliği ya da NameID olarak
+göndermelidir.
+
+## E-posta alan adlarını doğrulama
+
+[Console](https://opencode.ai/console) uygulamasına doğrulanmış bir alan adındaki e-postayla oturum açan kişiler kimlik
+sağlayıcınıza yönlendirilir. SSO etkinleştikten sonra **Email domains** altında **Add domain** düğmesine tıklayın, alan
+adınızı girin ve gösterilen TXT kaydını yayımlayın.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Kayıt yayımlandıktan sonra **Verify Domain** düğmesine tıklayın. DNS değişikliklerinin yayılması biraz sürebilir. Her alan
+adı yalnızca tek bir çalışma alanına ait olabilir.
+
+## SSO zorunluluğu
+
+Bir çalışma alanında SSO olduğunda yöneticiler ve üyeler çalışma alanını açmak için onun üzerinden oturum açmalıdır ve
+Console onları otomatik olarak yönlendirir. OpenCode'u `/connect` ile bağlamak da aynı kuralı izler.
+
+Çalışma alanı sahipleri SSO olmadan da oturum açabilir. Böylece kimlik sağlayıcısı yanlış yapılandırılsa bile çalışma alanı ayarlarına erişebilirler.
+
+## Otomatik üyelik
+
+Doğrulanmış bir alan adındaki kişiler SSO üzerinden ilk kez oturum açtıklarında çalışma alanına **Member** olarak katılır.
+Şu durumlarda otomatik olarak eklenmezler:
+
+- Bekleyen bir davetleri varsa. Bunun yerine davet kullanılır.
+- Çalışma alanı üyeliğe karar veren [dizin eşitleme](/console/scim) kullanıyorsa.
+- Çalışma alanında bir [Go](/console/go) aboneliği varsa.
+
+SSO kullanan bir çalışma alanına yapılan davetler, davet edilen kişiyi bağlantıyı açtığında kimlik sağlayıcınıza
+yönlendirir.
+
+## Mevcut hesaplar
+
+Aynı e-postayla zaten bir Console hesabı olan biri SSO akışı sırasında yeniden oturum açar ve **Link account** ile onaylar.
+Bir davet bu onayı atlamaz. Doğrulanmış bir çalışma alanı alan adındaki SCIM ile sağlanan hesaplar yine otomatik olarak
+bağlanabilir.
+
+## Düzenleme veya silme
+
+Ayrıntılarını değiştirmek için bağlantıdaki **Edit** düğmesine tıklayın. Mevcut değeri korumak için sır veya sertifika
+alanını boş bırakın. OIDC ile SAML arasında geçiş yapmak için bağlantıyı silin ve yeni bir tane oluşturun.
+
+Bağlantıyı **⋯ › Delete...** ile silin. Üyeler diğer oturum açma yöntemlerine döner ve dizin eşitleme, token'ları iptal
+edilerek durur. E-posta alan adları korunur.

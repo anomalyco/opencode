@@ -1,0 +1,271 @@
+---
+title: "ポリシー"
+description: "名前付きリソースに対する OpenCode の操作を許可または拒否します。マネージドポリシーと組織のポリシーは、ユーザー設定やプロジェクト設定より優先されます。"
+---
+
+ポリシーは、名前付きリソースに対して OpenCode が操作を実行できるかどうかを決定します。`policies` の下に記述するほか、接続した [OpenCode Console](/console) のワークスペースから配信することもできます。
+
+ポリシーは[権限](/permissions)とは別のものです。権限はエージェントごとのツールルールで、`allow`、`deny`、`ask` を指定できます。ポリシーは許可か拒否のどちらかで、ユーザーに確認を求めません。権限やプロバイダーが本来許可する範囲を狭めるだけです。
+
+## 設定
+
+`opencode.jsonc` にステートメントを追加すると、特定のプロバイダーをどこでも拒否できます。
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+拒否されたプロバイダーは、有効な認証情報があってもカタログとモデル選択から消えます。
+
+以前のリリースでは `experimental.policies` からポリシーを読み取っていました。このキーも引き続き機能し、`policies` にマージされます。
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## ステートメント
+
+各ステートメントには 3 つのフィールドがあります。
+
+| フィールド | 値                                                                                                                          | 意味                                             |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `action`   | `provider.use`、`tool.use`、`integration.connect`、`integration.use`、`mcp.use`、`skill.use`、`plugin.use`、`websearch.use` | 制御する操作                                     |
+| `resource` | 文字列またはワイルドカードパターン                                                                                          | ステートメントの適用対象。アクションによって異なります |
+| `effect`   | `allow`、`deny`                                                                                                             | このステートメントが一致したときの決定           |
+
+検証に失敗したステートメントは、サーバーログに警告を出して破棄され、残りのリストは引き続き適用されます。`deny` を編集した後はログを確認してください。
+
+## マッチング
+
+リソースは権限と同じ値全体のワイルドカードを使用します。`*` は 0 文字以上、`?` は 1 文字に一致します。
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+これにより `company-us` と `company-eu` が拒否されます。` *` で終わるパターンは引数なしの値にも一致するため、`shell:git push *` は `git push` 単体も対象にします。
+
+## 順序
+
+複数のステートメントが一致した場合、最後のものが優先されます。対象を絞ったステートメントが自動で優先されるわけではないので、適用範囲の広いものを先に、例外を後に置きます。何も一致しない場合、操作は許可されます。
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Anthropic だけが利用可能になります。
+
+## プロバイダー
+
+`provider.use` は、プロバイダーをそもそも使用できるかを制御します。リソースはプロバイダー ID で、`anthropic`、`openai`、`opencode`、または [`providers`](/providers) のカスタム ID です。
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+`providers` のエントリがエンドポイントを設定し、ステートメントによってそれが OpenCode の唯一のプロバイダーになります。ポリシーは、プロバイダーがどのように認識されたか（カタログデータ、環境変数、保存済みアカウント、組み込みプラグイン、設定）に関係なく適用されます。
+
+V1 の `enabled_providers` と `disabled_providers` のリストの代わりに `provider.use` を使用します。V1 のファイルも引き続き読み込まれます。[V1 からの移行](/migrate-v1#supported-fields-without-direct-native-equivalents)を参照してください。
+
+## ツール
+
+`tool.use` ステートメントは、[権限](/permissions)のチェックを強制的に拒否します。リソースは `<action>:<value>` で、ツールがチェックするすべてのリソースに対して照合されます。
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+ポリシーで拒否された操作は、確認を求めずに `Blocked by configuration policy` エラーで失敗します。ポリシーはエージェントのルールと保存済みの承認の後に適用されるため、`ask` も「Allow always」で保存した承認も上書きします。
+
+| パターン                     | ブロックする対象                                 |
+| ---------------------------- | ------------------------------------------------ |
+| `shell:*`                    | すべてのシェルコマンド                           |
+| `read:*/.ssh/*`              | SSH 関連ファイルの読み取り                       |
+| `external_directory:*`       | Location または worktree の外へのアクセス        |
+| `subagent:general`           | 1 つのサブエージェントの起動                     |
+| `github_delete_repository:*` | 1 つの MCP ツール                                |
+| `*`                          | まだ拒否されていないすべて                       |
+
+`allow` を指定した `tool.use` ステートメントは、アクセスを付与することはありません。以前の広い `deny` を解除するだけで、その後にエージェント自身のルールが判断します。
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status` はエージェントの `shell` ルールに従い、それ以外のすべてのコマンドはブロックされます。
+
+## 連携
+
+連携とは、`/connect` で接続するすべてのものです。OpenCode Console（`opencode`）、`anthropic` などのプロバイダー、`exa` などの Web 検索サービス、`https://ai.acme.com` などの well-known 設定のオリジンがあります。MCP サーバーへのサインインは連携ポリシーの影響を受けません。MCP サーバーを制御するには `mcp.use` を使用します。
+
+`integration.connect` は、`/connect` に一覧表示される連携と、接続できる連携を制御します。リソースは連携 ID です。
+
+`integration.use` は、連携が提供するすべてを制御します。プロバイダーとモデル、Web 検索、Console のワークスペースや well-known 設定のオリジンが配信する MCP サーバーと設定が含まれます。リソースは `<integration>#<account>` で、account は接続した組織またはアカウントの ID（`opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1` など）です。接続したアカウントがない場合は連携 ID のみになります。サインアウト状態の無料枠は `opencode`、`ANTHROPIC_API_KEY` 環境変数は `anthropic`、`opencode.json` のプロバイダーはそのプロバイダー ID です。
+
+次の MDM ポリシーは、1 つの Console ワークスペースだけを許可し、それ以外を許可しません。その他の例は[エンタープライズ](/enterprise)を参照してください。
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+`/connect` には Console だけが表示され、メンバーはサインインできます。無料枠、個人の Console アカウント、他の組織、環境変数の API キー、`opencode.json` のプロバイダーはすべて利用できません。ワークスペースのプロバイダー、MCP サーバー、Web 検索は機能し、Console でそれらを変更しても新しい MDM プロファイルは不要です。
+
+連携が配信する MCP サーバーと設定を差し止められるのはマネージドポリシーだけです。いずれの場合も、連携自身のポリシーは引き続き適用されます。
+
+## MCP サーバー、スキル、プラグイン
+
+| アクション   | リソース                                                          |
+| ------------ | ----------------------------------------------------------------- |
+| `mcp.use`    | 設定名で指定する [MCP サーバー](/mcp-servers)                     |
+| `skill.use`  | ID で指定する[スキル](/skills)                                    |
+| `plugin.use` | バージョンなしのパッケージ名または絶対パスで指定する[プラグイン](/plugins) |
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+拒否された MCP サーバーとスキルは削除され、拒否されたプラグインは読み込まれません。設定方法は問いません。
+
+### `integration.use` からのアップグレード
+
+OpenCode 2.2.3 より前は、`integration.use` が `mcp:`、`skill:`、`plugin:` のプレフィックスを通じて MCP サーバー、スキル、プラグインを対象にしていました。プレフィックス付きのステートメントも引き続き読み込まれ、`mcp.use`、`skill.use`、`plugin.use` に変換されます。
+
+これらのプレフィックスのないステートメント（単独の `*` を含む）は、連携に適用されるようになりました。次のような広い拒否は
+
+```jsonc
+{ "action": "integration.use", "resource": "*", "effect": "deny" }
+```
+
+MCP サーバー、スキル、プラグインをブロックしなくなりました。代わりに、後のステートメントが連携を許可しない限り、無料枠を含むすべてのプロバイダーをブロックします。以前の意味を保つには、次のように置き換えます。
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+例外も同じように移行します。`integration.use` の `mcp:github` は `mcp.use` の `github` に、`skill:team:review` は `skill.use` の `team:review` になります。
+
+2.2.3 より古いクライアントは、`integration.connect`、`integration.use`（新しい意味）、`mcp.use`、`skill.use`、`plugin.use` を無視するため、これらに依存する場合は 2.2.3 以降を必須にしてください。
+
+## Web 検索
+
+`websearch.use` は、`websearch` ツールが使用できる Web 検索プロバイダーを制御します。リソースはプロバイダー ID です。Console の OpenCode Web Search は `opencode`、組み込みプロバイダーは `exa`、`firecrawl`、`parallel`、`tavily`、`tinyfish` など、プラグインが追加するプロバイダーはその ID です。
+
+```jsonc
+{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}
+```
+
+拒否されたプロバイダーは、Exa や TinyFish のように API キーなしで動作する場合でも削除されます。すべてのプロバイダーが拒否されると、`websearch` ツールは提供されなくなります。2.2.6 より古いクライアントは `websearch.use` を無視します。
+
+## 優先順位
+
+通常はカレントディレクトリに最も近い設定が優先されます。ポリシーでは順序が逆になり、適用範囲が広い設定のステートメントほど後で評価され、範囲の狭い設定を上書きします。マネージド設定と接続した Console は、常にユーザー設定ファイルやプロジェクト設定ファイルより優先されます。
+
+| 優先度      | ソース                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1（最高）   | macOS の管理対象の環境設定（`/Library/Managed Preferences/ai.opencode.managed.plist`）                         |
+| 2           | システムの `opencode.json(c)`（`/Library/Application Support/opencode`、`/etc/opencode`、`%ProgramData%\opencode`） |
+| 3           | 接続した OpenCode Console のワークスペース                                                                     |
+| 4           | グローバルの `~/.config/opencode/opencode.json(c)`                                                             |
+| 5           | 直接の `opencode.json(c)`。外側のディレクトリが内側より優先                                                    |
+| 6（最低）   | `.opencode/opencode.json(c)`。外側のディレクトリが内側より優先                                                 |
+
+リポジトリから、グローバルで拒否したプロバイダーを再度有効にすることはできません。
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` は拒否されたままです。1 つのファイル内では、ステートメントは記述順に評価されます。
+
+## Console
+
+[OpenCode Console](/console) のワークスペースは、Providers と Tools のポリシーを通常の `policies` ステートメントとしてワークスペース設定にコンパイルします。OpenCode はその設定を、マネージドの環境設定とシステムファイルのすぐ下に位置する設定ファイルとしてマージするため、組織の `deny` をリポジトリやユーザーの `allow` で解除することはできず、組織の `allow` はより低い権限の `deny` を解除します。マネージドの環境設定とシステムファイルは、引き続きワークスペースより優先されます。
+
+これらのステートメントによる拒否では、ワークスペース名が示されます。
+
+```text
+Blocked by Acme's policy
+```
+
+ステートメントは接続したアカウントに従います。
+
+| イベント                     | 結果                                               |
+| ---------------------------- | -------------------------------------------------- |
+| Console のポリシー変更       | 次回の取得時（約 5 分ごと）に適用                  |
+| 別のワークスペースへの切り替え | そのワークスペースのステートメントに置き換え     |
+| 接続解除                     | ステートメントをクリア                             |
+| Console に到達できない       | その接続の最後のステートメントが有効なまま         |
+
+Console プラグインとポリシープラグインは `plugins` から無効にできません。[プラグインの制御](/plugins#control)を参照してください。
+
+<Callout type="note">
+  ポリシーはエンドポイントや認証情報を設定するものではなく、使用できないプロバイダーを使用可能にすることもできません。プラグインのコードをサンドボックス化するものでもありません。拒否されたプロバイダーは、通常のプロバイダーとモデルの経路でブロックされます。
+</Callout>

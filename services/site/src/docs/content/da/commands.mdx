@@ -1,0 +1,260 @@
+---
+title: "Kommandoer"
+description: "Gør prompts til genanvendelige slash-kommandoer i Markdown eller JSON med argumenter, shell-output og vedhæftninger."
+---
+
+Opret `.opencode/commands/review.md` for at gøre en prompt til `/review`:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+Kør den fra TUI'en med et mål:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode sender `Review src/auth.ts for bugs and missing tests.` som en brugerprompt.
+
+## Markdown
+
+Læg globale kommandoer i `~/.config/opencode/commands/` og projektkommandoer i `.opencode/commands/`.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Kun `.md`-filer findes. Indlejrede stier bliver kommandonavne med `/` som separator:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+Kør den indlejrede kommando som `/team/review src/auth.ts`. Den ældre entalsmappe `command/` findes også,
+men brug `commands/` til nye filer.
+
+Tilføj YAML-frontmatter, når kommandoen skal have metadata. Selve Markdown-indholdet, uden blanktegn i begyndelsen og slutningen, er altid promptskabelonen.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Definér kommandoer under `commands` i enhver OpenCode JSON- eller JSONC-[konfigurationsfil](/config). Hver kommando kræver en
+`template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Felter
+
+Markdown-frontmatter og JSON-poster accepterer de samme felter, bortset fra at Markdown får `template` fra filens body.
+
+| Felt | Påkrævet | Adfærd |
+| --- | --- | --- |
+| `template` | Kun JSON | Promptskabelon. |
+| `description` | Nej | Tekst, der vises i kommandolister og ved søgning. |
+| `agent` | Nej | Agent, der vælges, når kommandoen kører. |
+| `model` | Nej | Modeltilsidesættelse i formatet `provider/model` eller `provider/model#variant`. |
+| `subagent` | Nej | `true` kører kommandoen i en undersession i baggrunden; `false` kører den altid i den aktuelle session. |
+| `subtask` | Nej | Forældet alias for `subagent`. |
+
+Denne JSON-kommando angiver f.eks. alle aktuelle valgfrie felter:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Læg ikke `template` i Markdown-frontmatter; bodyen leverer den.
+
+## Argumenter
+
+Brug `$ARGUMENTS` til hele argumentstrengen præcis som indtastet.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+For `/component Account Settings` bliver pladsholderen `Account Settings`.
+
+## Positioner
+
+Brug `$1`, `$2` og højere tal til fortolkede positionsargumenter. Enkelte eller dobbelte anførselstegn grupperer ord og fjernes.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+For `/check src/auth.ts "error handling"` bliver `$1` til `src/auth.ts`, og `$2` bliver `error handling`.
+
+Pladsholderen med det højeste tal bruger sit argument og alt efter det. Manglende positioner bliver tomme strenge.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+For `/compare api stable branch` sender OpenCode `Compare api with stable branch.`
+
+## Fallback
+
+Når en skabelon ikke har `$ARGUMENTS` eller en positionspladsholder, tilføjer OpenCode ikke-tomme argumenter efter en tom linje.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+For `/explain src/cache.ts` bliver prompten:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+Pak en shell-kommando i `!` efterfulgt af backticks for at indsætte dens output, før prompten sendes.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode kører hver blok med den konfigurerede shell på den aktive projektplacering og indsætter blokkens samlede output.
+Pladsholdere for argumenter erstattes først:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+For `/history 5` modtager shellen `git log --oneline -5`. Læg ikke ubetroede argumenter i shell-blokke.
+
+<Callout type="warning">
+  Shell-blokke kører, når OpenCode evaluerer kommandoen, uden om agentens tilladelsesflow for værktøjer. Brug kun kommandoer fra
+  kilder, du stoler på.
+</Callout>
+
+## Vedhæftninger
+
+Gemte skabeloner udvider ikke `@path`; det forbliver almindelig prompttekst.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Hvis du vil vedhæfte en fil, skal du tilføje den via inputfeltet, når du kalder kommandoen. OpenCode bevarer disse
+vedhæftninger fra inputfeltet, når den sender den udvidede prompt.
+
+## Kørsel
+
+Kommandoer udvider argumenter og shell-blokke, før de sender en varig brugerprompt. De kører som standard i den aktuelle session.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+Kørsel af `/plan migration` skifter den aktuelle session til `plan`, før prompten sendes.
+
+Modelvalg følger disse regler:
+
+1. En `model` i kommandoen tilsidesætter enhver anden model.
+2. Ellers har modellen i den valgte agents konfiguration forrang for den model, der var aktiv, da du kørte kommandoen.
+3. Ellers forbliver den aktuelle sessionsmodel aktiv.
+
+Denne kommando vælger f.eks. både sin agent og en eksplicit model:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Kørsel i baggrunden
+
+Angiv `subagent: true` for at køre en kommando i en undersession i baggrunden.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+Den overordnede session forbliver tilgængelig og beholder sin agent og model. Når undersessionen er færdig, sender OpenCode
+dens resultat eller fejl tilbage til den overordnede session.
+
+| Værdi | Adfærd |
+| --- | --- |
+| `true` | Brug altid en undersession, også når den valgte agent har `mode: primary`. |
+| `false` | Brug altid den aktuelle session, også når den valgte agent har `mode: subagent`. |
+| Udeladt | Brug kun en undersession, når den valgte agent har `mode: subagent`. |
+
+Undersessionen vælger i denne rækkefølge: kommandoens model, den valgte agents model og til sidst den overordnede sessions model.
+Det gamle felt `subtask` accepteres stadig; hvis begge felter er angivet, har `subagent` forrang.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Dette eksempel kører i den aktuelle session, fordi `subagent` har forrang.
+
+## Indlæsning
+
+Markdown- og JSON-kommandoer deler ét register. Senere kilder erstatter tidligere kommandoer med samme navn.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Projektkilder har forrang over globale kilder, og nærmere projektkilder har forrang over kilder i overordnede mapper.
+En brugerdefineret definition kan også erstatte en tidligere indbygget kommando. OpenCode genindlæser automatisk
+kommandofiler og ændringer i konfigurationen.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Når du gemmer denne fil, opdateres `/review` uden at genstarte OpenCode.

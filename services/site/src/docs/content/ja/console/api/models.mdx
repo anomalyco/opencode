@@ -1,0 +1,182 @@
+---
+title: "モデル一覧 API"
+description: "ワークスペースで使用できるモデルを、上限、料金、機能、および各モデルを呼び出す Console の URL とともに一覧表示します。"
+---
+
+モデル一覧には 2 種類あります。[Console の一覧](#console-model-list)は、ワークスペースが接続したプロバイダーを含め、使用できるすべてを返します。[推論の一覧](#inference-model-lists)は、公開されている OpenCode Models と Go のカタログを OpenAI の一覧形式で返します。
+
+| 一覧                                                | 返す内容                                                                                       | キー |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---- |
+| [`/console/api/v1/models`](#console-model-list)     | 呼び出し元が使用できるすべてのプロバイダーとモデル（ワークスペースの編集を反映）。             | 必須 |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models。キーなしではすべての公開モデル、キーありではそのワークスペースが使用できるモデル。 | 任意 |
+| [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go) のモデル（同じ形式）。                                                       | 任意 |
+
+OpenCode と同じモデル（接続したプロバイダーを含む）をクライアントで提供する場合は、Console の一覧を使用します。OpenCode Models または Go だけが必要な場合や、キーがまだなく公開カタログを取得したい場合は、推論の一覧を使用します。
+
+## Console のモデル一覧
+
+`GET https://opencode.ai/console/api/v1/models` は、呼び出し元が使用できるすべてのプロバイダーと、プロバイダーごとに呼び出せるモデルを返します。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+ワークスペースのメンバーなら誰でも呼び出せます。ブラウザのセッション、OpenCode のログイン、[パーソナル API キー](/console/api#personal-api-keys)、または **Models › Read** を持つ[サービスアカウントキー](/console/api#service-accounts)を使用します。Console が生成する OpenCode の設定と同じルールを使うため、一覧は OpenCode の `/models` に表示される内容と一致します。レスポンスはキャッシュされません（`Cache-Control: private, no-store`）。
+
+### プロバイダー
+
+レスポンスはプロバイダー ID をキーとするオブジェクトです。プロバイダー ID は OpenCode が使用する ID です。
+
+| プロバイダー ID             | プロバイダー                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | ワークスペースのクレジットから支払う [OpenCode Models](/console/models)。                                                        |
+| `opencode-go`               | [Go](/console/go) のモデル。Go のサブスクリプションがある場合のみ含まれます。                                                    |
+| `console-<connection slug>` | ワークスペースが追加した[接続](/console/providers)（`console-openai`、`console-anthropic`、`console-aws-bedrock` など）。        |
+
+各プロバイダーには `id`、`name`、`models` があります。`name` は OpenCode が表示する名前で、通常はワークスペース名の後にプロバイダー名が続きます。`models` はモデル ID をキーとするオブジェクトです。
+
+### 例
+
+1 つのプロバイダーと 1 つのモデルに絞った例です。
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### フィールド
+
+各モデルは、[models.dev](https://models.dev) の v2 エントリにワークスペースの編集を適用したもので、[models.dev が公開している](https://models.dev/experimental/v2.0/api.json)フィールドを持ちます。無効なモデルと、models.dev が非推奨としているモデルは含まれません。
+
+| フィールド     | 意味                                                                                                                                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | モデルの種類（`chat`、`embedding`、`image`、`decision` など）。                                                                                                                                                                                                                     |
+| `id`           | リクエストで送信するモデル ID。`models` のキーでもあります。                                                                                                                                                                                                                        |
+| `name`         | 表示名。                                                                                                                                                                                                                                                                            |
+| `limit`        | `context` はコンテキストウィンドウ。`input` はモデルが設定している場合のリクエスト入力の上限。`output` はレスポンスの上限。                                                                                                                                                        |
+| `cost`         | 100 万トークンあたりの米ドル（`text.input.price`、`text.input.cache.read`、`text.input.cache.write`、`text.output.price`）。`0` は無料を意味します。キャッシュのフィールドがない場合は、そのモデルにキャッシュ料金がありません。一部のモデルは `cost.multipliers` を追加し、指定された時間帯に料金が上がります。 |
+| `capabilities` | モデルができること（ツール呼び出しや推論の強度など）。                                                                                                                                                                                                                              |
+| `modalities`   | 受け付ける入力の種類（`text`、`image/png`、`application/pdf` など）と出力の種類。                                                                                                                                                                                                   |
+| `api`          | このモデルに使用する Console の URL と SDK。[モデル API](#model-api)を参照してください。                                                                                                                                                                                            |
+
+### モデル API
+
+`api` には、モデルが使用するプロトコルをキーとする 1 つのエントリがあります。OpenAI Chat Completions は `chat-completions`、OpenAI Responses は `responses`、Anthropic Messages は `messages`、Gemini は `generate-content`、[OpenAI Embeddings](/console/models#embedding-models) は `embeddings` です。これは、そのプロトコルの models.dev エントリのベンダー URL を Console のものに置き換え、他のプロトコルを除いたものです。
+
+| フィールド       | 意味                                                                                                                                                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | このモデルへのリクエストの送信先。OpenCode Models は `https://opencode.ai/inference/...`、Go は `https://opencode.ai/inference/go/...`、接続はその Console API URL `https://opencode.ai/inference/custom/<connection_id>` を使用します。        |
+| `sdk.aisdk`      | そのプロトコルの AI SDK パッケージ。[モデルのエンドポイント](/console/models#endpoints)の表と同じものです。                                                                                                                                        |
+| `sdk.opencodeai` | OpenCode が読み込む対応するプロバイダーモジュール。                                                                                                                                                                                                |
+
+追加した接続のモデルは次のようになります。プロトコルのパス（`/chat/completions` や `/responses` など）を、[プロバイダー API](/console/api/providers#endpoints)の説明に従って追加します。
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## 推論のモデル一覧
+
+`GET https://opencode.ai/inference/v1/models` は OpenCode Models を、`GET https://opencode.ai/inference/go/v1/models` は Go のモデルを一覧表示します。どちらも OpenAI の一覧形式で返します。
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+1 つのモデルとその共通フィールドに絞った例です。
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+キーがない場合、一覧にはすべての公開モデルが含まれます。キーがある場合は、そのキーのワークスペースが使用できるモデルだけが含まれるため、サービスアカウントキーには **Models › Read** が必要です。キーは `Authorization: Bearer` または `x-api-key` で送信します。非公開のモデルと非推奨のモデルは含まれません。
+
+各項目は OpenAI の `id`、`object`、`created`、`owned_by` で始まり、その後に [Console の一覧](#fields)と同じ models.dev のフィールド（`name`、`type`、`limit`、`cost`、`capabilities`、`modalities`、`api`、`family`、`release_date` など）が続きます。Console の一覧と異なり、推論の一覧にはワークスペースの接続は含まれません。models.dev のデータが一時的に利用できない場合も、OpenAI のフィールドだけを持つ項目が表示され、`name` は ID と同じになります。
+
+各 Go モデルには `go` もあり、プランごとの月間使用量の上限（`monthly_usage`）、リクエストのデータを学習に使うかどうか（`training`）、データを一切保持しないかどうか（`zdr`）、利用できない国があるかどうか（`limited_regions`）を示します。
+
+## エラー
+
+| ステータス | 意味                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `401`      | 認証情報がない、またはキーが期限切れか失効している。                                    |
+| `403`      | キーがモデルを一覧表示できない。サービスアカウントキーと制限付きキーには **Models › Read** が必要です。 |

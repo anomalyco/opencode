@@ -1,0 +1,249 @@
+---
+title: "CLI のテーマ"
+description: "OpenCode のターミナルインターフェースの組み込みテーマを選ぶか、ターミナル自身の色を使うか、独自のテーマを追加します。"
+---
+
+OpenCode には、ライトモードとダークモード用の組み込みテーマが多数用意されています。設定で選ぶか、独自の色を組み合わせてください。
+
+## テーマを選ぶ
+
+`Ctrl+P` を押し、**Open settings** を選択して **Theme** を開きます。デフォルトのテーマは `opencode` です。以前のデフォルトは `opencode-classic` として引き続き利用できます。
+
+グローバルの [CLI 設定](/cli/config)でテーマとモードを設定することもできます。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+設定を開かずにテーマを変更するには `/themes` を実行します。
+
+## システムの色
+
+OpenCode がターミナルのパレットを読み取れる場合、テーマの選択肢に `system` テーマが含まれます。ターミナルの前景色、背景色、ANSI パレットから色を導出します。
+
+テーマ名を `system` にすると、ターミナルの配色を使います。モードを `system` にすると、ターミナルの外観に合わせてライトとダークを切り替えます。
+
+## モード
+
+ターミナルの外観に合わせるには `system` を使用し、テーマをライトまたはダークモードに固定することもできます。
+
+| モード   | 動作                                             |
+| -------- | ------------------------------------------------ |
+| `system` | ターミナルで検出されたライトまたはダークの外観に従います。 |
+| `dark`   | 常にテーマのダークの色を使用します。             |
+| `light`  | 常にテーマのライトの色を使用します。             |
+
+これは CLI 設定の `theme` 内の `mode` フィールドに対応します。カスタムテーマが 1 つのモードしか提供していない場合、もう一方が要求されたときはそのモードを使用します。
+
+## テーマを追加する
+
+ダウンロードしたテーマや他の人から受け取ったテーマを追加するには、その JSON ファイルをグローバルのテーマディレクトリにコピーします。
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+プロジェクトの `.opencode/themes` ディレクトリに置くと、そのプロジェクトでのみ利用できるようにもできます。
+
+ファイル名がテーマ名になります。たとえば `my-theme.json` は `my-theme` として表示されます。ファイルを追加した後に OpenCode を再起動し、`/themes` を実行して選択します。
+
+OpenCode は `.json` ファイルだけを読み取ります。カレントディレクトリに近いテーマは、同じ名前のグローバルテーマまたは親テーマを置き換えます。
+
+## プラグインでテーマを使う
+
+[TUI プラグイン](/build/plugins/cli)は、計算済みの色を `context.theme` から、使用中のモードを `context.themeMode` から取得します。選択中のテーマに合わせるには、セマンティックトークンを使ってください。
+
+```tsx title="Inside a TUI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+公開されている TUI プラグイン API ではテーマを登録できません。カスタムのテーマ定義は、上記のディレクトリの JSON ファイルで追加してください。
+
+## テーマを作成する
+
+テーマの作成や編集には[テーマツール](https://opencode.ai/theme/)を使用してください。このツールを使うと、構造を理解し、変更し、カスタムの色を定義するのが容易になります。以下の説明は参考情報です。
+
+テーマは、共有のセマンティックトークンとモード固有のパレットを分離します。
+
+| セクション     | 目的                                                           |
+| -------------- | -------------------------------------------------------------- |
+| `base`         | すべてのモードで共有される完全なトークンツリー。               |
+| `light`, `dark` | そのモードの完全な色相パレットと、任意のトークンの上書き。     |
+
+すべてのテーマは完全な `base` を提供し、`light` または `dark` の少なくとも 1 つを定義します。モードはファイルの `base` から継承し、組み込みの OpenCode テーマや他のモードからは継承しません。
+
+以下の例は各概念に関連するセクションのみを示しています。カスタマイズする前に、テーマエディタで完全なファイルを生成してください。
+
+### 構造
+
+両方のモードで使う色は `base` に置き、必要に応じて `light` または `dark` の中で上書きします。
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+完全な `base` がすべてのセマンティックトークンを提供します。各モードは必要な色相をすべて提供し、base のトークンツリーの任意の部分を上書きできます。
+
+### 色と参照
+
+色は、16 進数の色コード、`"transparent"`、またはテーマ内の別の色への参照で指定できます。
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### 色相
+
+色相は 9 段階のカラースケールです。各モードは 8 つのベース色相と 3 つのエイリアスを定義します。
+
+| 種類       | 値                                                                   |
+| ---------- | -------------------------------------------------------------------- |
+| ベース     | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| エイリアス | `accent`, `interactive`, `neutral`                                   |
+| ステップ   | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`        |
+
+ベース色相の 9 段階をすべて定義するか、ある色相を別の色相のエイリアスにします。
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+色相のステップはモードのコントラストの方向に従います。ライトテーマでは `100` が暗く `900` が明るく、ダークテーマでは `100` が明るく `900` が暗くなります。
+
+`base` の `categorical` 配列は、エージェントやその他の繰り返し項目を区別するために使用する色相を順序付きで設定します。
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### セマンティックトークン
+
+セマンティックトークンは、UI の役割に色を割り当てます。コンポーネントは色を直接選ぶのではなく、これらの役割を使用します。
+
+| グループ                | 目的                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `text`                  | ベース、ミュート、フェイント、選択、アクション、フォームフィールド、フィードバックのテキスト。`faint` のデフォルトは `muted`。 |
+| `background`            | ベース、選択、浮き上がったサーフェス、アクション、フォームフィールド、フィードバックの塗り。 |
+| `border`, `scrollbar`   | 境界線とスクロールバーの色。                                                             |
+| `diff`                  | 追加、削除、コンテキスト、ハイライト、行番号の色。                                       |
+| `syntax`                | ソースコードのハイライト。                                                               |
+| `markdown`              | Markdown の要素。                                                                        |
+
+たとえば `text.muted` は二次的なテキストを制御し、`background.raised` は段階的に浮き上がるサーフェスを定義します。
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+`text.selection` と `background.selection` は、マウスやキーボードで選択したテキストに色を付けます。デフォルトでは、フォーカスされたプライマリアクション（`background.action.primary.$focused` 上の `text.action.primary.$focused`）になります。
+
+構文のキーは `comment`、`keyword`、`function`、`variable`、`string`、`number`、`type`、`operator`、`punctuation` です。
+
+Markdown のキーは `text`、`heading`、`link`、`linkText`、`code`、`blockQuote`、`emphasis`、`strong`、`horizontalRule`、`listItem`、`listEnumeration`、`image`、`imageText`、`codeBlock` です。
+
+### アクションと状態
+
+アクションには `primary`、`secondary`、`destructive` のバリアントがあります。アクションとフォームフィールドは `base` と、任意のインタラクション状態を使用します。
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+状態のキーは `$hovered`、`$focused`、`$pressed`、`$selected`、`$disabled` です。指定されていない状態は、そのアクションまたはフォームフィールドの `base` の色を使用します。
+
+### ダイアログのサーフェス
+
+パネル、ダイアログ、メニュー、トーストは `background.raised` から表示階層に応じた背景を選びます。ダイアログでは、さらに `@dialog` でセマンティックトークンを上書きできます。
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+TUI は `@dialog` を適用してから参照先の値を求め直すため、`$background.base` を参照するトークンにはダイアログの背景色が反映されます。各アクションでは、状態別の色を明示的に指定していない場合、そのコンテキストでの `base` が使われます。

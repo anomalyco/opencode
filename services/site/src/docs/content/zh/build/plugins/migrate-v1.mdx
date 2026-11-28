@@ -81,7 +81,7 @@ V2 的上下文既是一个 OpenCode 客户端，也是插件 API。大多数操
 | 返回的 `dispose()` 钩子    | `setup` 返回的清理函数                                        |
 | 返回的 `event` 钩子        | `ctx.event.subscribe()`                                       |
 | 返回的配置、模型或工具修改 | 对应领域的 `transform(...)`                                   |
-| Bun shell 辅助函数 `$`     | 自行导入并管理插件所用的进程 API                              |
+| Bun 的命令执行辅助函数 `$` | 自行导入并管理插件所用的进程 API |
 
 `ctx.location` 描述的是该插件实例加载所在的 Location，而不是插件可能观察到的每个会话或事件所在的 Location。如果需要区分这一点，请读取会话或事件自身的数据。
 
@@ -91,7 +91,7 @@ V2 的上下文既是一个 OpenCode 客户端，也是插件 API。大多数操
 
 早期版本的插件通过 `ctx.catalog` 发布提供商和模型。现在 OpenCode 将 `ctx.provider` 和 `ctx.model` 作为两个独立的领域提供，因此调用 `ctx.catalog.transform` 的插件将无法加载。
 
-| 旧版 catalog API | 当前对应的 API |
+| 旧版目录 API | 当前对应的 API |
 | --- | --- |
 | `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` 和 `ctx.model.transform(editor => …)` |
 | `draft.provider.update(id, fn)` | `ctx.provider` 中的 `editor.update(id, fn)` |

@@ -1,0 +1,1766 @@
+---
+title: "サーバー"
+description: "OpenCode プラグインのサーバー部分を作成します。ツール、フック、連携、コマンド、エージェントを扱います。"
+---
+
+プラグインのサーバー部分は OpenCode サーバーで実行されます。OpenCode の動作を変更し、ツール、フック、連携、コマンド、エージェントといった機能を追加します。プラグインパッケージの構成、読み込み、公開については[概要](/build/plugins)を参照してください。
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+## ライフサイクル
+
+`setup` はプラグインの読み込み時に実行されます。プラグインのアンロード時に実行されるクリーンアップ関数を返すこともできます。
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### コンテキスト
+
+プラグインのコンテキストは、基本的には [OpenCode サーバークライアント](/build/client)と同じです。読み取りや操作を行うメソッドの入力とレスポンスも、クライアントと同じです。さらに、トランスフォーム、ランタイムフック、再読み込み、登録、プラグインのオプションを扱う専用メソッドが用意されています。
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location` は、このプラグインインスタンスが読み込まれた location を表します。`directory`、任意の `workspaceID`、`project` のメタデータ（`id`、`directory`、`canonical`）が含まれます。Promise プラグインと Effect プラグインの両方で利用できます。これはプラグインインスタンスの location であり、アクセスできるすべてのセッションや受信するイベントの location ではありません。
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### オプション
+
+プラグインのオプションは、`opencode.json(c)` のオブジェクト形式で渡します。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+`setup` の中で `ctx.options` からそれらの値を読み取ります。
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## トランスフォーム
+
+トランスフォームは OpenCode の各ドメインの状態を同期的に変更する処理です。同じドメインに先に登録された処理の結果に対して、変更を重ねていきます。`ctx.model.list()` などでレジストリを読むと、プラグインのセットアップ中でも、それまでの登録がすべて反映されています。起動時のバッチ処理でまとめるのは更新通知だけで、変更内容は待たずに読み取れます。リソースの状態を取得する API が返すのは、実際に動作しているリソースの状態です。定義が登録されていても、リソースの接続などの処理が完了したとは限りません。
+
+ソースは `ctx.provider.transform` を通じてプロバイダーと不変のモデル定義を提供します。
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+登録、削除、`reload()` のいずれかが行われると、レジストリに変更があったことが記録されます。次に読み取るときに、アクティブなすべてのトランスフォームを新しい値に対して登録順に適用し直し、レジストリを再構築します。トランスフォームは、負荷が小さく、同じ入力から同じ結果を得られるようにしてください。すでに読み取った値は、後から再構築しても変わりません。
+
+プロバイダーのトランスフォームを適用し、利用できるプロバイダーが確定すると、OpenCode はアクティブなプロバイダーのモデルを展開し、モデルのトランスフォームをすべて順に適用します。モデルのポリシーでは、更新されたばかりのソースを含む候補全体を検査できます。
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+取り込んだ入力は自動的には監視されません。外部データは同期のコールバックの前に読み込み、それらの入力が変わったら `reload()` を呼び出してください。ここで `loadFromSource()` は `{ info: Provider.Info, models: readonly Model.Info[] }` のエントリを返します。
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+プロバイダーが変わると有効なモデル一覧が再計算されるため、出力料金のポリシーは更新後のモデルにも適用されます。モデルのトランスフォームが取り込んだ入力だけが変わった場合は `ctx.model.reload()` を使います。
+
+## API
+
+### エージェント
+
+すべてのエージェントを読むか、ID で 1 つ取得します。
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+トランスフォームを登録すると、エージェントの確認、作成、更新、削除や、デフォルトエージェントの選択ができます。
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+新しいエージェントは `editor.update` で登録します。指定した ID のエージェントがすでにあれば、そのエージェントを編集します。なければ `Agent.Info.default(id)` で作成してからコールバックを実行します。
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
+})
+```
+
+トランスフォームが参照する外部の状態が変わったら、エージェントを再読み込みします。
+
+```ts
+await ctx.agent.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### プロバイダー
+
+利用可能なプロバイダーを読むか、ID で 1 つのプロバイダーのメタデータを確認します。
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+プロバイダーのトランスフォームは、プロバイダーの設定とソースの定義を編集します。エディタからは、非アクティブなプロバイダーも含めて変更不可の定義を読み取れます。`models.update` が編集するのは、ソースモデルのコピーです。
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-5-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+プロバイダーのソースの一覧は `models.set` で置き換え、取り込んだ定義が変わったら再読み込みします。
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+アカウント固有の検出では、一覧の読み込みに使用した接続を `sourceConnection` として渡します。別の接続が選択されている間、プラグインが更新された一覧を公開するまで、OpenCode はそのプロバイダーを除外します。
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### リファレンス
+
+スキーマ：[`Provider.Info`](/api#schema-Provider.Info)、[`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### モデル
+
+利用可能なモデルとデフォルトの選択を読み取ります。
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+モデルのトランスフォームでは、アクティブなプロバイダーのモデル候補全体を編集できます。無効な候補も、すべてのトランスフォームが終わるまでは編集できます。`update` でモデルを追加できるのは利用可能なプロバイダーだけです。
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-5-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+コールバックは、マージする前のモデルの上書き設定を編集します。OpenCode は結果を確定するときにプロバイダーのデフォルトと一度だけマージし、変更がない限り、読み取り時に同じ結果を返します。`editor.provider` が公開するのは、モデルのトランスフォームの出力ではなく、非アクティブなテンプレートも含む変更不可のソース定義です。
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### コマンド
+
+location で利用可能なコマンドを読み取ります。
+
+```ts
+const commands = await ctx.command.list()
+```
+
+コマンドはトランスフォームで登録します。エグゼキューターはセッション、プロンプトへの添付、指定された配信モードを受け取ります。
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+トランスフォームが参照する外部の状態が変わったら、コマンドを再読み込みします。
+
+```ts
+await ctx.command.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Command.Info`](/api#schema-Command.Info)、[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### 連携
+
+連携を読み取り、アクティブな認証情報を確認します。
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+連携は API キーで接続します。
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+OAuth 接続の試行を開始、確認、完了、キャンセルします。
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+コマンドベースの接続も、同じ開始、ステータス、キャンセルのフローを提供します。
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+トランスフォームを登録して、連携の確認と認証方法の管理を行います。
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+トランスフォームが参照する外部の状態が変わったら、連携を再読み込みします。
+
+```ts
+await ctx.integration.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Integration.Info`](/api#schema-Integration.Info)、[`Integration.Method`](/api#schema-Integration.Method)、[`Connection.Info`](/api#schema-Connection.Info)、[`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### 認証情報
+
+保存済みの認証情報を、その連携のアクティブな認証情報にします。
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### リファレンス
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+MCP サーバーとその現在の接続状態を一覧表示します。
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+プラグインから MCP サーバーを管理できるのは、トランスフォームを通じてのみです。サーバーの追加または置き換えには `editor.set`、設定の変更には `editor.update`、削除には `editor.remove` を使います。設定の確認には `editor.list` と `editor.get` を使います。
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+トランスフォームで `disabled: true` を設定すると、サーバーが無効になり、接続が切れます。`disabled: false` を設定すると、サーバーが有効になり、OpenCode が接続できるようになります。OpenCode はトランスフォーム後の設定に基づいて、サーバーのライフサイクルを管理します。
+
+トランスフォームが参照する外部の状態が変わったら、`reload()` を呼び出します。トランスフォームが再適用され、サーバーの状態が設定に合わせて更新されます。
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Mcp.Server`](/api#schema-Mcp.Server)、[`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded)、[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### プラグイン
+
+location で現在アクティブなプラグインを一覧表示します。
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### リファレンス
+
+スキーマ：[`Plugin.Info`](/api#schema-Plugin.Info)、[`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### 参照
+
+location で利用可能な参照を読み取ります。
+
+```ts
+const references = await ctx.reference.list()
+```
+
+トランスフォームを登録して、ローカルと Git の参照を確認、追加、削除します。`get(name)` は現在設定されているソースを返し、その名前のソースがなければ `undefined` を返します。
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+トランスフォームが参照する外部の状態が変わったら、参照を再読み込みします。
+
+```ts
+await ctx.reference.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Reference.Info`](/api#schema-Reference.Info)、[`Reference.LocalSource`](/api#schema-Reference.LocalSource)、[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### 生成（実験的）
+
+セッションを作成せず、ツールを呼び出さず、セッション履歴にも追加せずに、選択したモデルで生成します。これらの API は変更される可能性があります。`ctx.generate.text` は引き続き機能しますが、`ctx.experimental.generate.text` に代わって非推奨です。
+
+```ts
+const review = await ctx.experimental.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+  prompt: "Review this proposed action.",
+})
+
+const { images } = await ctx.experimental.generate.image({
+  model: { providerID: "openai", id: "gpt-image-1-mini" },
+  prompt: "A watercolor fox in the snow",
+  aspect: "16:9",
+})
+
+const { answers } = await ctx.experimental.generate.decisions({
+  model: { providerID: "opencode", id: "jev-1.13" },
+  input: [{ type: "text", text: "I was charged twice, please refund one." }],
+  questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
+})
+```
+
+### 権限
+
+操作を実行する前に権限を求めます。`assert` は、保存済みの承認を含むセッションの[権限ルール](/permissions)を評価し、結果が `ask` ならユーザーに確認します。操作が許可されると Promise は正常に完了します。
+
+```ts
+execute: async (input, context) => {
+  await ctx.permission.assert({
+    sessionID: context.sessionID,
+    agent: context.agent,
+    source: { type: "tool", messageID: context.messageID, id: context.id },
+    action: "deploy",
+    resources: [input.environment],
+    save: [input.environment],
+  })
+  return { content: await deploy(input.environment) }
+}
+```
+
+- `action` と `resources` がルールと照合されます。いずれかが `deny` なら操作はブロックされ、そうでなければいずれかが `ask` なら確認します。
+- `save` は、ユーザーが常に許可を選んだときに保存するパターンを列挙します。
+- `agent` は適用するルールの主体を選び、デフォルトはセッションのエージェントです。`source` はプロンプトをツール呼び出しに紐付けます。
+- `metadata` は、権限のプロンプトと `evaluate` フックに追加の詳細を渡します。
+
+拒否ルール、またはフィードバック付きの拒否は、理由を伴う `Tool.Error` で拒否されるため、モデルはそれを認識して続行します。単なる拒否は現在のステップを終了します。これらのエラーはツールの出力として返すのではなく、そのまま伝播させてください。
+
+保留中の権限リクエストを確認したり、許可・拒否を回答したりできます。
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
+```
+
+セッション単位の権限ルールを置き換えます。ルールはエージェントのルールの後に評価され、最後に一致したルールが優先されます。子セッションは、作成時に有効だったルールを継承します。
+
+```ts
+await ctx.session.update({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### セッション
+
+セッションを作成または読み取ります。
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+セッションはページ単位で一覧表示します。次のページを取得するには、`cursor.next` を `cursor` として渡します。カーソルはフィルターを記憶するため、繰り返し指定する必要はありません。
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20 })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+```
+
+以降のリクエストで使用するエージェントまたはモデルを変更します。
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
+```
+
+ユーザープロンプト、一時的な生成リクエスト、コマンド、合成メッセージを送信します。
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+await ctx.session.command({ sessionID, name: "review", text: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+`generate` は `text` とともに、その呼び出しの `tokens` と `cost` を、アシスタントメッセージが報告するのと同じ形で返します。
+
+セッションの名前変更、中断、待機を行います。
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, resume: false })
+await ctx.session.wait({ sessionID })
+```
+
+一時的なセッションは `remove` で削除します。削除は実行中の処理を停止し、子セッションを再帰的に削除します。
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+コンパクションは `compact` で要求します。完了した要約ではなく、受け付けられた受信トレイの項目を返し、コンパクションはデフォルトで次のステップの境界で実行されます。代わりにキューの順序を保つには `delivery: "queue"` を渡します。
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+キー付きのセッションの指示エントリは `instructions.entry` で添付、一覧表示、削除します。エントリはセッションの指示内に `<context key="...">` ブロックとして描画され、更新や削除はメッセージのターンをキューに入れずに次のステップの境界で通知されます。
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
+#### リファレンス
+
+スキーマ：[`Session.Info`](/api#schema-Session.Info)、[`Model.Ref`](/api#schema-Model.Ref)、[`Session.Inbox.User`](/api#schema-Session.Inbox.User)、[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)、[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: ExperimentalSessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<void>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### スキル
+
+location で利用可能なスキルを読み取ります。
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+トランスフォームを登録して、スキルを確認、追加、更新、削除します。`get(id)` はエディタで現在使われているスキルの定義を返し、そのスキルがなければ `undefined` を返します。
+
+```ts
+import { Skill } from "@opencode/plugin"
+
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: Skill.ID.make("review"),
+    name: Skill.Name.make("Review"),
+    description: "Review the current changes",
+    path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+トランスフォームが参照する外部の状態が変わったら、スキルを再読み込みします。
+
+```ts
+await ctx.skill.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### ストレージ
+
+プラグインにスコープされた永続的な JSON の値を保存、読み取り、削除します。
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+プレフィックスに一致するキーを取得します。カーソルを指定してページを送ることもできます。
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### リファレンス
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### ツール
+
+すべてのトランスフォームを適用した後、トランスフォームのコールバック外で、現在登録されているツールを取得します。各ツールの `id` には実際に使われる名前が入ります。
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+ツールの登録、更新、削除は、Promise プラグインでも同期的なトランスフォームで行います。外部データは登録または再読み込みの前に取得してください。実際に使われるツール名が同じ場合は、後から有効になった登録で上書きされます。
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+Promise のツールのエグゼキューターは `context.signal` を受け取ります。`fetch` などキャンセル可能な処理に渡すと、セッションを停止したときに基になる処理も停止します。
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+#### 自由形式のツール入力
+
+必須の文字列フィールドをちょうど 1 つ持つ直接ツールは、モデルにその文字列を JSON のラッパーなしで書かせることができます。`freeform` を `{ type: "text" }`、`{ type: "regex", pattern }`、`{ type: "lark", grammar }` のいずれかに設定します。
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+選択したモデルの API が models.dev で `regex` を列挙している場合、モデルは `OPS-42` を直接書けます。そうでない場合、Core は**`freeform` だけ**を省略します。モデルは `ticket` ツールを引き続き持ち、`{"id":"OPS-42"}` で呼び出します。形式の一覧がない、または空の場合は自由形式に未対応です。どちらの場合もエグゼキューターは `{ id }` を受け取ります。
+
+Code Mode（`codemode: true`）の内部では、自由形式のツールは `await tools.ticket("OPS-42")` のように文字列を直接受け取ります。`await tools.ticket({ id: "OPS-42" })` も機能します。
+
+コールバックが取り込んだソースデータが変わったら、`reload()` を呼び出します。再読み込みでは、アクティブなトランスフォームを同じ順序で適用し直します。プラグインのセットアップはやり直しません。
+
+```ts
+await ctx.tool.reload()
+```
+
+エディタにあるツールを確認するには `list()` と `get()` を使います。ツールの `id` には実際に使われる名前が入ります。その ID のツールが存在しない場合、`get()` は `undefined` を返します。`update` と `remove` には、名前空間を含めた実際のツール名（上の例では `acme_greeting`）を渡します。名前空間のドットは `_` に変換されます。ツール名では英字、数字、`_`、`-` 以外の文字が `_` に置き換わります。存在しない名前は無視されます。新しいツールを作成するには、`add` に完全な定義を渡してください。更新しても名前と名前空間は変わりません。ネストした値を直接変更するのではなく、新しいスキーマやオプションを代入して置き換えてください。無効な更新はログに記録され、以前の定義がそのまま残ります。
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+MCP カタログが更新された後も、登録済みの追加、更新、削除を順に適用し直します。登録を破棄すると、その変更は取り除かれ、残りのトランスフォームでツール一覧が再構築されます。
+
+登録を破棄すると、そのトランスフォームは取り除かれ、残りのトランスフォームでツール一覧が再構築されます。上書きしていた定義があれば元に戻ります。破棄は冪等です。プラグインのアンロード時にも登録は破棄されます。
+
+```ts
+await registration.dispose()
+```
+
+モデルリクエストごとに、実行可能なツールの固定スナップショットを取得します。その後のトランスフォーム、再読み込み、破棄が影響するのは次回以降のスナップショットだけです。すでに取得したツールの定義、Code Mode の名前空間の説明、エグゼキューターは変わりません。一方、エグゼキューターがクロージャーで可変のプラグインデータを参照していれば、そのデータは引き続き参照されます。定義とともに固定したい値は、トランスフォームの中で取り込んでください。
+
+#### リファレンス
+
+スキーマ：[`Tool.Content`](/api#schema-Tool.Content)、[`Tool.TextContent`](/api#schema-Tool.TextContent)、[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+リポジトリの情報、作業コピーの状態、ファイルの Diff を読み取ります。
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branch.list({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+トランスフォームで Location 単位の VCS プロバイダーを登録します。検出されたリポジトリの種類に合うプロバイダーが自動で選ばれます。別のプロバイダーを選ぶには `editor.default.set` を使います。
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+プロバイダーのコールバックは、現在の location、作業コピーのルート、カノニカルなプロジェクトルート、任意のリポジトリのストアを受け取ります。Diff のコールバックはさらに、選択されたモード、要求されたコンテキスト、出力のバイトバジェットを受け取ります。リポジトリの検出は、引き続き OpenCode 組み込みの Git と Mercurial の検出器を使用します。
+
+プロバイダーは任意で `init(scope, { signal })` を実装し、`scope.worktree` にリポジトリを作成できます。初期化は検出されたリポジトリの種類ではなく、ID（デフォルトは Git）でプロバイダーを選択します。location にまだリポジトリがない場合でも、`init` を持つプロバイダーを登録してください。OpenCode は呼び出す前にディレクトリが存在しリポジトリがないことを確認し、その後プロジェクトを再検出します。新しいリポジトリ形式には、このコールバックとは別に検出のサポートが必要です。
+
+#### リファレンス
+
+スキーマ：[`Vcs.Info`](/api#schema-Vcs.Info)、[`Vcs.FileStatus`](/api#schema-Vcs.FileStatus)、[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branch: {
+    list(input?: VcsBranchListInput, requestOptions?: RequestOptions): Promise<VcsBranchListOutput>
+  }
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### ワークツリー
+
+ローカルのワークツリーを扱うストラテジーは、通常のプラグインのライフサイクル内で登録します。この例の実装モジュールは、オプションの検証と、バックエンドの `create`、`remove`、`list` の各操作を担当します。
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+プラグインは `plugins` で読み込み、共通の移動先は別に設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- ストラテジーを追加すると自動的に選択されます。最後に有効な登録が優先され、ストラテジー選択の設定は不要です。
+- 登録を破棄するかプラグインをアンロードすると、以前の実装、最終的には同梱の Git ストラテジーに戻ります。
+- `reload()` は、取り込んだ入力が変わったときにトランスフォームを適用し直します。プラグインのセットアップはやり直しません。
+- 作成に失敗しても Git では再試行しません。デフォルトが変わっても、既存のワークツリーには管理元のストラテジーが記録されたままです。
+- ストラテジーはローカルのディレクトリを管理します。リモートのワークスペースのプロビジョニングはこのインターフェースの対象外です。
+
+#### 操作
+
+プラグインのコンテキストからは、クライアントと同じようにプロジェクト単位でワークツリーを操作できます。どの操作にも `projectID` が必要です。`list` が読み取るのは、同じプロジェクトの既知のチェックアウトを含む保存済みの一覧だけです。設定の読み込み、プラグインの起動、ファイルシステムの変更の検出は行いません。
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+作成時は、プロジェクトに保存された `canonical` ディレクトリから設定とプラグインを読み込み、そこで選択されたストラテジーを使います。親ディレクトリの `directory`、作成元の `from`、起点となるブランチの `branch`、名前の `name` を任意で指定できます。デフォルトの作成元は正規のチェックアウトです。`from` で別の作成元を指定する場合も、同じプロジェクトに属している必要があります。作成元を選んでも設定のルートは変わりません。起点の参照を指定するには、選択されたストラテジーがその指定に対応している必要があります。たとえば Rift のネイティブなスナップショット操作では参照を選べません。
+
+作成と更新は、正規のチェックアウトのプラグインが有効になるまで待ちます。ただし、そのチェックアウトでプラグインが自身のセットアップ中に呼び出した操作には、それまでの登録が反映され、呼び出し元自身が有効になるまで待つことはありません。
+
+削除時は、正規の設定を読み込んでプラグインを有効にし、現在のデフォルトではなく、そのワークツリーに記録されたストラテジーを使います。記録されたストラテジーが使えない場合はエラーになります。ワークツリーの配置先は別の場所でもかまいません。
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+管理元のストラテジーが見つからない場合は、Git にフォールバックせずに削除が失敗します。ストラテジーでは `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })` をスローして、強制削除の確認を要求できます。`Worktree` は `@opencode/plugin` からインポートでき、Core や Git のエラーに依存する必要はありません。
+
+更新時は正規の設定を読み込み、利用可能なすべてのストラテジーで既知のチェックアウトルートからワークツリーを検出します。結果をまとめ、記録済みの管理元はそのままに、存在しないディレクトリだけを一覧から取り除きます。いずれかの検出元で処理に失敗した場合、その検出元をログに記録し、残りの処理は続けます。どのストラテジーでも検出されなかったディレクトリも、実際に存在する限り一覧に残ります。`worktree.updated` を監視し、変更後の一覧は `list` を再度呼び出して取得してください。
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### リファレンス
+
+実装は、名前付けと衝突処理の後に推奨される移動先を受け取ります。`create` からは実際のディレクトリを返してください。バックエンドが独自のレイアウトを必要とする場合は異なることがあります。OpenCode は返されたパスを解決し、一覧、起動コマンド、API の結果に使用します。返されたディレクトリは存在している必要があります。
+
+別の移動先を選ぶストラテジーは、そこで名前の衝突を処理します。OpenCode はストラテジーを呼び出す前に、推奨される親ディレクトリを引き続き作成します。`list` は、そのストラテジーが所有するディレクトリと、リポジトリのルートだけを報告する必要があります。
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+Promise のコールバックは `signal` によるキャンセルに協力する必要があります。Effect のコールバックは Effect を返し、代わりに Effect の中断を使用します。登録はプラグインのランタイムにスコープされ、プロジェクトの操作はカノニカルなチェックアウトのレジストリを使用します。Core の設定アダプターが、ディレクトリの設定をそのレジストリに渡します。
+
+### Web 検索
+
+Web 検索のプロバイダーを一覧表示するか、選択されたプロバイダーでクエリを実行します。
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+トランスフォームでプロバイダーを登録し、デフォルトのプロバイダーを選びます。
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = (await response.json()) as { url: string; title: string; content: string }
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+Web 検索を無効にするには `false` を選択します。外部の状態が変わった場合は、プロバイダーを再読み込みします。
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### リファレンス
+
+スキーマ：[`WebSearch.Provider`](/api#schema-WebSearch.Provider)、[`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### イベント
+
+接続しているサーバーの公開イベントストリームを購読します。プラグインのクリーンアップ時にストリームを中止してください。`types`（たとえば `ctx.event.subscribe({ types: ["config.updated"] })`）を渡すと、それらのイベントタイプだけを受け取れます。イベントはそれに合わせて型付けされます。プラグインはサーバーの内部で実行されるため、SDK クライアントとは異なり `server.connected` を受け取ることはありません。不明なタイプ名は、サーバーログの警告とともに無視されます。
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### リファレンス
+
+スキーマ：[`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventContext {
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
+}
+```
+
+## フック
+
+フックは実行中の操作を横取りします。フックはそのドメインに登録し、不要になったら返された登録を破棄します。
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+複数のプラグインが同じフックを登録できます。OpenCode はプラグインの順に実行するため、後のフックは以前のフックによる変更を認識します。
+
+### セッション
+
+セッションのフックは、プロンプトの受け付け、モデル呼び出し、ネイティブ HTTP、再試行を横取りします。
+
+#### フォーク
+
+`fork` フックは、OpenCode が履歴をコピーした後、フォークの呼び出しが戻る前に実行されます。`sessionID` は新しいセッションを識別します。
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
+#### プロンプトの受け付け
+
+受信したユーザープロンプトを、添付とスキルの解決、および永続的な受信トレイへの受け付けの前に横取りします。
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+フックは所有権を持つ可変のドラフトを受け取ります。
+
+- `prompt` には `text`、`files`、`agents` 内のエージェントのメンション、選択された `skills` が含まれます。
+- `metadata` にはアプリケーションが定義した受け付けのメタデータが含まれます。
+- `delivery` はデフォルトで `"steer"` で、`"queue"` に変更できます。
+- セッションとメッセージの ID は読み取り専用で、フックが受け付け先を変更することはできません。
+
+フックが追加したファイルとスキルは、通常の解決と検証の経路に従います。テキストを書き換えるときは、一致しなくなった添付の `mention` オフセットを更新または削除してください。エージェントのメンションはセッションのアクティブなエージェントを切り替えません。
+
+プロンプトのフックは次の条件で実行されます。
+
+- フックは、セッションの location のプラグインが準備できた後、登録順に実行されます。
+- `session.prompt` を通じて送信するコマンドはフックを実行します。
+- 合成メッセージ、シェルメッセージ、コンパクションの制御、移動の制御は実行しません。
+- フックは受け付け時に 1 回だけ実行され、モデル呼び出しのたびに実行されるわけではありません。
+- モデルの解決は受け付けの後に行われるため、プロバイダーによるスコープは利用できません。
+
+編集内容は、正規の永続化されたユーザー入力になります。準備に失敗した、または中断された場合、OpenCode はプロンプトを受け付けません。
+
+プロンプトのフックは再試行に対して安全に保ってください。これらは副作用の exactly-once の境界ではありません。
+
+- すでに保留中または配信済みの ID を再試行すると、フックを再実行せずに元の受け付け結果を返します。
+- 同時に送信された場合はフックが複数回実行されることがありますが、最初に成功した受け付けだけが有効になります。
+- プロンプトのフックは入力を変換するもので、型付きの拒否 API は提供しません。
+
+#### モデルリクエスト
+
+モデルのディスパッチ直前に、組み立てられたシステム指示、メッセージ、ツール、リクエストオプションを変更します。セッションが発行するリクエストの種類ごとにフックがあるため、プラグインはエージェントのループと補助的なリクエストを別々に扱えます。
+
+- `context` は、ツールによる継続を含むエージェントのループで実行されます。
+- `compaction` はチェックポイントの要約で実行されます。`messages` は要約対象のトランスクリプトで、OpenCode はフックの実行後に要約のプロンプトを追加します。`result` を設定すると自分でコンパクションを記録してモデル呼び出しをスキップできます。完了したコンパクションメッセージと同じフィールドを取ります。
+- `generate` は一時的な `ctx.session.generate` の呼び出しで実行されます。
+- `title` はタイトルの生成で実行されます。`agent` や `tools` はありません。`result` を設定すると自分でタイトルを指定できます。
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+変更は送信されるモデル呼び出しにのみ影響し、永続化された履歴や設定には影響しません。すべてのリクエストに適用したいフックは、種類ごとに登録する必要があります。
+
+`context`、`compaction`、`generate` フックのメッセージは、保存されたメッセージの `metadata` を読み取り専用で持ちます（たとえば `prompt` フックが設定した内容）。これはモデルには送信されません。
+
+OpenCode の指示を保持する `system` パーツは、各ソースを `metadata.experimental.instructions` に `{ key, text }` として列挙します（`core/date` や `core/environment` など）。フックはこれでソースを区別できます。リストはコピーであるため、パーツの `text` を編集しても更新されません。これは実験的な機能で変更される可能性があります。
+
+リクエストの上書きは次のルールに従います。
+
+- `options` はモデル呼び出しごとに空で始まり、解決済みのモデル設定は含みません。
+- 型付きのキーは生成の設定で、それ以外のキーはプロバイダーのオプションとして選択されたプロトコルに渡されます。
+- フックは登録順に実行され、以前のフックによる上書きを認識します。
+- リクエストの上書きはモデルのデフォルトより優先され、モデルのデフォルトは経路のデフォルトより優先されます。
+- プロバイダーのオプションのオブジェクトは再帰的にマージされ、配列とスカラー値は以前の値を置き換えます。
+- 上書きを削除するか `undefined` を設定すると、設定済みのデフォルトを削除するのではなく、デフォルトにフォールバックします。
+- 生の HTTP ボディのオーバーレイはプロトコルへの変換後に適用され、結果のフィールドを上書きできます。
+
+#### プロバイダーのオプション
+
+プロバイダーのオプションは、生の HTTP ボディのフィールドではなく、選択されたプロトコルのセマンティックなオプション名を使用します。プロバイダー固有の設定は、該当するプロバイダーにスコープしてください。たとえば OpenAI Responses は `reasoningEffort` を使用します。
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+生成のオプションは、選択されたプロトコルとモデルによって異なります。
+
+- `maxTokens` は、出力トークン数の上限を指定するセマンティックオプションです。
+- Gemini は `topK` に対応していますが、OpenAI Responses は公開していません。
+
+#### モデルの解決
+
+実験的。セッションがリクエストのモデルを解決するたびに、そのリクエストのために何かが構築される前に実行されます。`model` は選択されたモデルから始まり、同じプロバイダーの別のモデル（モデルピッカーから隠れているものを含む）でこのリクエストを処理するように変更できます。セッションは選択したモデルを保ち、リクエストとアシスタントメッセージは新しいモデルを使用します。`kind` はどのリクエストを解決しているかを示すため、ルーターはタイトルをスキップしたり、コンパクション後に再度ルーティングしたりできます。別のプロバイダーのモデルは利用不可として失敗します。
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
+
+#### モデルリクエスト
+
+モデルリクエストの設定を変更し、必要に応じてフックを 1 つのプロバイダーに限定します。イベントは、以下の HTTP フックと同じ `kind` を持ちます。
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### ネイティブ HTTP
+
+ネイティブのプロバイダーのリクエストまたはレスポンスを変更します。ボディは 1 回限りのストリームであるため、読み取る前に複製するか置き換えてください。
+
+どちらのフックも、セッションが発行するすべてのリクエストで実行されます。`event.kind` はどのフローが発行したかを示します。エージェントのループは `"primary"`、チェックポイントの要約は `"compaction"`、タイトルの生成は `"title"`、一時的な `ctx.session.generate` の呼び出しは `"generate"` です。補助的なリクエストを区別するには、エージェント ID ではなくこれを使用してください。
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### ネイティブ WebSocket（実験的）
+
+WebSocket でストリーミングするプロバイダーは、セッションごとに 1 つの接続を開いてリクエスト間で再利用するため、`http.request` と `http.response` がそのトラフィックを見ることはありません。`experimental.ws.handshake` フックは、接続が選択される前にモデル呼び出しごとに 1 回実行されます。HTTP フックと同じ `sessionID`、`agent`、`model`、`kind` に加えて、接続の `url` と `headers` を持ちます。`url` または `headers` を変更すると、リクエストが使用するソケットが変わるため、ローテーションしたベアラートークンで接続が開き直されます。
+
+HTTP フックは、WebSocket の経路がフォールバックするリクエストを含め、すべての HTTP リクエストで引き続き実行されます。
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send` と `experimental.ws.receive` は、HTTP のリクエストやレスポンスのボディを編集するのに対応する WebSocket の機能として、フレーム自体を公開します。`send` はプロバイダードライバーが送信フレームを構築した後、書き込まれる前に実行され、`receive` はドライバーが観測する前に各受信フレームで実行されます。どちらもフレームを文字列として受け取り、フックが戻ったときに `frame` が保持している内容を送信します。
+
+OpenCode は書き換えられたフレームを検証しません。ドライバーはプロバイダーの応答から状態を追跡するため、プロトコルの意味を変える書き換えは、書き換えた HTTP ボディと同様にプラグインの責任です。
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+これらのフックは実験的で、名前や形が変わる可能性があります。
+
+#### 再試行ポリシー
+
+プロバイダーの失敗に対する再試行の判断を上書きするか、その遅延をミリ秒で置き換えます。フックは、OpenCode が失敗を分類してポリシーを提案した後、再試行がスケジュールされる前に実行されます。OpenCode が次の試行を内部でどのように行うかは公開しません。
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+再試行のフックは、通常は打ち切られる失敗を再試行可能にしたり、提案された再試行を拒否したりして、OpenCode の最初の `decision` を変更できます。
+
+再試行の判断は次のルールに従います。
+
+- 複数のフックは登録順に実行され、後のフックは現在の判断を認識します。
+- 組み込みの最大試行回数はハードリミットとして残ります。
+- `attempt` は検討中の実際の試行です。最初のリクエストが `1` のため、最初の再試行は `2` です。
+- `NaN`、無限大、負の値などの無効な遅延は、計算された遅延にフォールバックします。
+- コンテキストのオーバーフローからの復旧は、同じリクエストを再試行するのではなく会話をコンパクションするため、別に扱われます。
+
+#### セッションのリファレンス
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  native?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### 権限
+
+設定済みのルールが評価された後、操作が実行されるか権限のプロンプトが公開される前に、権限の判断を確認します。
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+権限のフックは次のルールに従います。
+
+- フックは `allow` と `ask` の判断で実行されます。
+- 明示的に設定された `deny` は最終的なもので、フックを呼び出しません。
+- フックは `effect` を `allow`、`ask`、`deny` に変更できます。
+- `message` は、エスカレーションされた権限リクエストに表示されるか、拒否の理由になります。
+
+#### リファレンス
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### シェル
+
+実行前にシェルコマンド、作業ディレクトリ、タイムアウト、実行可能ファイル、環境変数を変更します。
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### リファレンス
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### ツール
+
+実行前にツールの入力を確認または置き換えます。
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+実行後に成功した結果または失敗を確認します。
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### リファレンス
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## V1 のサポート
+
+プラグインは、同じパッケージのエントリポイントから V1 と V2 の両方をサポートできます。V1 の `server()` 関数と V2 の `setup()` 関数を持つ 1 つのオブジェクトをデフォルトエクスポートします。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- V1 は `server()` を呼び出し、返されたフックを使用します。
+- V2 はデフォルトエクスポートの `id` と `setup()`（Effect プラグインでは `effect()`）を読み取り、`server()` を無視します。
+- 各実装はそれぞれの API の上に保ってください。エクスポートを共有しても、V1 のフックが V2 のフックに変換されるわけではありません。
+- `Plugin.define(...)` をエクスポートするオブジェクトに展開すると、`server()` とは別に V2 の定義が型チェックされます。
+
+V1 のオブジェクト形式は OpenCode `1.18.29` でサポートされています。より古い V1 のリリースは代わりに関数のエクスポートを期待する場合があります。サポートする予定の最も古い V1 のリリースと V2 の両方で、インストールしたパッケージをテストしてください。

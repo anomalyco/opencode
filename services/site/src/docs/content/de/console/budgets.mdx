@@ -1,0 +1,93 @@
+---
+title: "Budgets"
+description: "Begrenze die monatlichen Ausgaben für einen Workspace, seine Mitglieder und seine Service-Konten."
+---
+
+Budgets begrenzen die monatlichen Ausgaben über Policies. Owner und Admins verwalten die Budgets unter
+**Controls**.
+
+## Budgetebenen
+
+| Policy-Zielgruppe       | Gilt für                                                    |
+| ----------------------- | ----------------------------------------------------------- |
+| Gesamter Workspace | Summe der Ausgaben aller Mitglieder und Service-Konten |
+| Alle Mitglieder         | Jedes Mitglied oder ein gemeinsames Kontingent für alle     |
+| Mitglieder mit Tags     | Mitglieder mit den gewählten Tags                           |
+| Diese Mitglieder        | Bestimmte Mitglieder                                        |
+| Alle Service-Konten     | Jedes Service-Konto oder ein gemeinsames Kontingent         |
+| Diese Service-Konten    | Bestimmte Service-Konten                                    |
+
+Eine Anfrage darf keines der dafür geltenden Budgets überschreiten. Ein höheres Kontingent hebt ein
+niedrigeres nicht auf. Ohne Budget gibt es kein Ausgabenlimit.
+
+## Workspace-Budget
+
+Sobald der Workspace sein Budget ausgeschöpft hat, werden Anfragen für alle blockiert.
+
+1. Öffne **Controls** und klicke auf **Add policy**.
+2. Wähle **Entire workspace** und füge eine **Budget**-Regel hinzu.
+3. Gib das Monatslimit in USD ein und klicke auf **Save**.
+
+## Budgets für Mitglieder
+
+Wähle in einer Policy **All members**, um jedem Mitglied ein monatliches Kontingent zu geben, oder teile einen Betrag
+in der Gruppe. Wähle bestimmte Mitglieder oder Tags, um eine kleinere Gruppe abzudecken.
+
+Um ein Budget für eine Person festzulegen:
+
+1. Öffne das Mitglied unter **Settings › Members**.
+2. Klicke auf **Create budget policy**, um den Editor zu öffnen. Die Person ist bereits ausgewählt.
+3. Gib den Betrag ein und klicke auf **Save**.
+
+Die Mitgliederseite listet die geltenden Policies auf. Wenn ein Budget für alle Mitglieder die Person ebenfalls
+abdeckt, gelten beide Limits.
+
+## Budgets für Service-Konten
+
+Wähle unter **Controls** **All service accounts** oder **These service accounts**, füge eine **Budget**-Regel hinzu und
+lege ein individuelles oder gemeinsames Monatskontingent fest. Die Policy gilt für jeden Schlüssel dieser Konten.
+
+## Beträge und Rücksetzung
+
+- Beträge sind in US-Dollar mit bis zu zwei Nachkommastellen.
+- Budgets werden am 1. jedes Monats um 00:00 UTC zurückgesetzt.
+- Ein Budget von `$0` blockiert alle Ausgaben, die auf Budgets angerechnet werden.
+- Das Hinzufügen oder Ändern eines Budgets bezieht bereits in diesem Monat erfasste Ausgaben ein; es setzt das
+  Kontingent nicht zurück.
+
+## Was zählt
+
+Standardmäßig deckt ein Budget **All spend** ab. Du kannst es auf ausgewählte Modelle einschränken; dann zählen nur
+diese Modelle, mit einem Kontingent für die Gruppe oder einem eigenen Kontingent pro Modell.
+
+| Ausgaben | Werden auf das Budget angerechnet |
+| --------------------------------------------------------------------- | ----------------------------- |
+| Kostenpflichtige Console-Modelle                                      | Ja                            |
+| Modelle auf [deinen eigenen Anbietern](/console/providers) mit Preis  | Ja, zum konfigurierten Preis  |
+| [Websuche](/console/websearch)                                        | Ja, bei Budgets für alle Ausgaben |
+| Kostenlose Modelle                                                    | Nein                          |
+| [Go](/console/go)-Nutzung im Tarif                                    | Nein                          |
+| Zusätzliche Go-Nutzung, aus Guthaben bezahlt                          | Ja                            |
+
+## Wenn ein Budget erreicht ist
+
+Neue Anfragen schlagen mit HTTP `429` fehl, bis das Budget zurückgesetzt wird oder ein Owner oder Admin es
+erhöht. Die Antwort meldet, dass ein in einer Policy festgelegtes Budget erreicht ist, nennt aber nicht das
+konkrete Budget. Öffne die Anfrage unter **Activity › Logs**, um zu sehen, welche Policy sie blockiert hat.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Das Budget wird beim Eingang einer Anfrage geprüft. Bereits laufende Anfragen werden zu Ende ausgeführt. Die
+Ausgaben können daher etwas über dem Limit liegen.
+
+## Ausgaben verfolgen
+
+Jedes Mitglied sieht unter **Activity** die eigenen Ausgaben und das eigene Limit. Über **My usage** gelangst
+du zu **Activity › Overview** mit Budgetdetails und den Terminen für die nächste Rücksetzung.
+
+Owner und Admins können **Activity › Usage** über das Ausgabendiagramm öffnen. Es schlüsselt die Kosten nach Tag,
+Modell und Person auf, und die Schaltfläche **Export usage** lädt die Tagessummen der letzten 7, 30 oder 90 Tage als
+CSV herunter. Um dieselbe Datei aus einem Skript herunterzuladen, nutze die
+[Usage-Export-API](/console/api/usage-export).

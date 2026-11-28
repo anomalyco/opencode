@@ -1,9 +1,9 @@
 ---
 title: "简介"
-description: "把开源编程 agent OpenCode 安装为 CLI、桌面应用、Web 应用或 Docker 镜像，然后连接模型提供商。"
+description: "安装开源编程 agent OpenCode，连接模型提供商。你可以使用 CLI、桌面应用、Web 应用或 Docker 镜像。"
 ---
 
-OpenCode 是一个开源的编程 agent。它可以作为终端界面、桌面应用或 Web 应用使用。
+OpenCode 是一款开源编程 agent，可通过终端界面、桌面应用或 Web 应用使用。
 
 
 ## CLI
@@ -24,7 +24,7 @@ OpenCode 是一个开源的编程 agent。它可以作为终端界面、桌面�
   ]}
 />
 
-npm 包使用 postinstall 脚本为你的平台选择原生 `opencode` 二进制文件。Bun 和 pnpm 命令显式允许所需的脚本；Vite+ 不需要额外参数。mise 命令需要 mise 2026.10.9 或更高版本；更旧的版本会安装 OpenCode 1。
+npm 包通过 postinstall 脚本选取适用于你当前平台的原生 `opencode` 二进制文件。上面的 Bun 和 pnpm 命令已明确允许该脚本运行，Vite+ 则无需额外参数。请使用 mise 2026.10.9 或更高版本，否则会装上 OpenCode 1。
 
 不支持 Windows 包管理器。
 
@@ -67,28 +67,27 @@ Docker 镜像使用带版本号的标签，例如 `ghcr.io/anomalyco/opencode:2.
 
 ## 连接提供商
 
-OpenCode 内置支持许多 LLM 提供商。你可以在 TUI 中用 `/connect` [直接连接它们](/cli/providers)。
+OpenCode 内置了对多家 LLM 提供商的支持。你可以在 TUI 中通过 `/connect` [直接连接提供商](/cli/providers)。
 
-参见[提供商](/providers)配置自定义提供商。
+要添加自定义提供商，请参阅[提供商](/providers)。
 
-如果你想轻松使用最好的 coding 模型，可以试试
+如果你想轻松用上优质的编程模型，可以试试
 [OpenCode 控制台](/console)。
 
-你也可以试试 [OpenCode Go](/console/go)，这是一个每月 $10 的订阅
-方案，让你可以使用最好的 coding 模型。
+你也可以订阅 [OpenCode Go](/console/go)，每月 $10 即可使用优质的编程模型。
 
 ---
 
 ## 自定义
 
-通过编辑 [OpenCode 配置](/config)、[加载插件](/plugins)、[连接 MCP
-服务器](/mcp-servers)或[创建命令](/commands)，让 OpenCode 成为你自己的工具。终端界面主题和快捷键请参见 [CLI
+你可以编辑 [OpenCode 配置](/config)、[加载插件](/plugins)、[连接 MCP
+服务器](/mcp-servers)或[创建命令](/commands)，让 OpenCode 更符合你的使用习惯。有关终端界面的主题和快捷键，请参阅 [CLI
 设置](/cli/config)。
 
 ---
 
 ## 学习
 
-如果你对 OpenCode 的深度课程感兴趣，Boot.dev 与我们的团队协商后制作了一门出色的
+想深入学习 OpenCode，可以看看 Boot.dev 在我们团队的协助下制作的优质课程
 [AI Coding with
-OpenCode](https://www.boot.dev/courses/learn-ai-coding) 课程。课程中的所有信息都可以免费阅读和观看，不过部分互动功能可能需要付费。
+OpenCode](https://www.boot.dev/courses/learn-ai-coding)。课程内容均可免费阅读和观看，部分互动功能可能需要付费。

@@ -26,9 +26,9 @@ OpenCode 会使用已有的提供商凭据。启动 ACP 客户端之前，请先
 opencode auth login
 ```
 
-OpenCode 只提供一种认证方式：`opencode-login`。默认情况下，它是 agent 认证方式（agent auth method）。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要认证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
+OpenCode 只提供一种认证方式：`opencode-login`。默认情况下，它属于 agent 认证方式。`authenticate` 请求只接受这一种方式，并且不会收集凭据。如果提示词因提供商需要认证而失败，OpenCode 会返回 ACP 的 `auth_required` 错误。
 
-如果客户端将 `clientCapabilities.auth.terminal` 设置为 `true`，该认证方式就是终端认证方式（terminal auth method）：
+如果客户端将 `clientCapabilities.auth.terminal` 设置为 `true`，它就属于终端认证方式：
 
 ```json
 {
@@ -106,9 +106,9 @@ OpenCode 会读取以下客户端能力：
 
 客户端在创建会话时设置工作目录。OpenCode 会使用该目录的配置，包括其中的模型、agent、命令、技能、指令、插件和 MCP 服务器。
 
-- `cwd` 必须是绝对路径；OpenCode 会拒绝相对路径的 `cwd`，并返回 invalid params 错误。
+- `cwd` 必须是绝对路径；OpenCode 会拒绝相对路径的 `cwd`，并返回 Invalid params 错误。
 - `session/load` 会重放已保存的消息，`session/resume` 和 `session/fork` 则不会。
-- 加载、恢复或分叉会话时，客户端必须将该会话的目录作为 `cwd` 传入，也可以传入同一项目的另一个目录，例如会话迁入 worktree 后，该项目的主检出目录。对于其他任何 `cwd`，OpenCode 都会返回 invalid params 错误，其 `data.directory` 为该会话的目录。
+- 加载、恢复或分叉会话时，客户端必须将该会话的目录作为 `cwd` 传入，也可以传入同一项目的另一个目录，例如会话移到工作树后，仍可传入项目的主检出目录。对于其他 `cwd`，OpenCode 都会返回 Invalid params 错误，其 `data.directory` 为该会话的目录。
 - `session/list` 每页最多返回 100 个会话，支持 `cwd` 过滤条件和 `cursor`。每个 subagent 会话都带有 `_meta["opencode/child-session"]`，其中包含其 `id`、`parentID` 和 `title`。
 - OpenCode 重命名会话时（例如生成标题后），会发送带有新 `title` 的 `session_info_update`。
 - `session/close` 会中断进行中的工作，并将会话与 ACP 进程分离。OpenCode 会保留已保存的会话。
@@ -130,7 +130,7 @@ OpenCode 会读取以下客户端能力：
 
 - 每一项都必须是绝对路径，且不能包含 `*` 或 `?`。
 - OpenCode 会为每个根目录放行外部目录访问。读取、编辑和 shell 权限规则仍然适用。
-- 按照 [additional directories RFD](https://agentclientprotocol.com/rfds/additional-directories) 的规定，每次请求中的列表都会替换会话之前的列表。
+- 按照[额外目录 RFD](https://agentclientprotocol.com/rfds/additional-directories) 的规定，每次请求中的列表都会替换会话之前的列表。
 - OpenCode 将这些授权保存在会话中，因此其他 OpenCode 客户端使用该会话时同样生效。OpenCode 创建子会话时，子会话会复制这些授权。
 
 `session/list` 会在 `additionalDirectories` 中返回每个会话存储的列表。
@@ -259,13 +259,13 @@ OpenCode 会读取以下客户端能力：
 
 ### 用量
 
-提示词响应中包含 [end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD（目前为草案）中定义的 `usage`。`usage` 汇总了该提示词在此会话中的所有模型调用，不包括子会话。
+提示词响应中包含[轮次结束时的用量](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD（目前为草案）定义的 `usage`。`usage` 汇总该提示词在当前会话中触发的所有模型调用用量，不包含子会话。
 
 ```json
 { "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
 ```
 
-在发送响应之前，OpenCode 会发送 [session usage](https://agentclientprotocol.com/rfds/session-usage) RFD 中定义的 `usage_update`。只有当提示词消耗了 token 且 OpenCode 知道模型的上下文大小时，才会发送。`cost` 是会话及其子会话的总费用，单位为美元。
+在发送响应之前，OpenCode 会发送[会话用量](https://agentclientprotocol.com/rfds/session-usage) RFD 定义的 `usage_update`。只有当提示词消耗了 token 且 OpenCode 知道模型的上下文大小时，才会发送。`cost` 是会话及其子会话的总费用，单位为美元。
 
 ```json
 { "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }

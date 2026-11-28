@@ -1,0 +1,130 @@
+---
+title: "Migawki"
+description: "Cofaj i ponawiaj ostatnie zmiany rozmowy i plików przez /undo i /redo oraz sprawdź, które pliki obejmują migawki."
+---
+
+Migawki pozwalają cofnąć razem ostatnie zmiany rozmowy i plików. Używaj ich do poprawiania niedawnej pracy, ale ważne
+rzeczy zabezpieczaj commitami Git lub kopiami zapasowymi.
+
+## Proces
+
+Uruchom `/undo` po odpowiedzi, którą chcesz poprawić. OpenCode przygotowuje wycofanie, przywraca zmienione pliki
+i wstawia usunięty prompt z powrotem do kompozytora, abyś mógł go edytować.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Wysłanie edytowanego promptu zatwierdza przygotowane wycofanie. Przed wysłaniem uruchom `/redo`, aby je anulować
+i przywrócić rozmowę i pliki sprzed `/undo`.
+
+```text
+/redo
+```
+
+Terminal udostępnia też domyślne skróty:
+
+| Działanie | Polecenie | Skrót |
+| --- | --- | --- |
+| Przygotuj wycofanie poprzedniej wiadomości | `/undo` | `<leader>u` |
+| Anuluj przygotowane wycofanie | `/redo` | `<leader>r` |
+
+Możesz też wybrać wcześniejszą wiadomość i wybrać **Revert**, aby przygotować wycofanie do tego miejsca.
+
+## Wykonywanie migawek
+
+W każdym kroku modelu OpenCode próbuje wykonać pierwszą migawkę tuż przed wywołaniem modelu, a drugą po zarejestrowaniu
+sukcesu lub błędu. W wiadomości asystenta zapisuje ścieżki zmienione między migawkami.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+Wykonanie migawki nie jest gwarantowane. Jeśli którejś z migawek nie ma, rozmowa jest kontynuowana, ale przywrócenie
+zmian w plikach z tego kroku może nie być możliwe.
+
+## Zakres
+
+Migawki obejmują aktywny katalog sesji w worktree Git. Na przykład sesja otwarta w `packages/app` obejmuje kwalifikujące
+się pliki poniżej `packages/app`, a nie zmiany w innych częściach repozytorium.
+
+| Zawartość | Obejmowane | Przykład |
+| --- | --- | --- |
+| Pliki śledzone w aktywnym katalogu | Tak | `packages/app/src/app.tsx` |
+| Nieignorowane pliki nieśledzone do 2 MiB każdy | Tak | `packages/app/notes.txt` |
+| Pliki ignorowane przez Git | Nie | `packages/app/dist/app.js` |
+| Pojedyncze pliki nieśledzone większe niż 2 MiB | Nie | `packages/app/debug.log` |
+| Pliki poza aktywnym katalogiem | Nie | `packages/server/src/index.ts` |
+| Metadane Git i inne efekty uboczne | Nie | commity, gałęzie, bazy danych lub procesy |
+
+Migawki systemu plików wymagają repozytorium Git. Poza nim `/undo` nadal może cofnąć historię rozmowy, ale nie może
+przywrócić plików.
+
+## Przywracanie
+
+Wycofanie przywraca tylko ścieżki przypisane do kroków asystenta po wybranej granicy rozmowy. Każda ścieżka wraca do
+stanu sprzed pierwszego cofanego kroku; plik utworzony przez te kroki jest usuwany, jeśli wcześniej nie istniał.
+
+| Oś czasu | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Wybrana granica | wersja A | brak |
+| Późniejsze kroki asystenta | wersja B | utworzony |
+| Po wycofaniu | wersja A | usunięty |
+
+Ścieżki nieprzypisane do tych kroków pozostają bez zmian. Bieżące zmiany zmienionej ścieżki mogą zostać nadpisane, więc
+przed kontynuowaniem sprawdź podsumowanie przywracania i `git diff`.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Przechowywanie
+
+OpenCode przechowuje migawki lokalnie, w osobnej wewnętrznej bazie obiektów Git w katalogu danych. Przy wykonywaniu
+migawek OpenCode nie tworzy commitów, nie przesuwa gałęzi ani celowo nie zmienia indeksu Twojego repozytorium.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Obiekty migawek mogą zawierać pełną treść plików śledzonych i kwalifikujących się nieśledzonych. Traktuj katalog danych
+OpenCode jako poufne dane lokalne.
+
+## Ustawienia
+
+Migawki są domyślnie włączone. Ustaw `snapshots` na `false` w [konfiguracji](/config#snapshots), aby zatrzymać przyszłe
+migawki systemu plików.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Wyłączenie migawek nie usuwa już zapisanych migawek. Cofanie rozmowy nadal działa, ale bez zapisanego stanu systemu
+plików nie może przywrócić powiązanych zmian plików.
+
+## Bezpieczeństwo
+
+Migawki to udogodnienie, a nie transakcja ani kopia zapasowa:
+
+- Polecenia powłoki mogą zmieniać usługi, procesy, zasoby sieciowe, bazy danych, stan Git, ignorowane dane wyjściowe lub
+  pliki poza aktywnym katalogiem. Przywrócenie migawki nie odwraca tych efektów.
+- Przerwana lub nieudana praca może pozostawić zmiany, gdy wykonanie migawki się nie powiedzie albo nie ma użytecznej
+  pary migawek.
+- Przywracanie zmienionych ścieżek nadpisuje ich bieżącą treść. Anulowanie przygotowanego wycofania może też nadpisać
+  późniejsze zmiany.
+- OpenCode odrzuca operacje wycofywania podczas działania sesji, ale zewnętrzne edytory i polecenia nadal mogą zmienić
+  worktree między wykonaniem migawki a przywróceniem.
+- Zatwierdzenie wycofania usuwa wiadomości z aktywnego widoku rozmowy, a nie z trwałej historii sesji ani istniejącego
+  magazynu migawek. Nie jest to bezpieczne usuwanie danych.
+
+Zacommituj lub zabezpiecz ważną pracę przed użyciem `/undo` w nieczystym worktree.

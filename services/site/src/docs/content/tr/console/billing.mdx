@@ -1,0 +1,92 @@
+---
+title: "Faturalandırma"
+description: "OpenCode Console'da kredi ekleyin, otomatik yüklemeyi ayarlayın, ödeme yöntemlerini yönetin ve faturaları indirin."
+---
+
+Console, ekip büyüklüğü ne olursa olsun ücretsizdir; üye başına ayrıca ücret alınmaz. Yalnızca kullanımınız kadar ödeme yaparsınız. Ücretler, çalışma alanının ortak ön ödemeli kredi bakiyesinden düşülür. Sahipler ve yöneticiler faturalandırmayı **Settings › Billing** bölümünden yönetir.
+
+[Kendi sağlayıcılarınız](/console/providers) üzerinden yaptığınız kullanımın ücretini Console değil, ilgili sağlayıcı tahsil eder.
+
+## Ödeme yöntemi ekleme
+
+1. **Settings › Billing** bölümünü açın.
+2. **Payment methods** altında **Add** düğmesine tıklayın.
+3. Bir yöntem seçin ve Stripe kurulumunu tamamlayın.
+
+Desteklenen ödeme yöntemleri:
+
+- Kart
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Otomatik ödemelerde kullanılacak yöntemi **⋯ › Make default** ile belirleyin. Bir ödeme yöntemini kaldırırsanız o yöntemle yapılan otomatik yüklemeler ve Go yenilemeleri durabilir.
+
+## Kredi ekleme
+
+1. **Credits** altında **Add credits** düğmesine tıklayın.
+2. $10, $50 veya $100 tutarlarından birini seçin ya da **Other** ile farklı bir tutar girin.
+3. Bir ödeme yöntemi seçin ve **Confirm and pay** düğmesine tıklayın.
+
+Satın alma tutarına %4,6 + 0,31 dolar işlem ücreti eklenir. Örneğin 50 dolarlık kredi almak için 52,61 dolar ödersiniz
+ve bakiyenize 50 doların tamamı eklenir.
+
+## Otomatik yükleme
+
+Otomatik yükleme, bakiye azaldığında kredi ekler.
+
+1. **Auto-recharge** altında **Add rule** düğmesine tıklayın.
+2. Yüklemeyi başlatacak bakiye eşiğini ve eklenecek tutarı belirleyin.
+3. **Save** düğmesine tıklayın.
+
+Yükleme tutarı ve işlem ücreti, varsayılan ödeme yönteminizden tahsil edilir. Ödeme alınamazsa otomatik yükleme devre dışı kalır; kullanmaya devam etmek için yeniden ayarlayın.
+
+## Bakiyenizi görüntüleme
+
+Sahipler ve yöneticiler bakiyeyi **Activity** sayfasındaki **Billing** kartında görebilir. Kartı seçtiğinizde
+**Settings › Billing** bölümü açılır.
+
+Çalışma alanının üst çubuğundaki **Billing** düğmesi veya `B` tuşu, güncel Go limitlerini, kredileri ve kullanımı gösteren paneli açar. Sahipler ve yöneticiler çalışma alanı bakiyesini, kullanımını ve otomatik yükleme ayarlarını; üyeler yalnızca kendi kullanımlarını ve limitlerini görür.
+
+## Krediler tükendiğinde
+
+Bakiye sıfıra indiğinde ücretli istekler HTTP `402` ile reddedilir. Bakiye sıfırın altına düşmez.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Faturalar
+
+Her ödeme **Invoices** altında durumuyla ve **Download invoice** veya **View receipt** bağlantısıyla görünür.
+
+| Kayıt            | Hangi işlemde oluşur?                    |
+| ---------------- | ---------------------------------------- |
+| Bakiye yüklemesi | Kredi ekleme                             |
+| Otomatik yükleme | Otomatik yükleme                         |
+| Go aboneliği     | Go, Go Plus veya Go Teams aboneliği      |
+| Go yenilemesi    | Aylık Go yenilemesi                      |
+| Go Plus yükseltmesi | Go'dan Go Plus'a yükseltme            |
+| Go Teams yükseltmesi | Go veya Go Plus'tan Go Teams'e yükseltme |
+| Go Teams üyesi   | Go Teams kullanan bir çalışma alanına katılan üye |
+| Monthly Usage    | Faturalı ödeme                           |
+
+## Vergi formları
+
+ABD'li müşteriler [Anomaly Innovations Inc.'in W-9 formunu](/assets/anomaly-w9.pdf) indirebilir.
+
+## Aylık fatura ile ödeme
+
+Kredi anlaşması olan çalışma alanları, önceden kredi satın almak yerine aylık fatura ile ödeme yapabilir. Bu seçeneği etkinleştirmek için destek ekibiyle iletişime geçin.
+
+- Kullanım tutarı ön ödemeli bakiyeden değil, tanınan kredi limitinden düşülür.
+- Fatura her ayın 1'inde (UTC) düzenlenir. Son ödeme tarihi, fatura tarihinden 14 gün sonradır.
+- Ödenmemiş faturalarda bir **Pay now** düğmesi bulunur.
+- Kredi limitine ulaşıldığında veya bir faturanın son ödeme tarihi geçtiğinde istekler HTTP `402` ile reddedilir.
+
+## Go
+
+[OpenCode Go](/console/go) abonelikleri aynı ödeme yöntemlerini kullanır ve aynı fatura listesinde görünür.
+[Go için krediyle de ödeme yapabilirsiniz](/console/go#pay-with-credit). Go limitine ulaşıldığında kredilerden ödeme
+yapmak için **Go** sayfasında **Extra Usage** seçeneğini açın.

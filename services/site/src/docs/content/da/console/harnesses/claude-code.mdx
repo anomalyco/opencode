@@ -1,0 +1,78 @@
+---
+title: "Claude Code"
+description: "Brug Console- og Go-modeller fra Claude Code."
+---
+
+Claude Code bruger Anthropic Messages API. Konfigurer Claude Code til at bruge Console med to miljøvariabler, så du kan bruge alle betalte modeller og Go-modeller, herunder GPT, Gemini og åbne modeller. Console oversætter anmodningen til modeller, der ikke understøtter Anthropic Messages.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) opsætter Claude Code med én kommando, inklusive arbejdsområdets
+  politikker, MCP-servere, skills og instruktioner. Kør `npx @opencode/console setup claude-code`. Trinene nedenfor opsætter det
+  manuelt.
+</Callout>
+
+```bash
+export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5
+```
+
+Erstat `oc_sk_...` med en [personlig API-nøgle](/console/harnesses#get-an-api-key).
+
+## Opsætning
+
+Angiv variablerne i `~/.claude/settings.json` for at bruge Console i hver session. Knyt aliasene `opus`, `sonnet` og `haiku`
+til Console-modeller, så `/model` og baggrundsopgaver bruger dem.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+Claude Code føjer `/v1/messages` til den angivne base URL, så undlad stien. Kør `/status` for at kontrollere, at URL'en og tokenet er aktive.
+
+<Callout>
+  Brug `ANTHROPIC_AUTH_TOKEN`, ikke `ANTHROPIC_API_KEY`. Hvis du er logget ind på en Claude-konto, skal du køre `/logout`
+  først, så Claude Code ikke sender det login til Console.
+</Callout>
+
+## Go
+
+Brug Gos base URL og en nøgle fra et arbejdsområde med et [Go](/console/go)-abonnement.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+## Modeller
+
+Brug et vilkårligt model-ID fra tabellen for [Console](/console/models#endpoints) eller [Go](/console/go#endpoints). Skift
+model i en session med `/model`, eller vælg en til en enkelt kørsel.
+
+```bash
+claude --model gpt-6.1-sol
+```
+
+## Console MCP
+
+Tilføj [Console MCP](/console/harnesses#console-mcp)-serveren for alle dine projekter.
+
+```bash
+claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp
+```
+
+Kør `/mcp` i Claude Code, vælg `opencode-console`, og log ind i browseren.

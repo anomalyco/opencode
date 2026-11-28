@@ -1,0 +1,126 @@
+---
+title: "Enterprise"
+description: "Controle quais modelos, provedores e integrações as pessoas da sua organização podem usar no OpenCode."
+---
+
+Use [políticas](/policies) para controlar o que o OpenCode pode usar nas máquinas da sua organização. Coloque-as na configuração
+gerenciada para que usuários e projetos não possam alterá-las.
+
+## Implantar
+
+Coloque as políticas no arquivo de configuração do sistema:
+
+| Plataforma | Arquivo                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+No macOS, você também pode implantá-las com MDM como preferências gerenciadas para o domínio `ai.opencode.managed`. Consulte
+[locais de configuração](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+As políticas nesses arquivos têm precedência sobre as configurações do usuário e do projeto. Por isso, nem o usuário nem o repositório podem liberar o que você bloquear.
+Consulte [precedência](/policies#precedence).
+
+## Bloquear modelos grátis
+
+Bloqueie o acesso grátis sem login. Todo o resto continua funcionando, e as pessoas podem conectar os próprios provedores e contas.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+O acesso grátis usa a integração `opencode` sem conta. Contas com login no Console usam `opencode#<account>` e não são
+afetadas por esta regra.
+
+Um espaço de trabalho do Console também pode oferecer modelos grátis. Para bloqueá-los:
+
+- No seu próprio espaço de trabalho, desative **Free models** na aba Models do Console. Consulte
+  [Modelos do OpenCode](/console/providers#opencode-models).
+- Para ocultar os modelos grátis em todas as contas, defina `OPENCODE_DISABLE_FREE_MODELS=1` no serviço do OpenCode. Consulte
+  [modelos grátis](/models#free-models).
+
+## Exigir seu espaço de trabalho do Console
+
+Permita apenas o espaço de trabalho do Console da sua organização. Nada mais pode ser conectado ou usado.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` lista apenas o OpenCode Console, para que as pessoas possam entrar.
+- Só o seu espaço de trabalho funciona. O acesso grátis, contas pessoais do Console, outras organizações, chaves de API de variáveis
+  de ambiente e provedores definidos em `opencode.json` ficam bloqueados.
+- Os modelos, servidores MCP e pesquisa na web do seu espaço de trabalho funcionam. Altere-os no Console sem reimplantar a política.
+
+Substitua `org_01M3CAP8H43Z49CER6NT0Y3ZF1` pelo ID da organização do seu espaço de trabalho. Para bloquear os modelos grátis no espaço de trabalho
+também, desative **Free models** no Console.
+
+## Permitir apenas provedores aprovados
+
+Bloqueie todos os provedores e libere apenas os aprovados. Este exemplo permite apenas um gateway interno compatível com OpenAI.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Um provedor bloqueado é removido mesmo que alguém tenha credenciais para ele. Consulte [provedores](/policies#providers).
+
+## Restringir servidores MCP e ferramentas
+
+Permita apenas servidores MCP aprovados e bloqueie ferramentas que você não quer que os agentes executem.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+Consulte [Servidores MCP, skills e plugins](/policies#mcp-servers-skills-and-plugins) e [ferramentas](/policies#tools).
+
+## Verificar se funciona
+
+- Execute `/connect` e `/models` como usuário e confirme que só aparece o que você permitiu.
+- Confira os avisos no log do servidor. Se uma regra não passar na validação, ela é descartada e as demais continuam valendo.
+- Uma chamada de ferramenta bloqueada falha com `Blocked by configuration policy`.
+
+## Versões
+
+| Ação                                                                    | Exige |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+Clientes mais antigos ignoram essas regras.

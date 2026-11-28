@@ -1,0 +1,636 @@
+---
+title: "從 V1 移轉"
+description: "從 OpenCode 1 升級到 OpenCode 2；V2 對外掛、伺服器 API 與終端機用戶端設定有重大變更。"
+---
+
+OpenCode 1 與 OpenCode 2 都使用 `opencode` 指令，且預設不再並存安裝。安裝 V2 前，
+請先移除由套件管理的 V1 安裝；V2 的 curl 安裝程式會取代 V1 二進位檔。
+
+## 重大變更
+
+V2 有三項有意不相容的重大變更：
+
+- [外掛](/build/plugins/migrate-v1)使用新的外掛 API。
+- [伺服器 API 與用戶端](#server-api-and-clients)有新的契約。
+- [終端機用戶端設定](/cli/config)從分層的 `tui.json(c)` 檔案改為單一全域 `cli.json` 檔案
+  （自動移轉）。
+
+這些範圍之外受支援的 V1 功能，預期仍與 V1 相容。V1 schema 接受的部分欄位
+從未有 V2 對應項，且會刻意忽略；這些欄位列於
+[可接受但不支援的欄位](#accepted-but-unsupported-fields)。
+
+現有受支援的伺服器設定欄位、agent 定義、指令定義、技能與 `.opencode/` 中的其他檔案，
+應可繼續運作而不需變更。若本指南所述受支援的行為在 V2 中停止運作，請將其視為
+相容性錯誤，而不是預期的移轉要求。
+
+<Callout type="tip">
+  若受支援的 V1 功能在 V2 中無法運作，請遵循
+  [疑難排解](/troubleshooting)中的問題回報指引，並提交相容性問題。
+</Callout>
+
+## 安裝 V2
+
+請依[安裝說明](/#cli)安裝 V2 終端機用戶端。
+
+你不需要在開始使用 V2 前改寫所有內容。實際的移轉方式是：
+
+1. 保留現有設定與檔案式定義。
+2. 啟動 V2，並驗證模型、憑證、agent、權限與 MCP 伺服器。
+3. 移植外掛，因為 V1 外掛實作無法在 V2 中執行。
+4. 移植會呼叫伺服器 API 的整合。
+5. 準備好時，將設定轉換為原生 V2 形式。此步驟是選用的。
+
+驗證移轉期間，請保留 V1 設定的複本。V1 與 V2 使用相同的設定位置，因此將檔案轉換為原生 V2 專用形式後，
+請勿再讓 V1 指向它們。
+
+## 設定
+
+本節涵蓋 JSON/JSONC 設定與 `.opencode/` 下的檔案式定義。
+
+### 使用現有設定
+
+V2 會從與 V1 相同的位置讀取現有的系統、全域與專案設定：
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 會在記憶體中標準化受支援的 V1 與原生 V2 欄位，而不改寫來源
+檔案。現有受支援的 V1 設定預期會繼續運作，因此你不需先轉換就能試用或採用
+V2。
+
+與 V1 相同，系統設定與 macOS 受管理偏好設定具有最高優先順序，因此其設定會覆寫
+全域與專案檔案。其[原則](/policies#precedence)（包括移轉後的 `enabled_providers` 與
+`disabled_providers`）也優先於全域與專案原則。覆寫設定無法阻止使用者新增
+供應商、MCP 伺服器、agent 或外掛，因此請以 `policies` 表達管理員強制的限制，
+而不是 `permissions` 等一般設定。
+
+### 請 OpenCode 執行移轉
+
+V1 設定格式仍受支援。原生 V2 格式是選用的，可讓多項設定更明確且
+易用。
+
+建議的移轉方式是請 OpenCode 替你更新設定：
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode 可以檢視完整檔案、套用下列相關變更，並避免改寫不需要
+變更的設定。轉換不必一次完成：受支援的 V1 與原生 V2 欄位可以在頂層並存。
+當兩種形式設定相同的標準值時，有效的原生 V2 值會優先，無論 JSON 鍵的順序為何。
+
+巢狀混合是有意限制的。OpenCode 能辨識 `mcp`、`compaction` 與
+`experimental` 中混合的 V1 與 V2 成員，但不會在個別 agent、供應商、指令或模型中遞迴推斷格式。這些巢狀項目
+請各自完全使用一種格式。受支援的 V1 語法本身不會產生訊息；格式錯誤的值、
+不支援的舊版欄位與衝突的 V1/V2 值會產生警告，而不相關的有效設定仍會繼續載入。
+
+### 權限與工具
+
+V1 依工具分組權限效果。V2 使用單一有序的 `permissions` 陣列，讓優先順序與例外更明確：
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+權限動作也變更了：`bash` 現在是 `shell`，`task` 現在是 `subagent`，`write` 與 `patch` 現在是 `edit`。
+有序 V2 規則格式請參閱[權限](/permissions)。
+
+待辦事項在 V2 中預設為關閉。若要開啟，請使用實驗性旗標。它可能在未來
+版本中變更或移除；請參閱[實驗性功能](/config#experimental)。
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
+<Callout type="warning">
+  V1 會先詢問才存取專案外的路徑。V2 不會：`external_directory` 預設為允許。若要保留
+  V1 行為，請將 `{ "action": "external_directory", "resource": "*", "effect": "ask" }` 加入 `permissions`。
+</Callout>
+
+### Agent 與模式
+
+單數的 `agent` 與已棄用的 `mode` 對照表會變成 `agents`。agent 欄位會與 V2 設定的其他部分
+更一致：
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` 會變成 `system`，`disable` 會變成 `disabled`，而獨立的 `variant` 會以 `#` 接在模型引用之後。
+`maxSteps` 會變成 `steps`。舊 `mode` 對照表中的項目會變成主要 agent。
+
+agent 的 [`request.body`](/agents#request) 會保留，但不會傳送給模型，因此 V1 的 `temperature`、`top_p` 與 `options`
+在其中沒有作用。請改在模型變體上設定它們。DeepSeek 只在關閉思考時套用 `temperature`，因此
+此變體也會關閉思考：
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+供應商 JSON 欄位請使用 `body`，供應商套件選項請使用 `settings`。請參閱[模型選項](/models#options)。
+
+### 快照
+
+將單數的 `snapshot` 欄位重新命名為 `snapshots`。其布林值不變：
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### 媒體
+
+將單數的 `attachment` 物件重新命名為 `media`。巢狀圖片設定保留相同名稱：
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### MCP 伺服器
+
+V2 將伺服器分組在 `mcp.servers` 下，以反向的 `disabled` 取代 `enabled`，並區分逾時用途：
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+遠端 OAuth 欄位使用 snake_case：`clientId` 會變成 `client_id`，`clientSecret` 會變成 `client_secret`，
+`callbackPort` 會變成 `callback_port`，而 `redirectUri` 會變成 `redirect_uri`。V1 的 `experimental.mcp_timeout` 值
+也會成為預設的 `mcp.timeout.catalog` 與 `mcp.timeout.execution` 值。請參閱 [MCP 伺服器](/mcp-servers)。
+
+### 壓縮
+
+V2 將保留上下文的 token 額度分組在 `keep` 下，並為保留區提供更清楚的名稱：
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+V1 的 token 數量會原樣沿用。V2 也接受模型視窗的百分比，例如 `"buffer": "15%"`，
+可適用於視窗大小不同的模型。
+
+`auto` 保留其名稱。V2 沒有原生 `tail_turns` 或 `prune` 欄位；兩個舊版欄位都會被忽略並產生警告。最近的
+上下文改以 token 額度保留。請參閱[壓縮](/compaction)。
+
+### 技能
+
+V1 將額外的技能路徑與 URL 分開。V2 將兩者合併為一個有序陣列：
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+現有技能檔案與 `.opencode/skills/` 自動探索不變。請參閱[技能](/skills)。
+
+### 指令
+
+將單數的 `command` 對照表重新命名為 `commands`，並將 `subtask` 重新命名為 `subagent`。將獨立的模型 `variant` 接到模型引用：
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`、`description` 與 `agent` 保留其名稱。舊版 `subtask` 仍會被接受；委派的指令現在會
+自動在背景執行，並將結果回報給父工作階段。現有 Markdown 指令定義仍受支援。
+請參閱[指令](/commands)。
+
+### 引用
+
+將已棄用的單數 `reference` 對照表重新命名為 `references`：
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 已接受 `references`，因此檔案使用它時不需要變更。引用項目保留
+相同形式。請參閱[引用](/references)。
+
+### 供應商
+
+將單數的 `provider` 對照表重新命名為 `providers`。V2 區分執行階段套件、端點與請求設定：
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1 的 `npm` 會變成 `package`，AI SDK 套件會加上 `aisdk:` 前綴。`api` 會變成 `settings.baseURL`。供應商的
+`options` 會依請求角色分為 `settings`、`headers` 與 `body`。`options.setCacheKey`
+會變成供應商上的 `compatibility.supportsPromptCacheKey`。請參閱[供應商](/providers)。
+
+V2 合併了兩個舊版供應商命名空間：
+
+| V1 供應商 ID | 標準 V2 供應商 ID |
+| --- | --- |
+| `azure-cognitive-services` | `azure` |
+| `google-vertex-anthropic` | `google-vertex` |
+
+無歧義的 V1 供應商、agent、指令與供應商篩選欄位移轉時會使用這些標準 ID。共用的
+頂層 `model` 欄位會保留其確切的供應商 ID，因為相同語法在原生 V2 設定中有效；移轉舊版內建供應商時，
+請將該欄位更新為標準 ID。
+
+### 模型與變體
+
+模型仍巢狀於其供應商下，但有幾個模型欄位變得更明確：
+
+- `id` 會變成 `modelID`。
+- `tool_call` 與 `modalities` 會變成 `capabilities.tools`、`capabilities.input` 與 `capabilities.output`。
+- `"deprecated"` 的 `status` 會變成 `disabled: true`。
+- 快取成本從 `cache_read` 與 `cache_write` 移到 `cache.read` 與 `cache.write`。
+- 供應商專屬的 `options` 會變成 `settings`。
+- V1 的變體物件會變成 V2 陣列，且每個項目都有 `id`。
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+完整原生模型形式請參閱[模型](/models)。
+
+### 沒有直接原生對應的受支援欄位
+
+大多數保留相同形式的欄位（包括 `shell`、`model`、`default_agent`、`watcher`、`formatter`、
+`instructions`、`enterprise` 與 `tool_output`）不需要移轉。
+
+V2 接受並保留 `lsp` 設定，但不會執行語言伺服器、提供 LSP 工具或產生 LSP
+診斷。依賴這些能力的工作流程，請改用專案的 lint、typecheck 或編譯器指令。
+
+V1 供應商篩選器沒有對應的原生 V2 設定欄位，但其行為仍透過
+[原則](/policies)支援：
+
+- `enabled_providers` 會變成內部的預設拒絕供應商原則，接著為列出的供應商加入允許。
+- `disabled_providers` 會變成所列供應商的內部拒絕原則。
+- `autoupdate` 會變成 `update`：`false` 對應 `"disable"`，`"notify"` 對應 `"notify"`，`true` 對應 `"auto"`。
+- `small_model` 會變成內建 `title` agent 的 `model` 選擇。原生 V2 設定應改用
+  `agents.title.model`。
+
+你可以保留這些欄位的 V1 語法。OpenCode 會標準化它們，不會產生警告。
+
+### 可接受但不支援的欄位
+
+V1 schema 也接受沒有受支援 V2 行為的欄位。V2 會忽略這些值並發出警告，讓
+它們不會被誤認為作用中的設定：
+
+- `logLevel`：啟動 OpenCode 時請使用 `OPENCODE_LOG_LEVEL`。
+- `server`：請使用 V2 服務與明確的伺服器選項；伺服器 API 是刻意的重大變更。
+- 頂層 `subagent_depth`：請改用 `experimental.subagent_depth`。
+- `compaction.tail_turns` 與 `compaction.prune`：V2 改用 `compaction.keep.tokens` 與以檢查點為基礎的壓縮。
+- V1 JSON 設定中的 agent `name`。
+- 沒有 `type` 且僅有 enabled 的 V1 MCP 項目。
+- V1 實驗性欄位 `batch_tool`、`openTelemetry`、`primary_tools` 與 `continue_loop_on_deny`。
+- V1 供應商欄位 `id`、`whitelist` 與 `blacklist`。
+- V1 供應商模型欄位 `release_date`、`attachment`、`reasoning`、`temperature`、`experimental`、非 `deprecated`
+  的 `status`，以及布林 `interleaved`。
+
+忽略這些欄位是預期行為，不是相容性問題。若 V2 不再支援本指南其他部分明列會保留的行為，請依照
+[疑難排解](/troubleshooting)中的問題回報指引。
+
+### Agent 檔案
+
+V1 agent 檔案可能使用 `agent/`、`agents/`、`mode/` 或 `modes/`。V2 仍會探索這四個目錄。偏好的
+V2 位置是：
+
+```text
+.opencode/agents/<name>.md
+```
+
+V1 `mode/` 或 `modes/` 目錄下的檔案代表主要 agent。將這類檔案移至 `agents/` 時，請在前置中繼資料中加入
+`mode: primary`。`agent/` 下的檔案可以移到 `agents/`，而不變更其由路徑衍生的 ID。
+
+將前置中繼資料轉換為原生 V2 欄位時：
+
+- 保留 Markdown 本文作為 agent 的系統指示。
+- 在 JSON 設定中出現時，將 `prompt` 重新命名為 `system`；檔案本文不需要 `system` 欄位。
+- 將 `disable` 重新命名為 `disabled`，並將 `permission` 重新命名為 `permissions`。
+- 以 `provider/model#variant` 合併 `model` 與 `variant`。
+- 在模型變體上設定取樣與供應商選項，如[上述](#agents-and-modes)所示。
+
+V1 的 agent 前置中繼資料已棄用，但仍會自動轉譯。每個檔案只會以一種格式讀取。使用
+`permissions`、`request`、`system` 或 `disabled` 任一的檔案會以 V2 讀取，其中的 V1 欄位（例如 `name`、
+`tools`、`permission` 或 `temperature`）會被忽略，並在日誌中留下警告。其他使用 V1 欄位的檔案會以 V1
+讀取。請一次轉換檔案的整段前置中繼資料，不要混用兩種格式。請參閱 [Agents](/agents)。
+
+### 指令檔案
+
+V1 指令檔案可能使用 `command/` 或 `commands/`。V2 兩者都會探索。偏好的位置是：
+
+```text
+.opencode/commands/<name>.md
+```
+
+將檔案從 `command/` 移到 `commands/` 下的相同相對路徑，以保留指令名稱。Markdown 本文仍是
+指令範本；前置中繼資料中的 `description` 與 `agent` 欄位名稱不變。將 `subtask` 重新命名為 `subagent`，以使用
+背景委派的原生名稱。若前置中繼資料中有獨立的
+`model` 與 `variant` 欄位，請將變體附加到模型並移除 `variant`：
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-5-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-5-5#high
+subagent: true
+```
+
+請參閱[指令](/commands)。
+
+### 技能檔案
+
+V2 會從 `.opencode/skill/` 與 `.opencode/skills/` 探索技能。偏好的配置是：
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+請移動完整的技能目錄，而不只是 `SKILL.md`，讓相對的指令碼、參考資料與其他輔助檔案仍可
+使用。請勿更改目錄名稱，以免技能 ID 改變。現有技能的前置中繼資料與 Markdown 本文不需要
+V2 改寫。請參閱[技能](/skills)。
+
+### 指示檔案
+
+現有 `AGENTS.md` 檔案會留在原處。V2 會探索全域 `~/.config/opencode/AGENTS.md`，以及從目前目錄到主目錄的環境 `AGENTS.md`
+檔案。若專案位於主目錄之外，探索會在專案根目錄停止。
+
+V2 保留 V1 的 `CLAUDE.md` 備援：沒有 `AGENTS.md` 的目錄會使用其 `CLAUDE.md`，而 `~/.claude/CLAUDE.md`
+會代替缺少的全域 `AGENTS.md`。`OPENCODE_DISABLE_CLAUDE_CODE` 會略過所有 `CLAUDE.md`，
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` 也會；後者在 V1 中只略過 `~/.claude/CLAUDE.md`。V1 會停在
+目錄樹中找到的第一個檔名，V2 則依目錄挑選，因此根目錄的 `AGENTS.md` 不再隱藏
+巢狀的 `CLAUDE.md`。請參閱[指示](/instructions)。
+
+## 終端機用戶端設定
+
+V2 以單一全域終端機用戶端設定檔取代分層的 V1 `tui.json(c)` 檔案：
+
+```text
+~/.config/opencode/cli.json
+```
+
+此檔案由終端機用戶端擁有；背景服務不會載入它。當 `cli.json` 不存在時，第一次 V2
+終端機用戶端啟動會移轉受支援的全域 `tui.json` 設定與已保存的偏好設定，同時讓 V1 檔案
+保持不變。專案本機的用戶端設定不會移轉，因為 V2 用戶端設定是全域的。請參閱
+[CLI 設定](/cli/config)以了解目前的用戶端設定參考。
+
+`cli.json` 建立後，對 `tui.json` 的修改就不會生效。請參閱[舊版 `tui.json`](/cli/config#legacy-tuijson)。
+
+## 外掛
+
+將 `plugin` 重新命名為 `plugins`。以物件取代套件與選項的元組：
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 會從 `.opencode/plugin/` 與 `.opencode/plugins/` 探索本機外掛；V2 檔案請使用 `.opencode/plugins/`。
+設定的本機路徑必須是目錄，因此請將移植後的外掛移至 `./plugin/local/index.ts`。
+
+<Callout type="warning">
+  V1 外掛實作無法在 V2 中執行。只移動檔案或重新命名其設定項目並不足夠。
+</Callout>
+
+請使用專用的[外掛移轉指南](/build/plugins/migrate-v1)移植進入點、掛鉤、工具、事件與套件匯出。
+
+## 伺服器 API 與用戶端
+
+OpenCode 2 有修訂過且更易用的伺服器 API，以及一組全新的用戶端。呼叫 V1 伺服器 API 的整合
+必須移轉到 V2 API。
+
+使用 `@opencode/client` 套件存取已發行的 V2 API。其端點、請求型別與回應請參閱產生的 [API 參考](/api)。
+
+### 伺服器驗證
+
+V2 伺服器仍使用 HTTP 基本驗證，但有下列變更：
+
+- `OPENCODE_PASSWORD` 設定密碼。`OPENCODE_SERVER_PASSWORD` 仍可使用。
+- 不再支援 `OPENCODE_SERVER_USERNAME`。使用者名稱一律是 `opencode`。
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+請參閱 [Web](/cli/web#authentication)。
+
+## 驗證你的設定
+
+在依賴 V2 進行日常工作之前，請先在專案中驗證你的模型、供應商憑證、agent、權限、MCP 伺服器與外掛。
+在你確認所需的 V2 行為之前，請保留 V1 設定，且不要讓 V1 指向
+你已轉換為原生 V2 形式的設定。

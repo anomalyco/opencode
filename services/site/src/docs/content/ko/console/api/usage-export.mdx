@@ -1,0 +1,114 @@
+---
+title: "사용량 내보내기 API"
+description: "워크스페이스의 일별 사용량을 CSV로 다운로드하세요. 날짜, 사용자, 제공자, 모델별 요청 수와 토큰, 비용이 포함됩니다."
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export`는 워크스페이스 사용량을 CSV로 반환하며, UTC 날짜, 멤버
+또는 서비스 계정, 제공자, 모델마다 한 행이 있습니다. **Activity › Usage**에서 **Export usage** 버튼으로 내려받는
+파일과 같습니다.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## 인증
+
+[API 키](/console/api#api-keys)를 베어러 토큰으로 보내세요. 해당 키가 발급된 워크스페이스의 사용량을 내보냅니다.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+키에 **Usage › Read**가 필요합니다. **All** 또는 **Read only** 키에는 이 권한이 있습니다. 제한 키에는 다음이
+필요합니다.
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+예약 내보내기에는 [서비스 계정 키](/console/api#service-accounts)를, 또는 소유자나 관리자의
+[개인 API 키](/console/api#personal-api-keys)를 사용하세요. 멤버는 워크스페이스 사용량을 읽을 수 없으므로
+해당 키는 `403`을 반환합니다.
+
+## 요청
+
+| 매개변수  | 필수 | 값                                                                                                                    |
+| --------- | ---- | --------------------------------------------------------------------------------------------------------------------- |
+| `range`   | 예   | `7d`, `30d`, `90d` 중 하나.                                                                                            |
+| `user_id` | 아니요 | 멤버 ID(`user_...`) 또는 서비스 계정 ID(`svcacct_...`). 해당 멤버나 서비스 계정의 행만 반환합니다.                    |
+
+`range`는 UTC 날짜를 기준으로 오늘을 포함해 계산합니다. `7d`는 오늘과 그 전 6일입니다. 오늘 날짜의 행에는
+UTC 자정까지 사용량이 계속 누적됩니다.
+
+서비스 계정 하나의 사용량을 내보내려면 이전 내보내기의 `user_id` 열에 있는 ID를 전달하세요.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+워크스페이스에 없는 ID는 헤더 행만 반환합니다.
+
+## 응답
+
+성공한 요청은 `200`과 함께 `Content-Type: text/csv; charset=utf-8`을 반환합니다. 첫 줄은 헤더이고, 이어서 최신
+날짜부터 행이 옵니다.
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- 줄은 `\r\n`으로 끝납니다.
+- 사용량이 없는 날짜는 행이 없습니다.
+- 응답은 다운로드(`Content-Disposition: attachment; filename="usage-30d.csv"`)이며 절대 캐시되지
+  않습니다(`Cache-Control: private, no-store`).
+- `=`, `+`, `-`, `@`로 시작하는 텍스트 셀에는 앞에 `'`가 붙어 스프레드시트가 수식으로 실행하지 않습니다.
+
+### 열
+
+| 열                      | 의미                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `day`                   | `YYYY-MM-DD` 형식의 UTC 날짜.                                                                                 |
+| `user_type`             | `member` 또는 `service_account`.                                                                              |
+| `user_id`               | 멤버 또는 서비스 계정의 ID.                                                                                   |
+| `user_name`             | 멤버의 이메일 또는 서비스 계정의 이름. 비어 있을 수 있습니다.                                                 |
+| `provider`              | 요청을 처리한 제공자. [OpenCode Models](/console/models)의 경우 `opencode`입니다.                             |
+| `model`                 | 모델 ID.                                                                                                      |
+| `requests`              | 요청 수.                                                                                                      |
+| `input_tokens`          | 입력 토큰.                                                                                                    |
+| `output_tokens`         | 출력 토큰.                                                                                                    |
+| `cache_read_tokens`     | 프롬프트 캐시에서 읽은 토큰.                                                                                  |
+| `cache_write_5m_tokens` | 프롬프트 캐시에 5분간 저장되는 토큰.                                                                          |
+| `cache_write_1h_tokens` | 프롬프트 캐시에 1시간 동안 저장되는 토큰.                                                                     |
+| `cost_micro_cents`      | 마이크로센트 단위의 정수로 나타낸 비용. 미화 1달러는 `100000000` 마이크로센트입니다.                            |
+| `cost_usd`              | 같은 비용을 미국 달러로 나타낸 정확한 소수. `2.145`나 `0.00`처럼 소수점 아래 두 자리 이상입니다.             |
+
+### 포함되는 항목
+
+- 워크스페이스 멤버와 서비스 계정이 보낸 모든 모델 요청.
+- 무료 모델 요청과 멤버가 자신의 Claude Code, Codex, OpenCode 구독으로 보낸 요청은 토큰과 함께 비용 0으로
+  포함됩니다.
+- [웹 검색](/console/websearch)과 기타 호스팅 서비스는 포함되지 않습니다.
+- 합계는 새 요청보다 약 1분 늦을 수 있습니다.
+
+## 제한
+
+- 내보내기는 최대 90일을 포함합니다. 더 긴 기록을 유지하려면 정기적으로 파일을 저장하세요.
+- 요청은 계정당 분당 300회인 Console API 한도에 포함되며, 다른 엔드포인트와 공유합니다. 개인 API 키는 키를
+  소유한 멤버 기준으로 집계됩니다.
+
+## 오류
+
+| 상태 | 의미                                                                                                  |
+| ---- | ----------------------------------------------------------------------------------------------------- |
+| `400`  | `range`가 없거나 `7d`, `30d`, `90d`가 아니거나, `user_id`가 멤버나 서비스 계정 ID가 아닙니다.       |
+| `401`  | 자격 증명이 없거나 키가 만료 또는 폐기되었습니다.                                                     |
+| `403`  | 키에 **Usage › Read**가 없거나, 소유자나 관리자가 아닌 멤버의 키입니다.                               |
+| `429`  | 요청 한도를 초과했습니다. `Retry-After` 헤더의 초만큼 기다린 뒤 다시 시도하세요.                      |
+| `503`  | 일별 합계를 아직 사용할 수 없습니다. 나중에 다시 요청하세요.                                          |

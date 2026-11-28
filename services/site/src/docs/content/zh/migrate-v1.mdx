@@ -448,9 +448,9 @@ V1 的 agent 文件可以放在 `agent/`、`agents/`、`mode/` 或 `modes/` 中�
 .opencode/agents/<name>.md
 ```
 
-V1 `mode/` 或 `modes/` 目录下的文件表示主 agent。将这类文件移到 `agents/` 时，请在其 frontmatter 中添加 `mode: primary`。`agent/` 下的文件可以直接移到 `agents/`，由路径推导出的 ID 不会改变。
+V1 的 `mode/` 或 `modes/` 目录下的文件定义主 agent。将这类文件移到 `agents/` 时，请在文件头的元数据中添加 `mode: primary`。`agent/` 下的文件可以直接移到 `agents/`，由路径推导出的 ID 不会改变。
 
-将 frontmatter 转换为 V2 原生字段时：
+将文件头元数据转换为 V2 原生字段时：
 
 - 保留 Markdown 正文，作为 agent 的系统指令。
 - 在 JSON 配置中出现的 `prompt` 要重命名为 `system`；文件正文不需要 `system` 字段。
@@ -458,7 +458,7 @@ V1 `mode/` 或 `modes/` 目录下的文件表示主 agent。将这类文件移�
 - 将 `model` 和 `variant` 合并为 `provider/model#variant`。
 - 如[上文](#agents-and-modes)所示，在模型变体上设置采样和提供商选项。
 
-V2 会自动转换旧的 agent frontmatter，因此这些修改都是可选的。每个文件只按一种格式读取：只要文件使用了 `permissions`、`request`、`system` 或 `disabled` 中的任意一个字段，就会按 V2 读取，其中的 V1 字段（例如 `name`、`tools`、`permission` 或 `temperature`）会被忽略，并在日志中给出警告。其他使用 V1 字段的文件会按 V1 读取。转换某个文件时，请一次性转换其全部 frontmatter，不要混用两种格式。请参阅[agent](/agents)。
+V1 的 agent 文件头元数据已弃用，但 V2 仍会自动转换。每个文件只按一种格式读取：只要文件使用了 `permissions`、`request`、`system` 或 `disabled` 中的任意一个字段，就会按 V2 读取，其中的 V1 字段（例如 `name`、`tools`、`permission` 或 `temperature`）会被忽略，并在日志中给出警告。否则，只要用到了 V1 字段，就会按 V1 读取。转换时，请一次改完文件头的所有元数据，不要混用两种格式。请参阅 [agent](/agents)。
 
 ### 命令文件
 
@@ -468,7 +468,7 @@ V1 的命令文件可以放在 `command/` 或 `commands/` 中，V2 会扫描这�
 .opencode/commands/<name>.md
 ```
 
-将文件从 `command/` 移到 `commands/` 下的相同相对路径，即可保留命令名称。Markdown 正文仍然是命令模板，frontmatter 中的 `description` 和 `agent` 名称不变。将 `subtask` 重命名为 `subagent`，即可使用后台委派的原生名称。如果 frontmatter 中分别有 `model` 和 `variant` 字段，请把变体追加到模型之后，并删除 `variant`：
+将文件从 `command/` 移到 `commands/` 下的相同相对路径，即可保留命令名称。Markdown 正文仍然是命令模板，文件头元数据中的 `description` 和 `agent` 字段名不变。请将 `subtask` 改为 `subagent`，换用 V2 原生的后台委派字段。如果文件头元数据中同时有 `model` 和 `variant` 字段，请把变体追加到模型之后，并删除 `variant`：
 
 ```yaml
 # V1
@@ -491,7 +491,7 @@ V2 会从 `.opencode/skill/` 和 `.opencode/skills/` 两个目录中发现技能
 .opencode/skills/<skill-id>/SKILL.md
 ```
 
-请移动整个技能目录，而不只是 `SKILL.md`，这样相对路径引用的脚本、参考资料和其他辅助文件才能继续使用。保持目录名不变，以保留技能 ID。现有技能的 frontmatter 和 Markdown 正文无需为 V2 重写。请参阅[技能](/skills)。
+请移动整个技能目录，而不只是 `SKILL.md`，这样相对路径引用的脚本、参考资料和其他辅助文件才能继续使用。保持目录名不变，以保留技能 ID。现有技能的文件头元数据和 Markdown 正文无需为 V2 重写。请参阅[技能](/skills)。
 
 ### 指令文件
 

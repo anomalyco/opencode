@@ -1,0 +1,81 @@
+---
+title: "Claude Code"
+description: "從 Claude Code 使用控制台與 Go 模型。"
+---
+
+Claude Code 使用 Anthropic Messages API。以兩個環境變數將它指向控制台，即可使用任何付費或 Go
+模型，包括 GPT、Gemini 與開放模型。對於不接受 Anthropic
+Messages 的模型，控制台會轉譯請求。
+
+<Callout>
+  [控制台 CLI](/console/harnesses#console-cli) 可用一個指令設定 Claude Code，包括工作區的
+  原則、MCP 伺服器、技能與指示。請執行 `npx @opencode/console setup claude-code`。下列步驟為手動
+  設定。
+</Callout>
+
+```bash
+export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5
+```
+
+將 `oc_sk_...` 替換為[個人 API 金鑰](/console/harnesses#get-an-api-key)。
+
+## 設定
+
+在 `~/.claude/settings.json` 中設定變數，即可在每個工作階段使用控制台。將 `opus`、`sonnet` 與 `haiku`
+別名對應到控制台模型，讓 `/model` 與背景工作使用它們。
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+Claude Code 會在基礎 URL 後附加 `/v1/messages`，因此請勿包含該路徑。執行 `/status` 以
+確認基礎 URL 與權杖已生效。
+
+<Callout>
+  請使用 `ANTHROPIC_AUTH_TOKEN`，而不是 `ANTHROPIC_API_KEY`。若你已登入 Claude 帳號，請先執行 `/logout`，
+  以免 Claude Code 將該帳號的登入憑證傳給控制台。
+</Callout>
+
+## Go
+
+使用 Go 基礎 URL，以及具有 [Go](/console/go) 訂閱之工作區的金鑰。
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+## 模型
+
+使用[控制台](/console/models#endpoints)或 [Go](/console/go#endpoints) 表中的任何模型 ID。在工作階段中
+使用 `/model` 切換模型，或為單次執行選擇模型。
+
+```bash
+claude --model gpt-6.1-sol
+```
+
+## 控制台 MCP
+
+為你所有的專案新增[控制台 MCP](/console/harnesses#console-mcp) 伺服器。
+
+```bash
+claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp
+```
+
+在 Claude Code 中執行 `/mcp`、選取 `opencode-console`，並從瀏覽器登入。

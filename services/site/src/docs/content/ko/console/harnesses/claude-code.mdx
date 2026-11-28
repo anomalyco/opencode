@@ -1,0 +1,81 @@
+---
+title: "Claude Code"
+description: "Claude Code에서 Console 및 Go 모델을 사용하세요."
+---
+
+Claude Code는 Anthropic Messages API를 사용합니다. 환경 변수 두 개를 설정해 Console에 연결하면 GPT, Gemini,
+오픈 모델 등 모든 유료 모델과 Go 모델을 사용할 수 있습니다. 모델이 Anthropic Messages를 지원하지 않으면
+Console이 요청을 변환합니다.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli)를 쓰면 워크스페이스의 정책, MCP 서버, 스킬, 지침까지 포함해
+  명령 하나로 Claude Code를 설정할 수 있습니다. `npx @opencode/console setup claude-code`를 실행하세요. 아래
+  단계는 직접 설정하는 방법입니다.
+</Callout>
+
+```bash
+export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
+export ANTHROPIC_AUTH_TOKEN="oc_sk_..."
+claude --model claude-sonnet-5-5
+```
+
+`oc_sk_...`를 [개인 API 키](/console/harnesses#get-an-api-key)로 바꾸세요.
+
+## 구성
+
+모든 세션에서 Console을 사용하려면 `~/.claude/settings.json`에 변수를 설정하세요. `opus`, `sonnet`, `haiku`
+별칭을 Console 모델에 매핑하면 `/model`과 백그라운드 작업이 그 모델을 사용합니다.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+Claude Code는 기본 URL 뒤에 `/v1/messages`를 붙이므로 그 경로는 빼고 입력하세요. `/status`를
+실행해 기본 URL과 토큰이 적용되었는지 확인하세요.
+
+<Callout>
+  `ANTHROPIC_AUTH_TOKEN`을 사용하고 `ANTHROPIC_API_KEY`는 사용하지 마세요. Claude 계정에 로그인되어 있다면 먼저
+  `/logout`을 실행해 Claude Code가 Claude 계정의 로그인 정보를 Console에 보내지 않도록 하세요.
+</Callout>
+
+## Go
+
+Go 기본 URL과 [Go](/console/go)를 구독한 워크스페이스의 키를 사용하세요.
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://opencode.ai/inference/go/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "oc_sk_...",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "minimax-m3",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5"
+  }
+}
+```
+
+## 모델
+
+[Console](/console/models#endpoints) 또는 [Go](/console/go#endpoints) 표에 있는 모델 ID를 사용하세요. 세션에서는
+`/model`로 모델을 바꾸고, 한 번 실행에만 쓸 모델을 고를 수도 있습니다.
+
+```bash
+claude --model gpt-6.1-sol
+```
+
+## Console MCP
+
+모든 프로젝트에 [Console MCP](/console/harnesses#console-mcp) 서버를 추가하세요.
+
+```bash
+claude mcp add --transport http --scope user opencode-console https://opencode.ai/console/mcp
+```
+
+Claude Code에서 `/mcp`를 실행하고 `opencode-console`을 선택한 뒤 브라우저에서 로그인하세요.

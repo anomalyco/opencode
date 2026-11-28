@@ -1,0 +1,177 @@
+---
+title: "API інференсу"
+description: "Викликайте моделі, сумісні з OpenAI, Anthropic і Gemini, через інференс Console з одним заголовком автентифікації."
+---
+
+Інференс Console надає API, сумісні з OpenAI, Anthropic і Gemini, за адресою `https://opencode.ai/inference`. Надсилайте
+запит `POST` із тілом у форматі JSON на ендпоінт потрібного для моделі сімейства API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Автентифікація
+
+Замініть `<token>` на [особистий API-ключ](/console/api#personal-api-keys) або
+[ключ сервісного облікового запису](/console/api#service-accounts), створений у [Console](https://opencode.ai/console).
+Платні моделі вимагають цього заголовка. Чат-моделі тарифу Free доступні лише з OpenCode; інші клієнти отримують
+HTTP `403`, навіть із API-ключем. З інших клієнтів використовуйте платні моделі або [підписку Go](/console/go).
+
+```text
+Authorization: Bearer <token>
+```
+
+## Ендпоінти
+
+| API                     | Шлях                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (decisions)  | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+Кожну модель обслуговує одне сімейство API. Дивіться таблицю [ендпоінтів моделей](/console/models#endpoints) або
+отримайте актуальний список:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+У документації [API списку моделей](/console/api/models) описано всі поля відповіді, а також список Console, до якого
+входять підключені вами провайдери.
+
+### OpenAI Chat Completions
+
+Відкриті моделі, як-от `kimi-k3`, `glm-5.3`, `minimax-m3`, і безкоштовні моделі використовують Chat Completions API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+Моделі GPT використовують Responses API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Моделі Claude і Qwen використовують Messages API. `max_tokens` обов'язковий.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Моделі Gemini приймають назву моделі й метод у шляху. Замініть `:generateContent` на `:streamGenerateContent`, щоб
+передавати відповідь потоком.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+Моделі рішень, як-от `jev-1.14`, `gemini-decision-1` і `gpt-6-luna-decision`, відповідають на типізовані питання про
+`state` замість генерації тексту. Дивіться [моделі рішень](/console/models#jev), щоб дізнатися про типи питань і
+медіавходи.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+Ті самі моделі також приймають формат Decisions від OpenAI за шляхом `/inference/openai/v1/decisions`.
+
+### OpenAI Embeddings
+
+Моделі ембедингів, як-от `text-embedding-3-small` і `qwen3-embedding-8b`, використовують Embeddings API. На сторінці
+[моделей ембедингів](/console/models#embedding-models) наведено всі моделі та їхні параметри.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints) надає доступні за підпискою моделі рішень і ембедингів за тими самими шляхами з префіксом
+`/inference/go`.
+
+## Вартість
+
+Кожна відповідь повідомляє, скільки коштував запит, поруч із використанням, яке вже повертає її API: у `usage` для
+OpenAI і Anthropic та в `usageMetadata` для Gemini. Потоки повідомляють це в події, що несе фінальне використання:
+останній чанк використання для Chat Completions із `stream_options.include_usage`, `response.completed` для Responses,
+`message_delta` для Messages і останній чанк для Gemini.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| Поле                      | Значення                                                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | Долари США, списані з вашого балансу. `0` для безкоштовних моделей і для використання [Go](/console/go) у межах його лімітів. Із власним ключем провайдера — оцінка того, скільки стягує ваш провайдер, якщо він не повідомляє власну суму. Відсутнє, коли модель не має ціни. |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus` або `byok` (власний ключ провайдера).                                                      |
+| `opencode.list_cost`      | Долари США за ціною моделі, включно з піковими годинами й ціноутворенням для довгого контексту.                               |
+| `opencode.estimated`      | `true`, коли `cost` — оцінка за ціною моделі, а не сума, яку стягнув OpenCode. Установлюється лише з власним ключем провайдера. |
+| `opencode.allowance`      | Лише Go: скільки запит зарахував до ваших [лімітів використання](/console/go#usage-limits) у доларах місячного ліміту тарифу. |
+| `opencode.tokens`         | Токени, за які нараховано плату. `input` не враховує токенів, прочитаних із кешу або записаних до нього; `output` включає `reasoning`. |
+
+Генерація зображень повідомляє ті самі поля у відповіді, а в потоці — на кожному завершеному зображенні з поточною
+вартістю. Вартість стає відома, коли відповідь завершується, ще до оновлення вашого балансу чи використання Go. Якщо
+ваш баланс або ліміти Go вичерпуються під час запиту, з вас можуть стягнути менше, ніж повідомлено, але ніколи більше.

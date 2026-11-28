@@ -1,6 +1,6 @@
 ---
 title: "TUI"
-description: "开始一个会话，并使用终端界面中的日常工作流。"
+description: "在终端界面中开启会话，了解常用操作。"
 ---
 
 在项目目录中运行 OpenCode，输入你的需求，然后按 **Enter**。
@@ -14,11 +14,11 @@ opencode
 Explain how authentication works in this project
 ```
 
-按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 换行。OpenCode 工作期间，按 **Enter** 会引导当前会话（steer）；先按 **Ctrl+X** 再按 **Enter**，则把提示词加入队列稍后发送。
+按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 换行。OpenCode 正在处理任务时，按 **Enter** 发送提示词，介入当前会话；如果想让提示词排队、稍后处理，先按 **Ctrl+X** 再按 **Enter**。
 
 ## 项目与目录
 
-OpenCode 会在启动时所在的目录中查找文件、执行 shell 命令。同一个 Git 仓库中的目录（包括它的 worktree）都属于同一个项目。没有纳入版本控制的目录自成一个项目。
+OpenCode 会在启动时所在的目录中查找文件、执行 shell 命令。同一个 Git 仓库下的目录（含各工作树中的目录）都属于同一个项目。未纳入版本控制的目录自成一个项目。
 
 启动时传入目录，即可打开另一个项目：
 
@@ -26,17 +26,17 @@ OpenCode 会在启动时所在的目录中查找文件、执行 shell 命令。�
 opencode ~/code/another-project
 ```
 
-按 **Ctrl+O** 打开最近会话和项目列表。选中项目后按 **Right** 查看它的 worktree 列表，再按 **Ctrl+N** 创建新的 worktree。
+按 **Ctrl+O** 打开最近会话和项目列表。选中项目后按 **Right** 查看工作树列表，再按 **Ctrl+N** 新建工作树。
 
 ## 上下文
 
-输入 `@` 搜索文件，选中后即可将该文件附加到提示词中。在 `@` 后继续输入可以缩小搜索范围。
+输入 `@` 搜索文件，选中后就能将文件附加到提示词。在 `@` 后继续输入可以缩小搜索范围。
 
 ```text
 Review @src/auth.ts for error handling problems
 ```
 
-你还可以在路径后加上行号或行范围。
+你还可以在路径后指定某一行或一段行号范围。
 
 ```text
 Explain @src/auth.ts#20-45
@@ -44,7 +44,7 @@ Explain @src/auth.ts#20-45
 
 ## Shell
 
-在空输入框的开头输入 `!` 进入 Shell 模式。输入命令后按 **Enter** 执行；按 **Esc** 则退出 Shell 模式，不执行命令。
+输入框为空时，输入 `!` 进入 Shell 模式。输入命令后按 **Enter** 执行；按 **Esc** 可直接退出，不执行命令。
 
 ```text
 !git status
@@ -54,7 +54,7 @@ Shell 命令在会话的工作目录中运行，输出会保留在会话中。
 
 ## 命令
 
-输入 `/` 列出斜杠命令。继续输入可以过滤列表，然后按 **Enter** 运行选中的命令。
+输入 `/` 查看斜杠命令。继续输入可以筛选列表，再按 **Enter** 运行所选命令。
 
 ```text
 /models
@@ -62,11 +62,11 @@ Shell 命令在会话的工作目录中运行，输出会保留在会话中。
 
 常用命令包括 `/new`、`/sessions`、`/models`、`/agents`、`/undo`、`/redo` 和 `/editor`。按 **Ctrl+P** 打开命令面板，查看当前视图中可用的所有操作。
 
-更新之后，OpenCode 会在主屏幕上显示一次该版本的新功能。运行 `/highlights` 可以再次查看；如果不想让它自动弹出，可以在 [`cli.json`](/cli/config#alerts) 中设置 `"highlights": false`。
+更新后，OpenCode 会在首页显示一次本版本的更新亮点。运行 `/highlights` 可以再次查看；如果不想让它自动打开，可以在 [`cli.json`](/cli/config#alerts) 中设置 `"highlights": false`。
 
 ## 顺便提问
 
-运行 `/btw <question>` 可以就目前的对话快速提一个问题。回答会使用会话的上下文和当前模型，但不会加入对话，因此不会影响后续的提示词。运行期间，输入框底部会显示 `/btw` 标识，回答会在对话框中打开；按 **C** 可以复制。
+运行 `/btw <question>` 可以针对目前的对话随手问个问题。OpenCode 会用当前模型和会话上下文回答，但不会把回答写进对话，因此不会影响后续提示词。等待回答时，输入框底部会显示 `/btw`；回答会单独显示在对话框里，按 **C** 即可复制。
 
 ```text
 /btw why did the test in step 2 fail?
@@ -90,7 +90,7 @@ Shell 命令在会话的工作目录中运行，输出会保留在会话中。
 
 先按 **Ctrl+X** 再按 **U**，或运行 `/undo`，可以撤销最近一条用户消息及其之后的所有工作。被撤销的提示词会回到输入框，方便你修改。
 
-先按 **Ctrl+X** 再按 **R**，或运行 `/redo`，可以恢复被撤销的工作。如果改为发送新的提示词，则视为接受撤销，并从该位置继续。
+先按 **Ctrl+X** 再按 **R**，或运行 `/redo`，可以恢复撤销的内容。如果直接发送新提示词，会话就会保留撤销结果，并从撤销后的位置继续。
 
 ## 编辑器
 

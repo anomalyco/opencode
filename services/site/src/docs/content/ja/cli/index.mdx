@@ -1,0 +1,95 @@
+---
+title: "CLI の概要"
+description: "OpenCode のターミナルインターフェースを起動し、スクリプトや CI からプロンプトを実行し、共有のバックグラウンドサービスを管理します。"
+---
+
+プロジェクトで CLI を実行すると、全画面のターミナルインターフェースが開きます。
+
+```bash
+opencode
+```
+
+別のプロジェクトで作業するには、ディレクトリを渡します。
+
+```bash
+opencode ~/code/my-project
+```
+
+推奨ターミナル：
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+トゥルーカラーに対応していると、テーマが最も正確な色で表示されます。対応していないターミナルでは、利用可能なパレットの近似色が使われます。
+
+## 自動化
+
+`opencode run` を使うと、対話的なインターフェースを開かずにプロンプトを送信できます。スクリプト、CI ジョブ、その他モデルの出力をターミナルで直接必要とするワークフロー向けに設計されています。
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+`opencode mini` を使うと、全画面の TUI の代わりに OpenCode の最小限の対話インターフェースを起動できます。
+
+```bash
+opencode mini
+```
+
+`opencode mini --help` を実行すると、セッション、モデル、エージェント、プロンプト、リプレイのオプションを確認できます。
+
+## バックグラウンドサービス
+
+デフォルトでは、OpenCode はユーザーアカウントごとに 1 つの共有バックグラウンドサーバーを検出または起動します。すべてのローカルの OpenCode クライアントがそのサーバーに接続し、サーバーがセッション、設定、連携、権限、ツールの実行を管理します。
+
+プライベートなサーバーで実行するには `--standalone`、特定のサーバー URL に接続するには `--server` を使用します。
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+CLI コマンドでプライベートサーバーをデフォルトにするには、共有サービスを無効にします。
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+これにより実行中のバックグラウンドサービスが停止します。`--server` は明示的に選択したサーバーに引き続き接続し、`opencode service start` で共有サービスを明示的に起動することもできます。自動的なサービスの利用に戻すには、`opencode service unset disabled` を実行します。ペアリングには共有サービスが必要で、無効になっている間は利用できません。
+
+共有サービスの診断については[トラブルシューティング](/troubleshooting)、サーバーのエンドポイントについては [API リファレンス](/api)を参照してください。
+
+## パス
+
+他のツールで使用するために、特定のローカルパスを出力します。
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+セレクターには `db`、`home`、`data`、`config`、`cache`、`state`、`tmp`、`bin`、`log`、`repos` のいずれかを指定できます。指定した場合はパスと改行だけを出力します。データベースのパスはリリースチャネルと `OPENCODE_DB` に従います。上書き用に相対パスを指定した場合はデータディレクトリを基準に解決し、`:memory:` はそのまま出力します。このコマンドはサーバーを起動せず、データベースも開きません。
+
+セレクターを省略すると、すべてのパスをラベル付きで表示します。
+
+```bash
+opencode debug paths
+```
+
+## アンインストール
+
+削除されるファイルとインストールをプレビューします。
+
+```bash
+opencode uninstall --dry-run
+```
+
+削除を確定するには `opencode uninstall` を実行します。OpenCode は、OpenCode のバージョンとチャネルで共有されるグローバルキャッシュディレクトリを削除する前に、登録されたバックグラウンドサービスと永続的なターミナルを停止します。セッションデータ、設定、状態は決して削除されません。
+
+- `--force`（`-f`）は確認をスキップします。非対話的な削除に使用します。
+- パッケージマネージャーでのインストールでは、検出されたパッケージマネージャーを使用します。Curl でのインストールでは、実行可能ファイルを手動で削除するための最後のコマンドが出力されます。

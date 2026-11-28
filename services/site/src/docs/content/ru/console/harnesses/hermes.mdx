@@ -1,0 +1,60 @@
+---
+title: "Hermes"
+description: "Используйте модели Console и Go из Hermes Agent."
+---
+
+В [Hermes Agent](https://hermes-agent.nousresearch.com) встроены провайдеры OpenCode для моделей с оплатой по факту и для Go. Hermes выбирает подходящий API для каждой платной модели и модели Go. Бесплатные чат-модели доступны только в OpenCode; запросы из Hermes к таким моделям возвращают HTTP `403`.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) настраивает Hermes одной командой, включая политики, MCP-серверы, навыки
+  и инструкции рабочего пространства. Выполните `npx @opencode/console setup hermes`. Ниже описана ручная настройка.
+</Callout>
+
+| Провайдер      | Тариф          | Переменная ключа       |
+| -------------- | -------------- | ---------------------- |
+| `opencode-zen` | Оплата по факту | `OPENCODE_ZEN_API_KEY` |
+| `opencode-go`  | Go             | `OPENCODE_GO_API_KEY`  |
+
+## Настройка
+
+Запустите настройку модели и выберите **OpenCode Zen** для оплаты по факту или **OpenCode Go** для Go.
+
+```bash
+hermes model
+```
+
+Вставьте [личный API-ключ](/console/harnesses#get-an-api-key), затем выберите модель. Hermes сохраняет ключ в `~/.hermes/.env`, а выбор — в `~/.hermes/config.yaml`.
+
+```yaml title="~/.hermes/config.yaml"
+model:
+  provider: opencode-go
+  default: kimi-k3
+```
+
+<Callout>Go требует ID сессии в каждом запросе. Hermes v0.21.6 и новее отправляют его автоматически.</Callout>
+
+## Модели
+
+Используйте ID моделей из таблицы [Console](/console/models#endpoints) или [Go](/console/go#endpoints) без префикса. Переключайте модели в сессии командой `/model` или выбирайте на один запуск.
+
+```bash
+hermes chat --provider opencode-zen --model claude-sonnet-5-5
+```
+
+## MCP Console
+
+Добавьте сервер [MCP Console](/console/harnesses#console-mcp) с OAuth, затем войдите из браузера.
+
+```bash
+hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console
+```
+
+Либо добавьте его в `~/.hermes/config.yaml` и выполните `/reload-mcp` в сессии.
+
+```yaml title="~/.hermes/config.yaml"
+mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth
+```

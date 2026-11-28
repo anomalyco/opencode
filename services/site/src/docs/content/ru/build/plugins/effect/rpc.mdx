@@ -1,0 +1,166 @@
+---
+title: "RPC Effect-плагинов"
+description: "Предоставляйте методы и события Effect-плагина как типизированные Effect и Stream."
+---
+
+Effect-плагины могут предоставлять методы и события, возвращающие типизированные Effect и Stream.
+
+## Определение
+
+Используйте `Rpc.define` с Effect Schema, чтобы определить RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### Проверка
+
+Effect Schema проверяет значения и выводит их типы TypeScript.
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+JSON Schema и Standard Schema также поддерживаются.
+
+### Вход и выход
+
+Используйте `input` для аргумента метода и `output` для возвращаемого значения. Обе схемы обязательны. Если метод не принимает аргумент или ничего не возвращает, задайте для соответствующей стороны `Schema.Struct({})`: передавайте `{}` при вызове без аргумента и возвращайте `{}`, если результата нет.
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### Ошибки
+
+Опишите ожидаемые ошибки в `errors`. Каждый ключ становится значением `type` соответствующей ошибки.
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### События
+
+Добавьте события в объект `events` верхнего уровня. Данные события должны быть объектом. Если у RPC нет событий, укажите `events: {}`: это обязательное поле.
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## Реализация
+
+Зарегистрируйте реализацию из Effect плагина:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+Карта ошибок становится типом ошибок Effect каждого метода. Используйте `context.error(...)`, чтобы создать объявленную ошибку.
+
+## Вызов
+
+После регистрации RPC можно вызывать по HTTP или из другого плагина.
+
+### HTTP
+
+Создайте Effect-клиент, затем подклиент RPC:
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### Плагин
+
+Другой Effect-плагин может создать локальный подклиент из своего контекста:
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### Подписка
+
+События RPC — это Stream. Подпишитесь по имени события и запустите Stream в файбере области видимости:
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)
+```
+
+Подписки доставляют только новые события и закрываются, когда чтение из Stream прекращается.

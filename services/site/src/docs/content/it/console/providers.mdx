@@ -1,0 +1,211 @@
+---
+title: "Provider di Console"
+description: "Collega i tuoi account provider di modelli a uno spazio di lavoro di OpenCode Console e scegli quali modelli possono usare i membri."
+---
+
+Collega gli account che paghi già presso provider come Anthropic, OpenAI o AWS Bedrock e condividi i relativi modelli
+con tutti i membri dello spazio di lavoro. Console conserva la credenziale e dà accesso a ciascun provider tramite il proprio gateway, così i membri
+usano i modelli senza mai vedere la chiave del provider. Lo stesso gateway è disponibile per i tuoi strumenti tramite
+l'[API dei provider](/console/api/providers).
+
+I proprietari e gli amministratori gestiscono i provider dalla scheda **Providers**. I membri ricevono i modelli abilitati in OpenCode dopo
+aver eseguito `/connect`.
+
+## Collegare un provider
+
+1. Apri **Providers** e fai clic su **Connect Provider**.
+2. Scegli un provider dal catalogo e inserisci la sua chiave API.
+3. Se vuoi, fai clic su **Test connection**, poi su **Save**.
+
+Il catalogo include Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter e molti altri. I provider del catalogo
+hanno i modelli già configurati.
+
+### Provider cloud
+
+I provider cloud richiedono qualche dettaglio in più.
+
+| Provider              | Dettagli                              |
+| --------------------- | ------------------------------------- |
+| Azure                 | Nome della risorsa e chiave API       |
+| AWS Bedrock           | Regione e chiave API                  |
+| Google Vertex AI      | Regione e JSON dell'account di servizio |
+| Cloudflare AI Gateway | ID dell'account, ID del gateway e token API |
+| Databricks            | URL dello spazio di lavoro e token    |
+
+### Provider personalizzati
+
+Fai clic su **Add Custom Provider** per collegare qualsiasi altro endpoint, poi aggiungi i suoi modelli con **Add Model**.
+
+| Campo      | Descrizione                                                                     |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Dove Console inoltra le richieste, ad esempio `https://api.deepseek.com/v1`.    |
+| Formato    | Chat Completions, Responses API, Anthropic Compatible o Google Generative AI.   |
+| Modalità di autenticazione | Bearer, header della chiave API o header personalizzato.        |
+| Credenziale | La chiave che Console invia al provider.                                       |
+
+## Scegliere i modelli
+
+Apri un provider per vedere i suoi modelli. Solo i modelli abilitati sono disponibili ai membri.
+
+- Usa l'interruttore **Enabled** per attivare o disattivare un modello.
+- Attiva **New models** per abilitare i modelli che il provider aggiungerà in futuro.
+
+## Modificare i modelli
+
+Fai clic su un modello per modificarlo. Le modifiche vengono salvate quando chiudi il pannello.
+
+| Sezione       | Cosa puoi cambiare                                              |
+| ------------- | --------------------------------------------------------------- |
+| General       | Nome visualizzato, ID API, supporto agli strumenti, tipi di input e output |
+| Variants      | Varianti con propri header o corpo                              |
+| Configuration | Variante predefinita, header e corpo della richiesta, limiti di token |
+| Cost Tiers    | Prezzi di input, output, lettura cache e scrittura cache per 1M token |
+
+### Prezzi personalizzati
+
+I modelli del catalogo partono dal prezzo di listino del provider. Se hai prezzi negoziati, ad esempio uno sconto sul tuo
+contratto OpenAI, sovrascrivi i prezzi in **Cost Tiers** così i report di utilizzo e i [budget](/console/budgets) corrispondono a ciò che
+paghi davvero.
+
+| Campo            | Prezzo di listino | Il tuo prezzo |
+| ---------------- | ----------------- | ------------- |
+| Prezzo di input  | $2.50             | $2.00         |
+| Prezzo di output | $15.00            | $12.00        |
+| Prezzo di lettura cache | $0.25      | $0.20         |
+
+I prezzi che cambi sono evidenziati nella pagina del provider. Usa **Restore default value** su un campo, o **⋯ › Restore...**
+sul modello, per tornare al prezzo di listino.
+
+Aggiungi una fascia **Context** se il costo del modello aumenta oltre una certa dimensione del contesto, ad esempio per prompt da più di 200K token.
+
+### Modelli personalizzati
+
+Fai clic su **Add Model** per aggiungere un modello non incluso nel catalogo, con il suo **Display name** e il suo **Model ID**. Usa
+**⋯ › Duplicate...** su un modello esistente per partire dalle sue impostazioni.
+
+## Modelli OpenCode
+
+La scheda **Models** gestisce i [modelli](/console/models) forniti da Console, pagati con i crediti dello spazio di lavoro. Funziona
+come la pagina di un provider:
+
+- Attiva o disattiva singoli modelli.
+- Disattiva **Free models** per bloccare i modelli gratuiti nello spazio di lavoro.
+- Attiva **New models** per abilitare automaticamente i nuovi modelli di Console.
+
+Disabilita l'intero provider da **⋯ › Disable** per usare solo i tuoi provider.
+
+## Uso in OpenCode
+
+I membri eseguono `/connect` e scelgono lo spazio di lavoro. Ogni provider abilitato compare come il nome dello spazio di lavoro seguito dal
+nome del provider, e `/models` elenca i suoi modelli abilitati.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Attiva **Managed providers only** in **Settings › General** per limitare OpenCode ai provider dello spazio di lavoro per
+tutti.
+
+## Inviare l'identità
+
+Se gestisci tu il gateway collegato come provider, attiva **Send identity** nella pagina del provider. Console aggiunge l'header `x-opencode-actor`
+a ogni richiesta al modello che inoltra a quel gateway. L'header identifica il membro o l'account di servizio che ha inviato la richiesta, così
+il tuo gateway può registrare o limitare le richieste per mittente.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- È disattivato per impostazione predefinita, e cambiare l'URL di base lo disattiva.
+- L'impostazione non compare se usi ancora l'API ufficiale del provider, ad esempio `https://api.openai.com/v1`,
+  perché il provider ignora l'header.
+- Console rimuove qualsiasi header `x-opencode-*` inviato da un client, quindi l'unico `x-opencode-actor` che il tuo gateway riceve è
+  quello firmato da Console.
+- **Test connection** e l'elenco dei modelli chiamano `GET <base URL>/models` con la sola credenziale, quindi non richiedere l'
+  header su quella route.
+
+### Token
+
+L'header è un JWT che Console firma per ogni richiesta.
+
+| Campo        | Valore                                           |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | L'URL di base del provider senza barre finali    |
+| `iat`, `exp` | `exp` è 120 secondi dopo `iat`                   |
+
+| Claim                | Valore                                                                 |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | `user_id` per un membro, `service_account_id` altrimenti               |
+| `workspace_id`       | Lo spazio di lavoro in cui è stata eseguita la richiesta               |
+| `user_id`, `email`   | Il membro, quando la richiesta è stata inviata da un membro            |
+| `service_account_id` | L'account di servizio, quando l'ha inviata un account di servizio (compresi gli agenti) |
+| `session_id`         | L'ID di sessione del client, quando ne ha inviato uno                  |
+| `request_id`         | L'ID che il client riceve nell'header di risposta `x-opencode-log-id`  |
+
+La richiesta di un membro porta un payload come questo:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Verificare il token
+
+Console pubblica le proprie chiavi pubbliche su `https://opencode.ai/inference/.well-known/jwks.json` con l'header
+`Cache-Control: public, max-age=300`. Verifica firma, issuer, audience, tipo e tempo trascorso dall'emissione del token, poi verifica lo spazio di lavoro. Questo
+esempio usa [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Imposta `audience` sull'URL di base del provider come salvato in Console, senza barre finali, e sostituisci `org_...` con
+l'ID dello spazio di lavoro del tuo URL di Console. Console pubblica una nuova chiave di firma prima di usarla, quindi un verificatore che
+cerca le chiavi per `kid`, come fa `createRemoteJWKSet`, continua a funzionare durante una rotazione.
+
+## Disabilitare o rimuovere
+
+Apri il menu **⋯** del provider:
+
+- **Disable** nasconde il provider e i suoi modelli ai membri ma conserva le sue impostazioni.
+- **Remove...** elimina il provider e i suoi modelli. Il dialogo mostra chi l'ha usato di recente e offre
+  **Disable instead**.
+
+Per ruotare una chiave, fai clic sulla credenziale nella pagina del provider e inserisci quella nuova.
+
+## Fatturazione
+
+Il provider ti addebita il costo dei token, senza detrarre crediti da Console. Console registra comunque ogni richiesta e
+il suo costo usando il prezzo del modello, quindi i report di utilizzo e i [budget](/console/budgets) lo includono.
+
+Per chiamare un provider dai tuoi strumenti invece che da OpenCode, usa l'[API dei provider](/console/api/providers).

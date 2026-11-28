@@ -1,0 +1,97 @@
+---
+title: "Effect SDK"
+description: "@opencode/sdk/effect で Effect プログラム内に OpenCode をホストします。Effect ネイティブの組み込み SDK です。"
+---
+
+`@opencode/sdk/effect` は Effect ネイティブの組み込み SDK です。操作は型付きの Effect と Stream を返し、所有する Scope を閉じると、ルーター、Location サービス、ファイバー、プラグイン登録が解放されます。
+
+```sh
+bun add @opencode/sdk effect@4.0.1
+```
+
+## ホストを作成する
+
+`Effect.scoped` の中でホストを作成し、生成された API グループまたは `sessions` エイリアスを使用します。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+組み込みホストは、`@opencode/client/effect` と同じスキーマ値、宣言されたエラー、リクエストオプション、Stream を使用します。
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## イベントのストリーミング
+
+ストリーミングのエンドポイントは Effect の `Stream` 値を返します。バックグラウンドで読み取る場合は、ホストの Scope 内で読み取り処理をフォークします。
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## カスタマイズ
+
+Effect プラグインを登録して OpenCode のインスタンスをカスタマイズします。組み込みホストを使って、エージェント、モデル、ツール、その他の動作をカスタマイズします。
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+プラグインのフック、transform、ツール、完全なプラグインコンテキストについては [Effect プラグインの完全なドキュメント](/build/plugins/effect)を参照してください。
+
+## Layer
+
+組み込みホストをアプリケーションのサービスにする場合は `OpenCode.layer()` を使用します。
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

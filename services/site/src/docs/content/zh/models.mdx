@@ -1,6 +1,6 @@
 ---
 title: 模型
-description: "为每个会话或单次运行选择模型、设置默认值，并配置变体、推理、提示词缓存和本地模型。"
+description: "为会话或单次运行选择模型，设置默认模型，以及配置变体、推理、提示词缓存和本地模型。"
 ---
 
 使用 `/models` 为当前会话选择模型：
@@ -9,11 +9,11 @@ description: "为每个会话或单次运行选择模型、设置默认值，并
 /models
 ```
 
-OpenCode 会列出来自 [models.dev](https://models.dev)、提供商集成以及你的配置中的模型。选择器只显示已启用、且其提供商在当前项目中可用的模型。连接提供商请参阅[提供商](/providers)。
+OpenCode 会列出 [models.dev](https://models.dev)、提供商集成和你自己的配置中的模型。只有已启用、且提供商在当前项目中可用的模型才会出现在选择列表里。连接提供商的步骤见[提供商](/providers)。
 
 ## 选择模型
 
-请直接从 `/models` 中选择条目，不要凭猜测填写提供商或模型 ID。所选模型只作用于当前会话，不会修改你的配置。
+直接在 `/models` 中选模型，不用猜提供商或模型 ID。所选模型只对当前会话生效，不会修改配置。
 
 ```text
 anthropic/claude-sonnet-5-5
@@ -23,7 +23,7 @@ anthropic/claude-sonnet-5-5
 
 - 模型必须已启用。
 - 其提供商必须在当前项目中可用。
-- 其他项目中的凭据和配置不会自动沿用过来。
+- 当前项目不会自动沿用其他项目的凭据和配置。
 
 ## 单次运行
 
@@ -46,7 +46,7 @@ agent 和命令也可以选择各自的模型。请参阅[agent](/agents)和[命
 }
 ```
 
-如果配置的模型已启用且其提供商可用，它就会成为模型目录的默认模型。否则，OpenCode 会回退到最新的受支持可用模型。
+如果配置的模型已启用，且其提供商可用，它就会成为目录中的默认模型。否则，OpenCode 会改用支持且可用的模型中最新的一个。
 
 - 会话中已选择的模型优先于配置的默认模型。
 - 切换会话的模型不会改写配置文件。
@@ -68,13 +68,13 @@ OPENCODE_DISABLE_FREE_MODELS=1 opencode serve
 opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 ```
 
-免费是指 `opencode` 或 `opencode-go` 中没有输入价格的模型。这些模型会从目录和默认值中消失；显式选择它们会失败并提示 `Model unavailable`。未登录时，`opencode` 提供商不存在，直到你连接 OpenCode 控制台账号或设置 `OPENCODE_API_KEY`，后者会恢复其付费模型。
+免费模型是指 `opencode` 或 `opencode-go` 中不收取输入费用的模型。禁用后，目录不再显示这些模型，OpenCode 也不会将其作为默认模型。直接指定此类模型会报错 `Model unavailable`。未登录时，`opencode` 提供商不会出现在列表中；连接 OpenCode 控制台账号或设置 `OPENCODE_API_KEY` 后，即可继续使用它的付费模型。
 
 要为组织中的所有人屏蔽免费模型，请改用策略。请参阅[企业版](/enterprise#block-free-models)。
 
 ## 变体
 
-变体是同一个模型的具名选项，通常用于设置推理强度或 token 预算。为单次运行、会话、agent 或命令选择变体时，在后面加上 `#variant`：
+变体是同一个模型下带名称的选项，通常用来设置推理强度或 token 预算。为单次运行、会话、agent 或命令选择变体时，在模型后加上 `#variant`：
 
 ```bash
 opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
@@ -144,9 +144,9 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 | `supported` | 模型是否会推理。`false`，或 `true` 但没有控制项时，不会添加变体。 |
 | `toggle`    | 添加一个 `none` 变体来关闭推理。                             |
 | `effort`    | 提供的推理强度级别。`default` 保留提供商的默认值，不添加变体。 |
-| `budget`    | 可选的 `min` 和 `max` 思考 token 数。设置 `effort` 时会被忽略。     |
+| `budget`    | 可用 `min` 和 `max` 设置推理 token 数量的下限和上限。设置 `effort` 时会忽略此项。 |
 
-`variants` 中列出的变体会应用在根据 `capabilities.reasoning` 构建的变体之上。
+如果 `variants` 中列出了变体，OpenCode 会在根据 `capabilities.reasoning` 生成变体后，再应用这些变体。
 
 ## 选项
 
@@ -221,15 +221,15 @@ OpenCode 先应用提供商的值，再应用模型的值，最后应用所选�
 }
 ```
 
-这里，`openai/coding-default` 是可供选择的引用，而发送给提供商的是 `gpt-6.1-sol`。对于目录中尚不存在的模型，OpenCode 会假定：
+这里，你可以选择 `openai/coding-default`，而 OpenCode 会把 `gpt-6.1-sol` 发给提供商。对于目录中还没有的模型，OpenCode 会假定：
 
 - 支持 JSON 工具、文本和图片输入，以及文本输出。除非 `capabilities.freeform` 列出了对应格式，否则不支持自由格式工具输入。
 - 上下文上限为 200,000 token，输出上限为 32,000 token。
 - 未指定输入上限。
 
-OpenCode 识别 `text`、`regex` 和 `lark`。models.dev 中的其他格式名称会被忽略，但不会因此丢弃模型或其工具。如果位于目录模型前面的代理拒绝自由格式工具，请在该模型上将 `capabilities.freeform` 设为 `[]`。
+OpenCode 识别 `text`、`regex` 和 `lark`，并忽略 models.dev 中的其他格式名称，但仍会保留模型及其工具。如果目录中的模型通过不接受自由格式工具的代理提供服务，请在该模型上将 `capabilities.freeform` 设为 `[]`。
 
-这些只是回退假设，并非检测到的能力。如果知道准确的值，请设置 `capabilities` 和 `limit`；显式设置的值会替换回退值。自动压缩以 `limit.input` 为准，但不会超过 `limit.context`，详见[窗口](/compaction#window)。添加 `disabled: true` 可以将模型从可用目录中隐藏：
+这些只是缺省假设，不是 OpenCode 检测到的模型能力。如果知道实际能力和上限，请通过 `capabilities` 和 `limit` 覆盖缺省值。自动压缩以 `limit.input` 为准，但不会超过 `limit.context`，详见[窗口](/compaction#window)。添加 `disabled: true` 可将模型从目录中隐藏：
 
 ```jsonc title="opencode.jsonc"
 {
@@ -294,9 +294,9 @@ OpenCode 能识别 `reasoning`、`reasoning_content` 和 `reasoning_text`，也�
 
 随后，OpenCode 会用 `cache_control: { "type": "ephemeral" }` 标记最后一个工具定义、系统提示词和最新一条消息，使用端点默认的五分钟缓存有效期。对于阿里云百炼（Alibaba Model Studio）的模型，请使用 `"alibaba"`，它们接受相同的标记，但会忽略工具定义上的标记。如果某个提供商下的所有模型都接受同一种格式，可以改为在提供商上设置 `compatibility.cacheFormat`。其他字段请参阅[兼容性](#compatibility)。
 
-### 缓存生命周期
+### 缓存有效期
 
-OpenCode 默认不发送缓存生命周期，因此各提供商会使用自己的默认值，例如 Anthropic 的五分钟。可以在提供商或模型上设置 `settings.cache.ttl` 来请求不同的时长。模型设置会覆盖提供商设置。
+OpenCode 默认不发送缓存有效期，由提供商使用自己的默认值，例如 Anthropic 默认缓存五分钟。你可以在提供商或模型上设置 `settings.cache.ttl` 来指定其他时长，模型设置优先。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -325,7 +325,7 @@ Gemini 这类无需标记即自动缓存的提供商会忽略它。有效期越�
 
 ## 兼容性
 
-`compatibility` 描述模型所通过 API 的请求和响应特性，例如哪个字段携带推理内容，或者端点是否接受 `prompt_cache_key`。每个模型只通过一个 API 提供服务，字段仅在该 API 读取它时生效，其他字段会被忽略。
+`compatibility` 描述模型 API 的请求和响应特性，例如推理内容放在哪个字段，或端点是否接受 `prompt_cache_key`。每个模型只通过一个 API 提供服务，只有该 API 会读取的字段才会生效。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -346,8 +346,8 @@ Gemini 这类无需标记即自动缓存的提供商会忽略它。有效期越�
 
 | 字段 | 作用 | 读取方 | 取值与默认值 |
 | --- | --- | --- | --- |
-| `reasoningField` | 携带推理内容的助手消息字段。读取流式推理时优先检查该字段，回传之前的推理时也使用它。 | OpenAI Chat | 除 `role`、`content`、`refusal` 或 `tool_calls` 之外的任意字段名。未设置时使用流中看到的字段，否则为 `reasoning_content`。 |
-| `requireReasoning` | 在每条之前的助手消息中发送推理字段，没有推理时发送空字符串。 | OpenAI Chat | `true` 或 `false`。设置了 `reasoningField` 或模型为 DeepSeek 时默认为 `true`，否则为 `false`。 |
+| `reasoningField` | 携带推理内容的助手消息字段。读取流式推理时优先检查该字段，回传之前的推理时也使用它。 | OpenAI Chat | 除 `role`、`content`、`refusal` 或 `tool_calls` 之外的任意字段名。未设置时，使用从流中识别出的字段；如果识别不到，则用 `reasoning_content`。 |
+| `requireReasoning` | 回传历史助手消息时，每条消息都附带推理字段；没有推理内容时，该字段为空字符串。 | OpenAI Chat | `true` 或 `false`。设置了 `reasoningField` 或模型为 DeepSeek 时默认为 `true`，否则为 `false`。 |
 | `maxTokensField` | 携带输出 token 上限的请求体字段。 | OpenAI Chat | `max_completion_tokens` 或 `max_tokens`。未设置时，对需要它的提供商（例如 DeepSeek、Moonshot、Together AI、Z.AI 和 Cerebras）检测为 `max_tokens`，否则为 `max_completion_tokens`。 |
 | `requireFinishReason` | 将没有 `finish_reason` 就结束的流视为不完整响应错误。设为 `false` 则接受其为已完成。 | OpenAI Chat | `true` 或 `false`。默认为 `true`。 |
 | `requireAssistantAfterTool` | 在工具结果和下一条用户消息之间插入一条助手消息，适用于拒绝该顺序的端点。 | OpenAI Chat | `true` 或 `false`。Mistral 系列模型 ID 默认为 `true`，否则为 `false`。 |
@@ -442,9 +442,9 @@ OpenCode 会在后台刷新模型列表，并从 LM Studio 读取上下文、视
 }
 ```
 
-OpenCode 会检查 `/health`，在后台刷新 `/v1/models`，将上报的 `max_model_len` 作为上下文上限，并且只纳入所有者为 `vllm` 的模型卡片。
+OpenCode 会检查 `/health`，在后台刷新 `/v1/models`，以返回的 `max_model_len` 作为上下文上限，并且只收录所有者为 `vllm` 的模型卡。
 
-已发现的模型会声明支持文本输入和输出，但不声明支持视觉或工具。vLLM 需要通过 `--enable-auto-tool-choice` 和 `--tool-call-parser` 等服务器参数启用工具调用，而模型发现不会上报这些参数。
+自动发现的模型只声明支持文本输入和输出，不声明支持视觉或工具。vLLM 可通过 `--enable-auto-tool-choice` 和 `--tool-call-parser` 等服务器参数启用工具调用，但自动发现不会报告这些参数。
 
 如果使用其他端点或需要认证的服务器，请设置其 OpenAI 兼容 URL：
 
@@ -499,7 +499,7 @@ OpenCode 会检查 `/health`，在后台刷新 `/v1/models`，将上报的 `max_
 }
 ```
 
-请填写服务器上真实的模型名称、上限、输入输出类型以及工具支持情况。OpenCode 无法检测自定义模型的回退值是否准确。如果端点需要密钥，请在 `settings` 中添加 `apiKey`，并使用环境变量替换，例如 `"apiKey": "{env:LOCAL_API_KEY}"`；不要把密钥提交到代码仓库。
+请填写服务器上模型的实际名称、上限、输入输出类型和工具支持情况。OpenCode 无法验证自定义模型的缺省值是否准确。如果端点需要密钥，请在 `settings` 中添加 `apiKey`，通过环境变量传入密钥，例如 `"apiKey": "{env:LOCAL_API_KEY}"`。不要把密钥提交到代码仓库。
 
 ## 模型引用
 
@@ -542,7 +542,7 @@ openrouter/anthropic/claude-sonnet-5.5#high
 ```
 
 - 选择器对象使用 `model`；提供商目录条目则使用 `modelID` 表示发送给提供商的 ID。
-- 虽然根级选择的结构接受变体，但 V2 的目录默认模型不会保留它。请改为在会话、单次运行、agent 或命令中选择变体。
+- 顶层的模型选择配置可以填写变体，但 V2 的默认模型不会保留该变体。请在会话、单次运行、agent 或命令中单独指定变体。
 - 模型选项因提供商而异，其他提供商包可能会忽略或拒绝它们。
-- 目录数据、凭据和配置都限定在各自的位置范围内。在一个项目中可用的模型，在另一个项目中可能不可用。
+- 目录数据、凭据和配置都只在各自的 Location 内生效。某个模型在一个项目中可用，在另一个项目中可能不可用。
 - 配置文件通常会自动重新加载。已经开始的模型请求会继续使用它开始时的设置。
