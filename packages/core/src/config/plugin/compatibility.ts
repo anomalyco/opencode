@@ -3,7 +3,7 @@ export * as ConfigCompatibilityPlugin from "./compatibility.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { Effect, FiberMap, PubSub, SchemaIssue, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Skill } from "../../skill.js"
@@ -39,6 +39,7 @@ export const Plugin = define({
         const roots = config.compatibility ? yield* config.compatibility() : { claude: [], agents: [] }
         const directories = [...roots.claude, ...roots.agents].map((root) => path.join(root, "skills"))
         const loaded = new Map<Skill.ID, Skill.Info>()
+        const formatIssue = SchemaIssue.makeFormatterDefault()
         for (const directory of directories) {
           const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
           if (!resolved) continue
@@ -51,6 +52,11 @@ export const Plugin = define({
             if (!content) continue
             const parsed = SkillFile.parse(resolved, filepath, content)
             if (parsed._tag === "Parsed") loaded.set(parsed.skill.id, parsed.skill)
+            else if (parsed.reason === "markdown") {
+              yield* Effect.logWarning("skill file skipped", { filepath, reason: "markdown" })
+            } else {
+              yield* Effect.logWarning("skill file skipped", { filepath, reason: "frontmatter", issue: formatIssue(parsed.issue) })
+            }
           }
         }
         skills.splice(0, skills.length, ...loaded.values())
