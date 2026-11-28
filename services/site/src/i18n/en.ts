@@ -44,7 +44,6 @@ export const dict = {
   "legal.englishGoverns": "Where a translation and the English differ, the English version governs.",
   "notFound.title": "Not Found | OpenCode",
   "notFound.heading": "404 - Page Not Found",
-  "notFound.home": "Home",
   "notFound.docs": "Docs",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
@@ -64,7 +63,6 @@ export const dict = {
     "OpenCode is the open source coding agent that works where you do. Connect AI models from 200+ providers, including Claude, GPT and Gemini, or start free.",
   "temp.title": "opencode | Coding agent built for the terminal",
   "temp.hero.title": "The coding agent built for the terminal",
-  "temp.zen": "OpenCode Models",
   "temp.feature.models.beforeLink": "Supports 200+ LLM providers through",
   "home.banner.badge": "New",
   "home.promo.title": "Introducing Tabs for Desktop",
@@ -218,7 +216,6 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "account",
   "go.faq.a4.p3": "Cancel any time.",
   "go.faq.q5": "What about data and privacy?",
-  "go.faq.a5.model": "Model",
   "go.faq.a5.training": "Model training",
   "go.faq.a5.retention": "Data retention",
   "go.faq.a5.retention30": "30 days",
@@ -241,7 +238,6 @@ export const dict = {
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
     "Free models include Big Pickle plus promotional models available at the time. Go offers a curated model lineup with higher request quotas enforced across rolling windows: 20% of the monthly allowance per 5 hours, 50% per week, and 100% per month. Model-specific allowances may differ (actual request counts vary by model and usage).",
-  "workspace.nav.zen": "OpenCode Models",
   "workspace.newUser.feature.lockin.body":
     "Use OpenCode Models with any coding agent, and continue using other providers with opencode whenever you want.",
   "download.title": "OpenCode | Download for macOS, Windows, Linux and mobile",
@@ -664,10 +660,6 @@ export const dict = {
   "go.referral.ended.label": "Warning",
   "go.referral.ended":
     "The referral program has ended. Referral links no longer earn credit for you or the person who shared them.",
-  "nav.models": "Models",
-  "nav.teams": "Teams",
-  "nav.subscription": "Subscription",
-  "nav.console": "Console",
   "legal.status.operational": "All systems operational",
   "legal.status.degraded": "Degraded performance",
   "legal.status.outage": "Service disruption",

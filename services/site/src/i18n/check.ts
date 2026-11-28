@@ -2,14 +2,15 @@
 // the page copy (src/i18n/content/<locale>.ts). Run it from services/site:
 //
 //   bun src/i18n/check.ts [locale ...] [--stamp]
+//   bun src/i18n/check.ts locale --stamp --keep-english=entry [--keep-english=entry ...]
 //
 // Errors (exit 1, and test/i18n.test.ts fails): a dictionary key the English doesn't have, and a
 // translation whose {{params}}, [text](link) ids or `code` spans differ from the English.
 // Warnings: entries still in English that were never reviewed, entries whose English changed since
 // they were translated, and page copy the English no longer has (an item whose English title
 // changed, for example), which no page shows. A stamp (src/i18n/stamps/<locale>.json) records a hash of the English
-// each entry was translated from; --stamp records the current English for every translated entry,
-// so run it once everything the check lists is translated.
+// each entry was translated from; --stamp records the current English for every translated entry.
+// Use --keep-english=entry for each reviewed entry that should stay as written.
 import path from "node:path"
 import { dict as en } from "~/i18n/en"
 import { LOCALES, type Locale } from "~/lib/language"
@@ -24,9 +25,12 @@ type Report = {
   stale: string[]
   unused: string[]
   stamps: Record<string, string>
+  review: Record<string, string>
 }
 
 const stampDir = path.join(import.meta.dir, "stamps")
+
+type Entry = { id: string; english: string; value?: string; inherited?: boolean }
 
 /** Every check for one locale. `stamps` is what --stamp would write. */
 export async function checkLocale(locale: Exclude<Locale, "en">): Promise<Report> {
@@ -34,22 +38,29 @@ export async function checkLocale(locale: Exclude<Locale, "en">): Promise<Report
   const content: unknown = (await import(`./content/${locale}.ts`)).content
   const file = Bun.file(path.join(stampDir, `${locale}.json`))
   const stamps: Record<string, string> = (await file.exists()) ? await file.json() : {}
-  const report: Report = { locale, errors: [], untranslated: [], stale: [], unused: [], stamps: {} }
+  const report: Report = { locale, errors: [], untranslated: [], stale: [], unused: [], stamps: {}, review: {} }
 
   const english = en as Record<string, string>
   Object.keys(dict)
     .filter((key) => !(key in english))
     .forEach((key) => report.errors.push(`${key}: not in the English dictionary`))
-  const entries = [
+  const englishContent = contentSource((key, params) => interpolate(english[key], params))
+  const localizedContent = contentSource((key, params) => interpolate(dict[key] || english[key], params))
+  const entries: Entry[] = [
     ...Object.keys(english).map((key) => ({ id: key, english: english[key], value: dict[key] })),
-    ...contentEntries(contentSource((key, params) => interpolate(english[key], params)), content, "", report.unused).map((entry) => ({ ...entry, id: `content:${entry.id}` })),
+    ...contentEntries(englishContent, localizedContent, content, "", report.unused),
   ]
   for (const entry of entries) {
+    // A translation inherited from the dictionary is already tracked under its dictionary key.
+    if (entry.inherited) continue
     const hash = Bun.hash(entry.english).toString(36)
     const translated = entry.value !== undefined && entry.value !== "" && entry.value !== entry.english
     if (translated) report.errors.push(...mismatches(entry.id, entry.english, entry.value!))
     if (translated || stamps[entry.id]) report.stamps[entry.id] = translated ? hash : stamps[entry.id]
-    if (!translated && !stamps[entry.id]) report.untranslated.push(entry.id)
+    if (!translated && !stamps[entry.id]) {
+      report.untranslated.push(entry.id)
+      report.review[entry.id] = hash
+    }
     if (stamps[entry.id] && stamps[entry.id] !== hash) report.stale.push(entry.id)
   }
   return report
@@ -77,28 +88,42 @@ function mismatches(id: string, english: string, value: string) {
  * path content/index.ts merges on (keyed list items by item id). Entries the English doesn't have go
  * to `unused`.
  */
-function contentEntries(base: unknown, overlay: unknown, at: string, unused: string[]): { id: string; english: string; value?: string }[] {
+function contentEntries(base: unknown, localized: unknown, overlay: unknown, at: string, unused: string[]): Entry[] {
   if (typeof base === "string") {
     if (structuralPaths.some((pattern) => matches(pattern, at))) return []
-    return [{ id: at, english: base, value: typeof overlay === "string" ? overlay : undefined }]
+    const value = typeof overlay === "string" && overlay ? overlay : undefined
+    return [
+      {
+        id: `content:${at}`,
+        english: base,
+        value,
+        inherited: value === undefined && typeof localized === "string" && localized !== base,
+      },
+    ]
   }
   const join = (key: string) => (at ? `${at}.${key}` : key)
   if (Array.isArray(base)) {
     const list: readonly unknown[] = base
+    const translated: readonly unknown[] = Array.isArray(localized) ? localized : []
     if (keyedList(list)) {
       const ids = itemIds(list)
       const items = (isRecord(overlay) ? overlay : {}) as Record<string, unknown>
       Object.keys(items)
         .filter((id) => !ids.includes(id))
         .forEach((id) => unused.push(`content:${join(id)}`))
-      return list.flatMap((item, index) => contentEntries(item, items[ids[index]], join(ids[index]), unused))
+      return list.flatMap((item, index) =>
+        contentEntries(item, translated[index], items[ids[index]], join(ids[index]), unused),
+      )
     }
     const items = Array.isArray(overlay) ? overlay : []
     items.slice(list.length).forEach((_, index) => unused.push(`content:${join(String(list.length + index))}`))
-    return list.flatMap((item, index) => contentEntries(item, items[index], join(String(index)), unused))
+    return list.flatMap((item, index) =>
+      contentEntries(item, translated[index], items[index], join(String(index)), unused),
+    )
   }
   if (!isRecord(base)) return []
   const values = (isRecord(overlay) ? overlay : {}) as Record<string, unknown>
+  const translated = isRecord(localized) ? localized : {}
   const fields = Object.keys(base).filter(
     (key) =>
       !(structural as readonly string[]).includes(key) &&
@@ -107,7 +132,7 @@ function contentEntries(base: unknown, overlay: unknown, at: string, unused: str
   Object.keys(values)
     .filter((key) => !fields.includes(key))
     .forEach((key) => unused.push(`content:${join(key)}`))
-  return fields.flatMap((key) => contentEntries(base[key], values[key], join(key), unused))
+  return fields.flatMap((key) => contentEntries(base[key], translated[key], values[key], join(key), unused))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -123,7 +148,14 @@ function matches(pattern: string, at: string) {
 if (import.meta.main) {
   const args = process.argv.slice(2)
   const stamp = args.includes("--stamp")
+  const keepEnglish = args
+    .filter((arg) => arg.startsWith("--keep-english="))
+    .map((arg) => arg.slice("--keep-english=".length))
   const asked = args.filter((arg) => !arg.startsWith("--"))
+  if (keepEnglish.length && (!stamp || asked.length !== 1)) {
+    console.error("--keep-english requires --stamp and exactly one locale")
+    process.exit(2)
+  }
   const unknown = asked.filter((arg) => !(LOCALES as readonly string[]).includes(arg) || arg === "en")
   if (unknown.length) {
     console.error(`unknown locale ${unknown.join(", ")}; use one of ${LOCALES.slice(1).join(" ")}`)
@@ -131,6 +163,11 @@ if (import.meta.main) {
   }
   const locales = (asked.length ? asked : LOCALES.slice(1)) as Exclude<Locale, "en">[]
   const reports = await Promise.all(locales.map(checkLocale))
+  const invalid = keepEnglish.filter((id) => !Object.hasOwn(reports[0].review, id))
+  if (invalid.length) {
+    console.error(`not awaiting English review: ${invalid.join(", ")}`)
+    process.exit(2)
+  }
   for (const report of reports) {
     console.log(
       `${report.locale}: ${report.errors.length} errors, ${report.untranslated.length} untranslated, ${report.stale.length} changed in English, ${report.unused.length} unused`,
@@ -141,8 +178,13 @@ if (import.meta.main) {
       report.stale.forEach((id) => console.log(`  todo   ${id} (English changed)`))
       report.unused.forEach((id) => console.log(`  unused ${id} (no English to translate)`))
     }
-    if (stamp && !report.errors.length)
-      await Bun.write(path.join(stampDir, `${report.locale}.json`), `${JSON.stringify(sortKeys(report.stamps), null, 2)}\n`)
+    if (stamp && !report.errors.length) {
+      keepEnglish.forEach((id) => (report.stamps[id] = report.review[id]))
+      await Bun.write(
+        path.join(stampDir, `${report.locale}.json`),
+        `${JSON.stringify(sortKeys(report.stamps), null, 2)}\n`,
+      )
+    }
   }
   if (reports.some((report) => report.errors.length)) process.exit(1)
 }

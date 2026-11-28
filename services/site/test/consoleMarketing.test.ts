@@ -29,8 +29,8 @@ describe("Console marketing navigation gate", () => {
     expect(result.stdout.toString().trim()).toBe(String(enabled))
   })
 
-  test.each([...LOCALES])("provides navigation labels through the English fallback for %s", (locale) => {
-    expect(i18n(locale)["nav.models"]).toBe("Models")
-    expect(i18n(locale)["nav.teams"]).toBe("Teams")
+  test.each([...LOCALES])("provides the current navigation labels for %s", (locale) => {
+    expect(i18n(locale)["site.nav.models"]).not.toBeEmpty()
+    expect(i18n(locale)["site.nav.subscriptions"]).not.toBeEmpty()
   })
 })
