@@ -12,6 +12,20 @@ test("stash JSONL skips corruption and retains newest entries", () => {
   expect(result[0]?.prompt.text).toBe("2")
 })
 
+test("frecency JSONL skips entries without a usable path and timestamps", () => {
+  const result = parseFrecency(
+    [
+      JSON.stringify({ frequency: 3, lastOpen: 1 }),
+      JSON.stringify({ path: "", frequency: 3, lastOpen: 1 }),
+      JSON.stringify({ path: 7, frequency: 3, lastOpen: 1 }),
+      JSON.stringify({ path: "checked", lastOpen: 1 }),
+      JSON.stringify({ path: "stamped", frequency: "3", lastOpen: 1 }),
+      JSON.stringify({ path: "kept", frequency: 1, lastOpen: 2 }),
+    ].join("\n"),
+  )
+  expect(result).toEqual([{ path: "kept", frequency: 1, lastOpen: 2 }])
+})
+
 test("frecency JSONL skips corruption, keeps latest path state, and limits entries", () => {
   const entries = Array.from({ length: MAX_FRECENCY_ENTRIES + 1 }, (_, index) =>
     JSON.stringify({ path: String(index), frequency: 1, lastOpen: index }),
