@@ -137,6 +137,7 @@ export const Definitions = {
   "session.toggle.exploration_grouping": keybind("none", "Toggle related tool call grouping"),
   "session.verbosity.cycle": keybind("none", "Cycle transcript verbosity"),
   "session.child.first": keybind("down", "Toggle subagent picker"),
+  "session.child.activity": keybind("ctrl+g", "Toggle agent activity panel"),
   "session.child.next": keybind("right", "Go to next child session"),
   "session.child.previous": keybind("left", "Go to previous child session"),
   "session.parent": keybind("up", "Go to parent session"),

@@ -1802,7 +1802,7 @@ test("direct footer counts queued and steering work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("ctrl+x q 2 pending · ↓ 1 subagent · Build")
+    expect(frame).toContain("ctrl+x q 2 pending · ↓ 1 subagent · ctrl+g agents · Build")
     expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
@@ -2024,7 +2024,7 @@ test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidd
   }
 })
 
-test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)", async (queued) => {
+test.each(["ctrl+n", "none"])("context actions use only configured bindings (%s)", async (queued) => {
   const app = await renderFooter({
     width: 96,
     tuiConfig: createTuiResolvedConfig({
@@ -2049,8 +2049,8 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
     const frame = app.captureCharFrame()
     expect(frame).toContain(
       queued === "none"
-        ? "ctrl+i interrupt · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu"
-        : "ctrl+i interrupt · ctrl+g 1 pending · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu",
+        ? "ctrl+i interrupt · ctrl+j 1 subagent · ctrl+g agents · Build · gpt-5 · ctrl+y menu"
+        : "ctrl+i stop · ctrl+n 1 pending · ctrl+j 1 sub · ctrl+g agents · Build · gpt-5 · ctrl+y menu",
     )
     for (const hidden of ["ctrl+b", "ctrl+x", "ctrl+p", "esc", "↓"]) expect(frame).not.toContain(hidden)
   } finally {
@@ -2096,7 +2096,7 @@ test("direct footer keeps work, model detail, context, and cost in priority orde
     await app.renderOnce()
     const statusline = footerStatusline(app.renderer.root)
     expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
-      "\u25aa esc stop · ↓ 1 sub · Plan · a-model-name-long-enough… · 159.6K (16%) · $4.23",
+      "\u25aa esc stop · ↓ 1 sub · ctrl+g agents · Plan · a-model-… · 16% ctx",
     )
   } finally {
     app.cleanup()
@@ -2242,7 +2242,7 @@ test("direct footer never offers backgrounding for a subagent", async () => {
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("↓ 1 subagent · Build · gpt-5 · ctrl+p menu")
+    expect(frame).toContain("↓ 1 subagent · ctrl+g agents · Build · gpt-5 · ctrl+p menu")
     expect(frame).not.toContain("ctrl+b")
     expect(frame).not.toContain("queued")
   } finally {

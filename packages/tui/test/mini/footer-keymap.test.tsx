@@ -27,6 +27,8 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
         label: "Explore",
         description: "Inspect the keymap",
         status: "running",
+        activeTool: "read",
+        toolStart: Date.now(),
       },
     ],
     details: {},
@@ -111,6 +113,33 @@ async function openSubagent(app: Awaited<ReturnType<typeof testRender>>) {
   app.mockInput.pressEnter()
   await app.renderOnce()
 }
+
+test("ctrl+g toggles the agent activity panel", async () => {
+  const { app } = await renderSubagent("ctrl+i")
+  try {
+    await app.renderOnce()
+    // Collapsed: status line shows the "agents" hint, no activity rows yet.
+    expect(app.captureCharFrame()).toContain("ctrl+g")
+    expect(app.captureCharFrame()).toContain("agents")
+    // Press the configured toggle key.
+    app.mockInput.pressKey("g", { ctrl: true })
+    await app.renderOnce()
+    // Expanded: activity rows appear above the status line (which now shows "hide" instead of "agents").
+    // The running subagent's label and active tool are visible in the new rows.
+    const expandedFrame = app.captureCharFrame()
+    expect(expandedFrame).toContain("Explore")
+    expect(expandedFrame).toContain("read")
+    expect(expandedFrame).not.toContain("agents")
+    // Press again to collapse the activity panel.
+    app.mockInput.pressKey("g", { ctrl: true })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("agents")
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    app.renderer.destroy()
+  }
+})
 
 test("configured subagent key updates its hint and action", async () => {
   const { app, interrupted } = await renderSubagent("ctrl+i")

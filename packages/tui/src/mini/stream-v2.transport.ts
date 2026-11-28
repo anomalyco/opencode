@@ -12,7 +12,7 @@ import type {
 import { ClientError } from "@opencode/client/promise"
 import { Event } from "@opencode/schema/event"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { blockerStatus, pickBlockerView } from "./session-data"
+import { blockerStatus, footerActivityStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { toolImageCommits, userImageCommits, type ImageCommit } from "./stream-v2.image"
@@ -643,6 +643,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     wait.terminalError = undefined
   }
 
+  let prevActivityStatus = ""
   const syncBlockers = () => {
     if (state.closed || controller.signal.aborted || input.footer.isClosed) return
     const descendant = subagents.snapshot()
@@ -650,8 +651,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       permission: state.permissions[0] ?? descendant.permissions[0],
       form: state.forms[0] ?? descendant.forms[0] ?? state.globalForms[0],
     })
-    if (next.type === "prompt" && state.view.type === "prompt") return
     if (next.type !== "prompt" && state.view.type === next.type && next.request.id === state.view.request.id) return
+    const footerPatch =
+      next.type === "prompt"
+        ? footerActivityStatus(next, descendant, state.rootActive)
+        : { phase: "running" as const, status: blockerStatus(next) }
+    if (next.type === "prompt" && state.view.type === "prompt" && footerPatch.status === prevActivityStatus && !state.rootActive) return
+    prevActivityStatus = footerPatch.status ?? ""
     state.view = next
     writeSessionOutput(
       { footer: input.footer, trace: input.trace },
@@ -660,10 +666,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         updates: [
           {
             type: "stream.patch",
-            patch:
-              next.type === "prompt"
-                ? { phase: state.rootActive ? "running" : "idle", status: blockerStatus(next) }
-                : { status: blockerStatus(next) },
+            patch: next.type === "prompt" ? footerPatch : { status: footerPatch.status },
           },
           { type: "stream.view", view: next },
         ],
@@ -941,7 +944,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const settleSession = async (initial: OpenCodeClient) => {
     const client = await waitForSession(initial)
     for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true)
-    paintIdle(blockerStatus(state.view))
+    paintIdle(footerActivityStatus(state.view, subagents.snapshot(), false).status)
     await input.footer.idle()
   }
 
@@ -1027,10 +1030,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       reconnect: next.reconnect,
     })
     if (!current(attempt)) return
-    write([], {
-      phase: state.rootActive ? "running" : "idle",
-      status: state.rootActive ? "assistant responding" : blockerStatus(state.view),
-    })
+    write([], footerActivityStatus(state.view, subagents.snapshot(), state.rootActive))
     if (!state.rootActive && !next.reconnect) await input.footer.idle()
     if (!current(attempt)) return
   }
@@ -1894,7 +1894,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const epoch = state.executionEpoch
       await sdk.session.interrupt({ sessionID: input.sessionID, resume: true }).then(
         () => {
-          if (state.executionEpoch === epoch) paintIdle(blockerStatus(state.view))
+          if (state.executionEpoch === epoch) paintIdle(footerActivityStatus(state.view, subagents.snapshot(), false).status)
         },
         () => {},
       )

@@ -35,6 +35,7 @@ import { footerStatuslinePolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
 import type { ClipboardService } from "../context/clipboard"
 import { modelInfo } from "./variant.shared"
+import { activeToolSummaries, descendantActivityModel } from "./session-data"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
 import { formatContextUsage } from "../util/session"
@@ -64,6 +65,9 @@ import type {
 import type { RunTheme } from "./theme"
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+
+// How long a running subagent may go without an update before the collapsed footer shows its stall time.
+const STALL_HINT_MS = 10_000
 
 const EMPTY_BORDER = {
   topLeft: "",
@@ -202,8 +206,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   const variantCycle = () => monoShortcut(shortcuts.all("variant.cycle") ?? "", props.mono)
   const clearShortcut = () => shortcut("prompt.clear")
   const busy = createMemo(() => props.state().phase === "running")
+  // Show the work spinner while the parent is running or a subagent is working, so the footer is
+  // never visibly frozen during subagent-only activity.
+  const showSpinner = createMemo(() => busy() || activeTabs().length > 0)
   const started = createMemo(() => (busy() ? performance.now() : undefined))
-  const statusWidth = createMemo(() => Math.max(1, width() - (busy() ? 2 : 0)))
+  const statusWidth = createMemo(() => Math.max(1, width() - (showSpinner() ? 2 : 0)))
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const usage = createMemo(() => props.state().usage)
@@ -361,6 +368,31 @@ export function RunFooterView(props: RunFooterViewProps) {
     openTab(next.sessionID)
   }
   const [promptRows, setPromptRows] = createSignal(1)
+  const [expanded, setExpanded] = createSignal(false)
+  const [now, setNow] = createSignal(Date.now())
+  // Ticker runs only while the panel is open or a subagent is running, so elapsed/stall times stay
+  // live without a 1 Hz tick during idle sessions.
+  createEffect(() => {
+    if (!expanded() && activeTabs().length === 0) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(id))
+  })
+  const toolSummaries = createMemo(() =>
+    expanded() ? activeToolSummaries(tabs(), now()) : [],
+  )
+  // Longest time any running subagent has gone without an update. Surfaced in the collapsed footer
+  // once it crosses STALL_HINT_MS so a stuck subagent (e.g. a downed MCP server) is visible without
+  // opening the panel.
+  const subagentStall = createMemo(() => {
+    let max = 0
+    for (const tab of activeTabs()) {
+      if (tab.lastUpdatedAt === undefined) continue
+      max = Math.max(max, now() - tab.lastUpdatedAt)
+    }
+    return max
+  })
+  const activityShortcut = createMemo(() => shortcut("session.child.activity"))
   const composer = createPromptState({
     directory: props.directory,
     findFiles: props.findFiles,
@@ -410,11 +442,18 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     if (notice()) return notice()
     if (!footerDetails()) return shell() ? "Shell" : ""
+    if (stateStatus() === "reconnecting") return "reconnecting"
+    const s = stateStatus()
+    if (s.startsWith("task:")) {
+      const childModel = descendantActivityModel(subagent())
+      const info = childModel ? modelInfo(props.providers(), childModel) : undefined
+      if (info?.model) return `${s.split(" · ")[0]} · ${info.model}`
+      return s
+    }
     if (busy()) {
-      if (stateStatus() === "reconnecting") return "reconnecting"
       return interruptLabel() ? `${interruptLabel()} stop` : "Running"
     }
-    return stateStatus() || (shell() ? "Shell" : "")
+    return s || (shell() ? "Shell" : "")
   })
   const agentStatus = createMemo(() => {
     if (!footerDetails() || !prompt() || shell()) return undefined
@@ -449,16 +488,26 @@ export function RunFooterView(props: RunFooterViewProps) {
       return []
     }
 
-    const items: Array<{ id: "queued" | "subagents"; key: string; label: string; expanded?: string }> = []
+    const items: Array<{ id: "queued" | "subagents" | "activity"; key: string; label: string; expanded?: string }> = []
     if (queuedPrompts().length > 0 && queuedShortcut()) {
       items.push({ id: "queued", key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
+      // Append the stall time once a subagent has been quiet long enough to look stuck.
+      const stall = subagentStall()
+      const suffix = stall >= STALL_HINT_MS ? `${props.mono ? " - " : " · "}${Math.round(stall / 1000)}s` : ""
       items.push({
         id: "subagents",
         key: subagentShortcut(),
-        label: `${activeTabs().length} sub`,
-        expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`,
+        label: `${activeTabs().length} sub${suffix}`,
+        expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}${suffix}`,
+      })
+    }
+    if (activeTabs().length > 0 && activityShortcut()) {
+      items.push({
+        id: "activity" as const,
+        key: activityShortcut(),
+        label: expanded() ? "hide" : "agents",
       })
     }
     return items
@@ -479,7 +528,10 @@ export function RunFooterView(props: RunFooterViewProps) {
         expanded: footerDetails() && busy() && interruptLabel() ? `${interruptLabel()} interrupt` : undefined,
       },
       escape: shell() && !takeover() ? { key: "esc", label: "normal" } : undefined,
-      work: contextHintCandidates(),
+      work: contextHintCandidates().filter(
+        (item): item is typeof item & { id: "queued" | "subagents" | "activity" } =>
+          item.id === "queued" || item.id === "subagents" || item.id === "activity",
+      ),
       model: info ? { name: info.model, variant: info.variant } : undefined,
       agent: agentStatus(),
       context:
@@ -492,7 +544,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       cost: footerDetails() ? cost() : undefined,
       provider: info?.provider,
       menu: commandHint(),
-      spinner: busy() ? (props.mono ? "*" : "\u25aa") : undefined,
+      spinner: showSpinner() ? (props.mono ? "*" : "\u25aa") : undefined,
     })
   })
   const statusSections = createMemo(() => statuslineLayout().groups.filter((group) => group.id !== "spinner"))
@@ -519,7 +571,12 @@ export function RunFooterView(props: RunFooterViewProps) {
     return rows
   })
   createEffect(() => {
-    props.onRows(promptRows() + (!panel() && !menu() && !inspecting() ? statusRows() : 0) - 1)
+    // Activity rows render above the status line while expanded; count them so the host grows the
+    // footer and the status line is not clipped. toolSummaries() is [] unless expanded, so this is
+    // 0 when collapsed.
+    const bottom = !panel() && !menu()
+    const activityRows = bottom ? toolSummaries().length : 0
+    props.onRows(promptRows() + (bottom && !inspecting() ? statusRows() : 0) + activityRows - 1)
   })
 
   createEffect(() => {
@@ -579,6 +636,27 @@ export function RunFooterView(props: RunFooterViewProps) {
       },
     ],
   }))
+
+  Keymap.createLayer(() => ({
+    enabled: active().type === "prompt" && route().type === "composer" && activeTabs().length > 0,
+    commands: [
+      {
+        id: "session.child.activity",
+        title: "Toggle agent activity panel",
+        group: "Session",
+        run: () => {
+          setExpanded((v) => !v)
+        },
+      },
+    ],
+  }))
+
+  createEffect(() => {
+    // Expanded is the user's choice; only force-collapse when no subagents are running at all.
+    // The rows block renders only when it has rows, so an expanded panel between tool calls is
+    // just the status line with a "hide" hint — never a blank footer.
+    if (activeTabs().length === 0) setExpanded(false)
+  })
 
   Keymap.createLayer(() => ({
     enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
@@ -949,6 +1027,45 @@ export function RunFooterView(props: RunFooterViewProps) {
             </Show>
 
             <Show when={!panel() && !menu()}>
+              {/* Activity rows appear above the status line so the status line (spinner, model, hints) is always visible. */}
+              <Show when={expanded() && toolSummaries().length > 0}>
+                <box
+                  id="mini-agent-activity"
+                  width="100%"
+                  flexDirection="column"
+                  flexShrink={0}
+                  backgroundColor="transparent"
+                >
+                  <For each={toolSummaries()}>
+                    {(row) => (
+                      <box width="100%" flexDirection="row" gap={1} flexShrink={0}>
+                        <text fg={theme().text} flexShrink={0}>
+                          {row.label}
+                        </text>
+                        <text fg={theme().muted} flexShrink={0}>
+                          {props.mono ? " - " : " · "}
+                        </text>
+                        <text fg={row.tool ? theme().text : theme().muted} flexShrink={0}>
+                          {row.tool || "thinking"}
+                        </text>
+                        <text fg={theme().muted} flexShrink={1} wrapMode="none">
+                          {row.elapsedMs > 0 ? `  ${Math.round(row.elapsedMs / 1000)}s` : ""}
+                        </text>
+                        <box width={1} flexShrink={0}>
+                          <OneCellSpinner
+                            animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
+                            color={agentColor()}
+                            animations={props.tuiConfig.animations}
+                            glow={!props.mono}
+                            still={props.mono ? "*" : undefined}
+                            age={row.elapsedMs}
+                          />
+                        </box>
+                      </box>
+                    )}
+                  </For>
+                </box>
+              </Show>
               <box
                 id="mini-statusline"
                 width="100%"
@@ -957,7 +1074,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 flexShrink={0}
                 backgroundColor="transparent"
               >
-                <Show when={busy()}>
+                <Show when={showSpinner()}>
                   <box id="mini-work-spinner" width={1} flexShrink={0}>
                     <OneCellSpinner
                       animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
@@ -965,7 +1082,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       animations={props.tuiConfig.animations}
                       glow={!props.mono}
                       still={props.mono ? "*" : undefined}
-                      age={performance.now() - (started() ?? performance.now())}
+                      age={started() !== undefined ? performance.now() - started()! : 0}
                     />
                   </box>
                 </Show>

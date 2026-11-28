@@ -165,7 +165,7 @@ function map(
     },
     entry: {
       system: { body: scrollback(theme.text.muted) },
-      user: { body: scrollback(theme.text.base) },
+      user: { body: scrollback(theme.hue.interactive[400]) },
       assistant: { body: scrollback(theme.markdown.text) },
       reasoning: { body: scrollback(theme.text.muted) },
       tool: { body: scrollback(theme.text.muted), start: scrollback(theme.text.muted) },
