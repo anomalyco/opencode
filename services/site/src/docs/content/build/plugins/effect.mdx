@@ -11,8 +11,16 @@ plugins and their `node_modules` dependencies. Install them as peer/dev dependen
 rather than bundling them into your plugin.
 
 ```sh
-bun add --peer @opencode/plugin effect@4.0.1
+bun add --peer @opencode/plugin effect@4.1.0
 ```
+
+Use the `effect` version `@opencode/plugin` itself depends on. A different version installs a second copy of the
+library, and `Schema` values from the two copies are not interchangeable: tools and skills declared with your copy
+fail to type-check against the editors with `Effect<...>` and `Codec<...>` errors.
+
+Use the `effect` version `@opencode/plugin` itself depends on. A different version installs a second copy of the
+library, and `Schema` values from the two copies are not interchangeable: tools and skills declared with your copy fail
+to type-check against the editors with `Effect<...>` and `Codec<...>` errors.
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
 
@@ -1558,10 +1566,10 @@ so development installs only one copy.
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "effect": "^4.0.1"
+    "effect": "^4.1.0"
   },
   "devDependencies": {
-    "effect": "4.0.1"
+    "effect": "4.1.0"
   }
 }
 ```
