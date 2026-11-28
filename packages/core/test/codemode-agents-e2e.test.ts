@@ -43,6 +43,7 @@ import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { registerToolPlugin } from "./lib/tool"
+import { disabledWatcher } from "./fixture/watcher"
 
 const e2e = testEffect(Layer.empty)
 
@@ -132,6 +133,7 @@ const harness = Effect.fnUntraced(function* () {
       Database.node.replace(Database.configured({ path: ":memory:" })),
       Global.node.replace(Layer.succeedContext(global)),
       offlineModels,
+      disabledWatcher,
       PluginSupervisor.node.replace(pluginSupervisor),
       LayerNodePlatform.llmClient.replace(Layer.succeedContext(llmContext as Context.Context<LLMClientService>)),
       SessionRunnerModel.node.replace(modelLayer),

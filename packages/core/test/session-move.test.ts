@@ -660,6 +660,7 @@ describe("Session.move home expansion", () => {
             Project.node.replace(globalProjectNode),
             SessionExecution.node.replace(SessionExecution.noopLayer),
             offlineModels,
+            disabledWatcher,
           ]),
         )
         const moves = Context.get(context, SessionMove.Service)

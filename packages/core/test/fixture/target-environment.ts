@@ -9,6 +9,7 @@ import { posix } from "node:path"
 import { permissionLayer } from "../lib/permission"
 import { hostEnvironmentLayer } from "./environment"
 import { location } from "./location"
+import { disabledWatcher } from "./watcher"
 
 /** Options for a paired machine's environment in tests. */
 export const machineOptions = { local: false, path: posix, shell: "sh" } as const
@@ -35,6 +36,7 @@ export const elsewhere = (
     Location.node.replace(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     ),
+    disabledWatcher,
   ]
   // Resolves and authorizes exactly as the session does, then places each target in the other environment, on that
   // machine as a resolved machine path is.

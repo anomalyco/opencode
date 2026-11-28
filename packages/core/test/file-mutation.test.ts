@@ -15,6 +15,7 @@ import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
+import { disabledWatcher } from "./fixture/watcher"
 
 function mutationLayer(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
   const activeLocation = Layer.succeed(
@@ -24,6 +25,7 @@ function mutationLayer(directory: string, transformFiles: EnvironmentFilesTransf
   return AppNodeBuilder.build(LayerNode.group([FileAccess.node, FileMutation.node]), [
     Location.node.replace(activeLocation),
     Permission.node.replace(permissionLayer()),
+    disabledWatcher,
     Environment.node.replace(transformEnvironmentFiles(transformFiles)),
   ])
 }

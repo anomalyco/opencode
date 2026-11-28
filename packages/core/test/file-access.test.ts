@@ -15,6 +15,7 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity } from "./lib/tool"
+import { disabledWatcher } from "./fixture/watcher"
 
 const invocation = {
   ...toolIdentity,
@@ -27,6 +28,7 @@ function provide(requests: Permission.AssertInput[], denied?: string) {
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([FileAccess.node, Location.node]), [
       Location.node.replace(tempLocationLayer),
+      disabledWatcher,
       Permission.node.replace(
         permissionLayer({
           assert: (input) =>
