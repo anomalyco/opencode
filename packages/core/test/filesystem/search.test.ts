@@ -240,6 +240,35 @@ describe("FileSystemSearch", () => {
     }),
   )
 
+  it.live("keeps find resilient when an exact query passes through a file", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-find-probe-")))).path
+      yield* Effect.promise(() => mkdir(path.join(directory, "docs"), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(directory, "docs", "readme.md"), "notes"))
+      expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
+
+      const layer = AppNodeBuilder.build(FileSystem.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(directory) }, {
+                vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) },
+              }),
+            ),
+          ),
+        ),
+        FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: false })),
+      ])
+      yield* Effect.gen(function* () {
+        const filesystem = yield* FileSystem.Service
+        // realPath through a file fails with ENOTDIR, which resolve() turns into a defect; the
+        // best-effort probe must swallow it instead of failing the whole find.
+        expect(yield* filesystem.find({ query: "docs/readme.md/nope", type: "file" })).toEqual([])
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
   it.live("real fff finds files on first search", () =>
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-lazy-")))).path

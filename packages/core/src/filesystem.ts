@@ -159,7 +159,10 @@ const baseLayer = Layer.effect(
             if (!type || (input.type && input.type !== type)) return undefined
             return Entry.make({ path: RelativePath.make(exact + (type === "directory" ? path.sep : "")), type })
           }),
-          Effect.orElseSucceed(() => undefined),
+          // Best-effort probe: resolve() dies on non-NotFound realPath failures (ENOTDIR through a
+          // file, permission errors) and orElseSucceed only catches typed errors, so a path-like
+          // query that goes through a file failed the whole find. Swallow every cause instead.
+          Effect.catchCause(() => Effect.succeed<Entry | undefined>(undefined)),
         )
         return found ? [found, ...entries].slice(0, input.limit ?? 50) : entries
       }),
