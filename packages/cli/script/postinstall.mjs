@@ -111,17 +111,26 @@ function packageNames() {
 function copyBinary(source) {
   if (!fs.existsSync(source)) throw new Error(`Binary not found at ${source}`)
   fs.mkdirSync(path.dirname(targetBinary), { recursive: true })
-  if (fs.existsSync(targetBinary)) {
-    try {
-      fs.unlinkSync(targetBinary)
-    } catch {}
-  }
+  // Stage the new binary under a unique name next to the target and rename it into place. A plain
+  // copy straight onto the target is not safe: killing the process mid-copy (an interrupted
+  // upgrade, a forced npm exit) leaves a truncated opencode.exe, which Windows refuses to start
+  // and reports as a bogus "16-bit application" error. The rename also keeps the previous binary
+  // when anything below fails, instead of deleting it up front.
+  const staged = `${targetBinary}.${process.pid}.${Date.now()}.tmp`
   try {
-    fs.linkSync(source, targetBinary)
-  } catch {
-    fs.copyFileSync(source, targetBinary)
+    try {
+      fs.linkSync(source, staged)
+    } catch {
+      fs.copyFileSync(source, staged)
+    }
+    fs.chmodSync(staged, 0o755)
+    fs.renameSync(staged, targetBinary)
+  } catch (error) {
+    try {
+      fs.rmSync(staged, { force: true })
+    } catch {}
+    throw error
   }
-  fs.chmodSync(targetBinary, 0o755)
 }
 
 function resolveBinary(name) {
