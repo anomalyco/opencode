@@ -370,6 +370,42 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
+  it.live("bounds the finished commands one server keeps in the daemon across all its Locations", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      // Each Location stays under its own cap, so only the server-wide one can forget anything.
+      const perLocation = 21
+      const locations = Math.ceil((Shell.DAEMON_EXITED_LIMIT + 1) / perLocation)
+      const total = locations * perLocation
+      const finished = yield* Effect.forEach(Array.from({ length: locations }), () =>
+        Effect.gen(function* () {
+          const directory = (yield* tmpdirScoped()).path
+          const { shell } = yield* env.openLocation(directory)
+          return yield* Effect.forEach(Array.from({ length: perLocation }), (_, index) =>
+            Effect.gen(function* () {
+              const info = yield* shell.create({ shell: "/bin/sh", command: `echo ${index}` })
+              env.daemon.exit(env.created().length, 0)
+              yield* shell.wait(info.id)
+              return { shell, info }
+            }),
+          )
+        }),
+      ).pipe(Effect.map((all) => all.flat()))
+      const evicted = total - Shell.DAEMON_EXITED_LIMIT
+      yield* until(() => env.daemon.processes.length === Shell.DAEMON_EXITED_LIMIT)
+      // The oldest finished commands, wherever they ran, were forgotten in the daemon and their files deleted.
+      expect(env.daemon.processes.map((process) => process.id)).toEqual(
+        Array.from({ length: Shell.DAEMON_EXITED_LIMIT }, (_, index) => evicted + index + 1),
+      )
+      yield* until(() => finished.slice(0, evicted).every(({ info }) => !existsSync(info.file)))
+      for (const { shell, info } of finished.slice(0, evicted))
+        expect(yield* shell.get(info.id).pipe(Effect.flip)).toBeInstanceOf(Shell.NotFoundError)
+      const kept = finished[evicted]!
+      expect(yield* kept.shell.get(kept.info.id)).toMatchObject({ status: "exited", exit: 0 })
+      expect(existsSync(kept.info.file)).toBe(true)
+    }),
+  )
+
   it.live("takes its commands back after a restart and leaves other Locations' alone", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()

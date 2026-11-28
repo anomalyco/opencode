@@ -47,6 +47,9 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.No
 // Keep recent exited processes observable in memory, including their file-backed output.
 // The process-local cap complements the time-based sweep, which also cleans files left by restarts.
 const EXITED_LIMIT = 25
+// The daemon keeps a finished process unreaped until it is forgotten, so one server's finished daemon commands are
+// also capped across all its Locations, however many directories it serves.
+export const DAEMON_EXITED_LIMIT = 100
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
 const SPAN_COMMAND_LIMIT = 200
@@ -348,6 +351,16 @@ const commandRuns = <E>(host: CommandHost<E>) =>
     // them are left to the job registry, which keeps their rows for it.
     const fork = (effect: Effect.Effect<void>) =>
       effect.pipe(Effect.forkIn(scope, { startImmediately: true }), Effect.setContext(context))
+    // Finished commands of every Location, oldest first, each with how its Location forgets it.
+    const exited = new Map<Shell.ID, Effect.Effect<void>>()
+    const evictExited = Effect.fnUntraced(function* () {
+      while (exited.size > DAEMON_EXITED_LIMIT) {
+        const oldest = exited.entries().next().value
+        if (!oldest) break
+        exited.delete(oldest[0])
+        yield* oldest[1]
+      }
+    })
 
     const place = (location: Location.Interface) => {
       const runs = new Map<Shell.ID, Run>()
@@ -383,6 +396,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
         const run = runs.get(id)
         const index = exitOrder.indexOf(id)
         if (index !== -1) exitOrder.splice(index, 1)
+        exited.delete(id)
         if (!run) return
         runs.delete(id)
         if (run.timeoutFiber) yield* Fiber.interrupt(run.timeoutFiber)
@@ -405,7 +419,14 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           if (!oldest) break
           yield* remove(oldest)
         }
+        yield* evictExited()
       })
+
+      // Keeps a finished command observable until this Location's or the server's cap evicts it.
+      const retain = (id: Shell.ID) => {
+        exitOrder.push(id)
+        exited.set(id, remove(id))
+      }
 
       const finish = Effect.fnUntraced(function* (run: Run, outcome: Ended) {
         const id = run.info.id
@@ -427,7 +448,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           { id, ...(outcome.exit !== undefined ? { exit: outcome.exit } : {}), status: outcome.status },
           { location: ref },
         )
-        exitOrder.push(id)
+        retain(id)
         yield* evict()
       })
 
@@ -599,11 +620,9 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           yield* Deferred.succeed(run.done, run.info)
           finished.push(run)
         }
-        exitOrder.push(
-          ...finished
-            .toSorted((a, b) => (a.info.time.completed ?? 0) - (b.info.time.completed ?? 0))
-            .map((run) => run.info.id),
-        )
+        finished
+          .toSorted((a, b) => (a.info.time.completed ?? 0) - (b.info.time.completed ?? 0))
+          .forEach((run) => retain(run.info.id))
         yield* evict()
       })
 
