@@ -1,5 +1,6 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
+import path from "node:path"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
@@ -8,6 +9,7 @@ import { FreeformFormat } from "@opencode/schema/tool"
 import { App } from "./app.js"
 import { Hash } from "@opencode/util/hash"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -719,15 +721,45 @@ export const decodeSnapshot = (text: string, recommended = false) =>
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
 const bundledCache = new Map<boolean, readonly Snapshot[]>()
-const bundledSnapshot = (recommended: boolean) =>
+const bundledSnapshot = <E, R>(
+  recommended: boolean,
+  load: () => Effect.Effect<readonly Snapshot[], E, R>,
+): Effect.Effect<readonly Snapshot[], E, R> =>
   Effect.suspend(() => {
     const cached = bundledCache.get(recommended)
     return cached
       ? Effect.succeed(cached)
-      : decodeSnapshot(snapshotText, recommended).pipe(
-          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(recommended, snapshot))),
-        )
+      : load().pipe(Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(recommended, snapshot))))
   })
+
+// Decoding and normalizing a catalog is one of the largest one-time allocations a server process makes, and the
+// result only depends on the catalog body, the `recommended` flag and the UTC day (catalog prices are dated).
+// Keeping the finished snapshots on disk lets the next process skip that work instead of repeating it at every boot.
+const normalizedCacheVersion = 1
+const NormalizedCacheEntry = Schema.fromJsonString(
+  Schema.Struct({
+    version: Schema.Finite,
+    app: Schema.String,
+    day: Schema.String,
+    digest: Schema.String,
+    snapshot: Schema.Array(Schema.Unknown),
+  }),
+)
+
+const isSnapshot = (value: unknown): value is Snapshot => {
+  if (typeof value !== "object" || value === null) return false
+  const info = "info" in value ? value.info : undefined
+  if (typeof info !== "object" || info === null) return false
+  if (!("id" in info) || typeof info.id !== "string") return false
+  const models = "models" in value ? value.models : undefined
+  return Array.isArray(models) && "environment" in value && Array.isArray(value.environment)
+}
+
+const isSnapshotList = (value: readonly unknown[]): value is readonly Snapshot[] => value.every(isSnapshot)
+
+let bundledSnapshotDigest: string | undefined
+// Hashed lazily: a process that reads the catalog from KV or a cache file never needs it.
+const bundledDigest = () => (bundledSnapshotDigest ??= Hash.sha256(snapshotText))
 
 // Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models,
 // v3 no embedding or transcription models.
@@ -747,6 +779,7 @@ export const layer = (options?: Options) =>
       const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
       const app = yield* App.Service
+      const global = yield* Global.Service
       const kv = yield* KV.Service
       const http = (yield* HttpClient.HttpClient).pipe(
         HttpClient.retryTransient({
@@ -839,6 +872,80 @@ export const layer = (options?: Options) =>
         )
       })
 
+      // Prices can carry date-windowed multipliers, so a catalog normalized for another day is not reused.
+      const day = () => new Date().toISOString().slice(0, 10)
+      // An uncompiled checkout reports `local`, and a host that never set a version reports `unknown`; both can change
+      // without the cache key changing, so neither reuses an entry.
+      const normalizedCache =
+        app.version === "local" || app.version === "unknown"
+          ? undefined
+          : {
+              app: `${app.name}@${app.version}`,
+              directory: global.cache,
+              file: (recommended: boolean) =>
+                path.join(
+                  global.cache,
+                  `models-dev-normalized-${recommended ? "recommended" : "default"}.json`,
+                ),
+            }
+
+      const readNormalized = (digest: string, recommended: boolean) =>
+        Effect.gen(function* () {
+          if (normalizedCache === undefined) return Option.none<readonly Snapshot[]>()
+          const text = yield* fs.readFileStringSafe(normalizedCache.file(recommended))
+          if (text === undefined) return Option.none<readonly Snapshot[]>()
+          const entry = Option.getOrUndefined(Schema.decodeUnknownOption(NormalizedCacheEntry)(text))
+          if (
+            entry === undefined ||
+            entry.version !== normalizedCacheVersion ||
+            entry.app !== normalizedCache.app ||
+            entry.day !== day() ||
+            entry.digest !== digest ||
+            !isSnapshotList(entry.snapshot)
+          )
+            return Option.none<readonly Snapshot[]>()
+          return Option.some(entry.snapshot)
+        }).pipe(Effect.catch(() => Effect.succeed(Option.none<readonly Snapshot[]>())))
+
+      const writeNormalized = (digest: string, recommended: boolean, snapshot: readonly Snapshot[]) =>
+        Effect.gen(function* () {
+          if (normalizedCache === undefined) return
+          const file = normalizedCache.file(recommended)
+          const temporary = `${file}.${process.pid}.${Date.now()}.tmp`
+          yield* fs.makeDirectory(normalizedCache.directory, { recursive: true })
+          yield* fs
+            .writeFileString(
+              temporary,
+              JSON.stringify({
+                version: normalizedCacheVersion,
+                app: normalizedCache.app,
+                day: day(),
+                digest,
+                snapshot,
+              }),
+            )
+            .pipe(
+              Effect.andThen(fs.rename(temporary, file)),
+              Effect.ensuring(fs.remove(temporary).pipe(Effect.catch(() => Effect.void))),
+            )
+        }).pipe(Effect.catch(() => Effect.void))
+
+      // A cache miss only costs the write; a failure anywhere above must never fail catalog population.
+      const normalized = <E, R>(
+        digest: string | undefined,
+        recommended: boolean,
+        compute: Effect.Effect<readonly Snapshot[], E, R>,
+      ): Effect.Effect<readonly Snapshot[], E, R> =>
+        digest === undefined
+          ? compute
+          : Effect.gen(function* () {
+              const cached = yield* readNormalized(digest, recommended)
+              if (Option.isSome(cached)) return cached.value
+              const snapshot = yield* compute
+              yield* writeNormalized(digest, recommended, snapshot)
+              return snapshot
+            })
+
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
         if (!response) return {}
@@ -851,9 +958,14 @@ export const layer = (options?: Options) =>
         const fromFile = yield* loadFromFile
         if (fromFile) return yield* normalize(fromFile, recommended)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog, recommended)
+        if (cached) return yield* normalized(cached.digest, recommended, normalize(cached.catalog, recommended))
         // The bundled snapshot is the boot-time floor until the periodic fetch refreshes it.
-        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended)
+        const bundled =
+          options?.snapshot === false
+            ? undefined
+            : yield* bundledSnapshot(recommended, () =>
+                normalized(bundledDigest(), recommended, decodeSnapshot(snapshotText, recommended)),
+              )
         if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
@@ -914,7 +1026,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: layer(options),
-    deps: [FSUtil.node, Bus.node, App.node, KV.node, httpClient],
+    deps: [FSUtil.node, Bus.node, App.node, KV.node, Global.node, httpClient],
   })
 }
 

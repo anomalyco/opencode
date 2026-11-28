@@ -1,5 +1,7 @@
 import path from "path"
-import { describe, expect } from "bun:test"
+import { tmpdir } from "node:os"
+import { mkdtempSync, rmSync } from "node:fs"
+import { afterAll, describe, expect } from "bun:test"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
@@ -19,6 +21,8 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
+import { App } from "@opencode/core/app"
+import { Global } from "@opencode/util/global"
 import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { drain } from "../lib/clock"
@@ -36,8 +40,14 @@ const layer = AppNodeBuilder.build(LayerNode.group([Provider.node, Model.node, I
 const it = testEffect(Layer.merge(layer, Flag.testLayer()))
 const real = testEffect(PluginTestLayer)
 const isolated = testEffect(Layer.empty)
+const cacheDirectory = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-"))
+afterAll(() => rmSync(cacheDirectory, { recursive: true, force: true }))
 const models = (file: string) =>
-  AppNodeBuilder.build(ModelsDev.node, [ModelsDev.node.replace(ModelsDev.configured({ file, fetch: false }))])
+  AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Global.node, App.node]), [
+    ModelsDev.node.replace(ModelsDev.configured({ file, fetch: false })),
+    Global.node.replace(Global.layerWith({ cache: cacheDirectory })),
+    App.node.replace(App.layer({ version: "test" })),
+  ])
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
