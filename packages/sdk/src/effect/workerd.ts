@@ -7,6 +7,10 @@ import { WorkerdProfile } from "../internal/workerd"
 import { OpenCode } from "./opencode"
 
 export type Configuration = WorkerdProfile.Configuration
+export type ImageLimits = WorkerdProfile.ImageLimits
+export type ImageResizerInput = WorkerdProfile.ImageResizerInput
+export type ImageResizerOutput = WorkerdProfile.ImageResizerOutput
+export type ImageResizer = WorkerdProfile.ImageResizer
 
 export interface CreateOptions<R = never> extends WorkerdProfile.Options {
   readonly log?: OpenCode.CreateOptions["log"]

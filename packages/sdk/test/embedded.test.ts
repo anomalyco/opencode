@@ -9,6 +9,7 @@ import { makeMemoryDriver } from "@opencode/core/environment/index"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Plugin } from "@opencode/plugin/effect"
+import { bytesToBase64 } from "@opencode/util/base64"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { AbsolutePath, Identity, Location } from "../src/effect"
 import { EffectSdk } from "../src/internal/effect"
@@ -746,4 +747,75 @@ it.live("OpenCodeWorkerd exposes alarm(), workspace.attach, and KV-backed Identi
       await sdk.alarm()
     })
   }),
+)
+
+it.live(
+  "OpenCodeWorkerd wires options.image for prompt attachment normalization in Effect and Promise entrypoints",
+  () =>
+    Effect.gen(function* () {
+      const inputBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+      const resizedBytes = new Uint8Array([255, 216, 255, 224])
+      const dataUri = `data:image/png;base64,${bytesToBase64(inputBytes)}`
+
+      const effectSeen: OpenCodeWorkerd.ImageResizerInput[] = []
+      const effectSdk = yield* OpenCodeWorkerd.create({
+        storage: makeDurableObjectStorage(),
+        models: { fetch: false },
+        config: { media: { image: { max_width: 1_024 } } },
+        image: async (input) => {
+          effectSeen.push(input)
+          return { bytes: resizedBytes, mime: "image/jpeg" }
+        },
+      })
+      const effectSession = yield* effectSdk.sessions.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+      })
+      const effectAdmitted = yield* effectSdk.sessions.prompt({
+        sessionID: effectSession.id,
+        text: "Check this image",
+        files: [{ uri: dataUri, name: "photo.png" }],
+        resume: false,
+      })
+
+      expect(effectSeen).toHaveLength(1)
+      expect(effectSeen[0]?.bytes).toEqual(inputBytes)
+      expect(effectSeen[0]?.mime).toBe("image/png")
+      expect(effectSeen[0]?.limits.maxWidth).toBe(1_024)
+      expect(effectAdmitted.type).toBe("user")
+      expect(effectAdmitted.payload.files?.[0]).toMatchObject({
+        mime: "image/jpeg",
+        data: bytesToBase64(resizedBytes),
+      })
+
+      yield* Effect.promise(async () => {
+        const { OpenCodeWorkerd } = await import("../src/workerd")
+        const promiseSeen: OpenCodeWorkerd.ImageResizerInput[] = []
+        await using sdk = await OpenCodeWorkerd.create({
+          storage: makeDurableObjectStorage(),
+          models: { fetch: false },
+          config: { media: { image: { max_height: 768 } } },
+          image: (input) => {
+            promiseSeen.push(input)
+            return { bytes: resizedBytes, mime: "image/webp" }
+          },
+        })
+        const session = await sdk.sessions.create({ location: { directory: "/workspace" } })
+        const admitted = await sdk.sessions.prompt({
+          sessionID: session.id,
+          text: "Check this image too",
+          files: [{ uri: dataUri, name: "photo.png" }],
+          resume: false,
+        })
+
+        expect(promiseSeen).toHaveLength(1)
+        expect(promiseSeen[0]?.bytes).toEqual(inputBytes)
+        expect(promiseSeen[0]?.mime).toBe("image/png")
+        expect(promiseSeen[0]?.limits.maxHeight).toBe(768)
+        expect(admitted.type).toBe("user")
+        expect(admitted.payload.files?.[0]).toMatchObject({
+          mime: "image/webp",
+          data: bytesToBase64(resizedBytes),
+        })
+      })
+    }),
 )

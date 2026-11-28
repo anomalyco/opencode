@@ -7,6 +7,7 @@ import { Environment, makeFiles, makeMemoryDriver } from "@opencode/core/environ
 import { FileSystem } from "@opencode/core/filesystem"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
+import { Image } from "@opencode/core/image"
 import { Identity } from "@opencode/core/machine/identity"
 import { Project } from "@opencode/core/project"
 import { Pty } from "@opencode/core/pty"
@@ -18,6 +19,7 @@ import { Workspace } from "@opencode/core/workspace"
 import { Worktree } from "@opencode/core/worktree"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
+import { bytesToBase64 } from "@opencode/util/base64"
 import { Npm } from "@opencode/util/npm"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { location } from "../../core/test/fixture/location"
@@ -296,4 +298,48 @@ it.effect("wires Pty.unsupportedLayer in ServerWorkerd.replacements", () =>
   }).pipe(
     Effect.provide(AppNodeBuilder.build(Pty.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }))),
   ),
+)
+
+it.effect("replaces Image.Service when ServerWorkerd options.image is supplied", () =>
+  Effect.gen(function* () {
+    const input = new Uint8Array([1, 2, 3, 4])
+    const resized = new Uint8Array([9, 8])
+    const seen: ServerWorkerd.ImageResizerInput[] = []
+    const storage = makeDurableObjectStorage()
+    const layer = AppNodeBuilder.build(
+      Image.node,
+      ServerWorkerd.replacements({
+        storage,
+        image: async (request) => {
+          seen.push(request)
+          return { bytes: resized, mime: "image/jpeg" }
+        },
+      }),
+    )
+
+    const result = yield* Image.Service.use((image) =>
+      Effect.gen(function* () {
+        yield* image.transform((editor) => editor.configure({ maxWidth: 1_024 }))
+        return yield* image.normalize("photo.png", {
+          uri: "file:///photo.png",
+          content: bytesToBase64(input),
+          encoding: "base64",
+          mime: "image/png",
+        })
+      }),
+    ).pipe(Effect.provide(layer))
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.bytes).toEqual(input)
+    expect(seen[0]?.mime).toBe("image/png")
+    expect(seen[0]?.limits.maxWidth).toBe(1_024)
+    expect(result.mime).toBe("image/jpeg")
+    expect(result.content).toBe(bytesToBase64(resized))
+
+    // Omitting options.image leaves Image.node untouched.
+    const withoutImage = ServerWorkerd.replacements({ storage })
+    expect(withoutImage.length).toBe(
+      ServerWorkerd.replacements({ storage, image: ({ bytes, mime }) => ({ bytes, mime }) }).length - 1,
+    )
+  }),
 )
