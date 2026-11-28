@@ -460,7 +460,13 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
-export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+export type PluginInfo = {
+  id?: PluginID
+  source: PluginSource
+  features: PluginFeatures
+  state: PluginState
+  options?: { [x: string]: JsonValue }
+}
 
 export type AutomationTarget = { session: SessionID; subagent?: never } | { subagent: AgentID; session?: never }
 
@@ -2888,7 +2894,7 @@ export type ExperimentalJobUpdated = {
   data: { info: JobInfo }
 }
 
-export type FormFields1 = [FormField1, ...Array<FormField1>]
+export type FormFields2 = [FormField1, ...Array<FormField1>]
 
 export type SpacePage = SpaceSnapshot | SpaceDelta
 
@@ -2990,7 +2996,7 @@ export type GenerateVideoGetResponse = { data: GenerateVideoJob }
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
-export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
+export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
 export type SessionMessageInfo =
   | SessionMessageAgentSelected

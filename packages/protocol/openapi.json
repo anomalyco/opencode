@@ -24260,6 +24260,9 @@
           },
           "state": {
             "$ref": "#/components/schemas/Plugin.State"
+          },
+          "options": {
+            "type": "object"
           }
         },
         "required": ["source", "features", "state"],

@@ -309,6 +309,7 @@ function slotInfo(slot: Slot): Plugin.Info {
     state: failure === undefined ? { status: "active" } : { status: "failed", ...failure },
     // Built-in and SDK plugins are server parts; a package lists its own parts.
     features: slot.plugin.features ?? { server: true },
+    options: slot.plugin.options,
   }
 }
 

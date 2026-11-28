@@ -30,6 +30,8 @@ export type Generation = PluginDefinition & {
    * restarting the server entry.
    */
   readonly gui?: { readonly file: string; readonly revision: string; readonly options: Plugin.GuiBundle["options"] }
+  /** The plugin's options for its TUI entry, which loads from the server's inventory. */
+  readonly options?: Plugin.GuiBundle["options"]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}

@@ -299,7 +299,10 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
           optional: true,
         })),
         ...serverTuiPlugins().map((plugin) => ({
-          entry: plugin.source.type === "package" ? plugin.source.target : plugin.source.path,
+          entry: {
+            package: plugin.source.type === "package" ? plugin.source.target : plugin.source.path,
+            options: plugin.options,
+          },
           install: false,
           optional: true,
         })),
@@ -724,7 +727,7 @@ function toDesired(item: Registration): Desired {
 }
 
 function sameOptions(a: Registration["options"], b: Registration["options"]) {
-  return isDeepEqual(a ?? null, b ?? null)
+  return isDeepEqual(a ?? {}, b ?? {})
 }
 
 function sameGeneration(
