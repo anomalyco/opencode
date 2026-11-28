@@ -3,7 +3,7 @@ import { createSignal, lazy, onCleanup, Suspense, untrack } from "solid-js"
 import { Command, createKeyed, SettingsPage, TitlebarItem, type SetupContext, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Updater } from "@opencode/plugin/gui/updater"
-import { updaterAction } from "./action"
+import { updaterAction, updaterPill } from "./action"
 import {
   ACTION_CHUNK_TIMEOUT_MS,
   initialWindowUpdater,
@@ -75,18 +75,16 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   onCleanup(onIdle(() => void Section.preload()))
 
   ctx.add(TitlebarItem, () => {
-    const current = state()
-    const installing = current?.status === "installing"
-    const ready = current?.status === "ready" || current?.status === "download-required"
+    const pill = updaterPill(state(), windowState())
 
-    if (!ready && !installing) return
+    if (!pill) return
 
     return {
       id: "update",
       label: ctx.t("status.label"),
-      title: ctx.t(updaterAction(current, windowState()).label),
-      busy: installing,
-      run: () => act("install"),
+      title: ctx.t(pill.label),
+      busy: pill.busy,
+      run: pill.install ? () => act("install") : undefined,
     }
   })
 

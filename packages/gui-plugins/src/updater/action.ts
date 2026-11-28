@@ -15,6 +15,24 @@ export function updaterAction(state: UpdaterState | undefined, windowState?: Win
   return action
 }
 
+/**
+ * The titlebar pill for a state, or nothing while the update has nothing to show. A check that finds a release
+ * downloads it at once, so the pill covers the download too: busy, and with no install to run until it is on disk.
+ */
+export function updaterPill(state: UpdaterState | undefined, windowState?: WindowUpdaterState) {
+  const downloading = state?.status === "downloading"
+  const installing = state?.status === "installing"
+  const ready = state?.status === "ready" || state?.status === "download-required"
+
+  if (!ready && !installing && !downloading) return
+
+  return {
+    label: updaterAction(state, windowState).label,
+    busy: downloading || installing,
+    install: !downloading,
+  }
+}
+
 function mainAction(state: UpdaterState | undefined) {
   if (!state) return { label: "action.checkNow" as const }
 
