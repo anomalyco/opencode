@@ -141,7 +141,9 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     body: info.options && options.body,
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
+      Object.fromEntries(
+        Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm, name)]),
+      ),
   }
 }
 
@@ -193,7 +195,7 @@ export function providerID(input: string) {
   return input
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | undefined) {
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | undefined, name: string) {
   const disableThinkingBlockBinding =
     info.options?.thinking?.blockBinding === false || info.options?.reasoningConfig?.blockBinding === false
   const options = info.options && { ...info.options }
@@ -219,7 +221,15 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
       : { settings: ConfigProviderOptionsV1.model(input), body: undefined }
   const migrated = options && split(options)
   const settings = migrated?.settings
-  const compatibility = Model.compatibility(info.interleaved)
+  // V1 marked an OpenAI-compatible endpoint's Claude models for prompt caching by API id or config key; V2 only marks
+  // the routes in its cache policy, so the marker format has to be named. Match the set V1 would have marked instead of
+  // migrating them to a route that bills every turn uncached (#65400).
+  const cache =
+    compatible && [info.id, name].some((id) => id !== undefined && /claude|anthropic/i.test(id))
+      ? { cacheFormat: "anthropic" as const }
+      : undefined
+  const legacy = Model.compatibility(info.interleaved)
+  const compatibility = legacy || cache ? { ...legacy, ...cache } : undefined
   const costs = info.cost && [
     {
       input: info.cost.input,
