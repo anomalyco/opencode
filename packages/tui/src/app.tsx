@@ -107,6 +107,7 @@ import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/k
 import { DialogVariant } from "./component/dialog-variant"
 import { DialogSpeed } from "./component/dialog-speed"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
+import { createProgramResume, type ProgramResumeInput } from "./context/program-resume"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
@@ -203,6 +204,8 @@ export type TuiInput = {
   updater?: UpdateSource
   packages: PackageSource
   environment?: Readonly<Record<string, string>>
+  /** Set when the terminal supports the Program Resume Protocol (OSC 7577). */
+  programResume?: ProgramResumeInput
   terminalHandoff?: () => Promise<
     | {
         readonly renderer: CliRenderer
@@ -316,6 +319,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
       renderer.once("destroy", () => shutdown.openUnsafe())
+      const programResume =
+        input.programResume && createProgramResume({ ...input.programResume, cwd: process.cwd(), renderer })
       yield* Effect.tryPromise(async () => {
         const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
@@ -326,6 +331,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               <ExitProvider
                 exit={(reason) => {
                   if (renderer.isDestroyed) return
+                  // Every exit() is the user quitting. A terminal ending OpenCode (SIGHUP, SIGTERM) skips this and
+                  // keeps the resume command, because that is when the terminal needs it.
+                  programResume?.clear()
                   exit.reason = reason
                   destroyRenderer(renderer)
                 }}
@@ -439,7 +447,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                                 packages={input.packages}
                                                                                 directories={pluginDirectories}
                                                                               >
-                                                                                <App />
+                                                                                <App programResume={programResume} />
                                                                               </PluginProvider>
                                                                             </PanelProvider>
                                                                           </UpdateNotificationProvider>
@@ -493,7 +501,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App() {
+function App(props: { programResume?: ReturnType<typeof createProgramResume> }) {
   const app = useTuiApp()
   const startup = useTuiStartup()
   const config = useConfig()
@@ -556,6 +564,12 @@ function App() {
       .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
       .catch(toast.error)
   })
+  // `--continue` opens on a placeholder session until it finds the latest one.
+  createEffect(() =>
+    props.programResume?.report(
+      route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined,
+    ),
+  )
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
@@ -1251,7 +1265,7 @@ function App() {
         enabled: process.platform !== "win32",
         run: async () => {
           await renderer.suspend()
-          process.once("SIGCONT", () => renderer.resume())
+          process.once("SIGCONT", () => renderer.resume().then(() => props.programResume?.again()))
           process.kill(0, "SIGTSTP")
         },
       },

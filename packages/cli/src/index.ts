@@ -18,6 +18,8 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+// Loading Env takes the terminal's resume token out of the environment before anything can start a child process.
+import { Env } from "./env"
 
 // Keep requests to the local service off any proxy. Bun reads lowercase `no_proxy` alone whenever it is set, so both
 // spellings get the same merged list.
@@ -139,6 +141,7 @@ Effect.gen(function* () {
     channel: OPENCODE_CHANNEL,
     local: OPENCODE_LOCAL,
     args: loggedArgs,
+    programResume: Env.programResumeToken !== undefined,
   })
   return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
 }).pipe(

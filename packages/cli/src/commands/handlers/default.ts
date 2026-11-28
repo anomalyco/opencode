@@ -157,6 +157,22 @@ export default Runtime.handler(Commands, (input) =>
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
       environment: requestedServer === undefined ? Env.session() : undefined,
+      // A resumed command starts in a fresh environment, so a password for an explicit --server would be gone, and
+      // storing it in the terminal's record would leak it. Such a TUI does not report.
+      programResume:
+        Env.programResumeToken && (requestedServer === undefined || server.endpoint.auth === undefined)
+          ? {
+              token: Env.programResumeToken,
+              // The name this build installs as, so a restart brings back this OpenCode and not another on PATH.
+              command: Commands.name,
+              // The directory argument needs no flag: the resume command runs in the directory OpenCode chdir'd to.
+              flags: [
+                ...(requestedServer === undefined ? [] : ["--server", requestedServer]),
+                ...(input.standalone ? ["--standalone"] : []),
+                ...(input.auto || input.yolo || input.dangerouslySkipPermissions ? ["--auto"] : []),
+              ],
+            }
+          : undefined,
       terminalHandoff: () => preflight.finish(),
       log: (level, message, tags) => {
         const effect =
