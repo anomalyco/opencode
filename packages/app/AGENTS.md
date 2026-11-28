@@ -137,6 +137,17 @@ This section is the single source for what may move or restyle the session timel
 - Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
 
+### A view that is not shown
+
+- A timeline that is not shown is out of the document: behind another view on a narrow screen, in a window that narrows onto the view it last showed there, or while another session is selected. Its scroll element loses its offset there and comes back at 0. Out of the document it also measures as empty: `scrollTop`, `scrollHeight` and `clientHeight` all read 0.
+- The virtualizer's offset is the reader's place while the view is away. TanStack moves that offset with the row under it when an older page lands above, so it names the same rows when the view returns. `restoreOffset` in `src/session/timeline/virtualizer.tsx` writes it back to the element once the element is back (`returning` in `src/session/timeline/reconnect-machine.ts`). A view that follows goes to its end instead. Before, the element's 0 was reported to the virtualizer, and a reader who had scrolled up came back to the start of the loaded history.
+- Only a view that returns has a place to go back to. A view that is put in the page for the first time holds the offset it was built with: the furthest there is when it was built following, which no reader was at. That offset is never written to the element.
+- Do not report the native offset of a returned element to the virtualizer before that write. Do not save a native offset to restore later either: the same number names other rows once history has loaded above.
+- Check `isConnected` before code decides anything from scroll geometry. The history probes in `src/session/timeline/interaction.ts` read the empty element as room to fill and as a reader at the top, and loaded one older page after another for as long as the view was not shown.
+- A session switch differs on purpose: the follow state starts over for each session (`src/session/timeline/follow.ts`), so a session opens at its latest message, or at the message its link names.
+- Keepers: "returns a reader to the rows they left …" in `e2e/regression/timeline-cache.spec.ts`, from another narrow-screen view, under an older page that landed while another view showed, and when the window narrows onto another view and widens again; "asks for no older page while the conversation is behind another narrow-screen view" in `e2e/regression/timeline-history.spec.ts`; "reveals ready measured rows after an offset-only reconnect" and "reveals a view that no longer follows at its start when it is first put in the page" in `component-tests/timeline-virtualizer.spec.ts`; "tells a view's first attachment from its return" in `src/session/timeline/reconnect-machine.test.ts`.
+- To check by hand: at a width under 768 px, scroll up into history, open Changes and come back. Then widen the window with Changes open, scroll up, and narrow and widen it again. The same rows must be in the same place each time.
+
 ### Scroll writes
 
 - A native scroll write (`scrollTo`, `scrollTop =`) forces a layout when anything is dirty. TanStack corrects the scroll position once for each row it resizes above the view, so a batch of measured rows forced one layout for each row.

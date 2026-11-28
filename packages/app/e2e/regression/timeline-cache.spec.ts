@@ -1,10 +1,20 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { expected, messages } from "../utils/markdown-sessions"
 import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
+import {
+  assistantMessage,
+  historyMessages,
+  setupTimeline,
+  textPart,
+  timelineRowTops,
+  userMessage,
+  validateTimelineMessages,
+  waitForVisualSettle,
+} from "../utils/timeline"
 import { mockWorkspace } from "../utils/workspace"
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
@@ -616,6 +626,114 @@ for (const grouped of [true, false]) {
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
   })
+}
+
+// A view that is not shown leaves the document, and its scroll element comes back at offset 0.
+test("returns a reader to the rows they left from another narrow-screen view", async ({ page }) => {
+  const timeline = await openHistory(page)
+  const rows = await readHistory(page, timeline.scroller, 700)
+
+  await timeline.views.getByRole("tab", { name: "Changes", exact: true }).click()
+  await expect(timeline.content).toHaveCount(0)
+  await timeline.views.getByRole("tab", { name: "Session", exact: true }).click()
+  await expectRowsInPlace(page, timeline.scroller, rows)
+})
+
+test("returns a reader to the rows they left under an older page that landed while another view showed", async ({
+  page,
+}) => {
+  const older = Promise.withResolvers<void>()
+  const timeline = await openHistory(page, older.promise)
+
+  try {
+    // The start of the loaded history asks for the older page, which is held back.
+    const rows = await readHistory(page, timeline.scroller, 100_000)
+    await timeline.asked
+    const content = (await timeline.content.elementHandle())!
+    const height = await content.evaluate((element) => parseFloat(element.style.height))
+
+    await timeline.views.getByRole("tab", { name: "Changes", exact: true }).click()
+    await expect(timeline.content).toHaveCount(0)
+    older.resolve()
+    // The page lands in the timeline that is not shown: its rows are in the list, above the reader's.
+    await expect.poll(() => content.evaluate((element) => parseFloat(element.style.height))).toBeGreaterThan(height)
+    await timeline.views.getByRole("tab", { name: "Session", exact: true }).click()
+    await expectRowsInPlace(page, timeline.scroller, rows)
+  } finally {
+    older.resolve()
+  }
+})
+
+test("returns a reader to the rows they left when the window narrows onto another view and widens again", async ({
+  page,
+}) => {
+  const timeline = await openHistory(page)
+  // A narrow window that last showed Changes remembers that view while it is wide.
+  await timeline.views.getByRole("tab", { name: "Changes", exact: true }).click()
+  await expect(timeline.content).toHaveCount(0)
+  await page.setViewportSize({ width: 1056, height: 844 })
+  const rows = await readHistory(page, timeline.scroller, 700)
+
+  // No click: the window only narrows through the breakpoint and widens again.
+  await page.setViewportSize({ width: 700, height: 844 })
+  await expect(timeline.content).toHaveCount(0)
+  await page.setViewportSize({ width: 1056, height: 844 })
+  await expectRowsInPlace(page, timeline.scroller, rows)
+})
+
+// A transcript that loads in pages of 16 messages, on a narrow screen. `older` holds each older page back.
+async function openHistory(page: Page, older: Promise<void> = Promise.resolve()) {
+  const transcript = validateTimelineMessages([
+    ...historyMessages(40),
+    userMessage(),
+    assistantMessage([textPart("prt_place_tail", "Checking the route")]),
+  ])
+
+  const asked = Promise.withResolvers<void>()
+  await setupTimeline(page, {
+    sessionMessages: transcript,
+    viewport: { width: 390, height: 844 },
+    pageMessages: (_, limit, before) => {
+      const end = before ? transcript.findIndex((message) => message.id === before) : transcript.length
+      const start = Math.max(0, end - Math.min(16, limit))
+
+      return { items: transcript.slice(start, end), cursor: start ? transcript[start]!.id : undefined }
+    },
+    beforeMessagesResponse: ({ before }) => (before ? older : Promise.resolve()),
+    onMessages: (request) => {
+      if (request.before) asked.resolve()
+    },
+  })
+  const content = page.locator("[data-timeline-virtual-content]")
+
+  return {
+    content,
+    scroller: page.locator(".scroll-view__viewport", { has: content }),
+    views: page.getByRole("tablist", { name: "Session view", exact: true }),
+    /** An older page was asked for. */
+    asked: asked.promise,
+  }
+}
+
+// Scrolls up from the end, and returns where each row in view is drawn once the timeline has come to rest.
+async function readHistory(page: Page, scroller: Locator, distance: number) {
+  const tail = scroller.getByText("Checking the route", { exact: true })
+  await expect(tail).toBeInViewport()
+  await scroller.hover()
+  await page.mouse.wheel(0, -distance)
+  await expect(tail).not.toBeInViewport()
+  await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+  const rows = await timelineRowTops(scroller)
+  expect(Object.keys(rows).length).toBeGreaterThan(1)
+
+  return rows
+}
+
+// The rows are drawn where they were, and still are once the timeline has come to rest.
+async function expectRowsInPlace(page: Page, scroller: Locator, rows: Record<string, number>) {
+  await expect.poll(() => timelineRowTops(scroller, Object.keys(rows))).toEqual(rows)
+  await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+  expect(await timelineRowTops(scroller, Object.keys(rows))).toEqual(rows)
 }
 
 function placeholderHistory(id: string) {

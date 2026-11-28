@@ -476,6 +476,26 @@ export async function waitForVisualSettle(page: Page, selectors: string[], stabl
   )
 }
 
+/**
+ * How far below the top of the timeline each row is drawn, by row key: the rows in view, or the rows with `keys`.
+ * A row that is not mounted has no entry.
+ */
+export function timelineRowTops(scroller: Locator, keys?: string[]) {
+  return scroller.evaluate((element, keys) => {
+    const view = element.getBoundingClientRect()
+
+    return Object.fromEntries(
+      [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap((row) => {
+        const rect = row.getBoundingClientRect()
+        const key = row.dataset.timelineKey!
+        const wanted = keys ? keys.includes(key) : rect.bottom > view.top && rect.top < view.bottom
+
+        return wanted ? [[key, Math.round(rect.top - view.top)] as const] : []
+      }),
+    )
+  }, keys)
+}
+
 export function historyMessages(count: number): TimelineMessage[] {
   return Array.from({ length: count }, (_, index) => {
     const value = String(index).padStart(4, "0")

@@ -168,8 +168,12 @@ story("holds a revealed tool inside a group of several through a later resize", 
   await expect(controls).toHaveAttribute("data-anchored", "true")
 })
 
+// A session's view leaves the page and comes back: while another session is selected, or behind another view on a
+// narrow screen. Its scroll element comes back at offset 0, and nothing tells the timeline so. `offset-only`: the view
+// comes back at the size it had, to a reader who had scrolled up. They find the place they left, and no native scroll
+// or resize has to arrive first. The start of the list, where the element comes back, is not their place.
 for (const input of [
-  { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
+  { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 200, scrolls: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
 ]) {
   story(`reveals ready measured rows after an ${input.name} reconnect`, async ({ page }) => {
@@ -189,8 +193,18 @@ for (const input of [
     if (input.name === "offset-only") {
       // Pinned to the end: the 600px row and the virtualizer's 92px tail, less the 180px viewport.
       await expect(root).toHaveAttribute("data-last-scroll-top", "512")
-      await root.locator("[data-scrollable]").dispatchEvent("wheel", { deltaY: -1 })
+      // The reader scrolls up to a place that is neither the start nor the end. The wheel and the scroll it causes
+      // arrive together.
+      await root.locator("[data-scrollable]").evaluate(
+        (element) =>
+          new Promise((resolve) => {
+            element.addEventListener("scroll", resolve, { once: true })
+            element.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }))
+            element.scrollTop = 200
+          }),
+      )
       await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
+      await expect(root).toHaveAttribute("data-last-scroll-top", "200")
     }
 
     if (input.name === "zero-height") {
@@ -214,12 +228,44 @@ for (const input of [
     })
 
     if (input.name === "offset-only") {
-      // This repair must not depend on another native scroll or resize delivery.
-      await expect(root).toHaveAttribute("data-scrolls", "0")
+      // The return must not depend on a native scroll or resize delivery. No scroll had arrived when the view was
+      // revealed (`scrolls` above), and the viewport reported no size.
       await expect(root).toHaveAttribute("data-viewport-resizes", resizes!)
     }
   })
 }
+
+story("reveals a view that no longer follows at its start when it is first put in the page", async ({ page }) => {
+  // A view can be built, and watched by the virtualizer, before it is in the page. One built while it follows holds
+  // the furthest offset there is, so that its last rows mount first: an offset no reader was at. When the view no
+  // longer follows by the time it is put in the page, as after navigation to a message, it starts where its scroll
+  // element is, at the start of its rows. Only a view that returns gets the offset it holds written back. Written
+  // back here, that offset shows the end.
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 100, rowHeight: 60, staged: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const controls = root.getByTestId("timeline-controls")
+  const content = root.locator("[data-timeline-virtual-content]")
+  await expect(controls).toHaveAttribute("data-pinned", "true")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await root.getByRole("button", { name: "Leave the end", exact: true }).click()
+  await expect(controls).toHaveAttribute("data-pinned", "false")
+  await expect(content).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Attach view", exact: true }).click()
+  await expect(content).toHaveCSS("visibility", "visible")
+  await expect(root).toHaveAttribute("data-first-reveal", /.+/)
+  expect(await root.evaluate((element) => JSON.parse(element.dataset.firstReveal!))).toMatchObject({
+    rows: [0, 1, 2, 3, 4],
+    pendingMarkdown: 0,
+    clipped: [],
+    viewportHeight: 180,
+    scrollTop: 0,
+    scrolls: 0,
+  })
+})
 
 // TanStack lists the rows it last read, and rows found their row by key or else by index. A listed key the projection
 // had dropped found nothing and crashed rendering with "Match/exhaustive: absurd" (#63944). A row whose key had left

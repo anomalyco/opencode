@@ -272,8 +272,10 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       // Like the scroll state, measures in the shared frame loop's read phase.
       historyProbe = frameLoop.addMeasured(
         () => {
+          // A timeline that is not shown is out of the document, where it measures as empty and at its top: it has
+          // neither room to fill nor a reader near its start.
           load =
-            !!scroller &&
+            !!scroller?.isConnected &&
             (effect.probe === "fill"
               ? follow.following() && scroller.scrollHeight <= scroller.clientHeight + 1
               : !follow.following() && scroller.scrollTop < HISTORY_SCROLL_THRESHOLD)
