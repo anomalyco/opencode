@@ -30,6 +30,7 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
+import { createSessionLinks } from "./session-links"
 import { savedTab, tabIcon, tabTitle } from "./saved-tabs"
 import { artifactLink, artifactWebURL } from "./artifact-link"
 import { attachable } from "./prompt-gate"
@@ -406,12 +407,14 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
   })
 
-  // The side panel's New tab page draws the browser bar across its top and the pages the browser showed last under
-  // its launchers. Only once the desktop's pane answers, and still while another window holds the session's browser:
-  // opening a page here takes it back.
+  // The side panel's New tab page draws the browser bar across its top, and under its launchers the pages the agent
+  // showed the person in this session and the pages the browser showed last. Only once the desktop's pane answers, and
+  // still while another window holds the session's browser: opening a page here takes it back.
   const NewTabBar = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabBar })))
-  const NewTabRecent = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabRecent })))
+  const NewTabPages = lazy(() => import("./new-tab").then((module) => ({ default: module.NewTabPages })))
   onCleanup(onIdle(() => void NewTabBar.preload()))
+  // Once for the plugin: a New tab page that opens again reuses the replies it read before.
+  const sessionLinks = createSessionLinks()
 
   const openable = (session: SessionRef) => !!model()?.available(session) && !!model()?.openable(session)
 
@@ -440,7 +443,16 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       <Show when={openable(input.session) && model()}>
         {(value) => (
           <Suspense>
-            <NewTabRecent model={value()} open={opener(input)} />
+            <NewTabPages
+              session={input.session}
+              model={value()}
+              links={sessionLinks}
+              open={opener(input)}
+              openFile={(path) => {
+                input.target(ctx.id)
+                value().openFile(input.session, path)
+              }}
+            />
           </Suspense>
         )}
       </Show>
