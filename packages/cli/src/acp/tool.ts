@@ -1,7 +1,8 @@
-import { isAbsolute, resolve } from "node:path"
+import { isAbsolute, join, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 import type { Tool } from "@opencode/schema/tool"
 import { readDisplayText } from "@opencode/tui/mini/tool"
+import { Global } from "@opencode/util/global"
 import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 
@@ -201,8 +202,15 @@ export function patchHunks(input: ToolInput) {
   return Result.isSuccess(parsed) ? parsed.success : []
 }
 
+// The file tools expand a leading ~ (FileAccess.resolvePath in core), so a location names the file they touch.
 export function absolutePath(path: string, cwd: string) {
-  return isAbsolute(path) ? path : resolve(cwd, path)
+  const expanded =
+    path === "~"
+      ? Global.Path.home
+      : path.startsWith("~/") || (process.platform === "win32" && path.startsWith("~\\"))
+        ? join(Global.Path.home, path.slice(2))
+        : path
+  return isAbsolute(expanded) ? expanded : resolve(cwd, expanded)
 }
 
 export function stringValue(value: unknown) {

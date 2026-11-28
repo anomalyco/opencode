@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AnyRequest, CreateElicitationResponse, RequestPermissionResponse } from "@agentclientprotocol/sdk"
 import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
+import { Global } from "@opencode/util/global"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/tmpdir"
@@ -181,6 +182,37 @@ describe("acp permissions over the wire", () => {
 })
 
 describe("acp edit previews over the wire", () => {
+  test("locates a ~/ write in the home directory on each of its requests", async () => {
+    const file = path.join(Global.Path.home, "notes.md")
+    const source = { type: "tool", messageID: "msg_home", id: "call_home" } as const
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_home", "write"),
+          toolCalled(sessionID, "call_home", { path: "~/notes.md", content: "hi\n" }),
+          permissionAsked(sessionID, "perm_external", {
+            action: "external_directory",
+            resources: [path.join(Global.Path.home, "*")],
+            source,
+          }),
+          permissionAsked(sessionID, "perm_edit", {
+            action: "edit",
+            resources: [file],
+            metadata: { files: [fileDiff(file, "", "hi\n", "added")] },
+            source,
+          }),
+        ),
+      permission: allowOnce,
+    })
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    expect(acp.permissions.map((request) => request.toolCall.locations)).toEqual([[{ path: file }], [{ path: file }]])
+    expect(acp.permissions[1]?.toolCall.content).toEqual([{ type: "diff", path: file, oldText: null, newText: "hi\n" }])
+  })
+
   test("previews added files as new and deleted files as empty", async () => {
     await using dir = await tmpdir()
     await Promise.all(
