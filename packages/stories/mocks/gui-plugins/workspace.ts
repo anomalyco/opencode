@@ -16,6 +16,7 @@ import type {
   MountedSession,
   SessionScreen,
 } from "../../../plugin/src/gui"
+import type { BuiltinComposer } from "../../../plugin/src/gui/builtin"
 
 export type ChangesScenario = "Changes" | "Clean" | "Read error" | "Offline"
 
@@ -238,6 +239,7 @@ export function createWorkspace(
       model: () => undefined,
       setModel: () => false,
       setVariant: () => false,
+      applySelection: async () => {},
       attach() {},
       quotable: () => false,
       focus() {},
@@ -247,7 +249,7 @@ export function createWorkspace(
       // As the app does once the session takes it, a sent file comment leaves the file.
       send: (id) => setComments((items) => items.filter((item) => item.id !== id)),
       focused: () => false,
-    },
+    } satisfies BuiltinComposer,
   }
 
   return { session, screen }

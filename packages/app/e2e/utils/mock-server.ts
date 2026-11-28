@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test"
 import type { OpenCodeEvent, AutomationInfo, SessionMessageInfo } from "@opencode/client/promise"
+import type { Goal } from "@opencode/schema/goal"
 import { Permission } from "@opencode/schema/permission"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
@@ -154,6 +155,10 @@ export interface MockServerConfig {
   commands?: unknown[] | ((directory: string) => unknown[])
   // Records POST /api/session/:id/command (204). Without it, commands answer 501 MockUnsupported.
   onCommand?: (input: { sessionID: string; body: unknown }) => void
+  // Records POST /api/session/:id/agent and /model, in the order they arrive with commands and prompts.
+  onSwitch?: (input: { sessionID: string; body: unknown }) => void
+  // The `/goal` plugin's state of a session (`opencode.goal` RPC `get`); no session has one by default.
+  goal?: (sessionID: string) => Goal.State | null
   fileList?: (path: string) => unknown[] | Promise<unknown[]>
   fileContent?: (path: string) => MockFileContent | Promise<MockFileContent>
   // Paths become directory entries.
@@ -1290,10 +1295,15 @@ function mockHandlers(
             cursor: { next: offset + limit < ordered.length ? String(offset + limit) : undefined },
           })
         },
-        // The goal plugin's pill reads each routed session's goal; no scenario sets one.
+        // The goal plugin's pill reads each routed session's goal.
         rpcCall: (ctx) =>
           ctx.params.rpcID === "opencode.goal" && ctx.params.method === "get"
-            ? Effect.succeed({ output: null })
+            ? Effect.succeed({
+                output: Option.match(decodeGoalGet(ctx.payload), {
+                  onNone: () => null,
+                  onSome: (payload) => config.goal?.(payload.input.sessionID) ?? null,
+                }),
+              })
             : Effect.fail(
                 new MockUnsupported({
                   message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC`,
@@ -1424,8 +1434,14 @@ function mockHandlers(
               action: ctx.payload.delivery,
             }),
           ).pipe(Effect.andThen(noContent)),
-        sessionSwitchAgent: () => noContent,
-        sessionSwitchModel: () => noContent,
+        sessionSwitchAgent: (ctx) =>
+          Effect.sync(() => config.onSwitch?.({ sessionID: ctx.params.sessionID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          ),
+        sessionSwitchModel: (ctx) =>
+          Effect.sync(() => config.onSwitch?.({ sessionID: ctx.params.sessionID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          ),
         // Only the session's own list; location requests (`permissions`) come from `/api/permission/request`.
         sessionPermission: (ctx) =>
           Effect.sync(() => ({
@@ -1720,6 +1736,8 @@ const decodeSessionUpdate = Schema.decodeUnknownOption(
 )
 
 const decodeRevertStage = Schema.decodeUnknownOption(Schema.Struct({ messageID: Schema.String }))
+
+const decodeGoalGet = Schema.decodeUnknownOption(Schema.Struct({ input: Schema.Struct({ sessionID: Schema.String }) }))
 
 const decodePermissionReply = Schema.decodeUnknownOption(Schema.Struct({ decision: Permission.Reply }))
 
