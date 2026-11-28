@@ -7,6 +7,7 @@ import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
+import { deduplicate } from "./jsonc"
 import { Info, normalizeLegacyTabs, SchemaURL } from "./schema"
 
 export * from "./schema"
@@ -98,7 +99,7 @@ export const layer = Layer.effect(
                 text,
                 modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
               ),
-            text,
+            deduplicate(text),
           )
           const errors: ParseError[] = []
           const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
