@@ -28,6 +28,7 @@ const result = await Bun.build({
     "#fff",
     "#photon-wasm",
     "#websocket-constructor",
+    "#x25519",
     "#v1-migration",
   ],
   splitting: true,

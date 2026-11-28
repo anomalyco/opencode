@@ -2,7 +2,7 @@ export * as Noise from "./noise.js"
 
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto"
 import { Result } from "effect"
-import { X25519 } from "./x25519.js"
+import { derivePublicKey, sharedSecret } from "#x25519"
 
 // Noise_XX_25519_AESGCM_SHA256 as the Noise Protocol Framework, revision 34, defines it:
 // https://noiseprotocol.org/noise.html. Section numbers below refer to that text.
@@ -245,11 +245,12 @@ const cipherState = (initial: Uint8Array | undefined) => {
 }
 
 /**
- * Section 12.1 DH, with x25519.ts rather than `node:crypto`, which workerd cannot use with a raw peer key. The spec
- * allows an invalid public key to be an error: a low-order point gives the all-zero output, refused here.
+ * Section 12.1 DH. Uses `#x25519` (native `node:crypto` on Node/Bun, RFC 7748 JS on `workerd` where `node:crypto`
+ * cannot use an SPKI-imported peer key). Refuses both runtime rejections and all-zero low-order outputs.
  */
 const dh = (keyPair: KeyPair, publicKey: Uint8Array) => {
-  const shared = X25519.scalarMult(keyPair.privateKey, publicKey)
+  const shared = sharedSecret(keyPair.privateKey, publicKey)
+  if (!shared) return badMessage
   // OR every byte rather than stop at the first non-zero one, so the time taken says nothing about the secret.
   if (shared.reduce((bits, byte) => bits | byte, 0) === 0) return badMessage
   return Result.succeed(shared)
@@ -299,7 +300,7 @@ const hkdf = (chainingKey: Uint8Array, inputKeyMaterial: Uint8Array) => {
 const hmac = (key: Uint8Array, data: Uint8Array) => new Uint8Array(createHmac("sha256", key).update(data).digest())
 
 const derive = (privateKey: Uint8Array): KeyPair => ({
-  publicKey: X25519.scalarMult(privateKey, X25519.BASE),
+  publicKey: derivePublicKey(privateKey),
   privateKey,
 })
 

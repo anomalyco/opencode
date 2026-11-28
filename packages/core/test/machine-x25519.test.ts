@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createPrivateKey, createPublicKey, diffieHellman, randomBytes } from "node:crypto"
-import { X25519 } from "@opencode/core/machine/x25519"
+import { X25519 } from "@opencode/core/machine/x25519.workerd"
 
 const hex = (value: string) => new Uint8Array(Buffer.from(value, "hex"))
 const PKCS8 = Buffer.from("302e020100300506032b656e04220420", "hex")

@@ -77,6 +77,10 @@
       "node": "./src/effect/websocket-constructor/websocket-constructor.node.ts",
       "default": "./src/effect/websocket-constructor/websocket-constructor.node.ts"
     },
+    "#x25519": {
+      "workerd": "./src/machine/x25519.workerd.ts",
+      "default": "./src/machine/x25519.ts"
+    },
     "#v1-migration": {
       "types": "./src/database/v1-migration.bun.ts",
       "bun": "./src/database/v1-migration.bun.ts",
