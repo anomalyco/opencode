@@ -258,15 +258,42 @@ export type InputProperty = {
   readonly required: boolean
 }
 
+const resolveRef = (
+  schema: JsonSchema,
+  definitions: Readonly<Record<string, JsonSchema>>,
+): { readonly schema: JsonSchema; readonly definitions: Readonly<Record<string, JsonSchema>> } | undefined => {
+  let current = schema
+  let defs = definitions
+  const seen = new Set<string>()
+  while (current.$ref !== undefined) {
+    const nextDefs =
+      current.definitions === undefined && current.$defs === undefined
+        ? defs
+        : { ...defs, ...(current.definitions ?? {}), ...(current.$defs ?? {}) }
+    const name = definitionName(current.$ref)
+    if (name === undefined || seen.has(name)) return undefined
+    const target = nextDefs[name]
+    if (target === undefined) return undefined
+    seen.add(name)
+    const { $ref: _ref, definitions: _definitions, $defs: _defs, ...siblings } = current
+    current = Object.keys(siblings).length === 0 ? target : { ...target, ...siblings }
+    defs = nextDefs
+  }
+  return { schema: current, definitions: defs }
+}
+
 export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
-    const schema = inputDocument(tool)?.schema
-    const required = new Set(schema?.required ?? [])
-    return Object.entries(schema?.properties ?? {}).map(([name, value]) => ({
-      name,
-      description: typeof value.description === "string" ? value.description : undefined,
-      required: required.has(name),
-    }))
+    const document = inputDocument(tool)
+    const required = new Set(document?.schema.required ?? [])
+    return Object.entries(document?.schema.properties ?? {}).map(([name, value]) => {
+      const resolved = resolveRef(value, document?.definitions ?? {})?.schema ?? value
+      return {
+        name,
+        description: typeof resolved.description === "string" ? resolved.description : undefined,
+        required: required.has(name),
+      }
+    })
   } catch {
     return []
   }
@@ -279,10 +306,12 @@ export const stringParameter = <R>(tool: Tool<R>) => {
     const document = inputDocument(tool)
     const fields = Object.entries(document?.schema.properties ?? {})
     if (document === undefined || fields.length !== 1) return undefined
-    const [name, field] = fields[0]!
-    if (field.type !== "string" || !document.schema.required?.includes(name)) return undefined
+    const [name, rawField] = fields[0]!
+    if (!document.schema.required?.includes(name)) return undefined
+    const field = resolveRef(rawField, document.definitions)?.schema
+    if (field?.type !== "string") return undefined
     const label = identifierSegment.test(name) ? name : "input"
-    const type = renderSchema(field, { definitions: document.definitions, pretty: false })
+    const type = renderSchema(rawField, { definitions: document.definitions, pretty: false })
     return { name, signature: `(${jsdoc(field, "").replace(/\n$/, " ")}${label}: ${type})` }
   } catch {
     return undefined
@@ -299,10 +328,7 @@ const inputDocument = <R>(tool: Tool<R>) => {
         schema: tool.input,
         definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
       }
-  if (document.schema.$ref === undefined) return document
-  const name = definitionName(document.schema.$ref)
-  const schema = name === undefined ? undefined : document.definitions[name]
-  return schema && { schema, definitions: document.definitions }
+  return resolveRef(document.schema, document.definitions)
 }
 
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>

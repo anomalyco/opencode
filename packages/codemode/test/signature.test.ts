@@ -7,6 +7,7 @@ import {
   inputTypeScript,
   jsonSchemaToTypeScript,
   outputTypeScript,
+  stringParameter,
 } from "../src/codemode/tool-schema.js"
 import type { JsonSchema } from "../src/codemode/tool.js"
 
@@ -585,6 +586,43 @@ describe("JSON Schema definition scope", () => {
     expect(jsonSchemaToTypeScript(schema, true)).toBe(
       ["{", "  nested?: boolean,", "  inherited?: string,", "  sibling?: number,", "}"].join("\n"),
     )
+  })
+
+  test("resolves $ref schemas in inputProperties and stringParameter", () => {
+    const chained = Tool.make({
+      description: "Ref chain",
+      input: {
+        $ref: "#/definitions/Alias",
+        definitions: {
+          Alias: { $ref: "#/definitions/Target" },
+          Target: {
+            type: "object",
+            properties: { body: { $ref: "#/definitions/Text", description: "Override" } },
+            required: ["body"],
+          },
+          Text: { type: "string", description: "Base" },
+        },
+      },
+      freeform: true,
+      execute: () => Effect.void,
+    })
+    expect(inputProperties(chained)).toEqual([{ name: "body", description: "Override", required: true }])
+    expect(stringParameter(chained)).toEqual({ name: "body", signature: "(/** Override */ body: string)" })
+
+    for (const $ref of ["#/$defs/A", "#/$defs/Missing"]) {
+      const unresolved = Tool.make({
+        description: "Unresolved",
+        input: {
+          type: "object",
+          properties: { a: { $ref } },
+          required: ["a"],
+          $defs: { A: { $ref: "#/$defs/B" }, B: { $ref: "#/$defs/A" } },
+        },
+        freeform: true,
+        execute: () => Effect.void,
+      })
+      expect(stringParameter(unresolved)).toBeUndefined()
+    }
   })
 })
 

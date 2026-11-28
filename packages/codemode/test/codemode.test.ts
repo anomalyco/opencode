@@ -871,6 +871,27 @@ describe("CodeMode public contract", () => {
     expect(await Effect.runPromise(runtime.execute('return await tools.plain("a")'))).toMatchObject({ ok: false })
   })
 
+  test("a freeform tool resolves a named Effect string field referenced via $ref", async () => {
+    const patch = Tool.make({
+      description: "Apply a patch",
+      input: Schema.Struct({
+        patchText: Schema.String.annotate({ identifier: "PatchText", description: "Unified diff" }),
+      }),
+      freeform: true,
+      output: Schema.String,
+      execute: ({ patchText }) => Effect.succeed(patchText),
+    })
+    const runtime = CodeMode.make({ tools: { patch } })
+    expect(runtime.catalog.map((tool) => tool.signature)).toEqual([
+      "tools.patch(/** Unified diff */ patchText: string): Promise<string>",
+    ])
+    expect(
+      await Effect.runPromise(
+        runtime.execute('return [await tools.patch("diff"), await tools.patch({ patchText: "obj" })]'),
+      ),
+    ).toMatchObject({ ok: true, value: ["diff", "obj"] })
+  })
+
   test("renders equivalent catalogs identically regardless of tool insertion order", () => {
     const alpha = Tool.make({
       description: "Alpha tool",
