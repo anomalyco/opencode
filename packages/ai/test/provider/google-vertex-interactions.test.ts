@@ -10,6 +10,13 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
+const reply = [
+  { event_type: "step.start", index: 0, step: { type: "model_output" } },
+  { event_type: "step.delta", index: 0, delta: { type: "text", text: "Hello." } },
+  { event_type: "step.stop", index: 0 },
+  { event_type: "interaction.completed", interaction: { status: "completed" } },
+]
+
 describe("Google Vertex Interactions", () => {
   it.effect("streams through the global project endpoint with OAuth and Vertex service tiers", () =>
     Effect.gen(function* () {
@@ -94,10 +101,7 @@ describe("Google Vertex Interactions", () => {
               expect(input.request.headers["x-goog-api-key"]).toBe("vertex-key")
               expect(input.request.headers).not.toHaveProperty("authorization")
               expect(input.request.headers).not.toHaveProperty("x-vertex-ai-llm-shared-request-type")
-              return input.respond(
-                sseEvents({ event_type: "interaction.completed", interaction: { status: "completed" } }),
-                { headers: { "content-type": "text/event-stream" } },
-              )
+              return input.respond(sseEvents(...reply), { headers: { "content-type": "text/event-stream" } })
             }),
           ),
         ),
@@ -119,10 +123,7 @@ describe("Google Vertex Interactions", () => {
             Effect.sync(() => {
               expect(input.request.url).toBe("https://vertex.test/v1beta1/locations/global/interactions?alt=sse")
               headers.push(input.request.headers.authorization)
-              return input.respond(
-                sseEvents({ event_type: "interaction.completed", interaction: { status: "completed" } }),
-                { headers: { "content-type": "text/event-stream" } },
-              )
+              return input.respond(sseEvents(...reply), { headers: { "content-type": "text/event-stream" } })
             }),
           ),
         ),
