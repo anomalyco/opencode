@@ -17,6 +17,16 @@ import {
 } from "./schema/index.js"
 import type { DispatchResult, PendingCall } from "./tool-runtime.js"
 
+/** The hidden tool that carries a `schema` answer. It is lowered into a tool call but never surfaced as one. */
+export const OBJECT_TOOL = "generate_object"
+
+/**
+ * Whether a call is the schema answer: the hidden tool's name, no namespace, and not run by the provider. A hosted or
+ * namespaced tool that happens to reuse the name is an ordinary call.
+ */
+export const isAnswerCall = (call: ToolCallPart) =>
+  call.name === OBJECT_TOOL && call.namespace === undefined && call.providerExecuted !== true
+
 /**
  * Client calls to answer before the next step. A call whose input was not valid JSON carries the error the model
  * gets back, so it can retry. A step is final when it calls `answerTool`, even alongside other tools, or when it hits
@@ -24,7 +34,7 @@ import type { DispatchResult, PendingCall } from "./tool-runtime.js"
  */
 export const pendingCalls = (response: LLMResponse, answerTool?: string): ReadonlyArray<PendingCall> => {
   if (response.finishReason.normalized === "length") return []
-  if (answerTool !== undefined && response.toolCalls.some((call) => call.name === answerTool)) return []
+  if (answerTool !== undefined && response.toolCalls.some(isAnswerCall)) return []
   return [
     ...response.toolCalls.filter((call) => call.providerExecuted !== true).map((call) => ({ call })),
     ...response.events.filter(LLMEvent.is.toolInputError).map((event) => ({
@@ -199,8 +209,26 @@ export function collect<E, R>(
               }),
             }),
           )
+        const last = steps.at(-1)
+        // A decoded `schema` answer is a hidden tool call: no tool ran, so no tool result arrived for it. Replay the
+        // call's raw wire input as its result, or the next request reports it missing. The public stream stays quiet.
+        if ("object" in finish && last) {
+          const answer = last.message.content.find(
+            (part): part is ToolCallPart => part.type === "tool-call" && isAnswerCall(part),
+          )
+          if (answer)
+            messages.push(
+              Message.tool({
+                id: answer.id,
+                name: answer.name,
+                namespace: answer.namespace,
+                result: { type: "json", value: answer.input },
+                providerMetadata: answer.providerMetadata,
+              }),
+            )
+        }
         const result = {
-          text: steps.at(-1)?.text ?? "",
+          text: last?.text ?? "",
           steps,
           messages,
           usage: finish.usage,

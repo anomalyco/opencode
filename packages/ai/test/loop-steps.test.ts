@@ -38,6 +38,22 @@ describe("pendingCalls", () => {
     expect(pendingCalls(step(read, answer), "generate_object")).toEqual([])
     expect(pendingCalls(step(read, answer)).map((item) => item.call.id)).toEqual(["call-1", "call-3"])
   })
+
+  test("does not treat a hosted or namespaced call with the answer name as the answer", () => {
+    const hostedAnswer = LLMEvent.toolCall({
+      id: "call-5",
+      name: "generate_object",
+      input: {},
+      providerExecuted: true,
+    })
+    const namespacedAnswer = LLMEvent.toolCall({ id: "call-6", name: "generate_object", namespace: "other", input: {} })
+
+    expect(pendingCalls(step(read, hostedAnswer), "generate_object").map((item) => item.call.id)).toEqual(["call-1"])
+    expect(pendingCalls(step(read, namespacedAnswer), "generate_object").map((item) => item.call.id)).toEqual([
+      "call-1",
+      "call-6",
+    ])
+  })
 })
 
 describe("nextRequest", () => {

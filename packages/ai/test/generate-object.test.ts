@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LLMEvent } from "../src/effect.js"
+import { ai, LLMEvent, Message } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { toDefinitions, tool } from "../src/tool.js"
+import { normalizeToolHistory } from "../src/tool-history.js"
 import { TestLLM } from "../src/testing.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -195,6 +196,59 @@ describe("ai.generate with schema", () => {
       expect(error.partial?.toolCalls[0]?.input).toEqual({ value: "not-a-number" })
     }),
   )
+
+  it.effect("replays the decoded answer into the next chat request", () =>
+    Effect.gen(function* () {
+      type ChatBody = OpenAIChatBody & {
+        readonly messages: ReadonlyArray<{
+          readonly role?: string
+          readonly tool_call_id?: string
+          readonly content?: unknown
+        }>
+      }
+      const bodies: ChatBody[] = []
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          bodies.push(decodeBody(input.text) as ChatBody)
+          return input.respond(
+            sseEvents(
+              ...(bodies.length === 1
+                ? [
+                    toolCallChunk("call_1", "generate_object", '{"count":42,"type":"text","value":"ok"}'),
+                    finishChunk("tool_calls"),
+                  ]
+                : [{ id: "x", choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] }]),
+            ),
+            { headers: { "content-type": "text/event-stream" } },
+          )
+        }),
+      )
+
+      const first = yield* ai
+        .collect(
+          ai.stream({
+            model,
+            prompt: "Count.",
+            schema: Schema.Struct({ count: Schema.Number, type: Schema.String, value: Schema.String }),
+          }),
+        )
+        .pipe(Effect.provide(layer))
+
+      expect(first.object).toEqual({ count: 42, type: "text", value: "ok" })
+
+      yield* ai
+        .generate({ model, messages: [...first.messages, Message.user("Again?")] })
+        .pipe(Effect.provide(layer))
+
+      expect(bodies).toHaveLength(2)
+      expect(bodies[1].messages).toContainEqual({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: '{"count":42,"type":"text","value":"ok"}',
+      })
+      expect(JSON.stringify(bodies[1].messages)).not.toContain("Tool result missing")
+    }),
+  )
 })
 
 describe("schema on ai.stream and ai.loop", () => {
@@ -276,6 +330,135 @@ describe("schema on ai.stream and ai.loop", () => {
         { city: "Paris" },
       ])
       expect(yield* client.requests()).toHaveLength(1)
+    }),
+  )
+
+  scripted.effect("collect replays a decoded answer as its raw tool result without an event", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCall("call-1", "generate_object", { count: 42, type: "text", value: "ok" }),
+      )
+
+      const Answer = Schema.Struct({ count: Schema.Number, type: Schema.String, value: Schema.String })
+      const result = yield* ai.collect(ai.stream({ model, prompt: "Count.", schema: Answer }))
+
+      expect(result.object).toEqual({ count: 42, type: "text", value: "ok" })
+      // `{ type, value }` is itself a tool-result shape; the replay must keep the raw answer, not re-tag it.
+      expect(result.messages).toEqual([
+        result.steps[0]?.message,
+        Message.tool({
+          id: "call-1",
+          name: "generate_object",
+          result: { type: "json", value: { count: 42, type: "text", value: "ok" } },
+        }),
+      ])
+    }),
+  )
+
+  scripted.effect("loop keeps running client tools when a hosted call reuses the answer name", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "call-1", name: "echo", input: { value: "Paris" } }),
+          LLMEvent.toolCall({
+            id: "call-2",
+            name: "generate_object",
+            input: { city: "ignored" },
+            providerExecuted: true,
+          }),
+        ),
+        TestLLM.toolCall("call-3", "generate_object", { city: "Paris" }),
+      )
+
+      const result = yield* ai.collect(ai.loop({ model, prompt: "Pick a city.", tools: [echo], schema: City }))
+
+      expect(result.object).toEqual({ city: "Paris" })
+      expect(result.messages.filter((message) => message.role === "tool").map((message) => message.content)).toEqual([
+        [expect.objectContaining({ type: "tool-result", id: "call-1", name: "echo" })],
+        [expect.objectContaining({ type: "tool-result", id: "call-3", name: "generate_object" })],
+      ])
+      expect(yield* client.requests()).toHaveLength(2)
+    }),
+  )
+
+  scripted.effect("generate ignores a provider-executed call that reuses the answer name", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({
+            id: "call-1",
+            name: "generate_object",
+            input: { city: "Paris" },
+            providerExecuted: true,
+          }),
+        ),
+      )
+
+      const error = yield* ai.generate({ model, prompt: "Pick a city.", schema: City }).pipe(Effect.flip)
+
+      expect(error.message).toContain("did not call the forced `generate_object` tool")
+    }),
+  )
+
+  scripted.effect("same-id siblings keep the answer settled and only repair the unrun call", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "call-1", name: "generate_object", input: { city: "Paris" } }),
+          LLMEvent.toolCall({ id: "call-1", name: "echo", input: { value: "x" } }),
+        ),
+      )
+
+      const result = yield* ai.collect(ai.loop({ model, prompt: "Pick a city.", tools: [echo], schema: City }))
+      const replayed = normalizeToolHistory([...result.messages, Message.user("Again.")])
+
+      expect(result.object).toEqual({ city: "Paris" })
+      expect(replayed.slice(0, 2)).toEqual([
+        result.messages[0],
+        Message.tool({ id: "call-1", name: "generate_object", result: { type: "json", value: { city: "Paris" } } }),
+      ])
+      expect(replayed[2]).toEqual(
+        Message.tool({
+          id: "call-1",
+          name: "echo",
+          result: { type: "error", value: "Tool result missing" },
+        }),
+      )
+    }),
+  )
+
+  scripted.effect("replays the answer before a same-id sibling that ran first", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "call-1", name: "echo", input: { value: "x" } }),
+          LLMEvent.toolCall({ id: "call-1", name: "generate_object", input: { city: "Paris" } }),
+        ),
+      )
+
+      const result = yield* ai.collect(ai.loop({ model, prompt: "Pick a city.", tools: [echo], schema: City }))
+      const replayed = normalizeToolHistory([...result.messages, Message.user("Again.")])
+
+      expect(result.object).toEqual({ city: "Paris" })
+      expect(replayed[1]).toEqual(
+        Message.tool({
+          id: "call-1",
+          name: "generate_object",
+          result: { type: "json", value: { city: "Paris" } },
+        }),
+      )
+      expect(replayed[2]).toEqual(
+        Message.tool({
+          id: "call-1",
+          name: "echo",
+          result: { type: "error", value: "Tool result missing" },
+        }),
+      )
     }),
   )
 })

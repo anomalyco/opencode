@@ -5,17 +5,18 @@ const MISSING_TOOL_RESULT = "Tool result missing"
 
 export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
   const normalized: Message[] = []
-  const pending = new Map<string, ToolCallPart>()
+  // Calls stay in order: providers can reuse one wire id for sibling calls, so a map by id would overwrite one.
+  const pending: ToolCallPart[] = []
   // System updates cannot sit between a tool call and its results, so they wait until every pending call is answered.
   const held: Message[] = []
   const releaseHeld = () => {
-    if (pending.size > 0) return
+    if (pending.length > 0) return
     normalized.push(...held)
     held.length = 0
   }
   const appendMissingResults = () => {
-    if (pending.size > 0) normalized.push(missingToolResults(pending.values()))
-    pending.clear()
+    if (pending.length > 0) normalized.push(missingToolResults(pending))
+    pending.length = 0
     releaseHeld()
   }
 
@@ -29,7 +30,7 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
       continue
     }
 
-    if (message.role === "system" && pending.size > 0) {
+    if (message.role === "system" && pending.length > 0) {
       held.push(message)
       continue
     }
@@ -37,7 +38,7 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
     normalized.push(message)
     if (message.role !== "assistant") continue
     for (const part of message.content) {
-      if (part.type === "tool-call" && part.providerExecuted !== true) pending.set(part.id, part)
+      if (part.type === "tool-call" && part.providerExecuted !== true) pending.push(part)
     }
   }
   appendMissingResults()
@@ -62,16 +63,28 @@ function missingToolResults(calls: Iterable<ToolCallPart>) {
   })
 }
 
-function normalizeToolMessage(message: ToolMessage, pending: Map<string, ToolCallPart>): Message | undefined {
+function normalizeToolMessage(message: ToolMessage, pending: ToolCallPart[]): Message | undefined {
   const content = message.content.map((part) => {
     if (part.type !== "tool-result" || part.providerExecuted === true) return part
-    const call = pending.get(part.id)
-    if (call) pending.delete(part.id)
+    const call = claimPending(pending, part)
     return normalizeToolResult(part, call)
   })
   if (content.length === 0) return undefined
   if (content.every((part, index) => part === message.content[index])) return message
   return new ToolMessage({ ...message, content })
+}
+
+/**
+ * Remove the call this result answers. An exact `(id, name, namespace)` match wins so siblings that share a wire id
+ * keep their own names; otherwise fall back to the id, which is how name-less results backfill their call's name.
+ */
+function claimPending(pending: ToolCallPart[], result: ToolResultPart): ToolCallPart | undefined {
+  const exact = pending.findIndex(
+    (call) => call.id === result.id && call.name === result.name && call.namespace === result.namespace,
+  )
+  const index = exact === -1 ? pending.findIndex((call) => call.id === result.id) : exact
+  if (index === -1) return undefined
+  return pending.splice(index, 1)[0]
 }
 
 function normalizeToolResult(part: ToolResultPart, call: ToolCallPart | undefined): ToolResultPart {

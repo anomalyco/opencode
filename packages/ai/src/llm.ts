@@ -1,4 +1,5 @@
 import { Effect, JsonSchema, Schema, Stream } from "effect"
+import { isAnswerCall, OBJECT_TOOL } from "./loop.js"
 import { tryRequest } from "./media-model.js"
 import {
   LLMClient,
@@ -273,8 +274,6 @@ const driveLoop = (
     )
   })
 
-const OBJECT_TOOL = "generate_object"
-
 type Input = LLMRequestInput & { readonly schema?: OutputSchema }
 
 // `schema` adds a hidden tool whose input is the answer. With other tools the model only has to call some tool.
@@ -303,7 +302,7 @@ const prepare = (input: Input) => {
 }
 
 const decodeObject = (output: Tool, response: LLMResponse) => {
-  const call = response.toolCalls.find((event) => event.name === OBJECT_TOOL)
+  const call = response.toolCalls.find(isAnswerCall)
   const invalid = (message: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ message, cause }), partial: response })
   // A cut-off call arrives with truncated or empty input, so its decode error would hide the real cause.
