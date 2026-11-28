@@ -194,6 +194,35 @@ describe("SessionModelRequest HTTP hooks", () => {
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
+  it.effect("preserves a tool renamed by re-keying its descriptor", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.tools.lookup_v2 = event.tools.lookup
+          delete event.tools.lookup
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const inputSchema = { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
+      const tools = {
+        definitions: [new ToolDefinition({ name: "lookup", description: "Lookup", inputSchema })],
+        execute: () => Effect.die("unused tool execution"),
+      }
+
+      const prepared = yield* requests.primary({
+        session,
+        agent: Agent.ID.make("build"),
+        model,
+        system: [],
+        messages: [],
+        tools,
+      })
+      const tool = prepared.request.tools[0]
+      expect(tool?.type === "tool" ? tool.name : undefined).toBe("lookup_v2")
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
   it.effect("offers the WebSocket executor alongside HTTP hooks and routes the WebSocket hooks", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service

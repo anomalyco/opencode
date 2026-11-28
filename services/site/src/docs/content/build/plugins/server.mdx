@@ -1470,6 +1470,16 @@ await ctx.session.hook("compaction", async (event) => {
 })
 ```
 
+A hook can rename a tool by moving its descriptor object to a new key. OpenCode resolves each descriptor by object
+identity first, then by key, so the rename holds while execution still maps it back to the original tool.
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.tools.read_v2 = event.tools.read
+  delete event.tools.read
+})
+```
+
 Changes affect only the outgoing model call, not persisted history or configuration. A hook that should apply to
 every request must register for each kind.
 
