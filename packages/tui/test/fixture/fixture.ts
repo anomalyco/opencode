@@ -21,7 +21,11 @@ export async function copyPlugin(name: string) {
   const directory = path.join(root.path, name)
   const entry = path.join(directory, "tui.tsx")
   await mkdir(directory)
-  await symlink(path.join(import.meta.dir, "../../node_modules"), path.join(directory, "node_modules"))
+  await symlink(
+    path.join(import.meta.dir, "../../node_modules"),
+    path.join(directory, "node_modules"),
+    process.platform === "win32" ? "junction" : "dir",
+  )
   await Bun.write(entry, Bun.file(path.join(import.meta.dir, "plugin", name, "tui.tsx")))
   return { directory, entry, [Symbol.asyncDispose]: root[Symbol.asyncDispose] }
 }

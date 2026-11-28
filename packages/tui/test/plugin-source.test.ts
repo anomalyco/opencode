@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test"
 import { createRequire } from "node:module"
 import path from "node:path"
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { mkdir, rename, symlink } from "node:fs/promises"
+import os from "node:os"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { Host } from "@opencode/plugin/host"
 import "../src/plugin/runtime-plugin-support.bun"
@@ -281,29 +283,18 @@ test("literal dynamic imports and JSON join the source graph", async () => {
   expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
 })
 
-test("real watchers observe atomic saves to nested, outside-root, and symlinked helpers", async () => {
-  let changes = 0
-  const watcher = createSourceWatcher(() => {
-    changes++
+test("real watchers observe atomic saves to nested and outside-root helpers", async () => {
+  await expectAtomicHelperReload(async (paths) => {
+    await Bun.write(paths.entry, 'export { value as default } from "../shared/nested/helper"')
   })
-  using _watcher = { [Symbol.dispose]: watcher.dispose }
-  await using sources = await fixture(watcher.wait)
-  const entry = new URL("plugin/tui.ts", sources.url)
-  const helper = new URL("shared/nested/helper.ts", sources.url)
-  await Bun.write(helper, "export const value = 1")
-  await Bun.write(entry, 'export { value as default } from "./link"')
-  await symlink(fileURLToPath(helper), fileURLToPath(new URL("plugin/link.ts", sources.url)))
-  expect((await sources.read(entry.href)).module).toMatchObject({ default: 1 })
-  const count = changes
-  await Bun.write(new URL(helper.href + ".new"), "export const value = 2")
-  await rename(new URL(helper.href + ".new"), helper)
-  const deadline = Date.now() + 3000
-  while (Date.now() < deadline) {
-    if (changes > count) break
-    await Bun.sleep(10)
-  }
-  expect(changes).toBeGreaterThan(count)
-  expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
+})
+
+// File symlinks cannot use junctions on Windows and require symlink privileges.
+test.skipIf(!supportsFileSymlinks())("real watchers observe atomic saves to symlinked helpers", async () => {
+  await expectAtomicHelperReload(async (paths) => {
+    await Bun.write(paths.entry, 'export { value as default } from "./link"')
+    await symlink(fileURLToPath(paths.helper), fileURLToPath(new URL("plugin/link.ts", paths.url)), "file")
+  })
 })
 
 test.each(["", "?mode=plugin", "?mode=plugin#section"])(
@@ -856,6 +847,47 @@ test.each(["ts", "tsx"])("%s wildcard package barrels retain live exports", asyn
   loaded.increment()
   expect(loaded).toMatchObject({ count: 1 })
 })
+
+async function expectAtomicHelperReload(setup: (paths: { entry: URL; helper: URL; url: URL }) => Promise<void>) {
+  let changes = 0
+  const watcher = createSourceWatcher(() => {
+    changes++
+  })
+  using _watcher = { [Symbol.dispose]: watcher.dispose }
+  await using sources = await fixture(watcher.wait)
+  const entry = new URL("plugin/tui.ts", sources.url)
+  const helper = new URL("shared/nested/helper.ts", sources.url)
+  await Bun.write(helper, "export const value = 1")
+  await setup({ entry, helper, url: sources.url })
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 1 })
+  const count = changes
+  await Bun.write(new URL(helper.href + ".new"), "export const value = 2")
+  await rename(new URL(helper.href + ".new"), helper)
+  const deadline = Date.now() + 3000
+  while (Date.now() < deadline) {
+    if (changes > count) break
+    await Bun.sleep(10)
+  }
+  expect(changes).toBeGreaterThan(count)
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
+}
+
+function supportsFileSymlinks() {
+  if (process.platform !== "win32") return true
+  const dir = mkdtempSync(path.join(os.tmpdir(), "opencode-tui-symlink-"))
+  const target = path.join(dir, "target.ts")
+  const link = path.join(dir, "link.ts")
+  try {
+    writeFileSync(target, "")
+    symlinkSync(target, link, "file")
+    return true
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EPERM") return false
+    throw error
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
 
 async function fixture(watch: (file: string) => Promise<void> = async () => {}) {
   const dir = await tmpdir()
