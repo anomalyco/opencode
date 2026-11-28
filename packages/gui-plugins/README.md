@@ -390,17 +390,17 @@ when the agent uses the tab. `close` returns true only for a tab closed now; a p
 
 `@opencode/plugin/gui/builtin` holds what only the built-ins use. It is never published and is not in the modules a plugin bundle may require; a public SDK module never imports it.
 
-| Export                                                  | What it adds                                                                                     |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `onIdle(fn)`                                            | Runs work while the main thread is idle, e.g. a lazy chunk's preload                             |
-| `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                           |
-| `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                       |
-| `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                  |
-| `BuiltinPromptGate`                                     | Work the host waits for, for at most one second, before it sends a prompt or a command           |
-| `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                          |
+| Export                                                  | What it adds                                                                                   |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `onIdle(fn)`                                            | Runs work while the main thread is idle, e.g. a lazy chunk's preload                           |
+| `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                         |
+| `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                     |
+| `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                |
+| `BuiltinPromptGate`                                     | Work the host waits for, for at most one second, before it sends a prompt or a command         |
+| `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                        |
 | `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`, `ctx.provideFor` for per-consumer contracts |
-| `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)`   |
-| `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                     |
+| `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)` |
+| `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                   |
 
 Each registry token has the same id as the public one, so the host reads every item through it. The host builds every context with the built-in members; `builtinContext` and `builtinMainContext` only type them. A plugin bundle's catalog holds every locale inline, and the host rejects a bundle whose catalog has a loader.
 
