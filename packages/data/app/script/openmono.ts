@@ -1,5 +1,5 @@
 // Copies the site's OpenMono files into this app: each style's "latin", "cyrillic" and "rest" subsets that
-// services/site/script/openmono.py builds from OpenMono 1.000, and their licence. Run it from packages/data/app
+// services/site/script/openmono.py builds from OpenMono 1.001, and their licence. Run it from packages/data/app
 // after the site's files change, with the folder that holds them:
 //
 //   bun script/openmono.ts ../../../services/site/src/asset/fonts
