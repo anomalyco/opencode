@@ -188,7 +188,10 @@ const toolUpdates = {
 
 const isHostedTool = (tool: ToolEntry) => tool.type === "tool" && tool.native !== undefined
 
-const declaresInPlace = (request: LLMRequest) => toolUpdateKinds(request).includes("add")
+// Automatic `context_management` compaction drops developer messages, removal notices included, while the tools stay
+// declared, so tool changes fold alongside it.
+const declaresInPlace = (request: LLMRequest) =>
+  request.providerOptions?.contextManagement === undefined && toolUpdateKinds(request).includes("add")
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -316,7 +319,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     lowerToolChanges: toolChangeLowering(layout.head.length > 0, custom),
   })
   return {
-    ...conversation,
+    model: conversation.model,
     input: [...layout.head, ...conversation.input],
     ...generation,
     ...Cache.openAIRequestTTL(requestTTL(request)),
@@ -406,6 +409,7 @@ export const protocol = Protocol.make({
   }),
   supportsEffortUpdates,
   toolUpdates,
+  namespaces: true,
 })
 
 const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })

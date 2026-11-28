@@ -1,0 +1,101 @@
+---
+title: "Effect SDK"
+description: "โฮสต์ OpenCode ในโปรแกรม Effect ด้วย @opencode/sdk/effect ซึ่งเป็น SDK แบบฝังที่ใช้ Effect โดยตรง"
+---
+
+`@opencode/sdk/effect` เป็น SDK แบบฝังที่ใช้ Effect โดยตรง การดำเนินการคืน Effect และ Stream ที่มีชนิด และการปิด
+Scope ที่เป็นเจ้าของจะคืนทรัพยากรของเราเตอร์ บริการ Location และ Fiber รวมถึงยกเลิกการลงทะเบียนปลั๊กอิน
+
+```sh
+bun add @opencode/sdk effect@4.0.1
+```
+
+## สร้างโฮสต์
+
+สร้างโฮสต์ภายใน `Effect.scoped` แล้วใช้กลุ่ม API ที่สร้างขึ้นหรือนามแฝง `sessions`
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+โฮสต์แบบฝังใช้ค่าตาม schema ข้อผิดพลาดที่ประกาศไว้ ตัวเลือกคำขอ และ Stream แบบเดียวกับ
+`@opencode/client/effect`
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## สตรีมอีเวนต์
+
+เอนด์พอยต์แบบสตรีมคืนค่า `Stream` ของ Effect หากต้องอ่านสตรีมเบื้องหลัง ให้แยกงานที่อ่านสตรีมไปทำงานใน Fiber ภายใน Scope ของโฮสต์
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## ปรับแต่ง
+
+ปรับแต่งอินสแตนซ์ OpenCode ของคุณด้วยการลงทะเบียนปลั๊กอิน Effect ใช้โฮสต์
+แบบฝังเพื่อปรับแต่งเอเจนต์ โมเดล เครื่องมือ และพฤติกรรมอื่น
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+ดู[เอกสารปลั๊กอิน Effect ฉบับเต็ม](/build/plugins/effect)สำหรับฮุก
+การแปลง เครื่องมือ และบริบทปลั๊กอินทั้งหมด
+
+## Layer
+
+ใช้ `OpenCode.layer()` เมื่อโฮสต์แบบฝังควรเป็นบริการของแอป
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

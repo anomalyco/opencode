@@ -10,20 +10,20 @@ import { docsUrl } from "~/lib/docs"
  *   free ones are offered (the FAQ: "a set of free models that you can use without creating an
  *   account").
  * - The free models today (models.dev's opencode provider, cost 0, not deprecated): Big Pickle,
- *   DeepSeek V4.1 Flash Free, GLM-5.3-Flash Free, MiMo-V2.6-Flash Free and a few more; the TUI's
+ *   DeepSeek V4.1 Flash Free, MiMo-V2.6-Flash Free and a few more; the TUI's
  *   model picker marks them "Free" (tui component/dialog-model.tsx).
  * - OpenCode Go is $10/month and Go Plus $40/month (the Console's /console/go page).
  */
 /** The free models the site names (models.dev's opencode provider has the full, live list). */
-export const freeModels = ["Big Pickle", "DeepSeek V4.1 Flash Free", "GLM-5.3-Flash Free"]
+export const freeModels = ["Big Pickle", "DeepSeek V4.1 Flash Free"]
 
-export function getStarted(route: (path: string) => string) {
+export function getStarted(route: (path: string) => string, consoleHref = route) {
   const links = {
     download: route("/product"),
     // The docs' list of the free models (its pricing table above mixes in the paid ones).
     free: route(docsUrl("/console/models/#free-models")),
     subs: route(docsUrl("/providers/")),
-    go: "/console/go",
+    go: consoleHref("/console/go"),
   }
   return {
     title: "Get started",
@@ -40,8 +40,8 @@ export function getStarted(route: (path: string) => string) {
     freeModels,
     subscriptions: byos.yours.items,
     plans: [
-      { name: "OpenCode Go", amount: "$10", href: "/console/go#console-go-plan-go" },
-      { name: "OpenCode Go Plus", amount: "$40", href: "/console/go#console-go-plan-go-plus" },
+      { name: "OpenCode Go", amount: "$10", href: consoleHref("/console/go#console-go-plan-go") },
+      { name: "OpenCode Go Plus", amount: "$40", href: consoleHref("/console/go#console-go-plan-go-plus") },
     ],
     steps: [
       { title: "Download", line: "Desktop, terminal or mobile." },

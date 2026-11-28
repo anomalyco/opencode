@@ -218,17 +218,23 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     .map((part) => ({ name: part.filename, mime: part.mime, path: part.path }))
 
   return {
+    // Quotes lead, like an email reply, and the rest follows the user's own text.
     text: [
-      ...(text.trim() ? [text] : []),
-      ...attachments.map(formatAttachmentReference),
-      ...comments.map((comment) => {
-        if (comment.type === "note") return formatNoteComment(comment)
+      ...comments.flatMap((comment) => (comment.type === "quote" ? [formatQuoteComment(comment)] : [])),
+      [
+        ...(text.trim() ? [text] : []),
+        ...attachments.map(formatAttachmentReference),
+        ...comments.flatMap((comment) => {
+          if (comment.type === "note") return [formatNoteComment(comment)]
 
-        if (comment.type === "quote") return formatQuoteComment(comment)
+          if (comment.type === "quote") return []
 
-        return formatCommentNote(comment)
-      }),
-    ].join("\n"),
+          return [formatCommentNote(comment)]
+        }),
+      ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     displayText: text,
     files: [...files, ...context, ...inline],
     agents,

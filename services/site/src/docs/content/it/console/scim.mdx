@@ -1,0 +1,93 @@
+---
+title: "Sincronizzazione della directory"
+description: "Aggiungi e rimuovi automaticamente i membri dello spazio di lavoro da Okta, Microsoft Entra ID o qualsiasi provider di identità SCIM 2.0."
+---
+
+La sincronizzazione della directory (SCIM 2.0) aggiunge le persone allo spazio di lavoro quando le assegni nel provider di identità
+e ne revoca l'accesso quando rimuovi l'assegnazione. Continui a gestire i ruoli in Console.
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## Prima di iniziare
+
+- Configura l'[SSO](/console/sso) per lo spazio di lavoro.
+- [Verifica](/console/sso#verify-email-domains) tutti i domini degli indirizzi email usati per accedere. La sincronizzazione aggiunge solo
+  chi ha un indirizzo su un dominio verificato. Invita le altre persone da [Membri](/console/members).
+
+## Creare un token
+
+Solo i proprietari dello spazio di lavoro possono configurare la sincronizzazione della directory o creare e revocare i suoi token.
+
+1. Apri **Settings › Security** e fai clic su **Set up** in **Directory sync**.
+2. Copia lo **SCIM base URL** e il token. Il token viene mostrato solo una volta, quindi salvalo in un gestore di segreti.
+
+Il tuo provider di identità invia il token con ogni richiesta.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Collegare il provider di identità
+
+### Okta
+
+1. Aggiungi l'app **SCIM 2.0 Test App (Header Auth)**.
+2. Imposta l'URL di base e inserisci `Bearer ` seguito dal token in **API Token**.
+3. Abilita **Create Users**, **Update User Attributes** e **Deactivate Users**. Lascia disattivati **Import Groups** e la
+   sincronizzazione delle password.
+
+### Microsoft Entra ID
+
+1. Nella tua app enterprise, apri **Provisioning** e imposta la modalità su **Automatic**.
+2. Inserisci l'URL di base come **Tenant URL** e il token come **Secret Token**.
+3. Assegna utenti e gruppi, poi avvia il provisioning.
+
+### Altri provider
+
+Configura un'app SCIM 2.0 con l'URL di base e l'autenticazione tramite token nell'header. Console supporta gli endpoint `/Users` e
+`/Groups`.
+
+Assegna prima una persona di prova. **Directory sync** mostra **Connected to your identity provider** dopo la prima
+richiesta.
+
+## Cosa viene sincronizzato
+
+| Nel tuo provider di identità   | In Console                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| Assegni una persona            | Aggiunta come **Member**. I membri esistenti mantengono il ruolo.                 |
+| Aggiorni un nome               | Profilo aggiornato.                                                               |
+| Togli l'assegnazione o disattivi | Accesso sospeso e mostrato come **Deactivated**. Le chiavi API che ha creato vengono revocate. |
+| Riassegni                      | Accesso ripristinato. Le chiavi revocate restano revocate.                        |
+| Elimini                        | Rimossa dallo spazio di lavoro. Il suo account e gli altri spazi di lavoro non vengono toccati. |
+
+- I ruoli e gli indirizzi email non vengono modificati dalla sincronizzazione della directory.
+- L'ultimo proprietario non può essere disattivato o eliminato.
+- Gli spazi di lavoro con un abbonamento [Go](/console/go) non possono aggiungere membri tramite la sincronizzazione della directory.
+
+## Gruppi
+
+Sincronizza i gruppi per assegnare tag ai loro membri, ad esempio con **Push Groups** di Okta o tramite l'assegnazione dei gruppi in Entra.
+Assegna prima le persone, poi sincronizza i relativi gruppi.
+
+```text
+Platform Admins  →  platform-admins
+```
+
+Ogni gruppo assegna ai propri membri un tag con il suo nome. In **Settings › Security › Group tags** puoi
+rinominare un tag, associare più gruppi a uno stesso tag o disattivare l'assegnazione del tag per un gruppo. Chi esce da un gruppo perde il relativo tag.
+
+## Ruotare il token
+
+1. Fai clic su **New token** e installalo nel tuo provider di identità.
+2. Aspetta che compaia la data dell'ultimo utilizzo del nuovo token.
+3. Revoca il vecchio token.
+
+Revocare un token ferma gli aggiornamenti futuri ma non cambia i membri esistenti. Eliminare la connessione SSO revoca tutti
+i token.
+
+## SSO e sincronizzazione della directory
+
+Una volta che uno spazio di lavoro ha emesso un token, l'SSO non [aggiunge più membri automaticamente](/console/sso#automatic-membership).
+È la directory a decidere chi ne fa parte, anche se il token viene revocato in seguito.

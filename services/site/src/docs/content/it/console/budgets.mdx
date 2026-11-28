@@ -1,0 +1,89 @@
+---
+title: "Budget"
+description: "Limita la spesa mensile di uno spazio di lavoro, dei suoi membri e dei suoi account di servizio."
+---
+
+I budget limitano la spesa mensile tramite policy. I proprietari e gli amministratori li gestiscono in **Controls**.
+
+## Livelli di budget
+
+| Destinatari della policy | Si applica a                                          |
+| ------------------------ | ----------------------------------------------------- |
+| Intero spazio di lavoro  | Spesa combinata di tutti i membri e gli account di servizio |
+| Tutti i membri           | Ogni membro, oppure un'unica dotazione condivisa per tutti i membri |
+| Membri con tag           | I membri con i tag scelti                             |
+| Questi membri            | Membri specifici                                      |
+| Tutti gli account di servizio | Ogni account di servizio, oppure un'unica dotazione condivisa |
+| Questi account di servizio | Account di servizio specifici                        |
+
+Una richiesta deve rientrare in ogni budget applicabile. Una dotazione più ampia non prevale mai su una più piccola. Senza alcun
+budget, la spesa è illimitata.
+
+## Budget dello spazio di lavoro
+
+Il budget dello spazio di lavoro blocca le richieste per tutti quando lo spazio di lavoro lo raggiunge.
+
+1. Apri **Controls** e fai clic su **Add policy**.
+2. Scegli **Entire workspace** e aggiungi una regola **Budget**.
+3. Inserisci il limite mensile in USD e fai clic su **Save**.
+
+## Budget dei membri
+
+Scegli **All members** in una policy per dare a ogni membro una dotazione mensile, oppure condividi un unico importo tra il gruppo.
+Scegli membri o tag specifici per coprire un gruppo più ristretto.
+
+Per impostare un budget per una persona:
+
+1. Apri la scheda del membro in **Settings › Members**.
+2. Fai clic su **Create budget policy** per aprire l'editor con il membro già selezionato.
+3. Inserisci l'importo e fai clic su **Save**.
+
+La pagina del membro elenca le policy applicabili. Se anche un budget per tutti i membri lo copre, si applicano entrambi i limiti.
+
+## Budget degli account di servizio
+
+In **Controls**, scegli **All service accounts** o **These service accounts**, aggiungi una regola **Budget** e imposta una
+dotazione mensile individuale o condivisa. La policy copre ogni chiave di quegli account.
+
+## Importi e reimpostazioni
+
+- Gli importi sono in dollari statunitensi con un massimo di due decimali.
+- I budget si reimpostano il giorno 1 di ogni mese alle 00:00 UTC.
+- Un budget di `$0` blocca tutta la spesa conteggiata nei budget.
+- Quando aggiungi o modifichi un budget, la spesa già registrata nel mese continua a contare: il budget non riparte da zero.
+
+## Cosa viene conteggiato
+
+Per impostazione predefinita, un budget copre **All spend**. Puoi restringerlo a modelli selezionati; in tal caso contano solo quei modelli,
+con un'unica dotazione per l'insieme o una dotazione separata per ogni modello.
+
+| Spesa                                                                | Conteggiata nei budget        |
+| -------------------------------------------------------------------- | ----------------------------- |
+| Modelli di Console a pagamento                                       | Sì                            |
+| Modelli sui [tuoi provider](/console/providers) con un prezzo impostato | Sì, al prezzo configurato  |
+| [Ricerca web](/console/websearch)                                     | Sì, per i budget su tutte le spese |
+| Modelli gratuiti                                                      | No                            |
+| Utilizzo di [Go](/console/go) entro il piano                          | No                            |
+| Utilizzo extra di Go pagato con crediti                               | Sì                            |
+
+## Quando un budget viene raggiunto
+
+Le nuove richieste ricevono un errore HTTP `429` finché il budget non si rinnova o un proprietario o un amministratore non lo aumenta. La risposta indica
+che una policy di budget ha bloccato la richiesta, senza specificare quale budget. Apri la richiesta in **Activity › Logs** per vedere la policy
+che l'ha bloccata.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+I budget vengono verificati all'inizio di una richiesta. Le richieste già in corso terminano, quindi la spesa può superare leggermente il
+limite.
+
+## Tenere traccia della spesa
+
+Ogni membro vede la propria spesa e il proprio limite in **Activity**. Apri **My usage** per **Activity › Overview**,
+compresi i dettagli dei budget e le date di reimpostazione.
+
+I proprietari e gli amministratori possono aprire **Activity › Usage** dal grafico della spesa. Suddivide il costo per giorno, modello e
+persona; il pulsante **Export usage** scarica i totali giornalieri degli ultimi 7, 30 o 90 giorni in CSV. Per scaricare lo
+stesso file da uno script, usa l'[API di esportazione dell'utilizzo](/console/api/usage-export).

@@ -45,12 +45,24 @@ import {
   SessionCompactionMessage,
   SessionCompactionQueued,
 } from "../message/message-content"
-import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
+import {
+  FileChangeRuns,
+  fileRuns,
+  runDisclosureKey,
+  ScriptChanges,
+  ScriptOutputProvider,
+  taskAgentName,
+  ToolRegistry,
+  type ContextGroupPart,
+  type ScriptOutputPlacement,
+} from "../tools/tool-renderer"
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
-import { timelineCategory, type TimelineDetail } from "./detail"
-import { currentToolFailed } from "../message/current-tool-state"
+import type { TimelineDetail } from "./detail"
+import { scriptFileFact, type FileFact } from "./facts"
+import { scriptOutputLayout } from "./script-output"
+import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
 import {
@@ -322,6 +334,10 @@ export function createSessionTimelineRowRenderer(input: {
       : undefined
   }
 
+  const latestCopyTurn = createMemo(() =>
+    Array.from(input.projection.assistantMessagesByParent().keys()).findLast((id) => !!copyContentID(id)),
+  )
+
   const padding = () => input.padding?.() ?? "px-4 md:px-6"
 
   const indexGroupContents = (refs: PartRef[]) => {
@@ -381,6 +397,29 @@ export function createSessionTimelineRowRenderer(input: {
               },
             ]
 
+          const script =
+            message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+          if (script)
+            return [
+              {
+                type: "file",
+                id: ref.partID,
+                file: script,
+                render: () => (
+                  <ScriptChanges
+                    files={[script]}
+                    render={ToolRegistry.render("patch") ?? GenericTool}
+                    fileOpen={(path) =>
+                      input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+                    }
+                    onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
+                    onSizeChange={onSizeChange}
+                  />
+                ),
+              },
+            ]
+
           if (ref.messageID !== ref.partID || !message) return []
 
           if (message.type === "shell")
@@ -425,7 +464,7 @@ export function createSessionTimelineRowRenderer(input: {
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) =>
-              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+              input.disclosure.value(`patch:${path}`) ?? (!!input.timelineDetail && diffOpens(input.timelineDetail()))
             }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
@@ -489,23 +528,95 @@ export function createSessionTimelineRowRenderer(input: {
         return Option.getOrUndefined(decodeMetadataFile(files[0]))?.file
       })
 
+      // Direct changes and a script's changes in the order they happened.
+      const runs = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "file") return []
+        const contents = indexGroupContents(group.refs)
+
+        return fileRuns(
+          group.refs.flatMap<Extract<SessionMessageAssistant["content"][number], { type: "tool" }> | FileFact>(
+            (ref) => {
+              const content = contents.get(ref.messageID)?.get(ref.partID)
+
+              if (content?.type === "tool") return [content]
+              const message = input.projection.messageByID().get(ref.messageID)
+
+              const file =
+                message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+              return file ? [file] : []
+            },
+          ),
+        )
+      })
+
       return (
-        <SessionFileToolGroup
-          tools={tools()}
-          fileOpen={(path) => {
-            const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+        <Show
+          when={runs().some((run) => run.type === "script")}
+          fallback={
+            <SessionFileToolGroup
+              tools={tools()}
+              fileOpen={(path) => {
+                const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 
-            if (open !== undefined) return open
+                if (open !== undefined) return open
 
-            if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
+                if (input.timelineDetail) return diffOpens(input.timelineDetail())
 
-            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+                if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
 
-            return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
-          }}
-          onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
-          onSizeChange={onSizeChange}
-        />
+                return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+              }}
+              onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+              onSizeChange={onSizeChange}
+            />
+          }
+        >
+          <FileChangeRuns
+            runs={runs()}
+            render={ToolRegistry.render("patch") ?? GenericTool}
+            tools={(run) => (
+              <SessionFileToolGroup
+                tools={run()}
+                fileOpen={(path) => {
+                  const open = input.disclosure.value(
+                    `${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`,
+                  )
+
+                  if (open !== undefined) return open
+
+                  if (input.timelineDetail) return diffOpens(input.timelineDetail())
+
+                  if (run()[0]?.name !== "edit" || path !== firstPath()) return false
+
+                  return (
+                    input.disclosure.value(runDisclosureKey(row().group.key, run(), tools()[0])) ??
+                    input.editToolDefaultOpen()
+                  )
+                }}
+                onFileOpenChange={(path, open) =>
+                  input.disclosure.set(`${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`, open)
+                }
+                onSizeChange={onSizeChange}
+              />
+            )}
+            fileOpen={(path) => {
+              const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+
+              if (open !== undefined) return open
+
+              if (input.timelineDetail) return diffOpens(input.timelineDetail())
+
+              if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+
+              return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+            }}
+            onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+            onSizeChange={onSizeChange}
+          />
+        </Show>
       )
     }
 
@@ -576,6 +687,7 @@ export function createSessionTimelineRowRenderer(input: {
                 content={content()}
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                keepCopyVisible={latestCopyTurn() === row().userMessageID}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
@@ -595,20 +707,7 @@ export function createSessionTimelineRowRenderer(input: {
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
     if (item.type === "tool" && item.name === "execute") return true
 
-    if (input.timelineDetail) {
-      const category = timelineCategory(item)
-
-      if (
-        category &&
-        input.timelineDetail()[category].placement === "hidden" &&
-        item.type === "tool" &&
-        currentToolFailed(item)
-      )
-        return true
-
-      if (category === "shell" || category === "edit" || category === "thinking")
-        return input.timelineDetail()[category].details === "expanded"
-    }
+    if (input.timelineDetail) return placeContent(item, input.timelineDetail(), "current").opens
 
     if (item.type === "reasoning") return input.reasoningMode() === "full"
 
@@ -681,6 +780,19 @@ export function createSessionTimelineRowRenderer(input: {
       }
     }
 
+    if (source === "codemode") {
+      const state = message.metadata?.state
+      const outcome: Outcome = state === "error" || state === "cancelled" ? state : "completed"
+      const jobID = message.metadata?.jobID
+
+      return {
+        label: i18n.t(outcomeNoticeKey(outcome), { actor: "Script" }),
+        data: Predicate.isString(jobID) ? jobID : undefined,
+        outcome,
+        icon: outcomeNoticeIcon(outcome),
+      }
+    }
+
     return { label: message.description ?? message.text }
   }
 
@@ -696,8 +808,14 @@ export function createSessionTimelineRowRenderer(input: {
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
-        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
-        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
+        // Blocks stand a step further apart than a script stands from its own changes.
+        "pt-2":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          props.row.spacing === "tool" &&
+          TimelineRow.scriptChanges(props.row),
+        "pt-4":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          (props.row.spacing === "content" || (props.row.spacing === "tool" && !TimelineRow.scriptChanges(props.row))),
         "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >
@@ -738,6 +856,25 @@ export function createSessionTimelineRowRenderer(input: {
       const match = data.store.provider?.all?.get(value.model.providerID)
       const variantOnly = value.previous?.providerID === value.model.providerID && value.previous.id === value.model.id
       const variant = value.model.variant ?? "default"
+
+      // A model's faster and slower speeds are models of their own ("gpt-5.5-fast"), so moving between them is a
+      // change of speed.
+      const info = match?.models?.[value.model.id]
+      const before = value.previous?.providerID === value.model.providerID && match?.models?.[value.previous.id]
+
+      if (
+        info &&
+        before &&
+        !variantOnly &&
+        (before.speed?.base ?? value.previous?.id) === (info.speed?.base ?? value.model.id)
+      )
+        return {
+          providerID: value.model.providerID,
+          variant: undefined,
+          label: info.speed
+            ? i18n.t("ui.sessionTimeline.notice.speedSwitched", { speed: info.speed.id })
+            : i18n.t("ui.sessionTimeline.notice.speedStandard"),
+        }
 
       return {
         providerID: value.model.providerID,
@@ -1216,9 +1353,7 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
-              {content}
-            </div>
+            <div data-slot="session-turn-assistant-content">{content}</div>
           </div>
         </Frame>
       )
@@ -1420,11 +1555,23 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
+  // Where each script's Output row goes, from the rows: after its changes when they are drawn right after it.
+  const scriptOutput = createMemo(() =>
+    scriptOutputLayout(input.projection.rows(), input.projection.messageByID(), data.flag("full_codemode")),
+  )
+
+  const scriptPlacement: ScriptOutputPlacement = {
+    afterChanges: (partID) => scriptOutput().afterChanges.has(partID),
+    outputAfter: (fileID) => scriptOutput().outputAfter.get(fileID),
+  }
+
   function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
     return (
-      <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
-      </Show>
+      <ScriptOutputProvider value={scriptPlacement}>
+        <Show when={TimelineRow.key(props.row())} keyed>
+          {(_key) => render(props.row, props.onSizeChange)}
+        </Show>
+      </ScriptOutputProvider>
     )
   }
 

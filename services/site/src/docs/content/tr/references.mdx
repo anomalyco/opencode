@@ -1,0 +1,280 @@
+---
+title: "Referanslar"
+description: "OpenCode'a geçerli projenin dışındaki yerel dizinlere ve Git depolarına adlandırılmış erişim verin, ardından bunları promptlara ekleyin."
+---
+
+Referanslar, OpenCode'un geçerli projenin dışındaki dizinlere bir takma adla erişmesini sağlar. `opencode.json` veya
+`opencode.jsonc` dosyasına bir referans tanımlayın, ardından gerektiğinde istemcide takma adıyla prompta ekleyin.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+`docs` referansını ekledikten sonra agent'tan ilgili yolu incelemesini isteyin:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Referansları belgeler, paylaşılan kitaplıklar, örnekler veya başka bir depodan gelen kaynak kodu için kullanın.
+
+## Yerel
+
+Yerel bir dizin için `path` kullanın:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Yollar şu şekilde davranır:
+
+- Göreli yollar yapılandırma dosyasını içeren dizinden çözümlenir.
+- Mutlak yollar desteklenir.
+- `~/docs` gibi ana dizine göreli yollar desteklenir.
+
+Başka alan gerekmediğinde dize kısa yazımını kullanın:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  Bir kısa yazım dizesi yalnızca `.`, `/` veya `~` ile başladığında yerel bir yoldur. `docs` değil `./docs` kullanın;
+  çıplak `docs` değeri bir Git deposu olarak yorumlanır.
+</Callout>
+
+## Git
+
+Uzak bir Git deposu için `repository` kullanın:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Desteklenen uzak biçimler şunlardır:
+
+- GitHub `owner/repo` kısa yazımı
+- Git URL'leri
+- Ana bilgisayar/yol biçimleri
+- SCP tarzı uzak adresler
+
+Yerel `file:` depoları desteklenmez.
+
+Uzak deponun varsayılan dalını izlemek için dize kısa yazımını kullanın:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+`branch` olmadan OpenCode uzak deponun varsayılan dalını checkout eder ve yeniler. Dal adları harf, sayı, `/`, `_`, `.` ve
+`-` içerebilir; ancak `-` ile başlayamaz veya `..` içeremez.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Depolama
+
+OpenCode her uzak depoyu normalleştirir ve uzak depo ile dal başına bir checkout'u genel veri dizini altında saklar.
+Açık bir dal verilmediğinde yol bu biçimi kullanır:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+Tipik bir Linux kurulumunda `Effect-TS/effect` şurada saklanır:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+Açık bir dal, kodlanmış bir `@<branch>` soneki ekler:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Yenileme
+
+Eksik depolar eşzamansız olarak klonlanır. Mevcut checkout'lar, referanslar yüklendiğinde veya yeniden yüklendiğinde ve
+konumlarında yeni bir kullanıcı promptu kabul edildikten sonra arka planda denetlenir.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+Bir checkout, son yenileme denemesi en az 24 saat önceyse veya hiç deneme kaydedilmemişse yenilenebilir. Yenileme, uzak
+depoyu getirir ve yapılandırılmış dala veya uzak deponun varsayılan dalına sıfırlar.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+Yenileme davranışı şu kuralları izler:
+
+- Zaman damgaları hizmet yeniden başlatmaları arasında korunur.
+- Aynı checkout'u kullanan konumlar onun zaman damgasını paylaşır.
+- Başarısız denemeler günlüğe yazılır ve 24 saatlik sınıra tabi kalır.
+- Bir konum kullanılmadığı sürece düzenli yoklama yapılmaz.
+- Klonlama veya yenileme hataları diğer referansların yüklenmesini durdurmaz.
+
+Promptlar klonlamayı veya yenilemeyi beklemez. Sonraki bir araç okuması güncellenmiş checkout'u görse bile bir ek daha eski
+içerik barındırabilir ve yeni bir referans, checkout'u hazır olmadan görünebilir.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Önbelleğe alınmış checkout'lar paylaşılır ve bir agent onları kullanırken güncellenebilir. Yenileme onları sıfırladığı
+  için önbelleğe alınmış checkout'ları düzenlemekten kaçının.
+</Callout>
+
+## Kullanım talimatları
+
+`description`, agent'lara bir referansın ne zaman ilgili olduğunu söyler. Açıklaması olan referanslar, takma adları ve
+çözümlenmiş yollarıyla agent talimatlarında görünür.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Açıklaması olmayan referanslar istemciler için kullanılabilir kalır ancak otomatik olarak duyurulmaz.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Görünürlük
+
+Bir referansı etkileşimli istemci seçicilerinden kaldırmak için `hidden` değerini `true` yapın:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` yalnızca etkileşimli görünürlüğü etkiler. Referans, referans API'sinde ve açıklaması varsa agent talimatlarında
+kalır.
+
+## Kullanım
+
+İstemciler bir referansı kök takma adıyla ekler. Ek, kökün hemen altındaki dosya ve dizinlerin özyinelemesiz listesini içerir.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Kökün altındaki içeriğe ihtiyaç duyduğunuzda agent'tan belirli bir yolu incelemesini isteyin.
+
+## İzinler
+
+Referanslar ek araç izinleri vermez. Etkin konumun dışına erişim yine normal araç kurallarına ve `external_directory`
+iznine tabidir; düzenleme ayrıca geçerli düzenleme iznini gerektirir.
+
+```text
+Read ../product-docs/api.md
+```
+
+İstek yalnızca etkin izinler o harici okumaya izin verdiğinde başarılı olur.
+
+## Alanlar
+
+| Alan          | Yerel    | Git      | Açıklama                                      |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path`        | Gerekli  | Hayır    | Yerel dizin yolu                              |
+| `repository`  | Hayır    | Gerekli  | Uzak Git deposu                               |
+| `branch`      | Hayır    | İsteğe bağlı | Getirilecek ve checkout edilecek dal      |
+| `description` | İsteğe bağlı | İsteğe bağlı | Agent'ların ne zaman kullanması gerektiğini anlatan rehberlik |
+| `hidden`      | İsteğe bağlı | İsteğe bağlı | Etkileşimli istemci seçicilerinden gizle |
+
+Eksiksiz bir Git girdisi Git ile uyumlu tüm alanları kullanabilir:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Takma adlar
+
+Bir takma ad boş olamaz veya `/`, `\`, boşluk, ters tik ya da virgül içeremez.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

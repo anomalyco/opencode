@@ -72,7 +72,7 @@ const gaps = (rows: TimelineRow.TimelineRow[]) => {
 
 describe("timelineGaps", () => {
   test("lines of activity in a row sit the small gap apart", () => {
-    expect(gaps([context("context:explored"), context("context:edited")])).toEqual(["-", "s"])
+    expect(gaps([context("context:explored"), context("context:edited")])).toEqual(["s", "-"])
   })
 
   test("a reply reads as one stretch, its words a little apart from its activity", () => {
@@ -84,7 +84,7 @@ describe("timelineGaps", () => {
         context("context:edited"),
         part("part:text-1", "assistant:text:1"),
       ]),
-    ).toEqual(["-", "l", "m", "m", "m"])
+    ).toEqual(["l", "m", "m", "m", "-"])
   })
 
   test("the agent's words sit a little apart from its activity, a command included", () => {
@@ -94,7 +94,7 @@ describe("timelineGaps", () => {
         part("part:shell", "shell"),
         part("part:text-1", "assistant:text:1"),
       ]),
-    ).toEqual(["-", "m", "m"])
+    ).toEqual(["m", "m", "-"])
   })
 
   test("a file sits as any row of activity does", () => {
@@ -108,7 +108,7 @@ describe("timelineGaps", () => {
         }),
         context("context:next"),
       ]),
-    ).toEqual(["-", "m", "s"])
+    ).toEqual(["m", "s", "-"])
   })
 
   test("each thing the user did stands apart, even from another thing they did", () => {
@@ -119,7 +119,7 @@ describe("timelineGaps", () => {
         new TimelineRow.Notice({ userMessageID: "shell-turn", messageID: goal.id }),
         context("context:next"),
       ]),
-    ).toEqual(["-", "l", "l", "l"])
+    ).toEqual(["l", "l", "l", "-"])
   })
 
   test("session events sit together, apart from the work around them", () => {
@@ -130,6 +130,46 @@ describe("timelineGaps", () => {
         new TimelineRow.Notice({ userMessageID: "user", messageID: switched.id }),
         new TimelineRow.UserMessage({ userMessageID: "next" }),
       ]),
-    ).toEqual(["-", "l", "s", "l"])
+    ).toEqual(["l", "s", "l", "-"])
+  })
+
+  test("a turn gap holds the gap above its turn, so a message waiting below live status brings its own", () => {
+    expect(
+      gaps([
+        part("part:text-1", "assistant:text:1"),
+        new TimelineRow.Activity({ userMessageID: "user" }),
+        new TimelineRow.TurnGap({ userMessageID: "next" }),
+        new TimelineRow.UserMessage({ userMessageID: "next" }),
+      ]),
+    ).toEqual(["-", "-", "l", "-"])
+  })
+
+  test("live status takes no gap from the row above it and holds the gap to a compaction waiting below", () => {
+    expect(
+      gaps([
+        part("part:text-1", "assistant:text:1"),
+        new TimelineRow.Activity({ userMessageID: "user" }),
+        new TimelineRow.CompactionQueued({ userMessageID: "user", inboxID: "compaction" }),
+      ]),
+    ).toEqual(["-", "l", "-"])
+  })
+
+  // Older history loads above rows that are on screen. A row whose gap changed then would change height in view.
+  test("rows keep their gaps when older rows load above them", () => {
+    const turn = [new TimelineRow.UserMessage({ userMessageID: "next" }), part("part:text-1", "assistant:text:1")]
+    const gapped = [new TimelineRow.TurnGap({ userMessageID: "next" }), ...turn]
+
+    // What was loaded first starts inside a turn, at a prompt, or at notices before a prompt.
+    const loaded = [
+      { rows: [part("part:text-0", "assistant:text:0"), context("context:edited"), ...gapped], with: [] },
+      { rows: turn, with: [new TimelineRow.TurnGap({ userMessageID: "next" })] },
+      { rows: [new TimelineRow.Notice({ userMessageID: "next", messageID: switched.id }), ...gapped], with: [] },
+    ]
+
+    const older = [new TimelineRow.UserMessage({ userMessageID: "user" }), context("context:explored")]
+
+    loaded.forEach((page) =>
+      expect(gaps([...older, ...page.with, ...page.rows]).slice(-page.rows.length)).toEqual(gaps(page.rows)),
+    )
   })
 })

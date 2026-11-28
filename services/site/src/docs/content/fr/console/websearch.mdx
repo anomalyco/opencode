@@ -1,0 +1,44 @@
+---
+title: Recherche web dans la Console
+description: Recherche web hébergée pour OpenCode via Console.
+---
+
+La Console propose une recherche web hébergée aux utilisateurs d’OpenCode connectés à leur espace de travail. Il suffit qu’un propriétaire ou un administrateur l’active pour tous les membres. Ceux-ci n’ont pas besoin d’une clé distincte pour le fournisseur de recherche.
+
+Chaque recherche réussie coûte **0,01 $**. Ce montant est déduit du solde de l’espace de travail et imputé au plafond de dépenses du membre.
+
+## Activation
+
+1. Connectez-vous à la [Console](https://opencode.ai/console) en tant que propriétaire ou administrateur d’espace de travail.
+2. Ouvrez **Integrations** et cliquez sur **Set up** sur **Hosted Web Search**.
+3. Cliquez sur **Enable**.
+
+Chaque membre connecte ensuite OpenCode à l’espace de travail avec `/connect`.
+
+```text
+/connect
+```
+
+La configuration de l’espace de travail sélectionne **OpenCode Web Search** comme fournisseur par défaut. Les membres n’ont pas besoin de définir `websearch.provider` ni d’ajouter une clé d’API de fournisseur. Un membre qui définit son propre `websearch.provider` conserve ce choix.
+
+## Recherche
+
+Demandez à OpenCode des informations actuelles dans un prompt. Les recherches s’exécutent depuis OpenCode, et non depuis une page interactive de la Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Le fournisseur de recherche hébergée interroge le web public et renvoie jusqu’à huit résultats. OpenCode utilise les résultats pour répondre au prompt et citer ses sources.
+
+Consultez le [guide de recherche web](/websearch) pour configurer les autorisations ou désactiver l’outil.
+
+## Facturation
+
+La Console facture **0,01 $** lorsqu’une recherche renvoie un ensemble de résultats valide. Elle ne facture ni les recherches qui échouent ni celles qui sont bloquées par la limite de débit.
+
+La recherche web apparaît séparément de l’utilisation des modèles dans **Activity › Usage**, **Activity › Overview**, l’activité des membres, les factures et les exports CSV. Les politiques de budget sur toutes les dépenses applicables incluent les frais de recherche web.
+
+## Confidentialité
+
+La recherche web hébergée ne conserve aucune donnée. Console et son fournisseur de recherche hébergé traitent chaque requête et ses résultats sans en conserver le contenu.

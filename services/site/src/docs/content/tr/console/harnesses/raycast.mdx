@@ -1,0 +1,39 @@
+---
+title: "Raycast"
+description: "Console ve Go modellerini Raycast AI'da kullanın."
+---
+
+Console ve Go modellerini [OpenCode uzantısı](https://www.raycast.com/vimtor/opencode) üzerinden Raycast AI Chat,
+Quick AI ve AI Commands içinde kullanın. Uzantıların sağladığı modeller
+[Raycast Pro](https://www.raycast.com/pro) gerektirir.
+
+## Yapılandırma
+
+Uzantı, çalışma alanınızda etkin olan modelleri yükler. Kullanım ücretleri çalışma alanınıza yansıtılır. Ücretli modelleri veya Go modellerini seçin. Ücretsiz sohbet modelleri yalnızca OpenCode'da kullanılabilir. Raycast'ten bu modellere yapılan istekler HTTP `403` ile reddedilir.
+
+1. Uzantıyı Raycast Store'dan kurun.
+2. Bir [kişisel API anahtarı](/console/harnesses#get-an-api-key) oluşturun ve uzantının **API Key** tercihine yapıştırın.
+3. Uzantının Raycast model seçicide model sağlamasına izin verin.
+
+Console'da modelleri etkinleştirdikten veya devre dışı bıraktıktan sonra **Refresh Models** çalıştırın.
+
+```text
+Refresh Models
+```
+
+## Go
+
+[Go](/console/go) aboneliği olan bir çalışma alanından alınan anahtarı kullanın. Uzantı ardından Go modellerini model
+seçicide listeler.
+
+## Console MCP
+
+[Console MCP](/console/harnesses#console-mcp) sunucusunu **Install MCP Server** komutuyla ekleyin.
+
+| Alan       | Değer                             |
+| ---------- | --------------------------------- |
+| Transport  | HTTP                              |
+| URL        | `https://opencode.ai/console/mcp` |
+| OAuth Type | Dynamic                           |
+
+Raycast sunucuyu ilk kullandığında oturum açmanızı ister.

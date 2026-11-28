@@ -119,6 +119,13 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`machine\` (
+          \`id\` text PRIMARY KEY,
+          \`key\` text,
+          \`time_created\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`permission\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
@@ -290,6 +297,15 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`space\` (
+          \`space\` text NOT NULL,
+          \`key\` text NOT NULL,
+          \`value\` text,
+          \`revision\` integer NOT NULL,
+          CONSTRAINT \`space_pk\` PRIMARY KEY(\`space\`, \`key\`)
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`provider\` text NOT NULL,
@@ -318,6 +334,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
       yield* tx.run(`CREATE INDEX \`job_child_session_idx\` ON \`job\` (\`child_session_id\`);`)
       yield* tx.run(`CREATE INDEX \`job_id_idx\` ON \`job\` (\`id\`);`)
+      yield* tx.run(`CREATE UNIQUE INDEX \`machine_key_idx\` ON \`machine\` (\`key\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
       )
@@ -347,6 +364,13 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
       yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
+      )
+      yield* tx.run(`CREATE INDEX \`space_revision_idx\` ON \`space\` (\`space\`,\`revision\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`space_live_idx\` ON \`space\` (\`space\`,\`revision\`) WHERE "space"."value" is not null;`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`space_tombstone_idx\` ON \`space\` (\`space\`,\`revision\`,\`value\`) WHERE "space"."value" is null;`,
       )
     })
   },

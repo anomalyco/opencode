@@ -14,12 +14,12 @@ export const content = {
     },
     terminal: {
       name: "Terminal",
-      body: "En hurtig terminalbrugerflade, der virker i enhver shell, editor eller fjernserver.",
+      body: "En hurtig terminalbrugerflade, der virker i enhver shell, i enhver editor og på enhver fjernserver.",
       action: "Installer",
     },
     sdk: { body: "Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer.", action: "Læs docs" },
     mini: {
-      body: "En minimal terminalbrugerflade. Svarene skrives ind i din scrollback med én prompt nedenunder.",
+      body: "En enkel terminalbrugerflade. Svarene lander i din scrollback, med én prompt nederst.",
       action: "Installer",
     },
   },
@@ -27,34 +27,34 @@ export const content = {
     desktop: {
       title: "OpenCode | Desktopapp til macOS, Windows og Linux",
       description:
-        "Kør så mange OpenCode-agenter parallelt, som du vil, se hver ændring i en browser ved siden af, og fortsæt på enhver enhed. Til macOS, Windows og Linux.",
+        "Kør så mange OpenCode-agenter parallelt, som du vil, følg alle ændringer i browseren ved siden af, og fortsæt på en hvilken som helst enhed. Til macOS, Windows og Linux.",
       intro:
-        "Kør flere agenter på én gang, hver session i sin egen fane. Gennemgå hver ændring som et diff, kommenter enhver linje, og tjek resultatet i den indbyggede browser. Til macOS, Windows og Linux.",
+        "Kør flere agenter samtidig, hver session i sin egen fane. Gennemgå alle ændringer som diffs, kommentér på de linjer, du vil, og se resultatet i den indbyggede browser. Til macOS, Windows og Linux.",
       showcase: {
         "parallel-agents": {
           title: "Parallelle agenter",
-          body: "Start så mange agenter, du vil, og lad dem alle arbejde parallelt. Skift mellem dem, efterhånden som de bliver færdige.",
+          body: "Start så mange agenter, du vil, og lad dem arbejde parallelt. Skift mellem dem, efterhånden som de bliver færdige.",
         },
         "see-it-in-the-browser": {
           title: "Se det i browseren",
-          body: "Din app åbner i en browser ved siden af agenten, så I begge ser hver ændring lande.",
+          body: "Din app åbner i browseren ved siden af agenten, så I begge kan følge med, når ændringerne lander.",
         },
         "on-every-device": {
           title: "På alle enheder",
-          body: "Start agenter på alle dine enheder, og fortsæt i desktop-appen, terminalen eller på din telefon.",
+          body: "Start agenter på alle dine enheder, og fortsæt i desktopappen, i terminalen eller på telefonen.",
         },
         "extend-it": {
           title: "Udvid den",
-          body: "Forbind dine værktøjer og tjenester, så agenten kan arbejde med alt. Eller lad OpenCode bygge plugins til sig selv med deres egen brugerflade i sidepanelet.",
+          body: "Forbind dine værktøjer og tjenester, så agenten kan arbejde med hvad som helst. Eller lad OpenCode bygge sine egne plugins med hver sin brugerflade i sidebaren.",
         },
       },
     },
     mobile: {
-      title: "OpenCode | Mobile, dine kodningssessioner på telefonen",
+      title: "OpenCode | Mobile – dine kodningssessioner på telefonen",
       description:
         "Start og styr OpenCode-sessioner fra din telefon. Tal med agenten, mens den kører på din computer.",
       intro:
-        "Start og styr sessioner fra din telefon, hvor du end er. Ring til en session og tal med agenten, eller åbn en session og fortsæt, hvor du slap, alt med OpenCode på din egen computer.",
+        "Start og styr sessioner fra telefonen, uanset hvor du er. Ring til en session, og tal med agenten, eller åbn en session, og fortsæt, hvor du slap. OpenCode kører stadig på din egen computer.",
       features: {
         "notify-when-done": {
           title: "Besked når færdig",
@@ -75,83 +75,82 @@ export const content = {
         "mute-sessions": { title: "Slå lyd fra", body: "Behold en session på listen uden at få dens notifikationer." },
       },
       showcase: {
-        voice: { title: "Stemme", body: "Ring til en session, og sig, hvad du har brug for. Agenten svarer højt." },
-        sessions: { title: "Sessioner", body: "Åbn en session for at se, hvor den er, og fortsæt, hvor du slap." },
-        steer: { title: "Styr", body: "Send en opfølgning for at skifte retning midt i sessionen." },
-        results: { title: "Resultater", body: "Opkaldet fortæller dig, hvad der er ændret, når arbejdet er færdigt." },
+        voice: { title: "Stemme", body: "Ring til en session, og sig, hvad du har brug for. Agenten svarer med stemmen." },
+        sessions: { title: "Sessioner", body: "Åbn en session for at se, hvor langt den er nået, og fortsæt, hvor du slap." },
+        results: { title: "Resultater", body: "Når arbejdet er færdigt, får du at vide i opkaldet, hvad der er ændret." },
       },
     },
     terminal: {
       title: "OpenCode | Terminal-UI til open source-kodningsagenten",
       description:
-        "En hurtig terminalbrugerflade til OpenCode, der virker i enhver shell, editor eller fjernserver. Beskriv, hvad du vil, se hver ændring som et diff, og godkend kommandoer.",
+        "En hurtig terminalbrugerflade til OpenCode, der virker i enhver shell, editor og på enhver fjernserver. Beskriv, hvad du vil have, se alle ændringer som diffs, og godkend kommandoer.",
       intro:
-        "En hurtig terminalbrugerflade, der virker i enhver shell, editor eller fjernserver. Beskriv med almindelige ord, hvad du vil, se hver ændring lande som et diff, og vælg, hvilke kommandoer der kører af sig selv.",
+        "En hurtig terminalbrugerflade, der virker i enhver shell, editor og på enhver fjernserver. Beskriv med egne ord, hvad du vil have, se hver ændring som et diff med det samme, og vælg, hvilke kommandoer der kører automatisk.",
       features: {
         "any-terminal": {
           title: "Enhver terminal",
           body: "Virker i enhver shell, i din editors terminal eller på en fjernserver.",
         },
         "diffs-in-the-timeline": {
-          title: "Diffs i tidslinjen",
-          body: "Se hver ændring som et diff i tidslinjen, mens agenten laver den.",
+          title: "Diffs på tidslinjen",
+          body: "Se hver ændring på tidslinjen som et diff, så snart agenten laver den.",
         },
         "pick-up-later": {
           title: "Fortsæt senere",
-          body: "Fortsæt den seneste session med -c, eller en hvilken som helst med -s.",
+          body: "Fortsæt den seneste session med -c eller en valgfri session med -s.",
         },
         "one-off-runs": { title: "Enkeltkørsler", body: "opencode run sender én besked og udskriver svaret." },
         "agents-and-commands": {
           title: "Agenter og kommandoer",
-          body: "Skift agent med shift+tab, og åbn alle kommandoer med ctrl+p.",
+          body: "Skift agent med shift+tab, og åbn kommandolisten med ctrl+p.",
         },
         "auto-approve": {
           title: "Autogodkend",
           body: "Kør med --auto for at tillade alle handlinger, du ikke har afvist.",
         },
-        "any-server": { title: "Enhver server", body: "Forbind til en OpenCode-server via URL med --server." },
-        "usage-stats": { title: "Forbrug", body: "opencode stats viser forbrugsstatistik, du kan dele." },
+        "any-server": { title: "Enhver server", body: "Opret forbindelse til en OpenCode-server via dens URL med --server." },
+        "usage-stats": { title: "Forbrugsstatistik", body: "opencode stats viser forbrugsstatistik, du kan dele." },
       },
       showcase: {
         "ask-in-plain-words": {
-          title: "Spørg med egne ord",
-          body: "Skriv, hvad du vil, så viser agenten sin plan, mens den arbejder.",
+          title: "Skriv med egne ord",
+          body: "Skriv, hvad du vil have, så viser agenten sin plan undervejs.",
         },
         "approve-what-runs": {
           title: "Godkend det, der kører",
           body: "Ændringer vises som diffs, og kommandoer venter på din tilladelse.",
         },
         "make-it-yours": {
-          title: "Gør den til din",
-          body: "Skift tema med et tastetryk, fra standard til tokyonight og flere.",
+          title: "Tilpas terminalen",
+          body: "Skift tema med et tastetryk. Vælg mellem standardtemaet, tokyonight og flere andre.",
         },
-        mini: { title: "Mini", body: "Kør opencode mini, og svarene skrives ind i din egen scrollback." },
+        mini: { title: "Mini", body: "Kør opencode mini, så lander svarene direkte i din scrollback." },
       },
     },
     sdk: {
       title: "OpenCode | TypeScript-SDK til scripts, CI-jobs og værktøjer",
       description:
-        "Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer. Den typede TypeScript-klient opretter sessioner, sender prompts og streamer alle events, mens de sker.",
+        "Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer. Den typesikre TypeScript-klient opretter sessioner, sender prompts og streamer alle hændelser i realtid.",
       intro:
-        "Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer. SDK'et kører OpenCode i din egen proces med din konfiguration og dine modeller, og dets typede klient opretter sessioner, sender prompts og streamer alle events.",
+        "Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer. SDK'et kører OpenCode i din proces med din konfiguration og dine modeller. Den typesikre klient opretter sessioner, sender prompts og streamer alle hændelser.",
       features: {
         "typescript-client": {
           title: "TypeScript-klient",
-          body: "Typede requests og events med de samme værdier som @opencode/client.",
+          body: "Anmodninger og hændelser med typer og samme værdier som @opencode/client.",
         },
         "sessions-from-code": {
           title: "Sessioner fra kode",
-          body: "Opret sessioner og send prompts fra ethvert script.",
+          body: "Opret sessioner, og send prompts fra et hvilket som helst script.",
         },
-        "any-model": { title: "Enhver model", body: "Bruger de modeller, din OpenCode-opsætning har." },
+        "any-model": { title: "Enhver model", body: "Bruger de modeller, du har sat op i OpenCode." },
         "npm-or-bun": {
           title: "npm eller bun",
           body: "Installer det med npm i @opencode/sdk eller bun add @opencode/sdk.",
         },
-        "in-process-host": { title: "In-process-host", body: "Kører OpenCode i hukommelsen uden netværkshop." },
+        "in-process-host": { title: "In-process-host", body: "Kører OpenCode i hukommelsen, uden at gå via netværket." },
         "your-plugins": {
           title: "Dine plugins",
-          body: "Giv dine egne plugins med, når du opretter in-process-hosten.",
+          body: "Send dine egne plugins med, når du opretter in-process-hosten.",
         },
         "promise-or-effect": {
           title: "Promise eller Effect",
@@ -164,16 +163,16 @@ export const content = {
       },
       showcase: {
         "fix-ci-from-code": {
-          title: "Ret CI fra kode",
-          body: "Et kort script beder OpenCode rette fejlende tests og kører dem så igen.",
+          title: "Ret CI-fejl fra kode",
+          body: "Et kort script beder OpenCode rette de tests, der fejler, og kører dem igen.",
         },
         "follow-every-step": {
           title: "Følg hvert trin",
-          body: "Stream events for at se hvert værktøj, agenten kalder, mens det sker.",
+          body: "Stream hændelser, og se hvert værktøjskald, efterhånden som det sker.",
         },
         "build-your-own-tools": {
-          title: "Byg egne værktøjer",
-          body: "Kobl OpenCode på bots, dashboards og workflows med få linjer.",
+          title: "Byg dine egne værktøjer",
+          body: "Kobl OpenCode til bots, dashboards og arbejdsgange med få linjer kode.",
         },
         "in-your-process": {
           title: "I din proces",
@@ -184,53 +183,53 @@ export const content = {
     mini: {
       title: "OpenCode | Mini, en minimal terminalbrugerflade til agenten",
       description:
-        "Mini kører OpenCode i en minimal terminalbrugerflade. Svarene skrives ind i din terminals egen scrollback, og kun en prompt og en statuslinje bliver nederst.",
+        "Mini kører OpenCode i en enkel terminalbrugerflade. Svarene lander i terminalens egen scrollback, så kun en prompt og en statuslinje bliver stående nederst.",
       intro:
-        "En minimal terminalbrugerflade til OpenCode. Kør opencode mini, og svarene skrives direkte ind i din terminals egen scrollback, så du kan scrolle, søge og kopiere dem som alt andet output. Kun prompten og en statuslinje bliver nederst.",
+        "En enkel terminalbrugerflade til OpenCode. Kør opencode mini, så lander svarene direkte i terminalens egen scrollback. Rul, søg og kopiér som med alt andet output. Kun prompten og en statuslinje bliver stående nederst.",
       features: {
-        "your-scrollback": { title: "Din scrollback", body: "Svarene bliver til almindelig terminalhistorik." },
+        "your-scrollback": { title: "Din scrollback", body: "Svarene vises i terminalens almindelige historik." },
         "one-prompt": { title: "Én prompt", body: "Agent, model, kontekst og pris på én statuslinje." },
         permissions: { title: "Tilladelser", body: "Tillad ændringer og kommandoer fra promptområdet." },
         "how-much-shows": {
           title: "Hvor meget du ser",
-          body: "Stille, standard eller alt, for tænkning og værktøjsoutput.",
+          body: "Vælg stille, standard eller fuld visning af modellens ræsonnering og værktøjernes output.",
         },
         "pick-up-later": {
           title: "Fortsæt senere",
-          body: "Fortsæt den seneste session med -c, eller en hvilken som helst med -s.",
+          body: "Fortsæt den seneste session med -c eller en valgfri session med -s.",
         },
         "same-opencode": { title: "Samme OpenCode", body: "Samme server, agenter og modeller som de andre apps." },
         agents: { title: "Agenter", body: "Skift agent direkte fra prompten." },
-        compact: { title: "Kompakt", body: "Gør en lang session mindre med /compact." },
+        compact: { title: "Komprimer", body: "Komprimer en lang session med /compact." },
       },
     },
   },
   extensionCard: {
     name: "Udvidelser",
-    body: "Brug OpenCode i VS Code, eller i Zed og andre editorer via ACP.",
+    body: "Brug OpenCode i VS Code eller i Zed og andre editorer via ACP.",
     action: "Installer",
   },
   extensions: {
     browse: {
-      body: "Lad agenter bruge din rigtige browser.",
-      title: "OpenCode | Browse, din rigtige browser til kodningsagenter",
+      body: "Giv agenter adgang til den browser, du bruger til daglig.",
+      title: "OpenCode | Browse giver kodningsagenter adgang til din egen browser",
       description:
-        "Browse lader OpenCode og andre MCP-klienter bruge din rigtige browser. Agenter læser, klikker, skriver, tager skærmbilleder, optager faner og giver logins og 2FA tilbage til dig.",
+        "Med Browse kan OpenCode og andre MCP-klienter bruge din egen browser. Agenter kan læse, klikke, skrive, tage skærmbilleder og optage faner. Du tager selv over, når du skal logge ind eller bekræfte med 2FA.",
       intro:
-        "En MCP-server og en Chromium-udvidelse, der lader dine agenter bruge din rigtige browser med dine faner, logins og udvidelser. De åbner faner i baggrunden, samlet i grupper og ude af vejen, og læser sider, klikker, skriver, tager skærmbilleder og optager faner. Når det er din tur, for et login, en 2FA-prompt eller en betaling, giver de fanen tilbage til dig og fortsætter, når du klikker på Continue.",
+        "En MCP-server og en Chromium-udvidelse, så dine agenter kan bruge din egen browser med dine faner, login og udvidelser. Agenterne åbner grupper af faner i baggrunden, så de ikke forstyrrer dig. De kan læse sider, klikke, skrive, tage skærmbilleder og optage faner. Skal du logge ind, bekræfte med 2FA eller betale, får du fanen tilbage. Agenterne fortsætter, når du klikker på Continue.",
       features: {
         "your-real-browser": {
-          title: "Din rigtige browser",
+          title: "Din egen browser",
           body: "Chrome, Edge, Brave, Arc, Helium, Vivaldi, Opera og Chromium.",
         },
-        "out-of-your-way": { title: "Ude af vejen", body: "Agentfaner åbner i baggrunden i sammenklappede grupper." },
-        handoffs: { title: "Aflevering", body: "Klar login eller 2FA selv, og klik så på Continue." },
+        "out-of-your-way": { title: "Faner, der ikke forstyrrer", body: "Agenternes faner åbner i baggrunden i sammenklappede grupper." },
+        handoffs: { title: "Tag selv over", body: "Log ind eller gennemfør 2FA selv, og klik så på Continue." },
         "lend-a-tab": {
           title: "Lån en fane ud",
           body: "Klik på knappen i værktøjslinjen for at give en agent en åben fane.",
         },
         "record-and-capture": {
-          title: "Optag og gem",
+          title: "Optagelser og skærmbilleder",
           body: "Skærmbilleder, optagelser af faner og netværkstrafik.",
         },
         "any-mcp-client": {
@@ -238,19 +237,19 @@ export const content = {
           body: "OpenCode, Claude Code, Cursor, Codex, Zed og mange flere.",
         },
         "all-your-logins": {
-          title: "Alle dine logins",
-          body: "Agenter bruger de sites, du allerede er logget ind på. Ingen nøgler, ingen opsætning.",
+          title: "Allerede logget ind",
+          body: "Agenterne kan bruge de sider, du allerede er logget ind på. Ingen nøgler eller opsætning.",
         },
-        "allowed-sites": { title: "Tilladte sites", body: "Hold en agents fane på de sites, du angiver." },
+        "allowed-sites": { title: "Tilladte websites", body: "Begræns agentens fane til de websites, du angiver." },
       },
       install:
-        "Installer [Chrome-udvidelsen] først. Den guider dig gennem resten af trinene. Vil du installere CLI'en direkte (det burde du ikke have brug for), så brug en af disse.",
+        "Installer [Chrome-udvidelsen] først. Den guider dig gennem resten af trinene. Vil du installere CLI'en direkte, selvom det normalt ikke er nødvendigt, så brug en af disse metoder.",
     },
   },
   apps: {
     browse: {
       category: "Browserstyring for agenter",
-      body: "Lad din agent bruge din rigtige browser, med dine logins og faner.",
+      body: "Lad din agent bruge din egen browser med dine login og faner.",
     },
     opentunnel: { category: "Lokale tunneler", body: "Offentlige HTTPS-URL'er til lokale apps." },
     opentui: { category: "Bibliotek", body: "Et bibliotek til terminalbrugerflader." },
@@ -258,7 +257,7 @@ export const content = {
   },
   getStarted: {
     title: "Kom i gang",
-    lead: "Den nemmeste måde at starte på er at downloade OpenCode og bruge de gratis modeller. Ingen konto nødvendig. Vil du have mere, så tag dit eget abonnement med, eller brug OpenCode Go.",
+    lead: "Download OpenCode, og brug de gratis modeller. Det er den nemmeste måde at starte på, og du behøver ingen konto. Brug dit eget abonnement eller OpenCode Go, hvis du vil have mere.",
     phrases: {
       "download-opencode": { text: "downloade OpenCode" },
       "free-models": { text: "gratis modeller" },
@@ -270,26 +269,26 @@ export const content = {
       download: { title: "Download", line: "Desktop, terminal eller mobil." },
       "use-free-models": {
         title: "Brug gratis modeller",
-        line: "OpenCode har et sæt gratis modeller. Ingen konto nødvendig.",
+        line: "OpenCode har gratis modeller, du kan bruge uden en konto.",
       },
       "add-more-models": {
         title: "Tilføj flere modeller",
-        line: "Tag dit eget abonnement med, eller brug OpenCode Go's udvalgte modeller fra $10/md.",
+        line: "Brug dit eget abonnement, eller få udvalgte modeller med OpenCode Go fra $10/måned.",
       },
     },
     sentence:
-      "Download OpenCode, start med gratis modeller, og tag dit eget abonnement eller OpenCode Go med, når du vil have mere.",
+      "Download OpenCode, og start med de gratis modeller. Brug dit eget abonnement eller OpenCode Go, når du vil have mere.",
   },
   byos: {
     title: "Brug dit eget abonnement",
     headline: "Brug de abonnementer, du allerede har.",
-    line: "Log ind med ChatGPT Plus eller Pro eller med GitHub Copilot. Eller brug et OpenCode-abonnement.",
+    line: "Log ind med dit abonnement på ChatGPT Plus, ChatGPT Pro eller GitHub Copilot. Du kan også bruge et OpenCode-abonnement.",
     yours: { label: "Dit abonnement", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode-abonnement"],
     ours: { label: "OpenCode-abonnementer" },
   },
   brand: {
-    hero: { copy: { text: "Regler til agent", copied: "Regler kopieret" } },
+    hero: { copy: { text: "Regler til din agent", copied: "Regler kopieret" } },
     naming: {
       title: "Navn",
       body: "Skriv OpenCode i ét ord med stort O og stort C. Skriv ikke Opencode, Open Code, OpenCode AI eller Open-Code.",
@@ -308,11 +307,11 @@ export const content = {
       },
       wordmark: {
         title: "Ordmærke",
-        body: "Det fulde navn i OpenCodes bogstavformer. Brug det, hvor der er plads til at skrive navnet helt ud.",
+        body: "Det fulde navn skrevet med OpenCodes egne bogstaver. Brug ordmærket, hvor der er plads til hele navnet.",
         assets: { light: { name: "Lyst" }, dark: { name: "Mørkt" } },
       },
       "simple-wordmark": {
-        title: "Simpelt ordmærke",
+        title: "Enkelt ordmærke",
         body: "En ensfarvet version af ordmærket til tryk, broderi og steder, der kun tillader én farve.",
         assets: { light: { name: "Lyst" }, dark: { name: "Mørkt" } },
       },
@@ -324,7 +323,7 @@ export const content = {
     },
     colors: {
       title: "Farver",
-      body: "Logoet og ordmærket bruger én farve i tre opaciteter, med en lysere farve til mørke baggrunde. Værdierne nedenfor er farverne i standardfilerne. Brug dem kun til logoet og ordmærket, ikke til anden tekst eller baggrunde. Klik på en værdi for at kopiere den.",
+      body: "Logoet og ordmærket bruger én farve i tre grader af opacitet og en lysere farve til mørke baggrunde. Værdierne nedenfor er farverne i standardfilerne. Brug dem kun til logoet og ordmærket, ikke til anden tekst eller til baggrunde. Klik på en værdi for at kopiere den.",
       palettes: {
         light: {
           name: "Lyst",
@@ -346,19 +345,19 @@ export const content = {
     },
     variants: {
       title: "Varianter",
-      body: "Vælg den version, der holder logoet tydeligt på din baggrund, altså mørk på lyse baggrunde og lys på mørke. Logoet og ordmærket er separate filer. Brug det ene eller det andet.",
+      body: "Vælg den variant, der står tydeligst på baggrunden: mørk på lys baggrund og lys på mørk baggrund. Logoet og ordmærket ligger i hver sin fil. Brug det ene eller det andet.",
       groups: {
         default: {
           name: "Standard",
-          body: "Logoet, du bruger næsten overalt. Den indre skygge er gennemsigtig. På hvid eller sort ligner det præcis de tofarvede gråtoner, og på fotos, gradienter og farver skinner baggrunden igennem.",
+          body: "Brug dette logo i de fleste tilfælde. Den indre skygge er gennemsigtig. På hvid eller sort baggrund ser den ud præcis som de tofarvede grå varianter. På fotos, gradienter og farver skinner baggrunden igennem.",
           rows: {
             logo: { title: "Logo", tiles: { dark: { name: "Mørkt" }, light: { name: "Lyst" } } },
             wordmark: { title: "Ordmærke", tiles: { dark: { name: "Mørkt" }, light: { name: "Lyst" } } },
           },
         },
         simple: {
-          name: "Simpel",
-          body: "Én farve med åbne punktsere og uden indre skygge. Brug den på ensfarvede baggrunde, til tryk i én farve og overalt, hvor du ikke kan bruge gråtonerne, simpel mørk på lyse farver og simpel lys på mørke farver.",
+          name: "Enkel",
+          body: "Én farve, åbne indre bogstavrum og ingen indre skygge. Brug varianten på ensfarvede baggrunde, til tryk i én farve og andre steder, hvor gråtonerne ikke kan bruges. Vælg den enkle mørke variant på lyse farver og den enkle lyse på mørke farver.",
           rows: { wordmark: { title: "Ordmærke", tiles: { dark: { name: "Mørkt" }, light: { name: "Lyst" } } } },
         },
       },
@@ -378,15 +377,15 @@ export const content = {
         title: "Hele pixels",
         body: "Logoets proportioner er låst til 4:5, og én streg er en fjerdedel af dets bredde. Skaler det i trin på 4 × 5px, så hver kant og hver streg lander på en hel pixel.",
         do: "at hver kant og stregen på 4px lander på hele pixels.",
-        dont: "at give logoet andre proportioner end 4:5, ellers falder kanterne mellem pixels og bliver slørede.",
+        dont: "at ændre logoets proportioner fra 4:5. Ellers falder kanterne mellem pixels og bliver slørede.",
         sizes: { logo: { title: "Logo" }, wordmark: { title: "Ordmærke" } },
       },
       minimumTitle: "Minimumsstørrelser",
       minimum: {
-        logo: { title: "Logo", body: "Mindst 16 × 20px med en streg på 4px. Mindre end det bliver det sløret." },
+        logo: { title: "Logo", body: "Mindst 16 × 20px med en streg på 4px. Ved mindre størrelser bliver logoet sløret." },
         wordmark: {
           title: "Ordmærke",
-          body: "Mindst 117 × 21px med en streg på 3px. Mindre end det bliver det sløret.",
+          body: "Mindst 117 × 21px med en streg på 3px. Ved mindre størrelser bliver ordmærket sløret.",
         },
       },
     },
@@ -398,21 +397,21 @@ export const content = {
         bright: { caption: "at bruge én skarp farve." },
         gradient: { caption: "at fylde logoet med en gradient." },
         inverted: { caption: "at bytte om på tonerne." },
-        stretch: { caption: "at strække eller klemme logoet." },
-        shadow: { caption: "at tilføje skygger." },
+        stretch: { caption: "at strække eller trykke logoet sammen." },
+        shadow: { caption: "at tilføje slagskygger." },
         glow: { caption: "at tilføje glød eller konturer." },
         lockup: { caption: "at sætte andre ord ved siden af logoet." },
         "low-contrast": { caption: "at bruge grå på grå med lav kontrast." },
-        color: { caption: "at sætte det grå tofarvede logo på en farvet baggrund, hvor gråtonerne bliver mudrede." },
+        color: { caption: "at bruge det tofarvede grå logo på en farvet baggrund, hvor gråtonerne mister deres klarhed." },
       },
     },
     integrations: {
       title: "Integrationer",
-      body: "Plugins, udbydere og værktøjer, der virker med OpenCode, og projekter bygget med det, må gerne sige det. Brug et badge eller et partner-lockup, og navngiv dit projekt, så det er tydeligt, at det er dit.",
+      body: "Hvis dit plugin, din udbyder eller dit værktøj virker med OpenCode, eller dit projekt er bygget med det, må du gerne skrive det. Brug et badge eller en kombination med partnerlogo, og vælg et navn, der gør det klart, at projektet er dit.",
       badges: {
-        body: "Sæt et badge i din README, dokumentation eller på dit website, og link det til opencode.ai. Vælg den lyse eller mørke fil til din baggrund (HTML'en skifter selv), og ændr ikke farverne eller teksten.",
-        sizes: "Alle stilarter findes i 20, 32 og 44px (Shields kun i 20px), som SVG og som PNG i 2×.",
-        mono: "Hver fil findes også med tekst i OpenTUI Mono. Tilføj -mono før filtypen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for OpenTUI Mono med versaler.",
+        body: "Sæt et badge i din README, i dokumentationen eller på dit website, og lad det linke til opencode.ai. Vælg den lyse eller mørke fil efter din baggrund (HTML-versionen skifter automatisk). Ændr ikke farverne eller teksten.",
+        sizes: "Alle varianter fås i 20, 32 og 44px (Shields kun i 20px) som SVG og som PNG i 2× opløsning.",
+        mono: "Hver fil fås også med tekst i OpenMono. Sæt -mono før filendelsen, som i opencode-works-with-a-light-20-mono.svg, eller -mono-caps for store bogstaver i OpenMono.",
         groups: {
           "works-with": {
             title: "Virker med",
@@ -421,11 +420,11 @@ export const content = {
           },
           "built-with": { title: "Bygget med", alt: "Bygget med OpenCode", body: "Til projekter lavet med OpenCode." },
         },
-        styles: { a: { name: "Ramme" }, c: { name: "Celler" }, f: { name: "Massiv" }, g: { name: "Shields" } },
+        styles: { a: { name: "Ramme" }, c: { name: "Celler" }, f: { name: "Udfyldt" }, g: { name: "Shields" } },
       },
       lockup: {
-        title: "Partner-lockup",
-        body: "Placer OpenCode-logoet og partnerlogoet side om side med et × imellem. Hold 3 stregers afstand på hver side af ×, skaler partnerlogoet, så det ser lige så højt ud som OpenCode-logoet, og hold frirum rundt om hele lockuppet.",
+        title: "Kombination med partnerlogo",
+        body: "Sæt OpenCode-logoet og partnerens logo ved siden af hinanden med et × imellem. Lad der være 3 stregers afstand på hver side af ×, skalér partnerens logo, så det ser lige så højt ud som OpenCode-logoet, og hold frirum omkring hele kombinationen.",
       },
       naming: {
         title: "Navngiv dit projekt",
@@ -435,18 +434,18 @@ export const content = {
     },
     trademarks: {
       title: "Varemærker",
-      body: "OpenCode og OpenCode-logoet er varemærker tilhørende Anomaly. Brug dem ikke til at antyde, at Anomaly støtter eller sponsorerer dig, i dit produkt- eller firmanavn eller på merchandise uden tilladelse.",
+      body: "OpenCode og OpenCode-logoet er Anomalys varemærker. Brug dem ikke til at antyde, at Anomaly støtter eller sponsorerer dig, i dit produkt- eller firmanavn eller på merchandise uden tilladelse.",
       contact: { before: "Spørgsmål kan sendes til " },
     },
   },
   press: {
-    title: "OpenCode | Pressekit med fakta om firmaet og brand-assets",
+    title: "OpenCode | Pressekit med fakta og brandmateriale",
     description:
-      "OpenCodes pressekit med fakta om OpenCode og Anomaly, firmaet bag, plus logoer og ordmærker til download og en kontakt til spørgsmål fra pressen.",
-    hero: { title: "Presse", body: "Fakta, brand-assets og kontakter til at skrive om OpenCode og Anomaly." },
+      "OpenCodes pressekit med fakta om OpenCode og virksomheden bag, Anomaly. Her finder du også logoer og ordmærker til download og kontaktoplysninger til pressen.",
+    hero: { title: "Presse", body: "Fakta, brandmateriale og kontaktoplysninger til dig, der skriver om OpenCode og Anomaly." },
     company: {
       title: "Om Anomaly",
-      lead: "Anomaly er firmaet bag OpenCode. Det bygger open source-værktøjer til udviklere.",
+      lead: "Anomaly er virksomheden bag OpenCode. Anomaly bygger open source-værktøjer til udviklere.",
       more: "Andre projekter er bl.a. SST og OpenTUI, alle open source på [GitHub](github).",
       learnMore: "Læs mere på [anoma.ly](site).",
       projects: {
@@ -454,26 +453,26 @@ export const content = {
           body: "Open source-kodningsagenten med apps til desktop, terminal og mobil og et SDK. MIT-licenseret, over 220.000 GitHub-stjerner.",
         },
         sst: {
-          body: "Et framework til at bygge full-stack-apps på din egen infrastruktur. MIT-licenseret, åbent siden 2020, med over 26.000 GitHub-stjerner.",
+          body: "Et framework til at bygge full-stack-apps på din egen infrastruktur. MIT-licenseret og open source siden 2020. Over 26.000 GitHub-stjerner.",
         },
         opentui: {
           name: "OpenTUI",
           body: "Et bibliotek til terminalbrugerflader i TypeScript, React eller Solid med en kerne i Zig. OpenCode bruger det i produktion. Over 13.000 GitHub-stjerner.",
         },
         "models-dev": {
-          body: "En open source-database med specifikationer, priser og egenskaber for AI-modeller og et offentligt API. Den indeholder over 8.900 modeller fra over 200 udbydere.",
+          body: "En open source-database med specifikationer, priser og funktioner for AI-modeller og et offentligt API. Den indeholder over 8.900 modeller fra over 200 udbydere.",
         },
         hex: {
-          body: "Diktering til Mac, Windows og Linux. Hex transskriberer på din enhed og indsætter i enhver app, så lyden aldrig forlader den.",
+          body: "Diktering til Mac, Windows og Linux. Hex transskriberer på din enhed og indsætter teksten i enhver app, så lyden aldrig forlader enheden.",
         },
         opentunnel: {
-          body: "En CLI og et SDK, der giver apps på din maskine en offentlig HTTPS-URL. TLS ender på din maskine, så relayet aldrig ser klartekst.",
+          body: "En CLI og et SDK, der giver apps på din computer en offentlig HTTPS-URL. TLS termineres på din computer, så relayet aldrig ser klartekst.",
         },
       },
     },
     about: {
       title: "Om OpenCode",
-      body: "Beskrivelser af OpenCode og dets produkter i en lang og en kort version, klar til at kopiere.",
+      body: "Korte og lange beskrivelser af OpenCode og produkterne, lige til at kopiere.",
       boilerplate: {
         long: "OpenCode er en open source-kodningsagent. Den findes som desktopapp, terminal-UI, mobilapp og SDK og virker med modeller fra enhver udbyder, bl.a. Claude, GPT og Gemini. OpenCode er MIT-licenseret og lavet af Anomaly. Den har over 220.000 GitHub-stjerner og mere end 1.000 bidragydere, og over 22 millioner udviklere bruger den hver måned.",
         short:
@@ -482,20 +481,20 @@ export const content = {
       products: {
         "opencode-console": {
           name: "OpenCode Console",
-          long: "OpenCode Console er webappen, hvor udviklere og teams køber og administrerer adgang til AI-modeller til OpenCode og andre kodningsagenter. Den tilbyder pay-as-you-go-inferens til frontier- og open weight-modeller, afregnet pr. request fra forudbetalt kredit, og OpenCode Go-abonnementer. Teams får workspaces med rollerne Member, Admin og Owner, forbrugsgrænser for workspace og pr. bruger, single sign-on med Okta, Microsoft Entra ID eller Google Workspace og SCIM. Console understøtter mere end 30 udbydere, så teams kan forbinde udbyderkonti, de allerede har, og den egen inferens er valgfri. Den findes på opencode.ai/console.",
+          long: "OpenCode Console er webappen, hvor udviklere og teams køber og styrer adgangen til AI-modeller for OpenCode og andre kodningsagenter. Her får du inferens til frontier- og open weight-modeller, afregnet pr. anmodning fra forudbetalt kredit, samt OpenCode Go-abonnementer. Teams får arbejdsområder med rollerne Member, Admin og Owner, forbrugsgrænser for hele arbejdsområdet og pr. bruger, single sign-on med Okta, Microsoft Entra ID eller Google Workspace samt SCIM. Console understøtter over 30 udbydere, så teams kan forbinde de udbyderkonti, de allerede har. Det er valgfrit at bruge OpenCodes inferens. Find Console på opencode.ai/console.",
           short:
-            "OpenCode Console er Anomalys webapp til pay-as-you-go-adgang til AI-modeller, OpenCode Go-abonnementer og teamkontrol som budgetter og single sign-on.",
+            "OpenCode Console er Anomalys webapp med adgang til AI-modeller betalt efter forbrug, OpenCode Go-abonnementer og værktøjer til teams som budgetter og single sign-on.",
         },
         "opencode-go": {
-          long: "OpenCode Go er et abonnement til udviklere, der vil have en fast månedspris for kodningsmodeller. Go koster $10/md., Go Plus koster $40/md. med højere grænser, og Go Teams koster $20/md. pr. medlem. Hvert abonnement indeholder et udvalg af modeller, der er testet til agentisk kodning. Forbrugsgrænserne er månedlige dollarbeløb for hver model med løbende kvoter for 5 timer og en uge på 20% og 50% af månedsgrænsen. Abonnenter kan fylde kredit på, falde tilbage på en pay-as-you-go-saldo og opsige når som helst. Go virker med OpenCode og andre agenter. Det findes på opencode.ai/console/go.",
+          long: "OpenCode Go er et abonnement til udviklere, der vil have kodningsmodeller til en fast månedspris. Go koster $10/måned, Go Plus koster $40/måned med højere grænser, og Go Teams koster $20/medlem/måned. Hvert abonnement har et udvalg af modeller testet til agentisk kodning. Forbrugsgrænserne er månedlige beløb i dollars for hver model med rullende kvoter på 20 % af månedsgrænsen pr. 5 timer og 50 % pr. uge. Du kan tilføje kredit, betale ekstra forbrug fra din saldo og opsige når som helst. Go virker med OpenCode og andre agenter. Find det på opencode.ai/console/go.",
           short:
-            "OpenCode Go er et månedligt abonnement fra Anomaly, der giver udviklere månedlige forbrugsgrænser på et udvalg af kodningsmodeller, fra $10/md.",
+            "OpenCode Go er et månedligt abonnement fra Anomaly til udviklere. Fra $10/måned får du månedlige forbrugsgrænser for et udvalg af kodningsmodeller.",
         },
         "opencode-data": {
           name: "OpenCode Data",
-          long: "OpenCode Data er et offentligt dashboard, der viser, hvilke AI-modeller udviklere bruger i OpenCode, og hvordan fordelingen ændrer sig over tid. Det udgiver en rangliste over de mest brugte modeller, tokenforbrug, omkostninger pr. session og token, cache-andele, markedsandele og en opdeling efter land. Tallene samles hver time med dage og uger i UTC. Antal brugere og sessioner er omtrentlige, og omkostninger bruger listepriser fra OpenCodes modelkatalog. Journalister kan citere det som OpenCode Data (opencode.ai/data) med det opdateringstidspunkt, siden viser.",
+          long: "OpenCode Data er et offentligt dashboard, der viser, hvilke AI-modeller udviklere bruger i OpenCode, og hvordan fordelingen ændrer sig over tid. Det viser en rangliste over de mest brugte modeller, tokenforbrug, omkostninger pr. session og token, cacheandele, markedsandele og tal fordelt på lande. Tallene samles hver time, og dage og uger opgøres i UTC. Antallet af brugere og sessioner er omtrentligt. Omkostningerne beregnes ud fra listepriserne i OpenCodes modelkatalog. Journalister kan citere kilden som OpenCode Data (opencode.ai/data) med det opdateringstidspunkt, der står på siden.",
           short:
-            "OpenCode Data er et offentligt dashboard på opencode.ai/data, der rangerer AI-modeller efter reelt forbrug i OpenCode med tokens, omkostninger og markedsandele, opdateret hver time.",
+            "OpenCode Data er et offentligt dashboard på opencode.ai/data, der rangerer AI-modeller efter faktisk forbrug i OpenCode. Tal for tokens, omkostninger og markedsandele opdateres hver time.",
         },
       },
     },
@@ -522,14 +521,14 @@ export const content = {
     news: {
       title: "Seneste versioner",
       intro: "OpenCode udkommer ofte. Her er de nyeste versioner med nye funktioner.",
-      changelog: { text: "Fuld changelog" },
+      changelog: { text: "Hele ændringsloggen" },
       feed: { text: "RSS-feed" },
     },
     media: {
       title: "Medier",
       intro:
-        "Stillbilleder og korte videoer af hver app, optaget fra det rigtige produkt. Du kan bruge dem, når du skriver om OpenCode.",
-      note: "Alle optagelser bruger det mørke tema. Stillbilleder og plakater er JPG'er op til 1920 × 1080, eller 1080 × 1350 i portræt. Videoer er MP4-klip uden lyd.",
+        "Stillbilleder og korte videoer fra hver app, optaget direkte i produktet. Du kan bruge dem, når du skriver om OpenCode.",
+      note: "Alt materiale er optaget med det mørke tema. Stillbilleder og plakatbilleder er JPG'er på op til 1920 × 1080 eller 1080 × 1350 i højformat. Videoerne er MP4-klip uden lyd.",
       products: {
         desktop: {
           name: "Desktop",
@@ -539,9 +538,9 @@ export const content = {
             "frame-2": { title: "Desktop-billede 2" },
             "frame-3": { title: "Desktop-billede 3" },
             "frame-4": { title: "Desktop-billede 4" },
-            "feature-1": { title: "Sessioner i faner" },
-            "feature-2": { title: "Gennemgå og kommenter" },
-            "feature-3": { title: "Se det i browseren" },
+            "feature-1": { title: "Parallelle agenter" },
+            "feature-2": { title: "Se det i browseren" },
+            "feature-3": { title: "På alle enheder" },
             "locked-portrait": { title: "Desktop-film, portræt" },
           },
         },
@@ -553,8 +552,8 @@ export const content = {
             "frame-2": { title: "Mobile-billede 2" },
             "frame-3": { title: "Mobile-billede 3" },
             "feature-1": { title: "Stemme" },
-            "feature-2": { title: "Godkendelser" },
-            "feature-3": { title: "Sessioner" },
+            "feature-2": { title: "Sessioner" },
+            "feature-3": { title: "Resultater" },
             "locked-portrait": { title: "Mobile-film, portræt" },
           },
         },
@@ -566,9 +565,9 @@ export const content = {
             "frame-2": { title: "Terminal-billede 2" },
             "frame-3": { title: "Terminal-billede 3" },
             "frame-4": { title: "Terminal-billede 4" },
-            "feature-1": { title: "Spørg med egne ord" },
+            "feature-1": { title: "Skriv med egne ord" },
             "feature-2": { title: "Godkend det, der kører" },
-            "feature-3": { title: "Gør den til din" },
+            "feature-3": { title: "Tilpas terminalen" },
             "locked-portrait": { title: "Terminal-film, portræt" },
           },
         },
@@ -581,7 +580,7 @@ export const content = {
             "frame-4": { title: "SDK-billede 4" },
             "feature-1": { title: "Ret CI fra kode" },
             "feature-2": { title: "Følg hvert trin" },
-            "feature-3": { title: "Byg egne værktøjer" },
+            "feature-3": { title: "Byg dine egne værktøjer" },
             "locked-portrait": { title: "SDK-film, portræt" },
           },
         },
@@ -596,6 +595,13 @@ export const content = {
         "mark-white": { name: "Mærke, hvid" },
         "wordmark-black": { name: "Ordmærke, sort" },
         "wordmark-white": { name: "Ordmærke, hvid" },
+      },
+      avatars: {
+        body: "Kvadratiske avatarer til X, GitHub, Slack, LinkedIn og andre profiler. Mærket sidder et godt stykke inde i cirklen, så det klarer en rund beskæring. PNG'er er 1024 og 400 px brede.",
+        items: {
+          "avatar-dark": { name: "Avatar, mørk" },
+          "avatar-light": { name: "Avatar, lys" },
+        },
       },
       all: { text: "Download alt" },
     },
@@ -613,18 +619,18 @@ export const content = {
       items: {
         desktop: {
           name: "Desktop",
-          body: "Kør flere agenter på én gang, hver i sin egen fane, på macOS, Windows og Linux. Gennemgå hver ændring som et diff, og se den.",
+          body: "Kør flere agenter på én gang, hver i sin egen fane, på macOS, Windows og Linux. Gennemgå hver ændring som et diff, og se en forhåndsvisning.",
         },
         mobile: {
           name: "Mobile",
-          body: "Den nyeste OpenCode-app. Ring til en session for at tale med agenten, og gennemgå og godkend dens ændringer fra din telefon, hvor som helst.",
+          body: "Den nyeste OpenCode-app. Ring til en session for at tale med agenten. Gennemgå og godkend derefter ændringerne fra telefonen, uanset hvor du er.",
         },
         terminal: {
           name: "Terminal",
-          body: "En terminalbrugerflade, der virker i enhver shell, editor eller fjernserver. Se hver ændring som et diff, og vælg, hvilke kommandoer der kører af sig selv.",
+          body: "En terminalbrugerflade til enhver shell, editor og fjernserver. Se alle ændringer som diffs, og vælg, hvilke kommandoer der kører automatisk.",
         },
         sdk: {
-          body: "En typet TypeScript-klient til scripts, CI-jobs og dine egne værktøjer. Opret sessioner, send prompts, og stream alle events, mens de sker.",
+          body: "En typesikker TypeScript-klient til scripts, CI-jobs og dine egne værktøjer. Opret sessioner, send prompts, og stream alle hændelser i realtid.",
         },
       },
     },
@@ -634,7 +640,7 @@ export const content = {
         press: { title: "Presse", body: "Til journalister og analytikere. Vi svarer kun på henvendelser fra medier." },
         support: {
           title: "Support",
-          body: "Få hjælp til OpenCode ved at oprette et issue eller spørge fællesskabet. Skriv til os om konto og betaling.",
+          body: "Få hjælp til OpenCode ved at oprette et issue eller spørge i fællesskabet. Skriv til os med spørgsmål om konto og fakturering.",
           links: { "github-issues": { text: "GitHub-issues" }, "help-anoma-ly": { text: "help@anoma.ly" } },
         },
         security: {
@@ -667,18 +673,18 @@ export const content = {
     sdk: { more: { label: "Læs SDK-dokumentationen" } },
     mini: {
       commands: { curl: { name: "Script" } },
-      lead: "Mini følger med OpenCode CLI. Installer den på en af disse måder, og kør så opencode mini.",
+      lead: "Mini følger med OpenCode CLI. Brug en af disse installationsmetoder, og kør derefter opencode mini.",
     },
   },
   pair: {
     title: "Forbind din telefon",
-    cardTitle: "Par din telefon med én kommando",
+    cardTitle: "Par telefonen med én kommando",
     intro:
-      "OpenCode Mobile er en fjernbetjening til OpenCode på din computer. Dine sessioner kører videre der, og appen viser dem og lader dig styre dem.",
+      "OpenCode Mobile er en fjernbetjening til OpenCode på din computer. Dine sessioner fortsætter på computeren, mens du følger og styrer dem fra appen.",
     steps: {
       "get-the-app": {
         title: "Hent appen",
-        body: "Installer OpenCode-betaen på din iPhone fra TestFlight. Android-appen kommer snart.",
+        body: "Installer OpenCode-betaen på din iPhone via TestFlight, eller hent appen til din Android-telefon.",
       },
       "run-this-on-your-computer": {
         title: "Kør dette på din computer",
@@ -686,28 +692,28 @@ export const content = {
       },
       "scan-the-code": {
         title: "Scan koden",
-        body: "Scan QR-koden med appen, eller indsæt linket. Din computers seneste sessioner åbner på telefonen.",
+        body: "Scan QR-koden med appen, eller indsæt linket. Så vises computerens seneste sessioner på telefonen.",
       },
     },
-    note: "--remote forbinder via en OpenTunnel-adresse, så det virker fra ethvert netværk. På samme Wi-Fi kører du opencode service set hostname 0.0.0.0 én gang og derefter opencode pair.",
+    note: "Med --remote går forbindelsen via en OpenTunnel-adresse og virker derfor fra ethvert netværk. Er du på samme Wi-Fi, så kør opencode service set hostname 0.0.0.0 én gang og derefter opencode pair.",
     facts: [
       "Parringen virker fra ethvert netværk, fordi --remote forbinder via en OpenTunnel-adresse.",
       "Linket og koden virker én gang og udløber efter 5 minutter.",
       "Lad computeren være tændt, for agenten kører der og ikke på telefonen.",
-      "På samme Wi-Fi kører du opencode service set hostname 0.0.0.0 én gang og derefter opencode pair.",
+      "Er du på samme Wi-Fi, så kør opencode service set hostname 0.0.0.0 én gang og derefter opencode pair.",
     ],
   },
   announcements: {
     "create-install-and-share-desktop-plugins": {
-      text: "Opret, installer og del desktop-plugins.",
-      link: "Se nyt i 2.2",
+      text: "Opret, installer og del plugins til Desktop.",
+      link: "Se nyhederne i 2.2",
     },
-    "desktop-terminals-now-survive-restarts": { text: "Desktop-terminaler overlever nu genstart.", link: "Se v2.2.4" },
+    "desktop-terminals-now-survive-restarts": { text: "Terminalerne i Desktop bevares nu efter genstart.", link: "Se v2.2.4" },
     "agents-can-now-generate-images": { text: "Agenter kan nu generere billeder.", link: "Se v2.2.1" },
     "steer-your-sessions-from-your-phone": {
       text: "Styr dine sessioner fra din telefon.",
       link: "Mød OpenCode Mobile",
     },
-    "a-refreshed-desktop-app": { text: "En fornyet desktopapp.", link: "Se nyt i 2.2" },
+    "a-refreshed-desktop-app": { text: "En fornyet desktopapp.", link: "Se nyhederne i 2.2" },
   },
 } satisfies ContentOverlay

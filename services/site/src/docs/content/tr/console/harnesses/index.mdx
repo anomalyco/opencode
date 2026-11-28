@@ -1,0 +1,117 @@
+---
+title: "Harness'ler"
+description: "Console ve Go modellerini diğer kodlama agent'larında ve AI uygulamalarında kullanın."
+---
+
+Console, OpenCode dışındaki kodlama agent'larıyla da çalışır. Herhangi bir ücretli modeli veya Go modelini kullanmak için harness'i bir API anahtarıyla Console ağ geçidine yönlendirin. Kullanım, diğer isteklerde olduğu gibi çalışma alanınıza faturalandırılır.
+
+| Harness                                       | Kullandıkça öde | Go        | MCP |
+| --------------------------------------------- | --------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | Evet            | Evet      | Evet |
+| [Codex](/console/harnesses/codex)             | Evet            | Evet      | Evet |
+| [Hermes](/console/harnesses/hermes)           | Yerleşik        | Yerleşik  | Evet |
+| [OpenClaw](/console/harnesses/openclaw)       | Eklenti         | Yerleşik  | Evet |
+| [Pi](/console/harnesses/pi)                   | Yerleşik        | Yerleşik  | Evet |
+| [Raycast](/console/harnesses/raycast)         | Uzantı          | Uzantı    | Evet |
+
+Ücretsiz katman sohbet modelleri yalnızca OpenCode içinden kullanılabilir. Diğer harness'ler, bir Console API anahtarıyla
+bile bu modeller için HTTP `403` alır. Ücretli modeller veya bir Go aboneliği kullanın.
+
+## Console CLI
+
+[Console CLI](https://github.com/anomalyco/opencode-console-cli), bir harness'i çalışma alanınıza tek komutla bağlar.
+Node.js 22 veya üstünü gerektirir.
+
+| Harness          | Komut                                          |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+Tarayıcınız Console'u açar; oturum açmayı onaylar ve çalışma alanını seçersiniz. Ardından harness şunları alır:
+
+- Console üzerinden çalışma alanının modellerini
+- Her araç çağrısından önce kontrol edilen çalışma alanı politikalarını
+- Çalışma alanının MCP sunucularını, skill'lerini ve talimatlarını
+
+CLI, harness'i çalışma alanıyla eşitlenmiş tutar ve kendini günceller.
+
+Bir harness'in kendi oturum açmasını ve modellerini, örneğin bir Claude veya ChatGPT aboneliğini korumak için
+`--keep-provider` ekleyin. Harness yine çalışma alanının politikalarını, MCP sunucularını, skill'lerini ve talimatlarını
+alır. Claude Code, Codex, Hermes ve OpenClaw ile çalışır.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+Bir harness'i elle veya CLI'nın kapsamadığı bir tanesini kurmak için bir API anahtarı ve aşağıdaki base URL'leri
+kullanın.
+
+## API anahtarı alma
+
+Harness'ler bir Console API anahtarıyla kimlik doğrular. En hızlı seçenek, modelleri sizin adınıza çağıran bir
+[kişisel API anahtarıdır](/console/api#personal-api-keys).
+
+1. [Console](https://opencode.ai/console) hesap menüsünden **Account** bölümünü açın.
+2. **Personal API keys** altında **Add API key** düğmesine tıklayın.
+3. Çalışma alanını seçin, anahtara bir ad verin ve **Create** düğmesine tıklayın.
+4. Anahtarı kopyalayın. Yalnızca bir kez gösterilir.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Kullanım [üye bütçenize](/console/budgets#member-budgets) sayılır. Kullandıkça öde için kredisi olan bir çalışma
+alanından, Go için [Go](/console/go) aboneliği olan bir çalışma alanından anahtar kullanın.
+
+Paylaşılan makineler veya CI için sahipler ve yöneticiler bunun yerine bir
+[hizmet hesabı](/console/api#service-accounts) anahtarı oluşturabilir; böylece kullanım tek bir kişiye bağlı kalmaz.
+
+## Base URL'ler
+
+Kullandıkça öde ve Go farklı base URL'lerden sunulur. Planınıza uyanı kullanın.
+
+| Plan           | Base URL                           |
+| -------------- | ---------------------------------- |
+| Kullandıkça öde | `https://opencode.ai/inference`   |
+| Go             | `https://opencode.ai/inference/go` |
+
+Harness'inizin kullandığı API'nin yolunu base URL'nin sonuna ekleyin. Her API, tüm ücretli metin modellerini ve Go metin modellerini sunar. Model kullanılan API'yi destekliyorsa Console isteği doğrudan modelin kendi endpoint'ine iletir; desteklemiyorsa isteği uygun biçime dönüştürür.
+
+| API                     | Yol                                             |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## Oturumlar
+
+Console'un bir konuşmayı tutarlı yönlendirebilmesi ve prompt önbelleğini yeniden kullanabilmesi için her istekle kararlı
+bir oturum kimliği gönderin. Go bunu [gerektirir](/console/go#where-can-i-use-it).
+
+```text
+x-opencode-session: ses_...
+```
+
+Console ayrıca Claude Code, Codex, Hermes ve Pi tarafından gönderilen yerel oturum başlıklarını tanır ve OpenClaw
+`x-opencode-session` başlığını kendisi gönderir; bu nedenle hiçbiri ek yapılandırma gerektirmez.
+
+## Console MCP
+
+MCP desteği olan harness'ler çalışma alanınızı Console MCP sunucusu üzerinden yönetebilir. Dinamik istemci kaydıyla
+OAuth kullanır; bu nedenle anahtar yapıştırmak yerine tarayıcıdan oturum açarsınız.
+
+```text
+https://opencode.ai/console/mcp
+```
+
+Her harness sayfası nasıl ekleneceğini gösterir. Çalışma alanınız etkinleştirdiğinde OpenCode sunucuyu `opencode_console`
+olarak otomatik ekler ve ilk kullandığında tarayıcıdan oturum açmanızı ister.

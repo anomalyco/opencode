@@ -1,0 +1,113 @@
+---
+title: "Вебпошук"
+description: "Дозвольте OpenCode шукати в інтернеті через Exa, Firecrawl, Parallel, Tavily, TinyFish або ваш тариф Claude і вибирайте провайдера й дозволи для пошуку."
+---
+
+Попросіть OpenCode про актуальну інформацію, і він може пошукати в інтернеті, прочитати результати й додати посилання на джерела у відповідь.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Під час першого пошуку OpenCode попросить дозволу на вебпошук і запропонує вибрати провайдера. Він запам'ятає вибір для наступних сесій.
+
+## Провайдери
+
+OpenCode містить п'ять провайдерів пошуку:
+
+| Провайдер | ID | Змінна середовища |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (необов'язково) |
+
+Підключіть обліковий запис із TUI через `/connect` або встановіть змінну середовища провайдера перед запуском OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+Коли [Claude Agent](/claude-agent) підключено, він також пропонує провайдера пошуку з ID `claude-agent`. Він запускає WebSearch із Claude Code, тож пошуки зараховуються до вашого тарифу Claude і не потребують API-ключа пошуку. Його може використовувати кожна модель, не лише Claude.
+
+Claude Agent ніколи не вибирається автоматично. Виберіть його в `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch повертає вміст сторінок зашифрованим, тож кожен пошук має виконувати модель Claude. Його виконує Haiku, і спочатку йде його короткий підсумок результатів, а далі посилання. Пошуки використовують налаштування підключення провайдера Claude Agent та обліковий запис, який ваші чати використовували останнім.
+
+## Вибір
+
+Встановіть провайдера в `opencode.jsonc`, щоб пропустити запит вибору.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Задайте `"random"`, щоб OpenCode автоматично вибирав доступного провайдера. Сесія використовує вибраного провайдера, доки не спрацює його ліміт частоти запитів.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Обмеження
+
+Коли провайдер повертає HTTP 429, випадковий вибір повторює пошук з іншим доступним провайдером. Провайдер з обмеженням чекає свій період `Retry-After`, або 60 секунд, якщо відповідь не містить дійсного періоду.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Якщо всі провайдери в періоді очікування, пошук негайно завершується невдачею. Переміщення сесії або перезапуск її сервера очищає запам'ятованого провайдера; періоди очікування спільні для сесій в одному робочому просторі.
+
+## Дозволи
+
+Вебпошуки використовують дію дозволу `websearch` і пошуковий запит як ресурс. Запитуйте перед пошуками, які явно не дозволені.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Дивіться [Дозволи](/permissions), щоб дізнатися про порядок правил і зіставлення.
+
+## Вимкнення
+
+Встановіть `websearch` у `false`, щоб прибрати інструмент вебпошуку із запитів до моделі.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

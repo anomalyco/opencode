@@ -150,7 +150,13 @@ export class OpenCodeDO {
     if (this.configurations !== 1 || admitted.some(item => item.payload.text !== "Packed prompt:packed-thread")) {
       throw new Error("Packed instance configuration did not share or prepare prompts correctly")
     }
+    await opencode.alarm()
     return Response.json(await opencode.server.info())
+  }
+
+  async alarm() {
+    const opencode = await this.opencode
+    await opencode.alarm()
   }
 }
 
@@ -219,7 +225,9 @@ for (const module of modules) {
 
   const transpiler = new Bun.Transpiler({ loader: "js" })
   const bundled = await Bun.file(join(consumer, "dist/worker.js")).text()
-  const bunGlobals = Array.from(new Set(bundled.match(/\bBun\.[A-Za-z_$][\w$]*/g) ?? []))
+  // Quoted strings are skipped: an error message naming `Bun.write` isn't a reference to the global.
+  const code = bundled.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""')
+  const bunGlobals = Array.from(new Set(code.match(/\bBun\.[A-Za-z_$][\w$]*/g) ?? []))
   if (bunGlobals.length > 0) throw new Error(`Packed workerd bundle references Bun globals: ${bunGlobals.join(", ")}`)
   const leaked = [
     ...transpiler

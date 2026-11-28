@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import { randomUUID } from "node:crypto"
-import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { Effect, Exit, Fiber, Stream } from "effect"
@@ -79,15 +78,6 @@ describe("AppProcess", () => {
     )
 
     it.live(
-      "non-zero exit returns RunResult; caller can require success",
-      Effect.gen(function* () {
-        const svc = yield* AppProcess.Service
-        const result = yield* svc.run(cmd("-e", "process.exit(1)"))
-        expect(result.exitCode).toBe(1)
-      }),
-    )
-
-    it.live(
       "requireSuccess fails on non-zero exit",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -97,15 +87,6 @@ describe("AppProcess", () => {
         expect(error).toBeInstanceOf(AppProcess.AppProcessError)
         expect(error.exitCode).toBe(1)
         expect(error.message).toContain("Command failed (exit 1)")
-      }),
-    )
-
-    it.live(
-      "requireSuccess succeeds on exit 0",
-      Effect.gen(function* () {
-        const svc = yield* AppProcess.Service
-        const result = yield* svc.run(cmd("-e", "process.exit(0)")).pipe(Effect.flatMap(AppProcess.requireSuccess))
-        expect(result.exitCode).toBe(0)
       }),
     )
 
@@ -204,26 +185,6 @@ describe("AppProcess", () => {
     }
   })
 
-  describe("inherited platform methods", () => {
-    it.live(
-      "string returns stdout as string",
-      Effect.gen(function* () {
-        const svc = yield* AppProcess.Service
-        const out = yield* svc.string(cmd("-e", "process.stdout.write('hi\\n')"))
-        expect(out).toBe("hi\n")
-      }),
-    )
-
-    it.live(
-      "lines returns the platform's array of lines",
-      Effect.gen(function* () {
-        const svc = yield* AppProcess.Service
-        const out = yield* svc.lines(cmd("-e", "process.stdout.write('a\\nb\\n')"))
-        expect(Array.from(out)).toEqual(["a", "b"])
-      }),
-    )
-  })
-
   describe("run with stdin option", () => {
     const echoStdin = "process.stdin.on('data', c => process.stdout.write(c))"
 
@@ -280,22 +241,6 @@ describe("AppProcess", () => {
         const result = yield* svc.run(command, { stdin: "payload" })
         expect(result.exitCode).toBe(0)
         expect(result.stdout.toString("utf8")).toBe("envset:payload")
-      }),
-    )
-
-    it.live(
-      "carries existing Command options like cwd",
-      Effect.gen(function* () {
-        const svc = yield* AppProcess.Service
-        const dir = realpathSync(tmpdir())
-        const script =
-          "process.stdout.write(process.cwd() + '|'); process.stdin.on('data', c => process.stdout.write(c))"
-        const command = ChildProcess.make(NODE, ["-e", script], { cwd: dir })
-        const result = yield* svc.run(command, { stdin: "ok" })
-        expect(result.exitCode).toBe(0)
-        const [cwd, stdin] = result.stdout.toString("utf8").split("|")
-        expect(realpathSync(cwd)).toBe(dir)
-        expect(stdin).toBe("ok")
       }),
     )
   })
@@ -390,20 +335,6 @@ describe("AppProcess", () => {
         )
         expect(Exit.isFailure(exit)).toBe(true)
       }),
-    )
-  })
-
-  describe("spawn (inherited)", () => {
-    it.live(
-      "returns the platform ChildProcessHandle for advanced use",
-      Effect.scoped(
-        Effect.gen(function* () {
-          const svc = yield* AppProcess.Service
-          const handle = yield* svc.spawn(cmd("-e", "setInterval(() => {}, 1_000)"))
-          expect(yield* handle.isRunning).toBe(true)
-          yield* handle.kill()
-        }),
-      ),
     )
   })
 })

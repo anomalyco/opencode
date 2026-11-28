@@ -68,7 +68,13 @@ export type OverlayEvent =
   | { readonly type: "overlay.cancelled" }
   /** A press beside the editor: it dismisses only an empty draft. */
   | { readonly type: "backdrop.pressed" }
-  | { readonly type: "overlay.submitted"; readonly value: string; readonly context: OverlayContext }
+  /** `send` also sends the comment or note to the session now, the editor's Mod+Enter action. */
+  | {
+      readonly type: "overlay.submitted"
+      readonly value: string
+      readonly context: OverlayContext
+      readonly send?: boolean
+    }
   /** The routed session, the shown tab, the pane's visibility or the page's inspectability changed. */
   | { readonly type: "context.changed"; readonly context: OverlayContext }
   | { readonly type: "disposed" }
@@ -89,6 +95,7 @@ export type OverlayEffect =
       /** False once the tab navigated: the draft survives, but its ref names nothing. */
       readonly live: boolean
       readonly comment: string
+      readonly send: boolean
     }
   | {
       readonly type: "attach-note"
@@ -96,6 +103,7 @@ export type OverlayEffect =
       readonly url: string
       readonly title: string
       readonly comment: string
+      readonly send: boolean
     }
 
 export type OverlayTransition = { readonly state: OverlayState; readonly effects: readonly OverlayEffect[] }
@@ -165,7 +173,7 @@ export function transitionOverlay(state: OverlayState, event: OverlayEvent): Ove
 
       return state.draft.trim() ? unchanged(state) : close(state)
     case "overlay.submitted":
-      return submitted(state, event.value, event.context)
+      return submitted(state, event.value, event.context, !!event.send)
     case "context.changed":
       return changed(state, event.context)
     case "disposed":
@@ -249,7 +257,7 @@ function reported(state: OverlayState, event: Extract<OverlayEvent, { type: "ins
   }
 }
 
-function submitted(state: OverlayState, value: string, context: OverlayContext): OverlayTransition {
+function submitted(state: OverlayState, value: string, context: OverlayContext, send: boolean): OverlayTransition {
   if (state.status === "commenting") {
     const live =
       context.sessionKey === state.sessionKey &&
@@ -259,7 +267,15 @@ function submitted(state: OverlayState, value: string, context: OverlayContext):
     return {
       state: IDLE,
       effects: [
-        { type: "attach-comment", tabID: state.tabID, url: state.url, element: state.element, live, comment: value },
+        {
+          type: "attach-comment",
+          tabID: state.tabID,
+          url: state.url,
+          element: state.element,
+          live,
+          comment: value,
+          send,
+        },
         { type: "clear-highlight", sessionKey: state.sessionKey, tabID: state.tabID },
       ],
     }
@@ -269,7 +285,7 @@ function submitted(state: OverlayState, value: string, context: OverlayContext):
 
   return {
     state: IDLE,
-    effects: [{ type: "attach-note", tabID: state.tabID, url: state.url, title: state.title, comment: value }],
+    effects: [{ type: "attach-note", tabID: state.tabID, url: state.url, title: state.title, comment: value, send }],
   }
 }
 

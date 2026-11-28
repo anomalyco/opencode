@@ -1,0 +1,251 @@
+---
+title: "コマンド"
+description: "プロンプトを再利用可能なスラッシュコマンドにします。Markdown または JSON で、引数、シェル出力、添付ファイルを扱えます。"
+---
+
+`.opencode/commands/review.md` を作成すると、プロンプトを `/review` にできます。
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+TUI から対象を指定して実行します。
+
+```text
+/review src/auth.ts
+```
+
+OpenCode は `Review src/auth.ts for bugs and missing tests.` をユーザープロンプトとして送信します。
+
+## Markdown
+
+グローバルのコマンドは `~/.config/opencode/commands/` に、プロジェクトのコマンドは `.opencode/commands/` に置きます。
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+検出されるのは `.md` ファイルだけです。ネストしたパスは `/` 区切りのコマンド名になります。
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+ネストしたコマンドは `/team/review src/auth.ts` として実行します。従来の単数形ディレクトリ `command/` も検出されますが、新しいファイルには `commands/` を使用してください。
+
+コマンドにメタデータが必要な場合は YAML フロントマターを追加します。プロンプトテンプレートには、Markdown 本文の前後の空白を除いた内容が常に使われます。
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+任意の OpenCode JSON または JSONC の[設定ファイル](/config)の `commands` の下にコマンドを定義します。各コマンドには `template` が必要です。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## フィールド
+
+Markdown の frontmatter と JSON のエントリは同じフィールドを受け付けますが、Markdown では `template` をファイルの本文から取得します。
+
+| フィールド   | 必須    | 動作                                                                                     |
+| ------------ | ------- | ---------------------------------------------------------------------------------------- |
+| `template`   | JSON のみ | プロンプトテンプレート。                                                                 |
+| `description` | いいえ | コマンド一覧や検出時に表示されるテキスト。                                               |
+| `agent`      | いいえ  | コマンド実行時に選択されるエージェント。                                                 |
+| `model`      | いいえ  | `provider/model` または `provider/model#variant` 形式のモデルの上書き。                  |
+| `subagent`   | いいえ  | `true` はバックグラウンドの子セッションで実行し、`false` は現在のセッションを強制します。 |
+| `subtask`    | いいえ  | `subagent` の非推奨のエイリアス。                                                        |
+
+たとえば、次の JSON コマンドは現在の任意フィールドをすべて設定しています。
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Markdown では本文がテンプレートになるため、frontmatter には `template` を書かないでください。
+
+## 引数
+
+入力されたとおりの引数文字列全体には `$ARGUMENTS` を使用します。
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+`/component Account Settings` の場合、プレースホルダーは `Account Settings` になります。
+
+## 位置引数
+
+入力を解析して得られた位置引数には `$1`、`$2` などの番号を使います。一重引用符か二重引用符で囲んだ語句は 1 つの引数にまとまり、引用符自体は取り除かれます。
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+`/check src/auth.ts "error handling"` の場合、`$1` は `src/auth.ts`、`$2` は `error handling` になります。
+
+最も大きい番号のプレースホルダーは、その引数とそれ以降のすべてを消費します。存在しない位置は空文字列になります。
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+`/compare api stable branch` の場合、OpenCode は `Compare api with stable branch.` を送信します。
+
+## フォールバック
+
+テンプレートに `$ARGUMENTS` も位置プレースホルダーもない場合、OpenCode は空行の後に空でない引数を追加します。
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+`/explain src/cache.ts` の場合、プロンプトは次のようになります。
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## シェル
+
+シェルコマンドをバッククォートで囲み、その直前に `!` を付けると、プロンプトの送信前にコマンドの出力が挿入されます。
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode は各ブロックを、アクティブなプロジェクトの場所で設定済みのシェルを使って実行し、結合した出力を挿入します。引数のプレースホルダーは先に展開されます。
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+`/history 5` の場合、シェルは `git log --oneline -5` を受け取ります。信頼できない引数をシェルブロック内に置かないでください。
+
+<Callout type="warning">
+  シェルブロックは、OpenCode がコマンドを評価するときに、エージェントのツール権限の流れの外で実行されます。信頼できるソースのコマンドだけを使用してください。
+</Callout>
+
+## 添付ファイル
+
+保存されたテンプレートは `@path` を展開しません。通常のプロンプトテキストのままです。
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+ファイルを添付するには、コマンドを実行するときに入力欄から追加します。OpenCode は、展開されたプロンプトを送信するときに、入力欄での添付ファイルを保持します。
+
+## 実行
+
+コマンドは、永続的なユーザープロンプトを送信する前に引数とシェルブロックを展開します。デフォルトでは現在のセッションで実行されます。
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+`/plan migration` を実行すると、プロンプトを送信する前に現在のセッションが `plan` に切り替わります。
+
+モデルの選択は次のルールに従います。
+
+1. コマンドの `model` は他のすべてのモデルを上書きします。
+2. そうでない場合、選択されたコマンドのエージェントに設定されたモデルが、実行時にアクティブなモデルを上書きします。
+3. それもない場合、現在のセッションのモデルがアクティブなままです。
+
+たとえば、次のコマンドはエージェントと明示的なモデルの両方を選択します。
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## バックグラウンド
+
+`subagent: true` を設定すると、コマンドをバックグラウンドの子セッションで実行します。
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+親セッションは引き続き利用でき、エージェントとモデルも変わりません。子セッションが終了すると、OpenCode は結果または失敗を親セッションに通知します。
+
+| 値       | 動作                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------- |
+| `true`   | 選択されたエージェントが `mode: primary` でも、常に子を使用します。                      |
+| `false`  | 選択されたエージェントが `mode: subagent` でも、常に現在のセッションを使用します。       |
+| 省略     | 選択されたエージェントが `mode: subagent` の場合にのみ子を使用します。                   |
+
+子は、コマンドのモデル、選択されたエージェントのモデル、親のモデルの順に使用します。従来の `subtask` も引き続き受け付けられ、両方のフィールドがある場合は `subagent` が優先されます。
+
+```yaml
+subagent: false
+subtask: true
+```
+
+この例は `subagent` が優先されるため、現在のセッションで実行されます。
+
+## 読み込み
+
+Markdown と JSON のコマンドは 1 つのレジストリを共有します。後のソースが、同じ名前の以前のコマンドを置き換えます。
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+プロジェクトのソースはグローバルのソースより優先されます。プロジェクト内では、カレントディレクトリに近いソースが上位ディレクトリのソースより優先されます。カスタム定義で、先に読み込まれた組み込みコマンドを上書きすることもできます。OpenCode はコマンドファイルや設定が変わると自動で読み込み直します。
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+このファイルを保存すると、OpenCode を再起動せずに `/review` が更新されます。

@@ -1,0 +1,88 @@
+---
+title: "はじめに"
+description: "オープンソースのコーディングエージェント OpenCode の CLI、デスクトップアプリ、Web アプリ、Docker イメージの導入方法と、モデルプロバイダーへの接続方法を説明します。"
+---
+
+OpenCode はオープンソースのコーディングエージェントです。ターミナル、デスクトップアプリ、Web アプリから利用できます。
+
+
+## CLI
+
+<CodeTabs
+  id="install"
+  label="Install method"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+    { label: "mise", code: "mise use -g opencode" },
+  ]}
+/>
+
+npm パッケージは postinstall スクリプトで、実行環境に合ったネイティブの `opencode` バイナリを選びます。上記の Bun と pnpm のコマンドでは、そのスクリプトの実行を明示的に許可しています。Vite+ では追加のフラグは不要です。mise のコマンドには mise 2026.10.9 以降が必要です。それより古いバージョンでは OpenCode 1 がインストールされます。
+
+Windows のパッケージマネージャーには対応していません。
+
+
+プラットフォーム別のスタンドアロン CLI バイナリをダウンロードできます。
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-x64-baseline.zip)
+- **Windows:** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-arm64.zip) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-windows-x64-baseline.zip)
+- **Linux (glibc):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline.tar.gz)
+- **Linux (musl):** [ARM64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-musl.tar.gz) · [x64 (baseline)](https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-x64-baseline-musl.tar.gz)
+
+## デスクトップ
+
+プラットフォーム別の最新 OpenCode Desktop ビルドをダウンロードできます。
+
+- **macOS:** [Apple silicon](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-mac-x64.dmg)
+- **Windows:** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-win-arm64.exe)
+- **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
+- **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
+- **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
+
+
+## Web
+
+`opencode pair` コマンドで OpenCode の Web インターフェースにアクセスできます。
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+```
+
+## Docker
+
+Docker イメージには、`ghcr.io/anomalyco/opencode:2.0.0` のようにバージョンを示すタグが付きます。コンテナでサーバーを実行するには、[Docker](/cli/web#docker)を参照してください。
+
+---
+
+## 接続
+
+OpenCode は多くの LLM プロバイダーに標準で対応しています。[TUI](/cli/providers) では `/connect` を使って直接接続できます。
+
+カスタムプロバイダーを設定するには [プロバイダー](/providers) を参照してください。
+
+最高水準のコーディングモデルを手軽に使いたい場合は、[OpenCode Console](/console) をお試しください。
+
+月額 $10 のサブスクリプション [OpenCode Go](/console/go) でも、最高水準のコーディングモデルを利用できます。
+
+---
+
+## カスタマイズ
+
+[OpenCode の設定](/config)の編集、[プラグインの読み込み](/plugins)、[MCP サーバーへの接続](/mcp-servers)、[コマンドの作成](/commands)で、OpenCode を自分好みにカスタマイズできます。ターミナルインターフェースのテーマとキーバインドについては、[CLI の設定](/cli/config)を参照してください。
+
+---
+
+## 学習
+
+OpenCode を詳しく学ぶなら、Boot.dev が OpenCode チームの協力を得て作成したコース [AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding) がおすすめです。すべての教材を無料で閲覧・視聴できますが、一部のインタラクティブな機能は有料の場合があります。

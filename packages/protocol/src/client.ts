@@ -49,6 +49,7 @@ export const groupNames = {
   "server.integration": "integration",
   "server.websearch": "websearch",
   "server.usage": "usage",
+  "server.flag": "flag",
   "server.credential": "credential",
   "server.form": "form",
   "server.permission": "permission",
@@ -109,6 +110,7 @@ export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "machine.link",
   "generate.textLegacy",
 ])
 export const effectOmitEndpoints = new Set([
@@ -117,8 +119,10 @@ export const effectOmitEndpoints = new Set([
   "media.get",
   "blob.get",
   "artifacts.view",
+  "skill.file",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "machine.link",
   "generate.textLegacy",
 ])

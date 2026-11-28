@@ -1,5 +1,5 @@
 ---
-title: "RPC"
+title: "Plugin RPC"
 description: "Expose a plugin's custom methods and events to other plugins and clients."
 ---
 
@@ -68,9 +68,18 @@ and errors. It supports two schema formats:
 
 ### Input and output
 
-Each method can define an `input` schema for its argument and an `output` schema
-for its return value. Leave either one out if the method does not accept or
-return a value.
+Each method needs an `input` schema for its argument and an `output` schema for
+its return value. When a method takes or returns nothing, use an empty object
+schema, call it with `{}` and return `{}`:
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+A method that returns `undefined` fails with `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -111,7 +120,8 @@ Error names beginning with `rpc.` are reserved by OpenCode.
 ### Events
 
 Add events to the top-level `events` map. Each event has a schema for the data
-sent to subscribers.
+sent to subscribers. The map is required; use `events: {}` when the RPC has no
+events.
 
 Event data must be an object. Use an empty object schema when there is no data:
 

@@ -6,10 +6,11 @@ import { changelogEntryPageMarkdown, changelogMarkdown } from "~/lib/changelog-m
 import { areaKeys, changelogEntryView, changelogView, type ChangelogView } from "~/lib/changelog-notes"
 import { fontMarkdown } from "~/lib/font-content"
 import { homeMarkdown } from "~/lib/home-markdown"
-import { route, type Locale } from "~/lib/language"
+import { consoleRoute, route, type Locale } from "~/lib/language"
 import { legalMarkdown } from "~/lib/legal"
 import { legalHubMarkdown } from "~/lib/legal-documents"
 import { privacyPolicy } from "~/lib/legal/privacy-policy"
+import { refundPolicy } from "~/lib/legal/refund-policy"
 import { termsOfService } from "~/lib/legal/terms-of-service"
 import { markdownDocument, type MarkdownContext } from "~/lib/markdown"
 import { pressMarkdown } from "~/lib/press-content"
@@ -97,6 +98,12 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
     markdown: (context) => legalMarkdown(privacyPolicy, context),
     englishOnly: true,
   },
+  [refundPolicy.path]: {
+    title: refundPolicy.title,
+    description: "When OpenCode refunds Go subscriptions and Models credits",
+    markdown: (context) => legalMarkdown(refundPolicy, context),
+    englishOnly: true,
+  },
   [termsOfService.path]: {
     title: termsOfService.title,
     description: "The terms that govern the OpenCode website and hosted services",
@@ -129,6 +136,7 @@ export async function markdownContext(
   return {
     t: translator(locale),
     route: (path) => route(locale, path),
+    consoleRoute: (path) => consoleRoute(locale, path),
     changelog: page?.changelog?.(releases, query),
     releases: page?.releases ? releases : undefined,
   }

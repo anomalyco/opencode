@@ -349,7 +349,7 @@ export default function DebugBar(props: {
           <div class="ms-auto flex items-center gap-[9px]">
             {/* The lab's route exists only on the dev server and in Beta. */}
             {(import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta") && (
-              <Tooltip appearance="compact" value={ctx.t("components.tip")} placement="top">
+              <Tooltip appearance="compact" value={ctx.t("lab.tip")} placement="top">
                 <a
                   href="/components"
                   classList={{
@@ -361,7 +361,7 @@ export default function DebugBar(props: {
                     dir="ltr"
                     class="-translate-y-px text-[10px] leading-none font-black tracking-[0.04em] opacity-70"
                   >
-                    {ctx.t("components.label")}
+                    {ctx.t("lab.label")}
                   </span>
                 </a>
               </Tooltip>

@@ -1,0 +1,91 @@
+---
+title: "OpenClaw"
+description: "從 OpenClaw 使用控制台與 Go 模型。"
+---
+
+[OpenClaw](https://openclaw.ai) 內建按用量計費與 Go 的 OpenCode 供應商。它會為每個付費或 Go 模型選擇正確的 API，
+並在每個 Go 請求中傳送工作階段 ID。免費方案聊天模型只能在 OpenCode 中使用；從 OpenClaw 使用會回傳 HTTP
+`403`。
+
+<Callout>
+  [控制台 CLI](/console/harnesses#console-cli) 可用一個指令設定 OpenClaw，包括工作區的
+  原則、MCP 伺服器、技能與指示。請執行 `npx @opencode/console setup openclaw`，然後執行 `openclaw gateway
+  restart`。下列步驟為手動設定。
+</Callout>
+
+| 供應商 | 方案 | 模型前綴 |
+| --- | --- | --- |
+| `opencode` | 按用量計費 | `opencode/...` |
+| `opencode-go` | Go | `opencode-go/...` |
+
+Go 供應商隨 OpenClaw 提供。按用量計費供應商是外掛；若 `openclaw models list`
+未顯示它，請安裝。
+
+```bash
+openclaw plugins install @openclaw/opencode-provider
+```
+
+## 登入
+
+從瀏覽器登入，而不必貼上金鑰。這需要 OpenClaw 2026.11.7 或更新版本。
+
+```bash
+openclaw models auth login --provider opencode-go --method oauth
+```
+
+開啟 OpenClaw 印出的連結、在控制台確認代碼，並選擇具有 [Go](/console/go) 訂閱的工作區。
+OpenClaw 會自行維持登入狀態，並更新登入憑證。
+
+每個供應商會分別登入。按用量計費模型也請登入 `opencode`。
+
+```bash
+openclaw models auth login --provider opencode --method oauth
+```
+
+你也可以在 `openclaw onboard` 期間選擇 **OpenCode Go (browser sign-in)**，或在聊天中使用 `/login`，或從
+**Settings › Models › Add account** 選擇。
+
+## 使用 API 金鑰
+
+兩個供應商都會從 `OPENCODE_API_KEY` 讀取相同的金鑰。請建立[個人 API 金鑰](/console/harnesses#get-an-api-key)
+並傳遞給引導流程。
+
+```bash
+openclaw onboard --opencode-go-api-key "$OPENCODE_API_KEY"
+```
+
+或在 `~/.openclaw/openclaw.json` 中設定。
+
+```json5 title="~/.openclaw/openclaw.json"
+{
+  env: { vars: { OPENCODE_API_KEY: "oc_sk_..." } },
+  agents: { defaults: { model: { primary: "opencode-go/kimi-k3" } } },
+}
+```
+
+即使金鑰所屬的工作區未訂閱 Go，仍可列出 Go 模型；但在工作區訂閱 Go 前，送往這些模型的請求都會失敗。
+
+## 模型
+
+以 `<provider>/<model-id>` 選取模型，使用[控制台](/console/models#endpoints)或
+[Go](/console/go#endpoints) 表中的 ID。OpenClaw 會從控制台讀取模型清單，因此新模型不需更新就會出現。
+
+```bash
+openclaw models list --provider opencode-go
+```
+
+為你的 agent 設定預設模型。
+
+```bash
+openclaw config set agents.defaults.model.primary "opencode-go/kimi-k3"
+```
+
+## 控制台 MCP
+
+以 OAuth 新增[控制台 MCP](/console/harnesses#console-mcp) 伺服器，然後在閘道
+執行時從瀏覽器登入。
+
+```bash
+openclaw mcp set opencode-console '{"url":"https://opencode.ai/console/mcp","transport":"streamable-http","auth":"oauth"}'
+openclaw mcp login opencode-console
+```

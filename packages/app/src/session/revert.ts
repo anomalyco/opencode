@@ -15,6 +15,7 @@ import type { SessionModel } from "./model"
 import {
   createSessionRevertState,
   REVERT_TIMEOUT_MS,
+  selectCursorAfterRevert,
   transitionSessionRevert,
   viewSessionRevert,
   type SessionRevertEffect,
@@ -22,7 +23,7 @@ import {
   type SessionRevertOperation,
   type SessionRevertState,
 } from "./revert-machine"
-import { selectSessionUserMessages } from "./session-domain"
+import { selectSessionUserMessages, selectUnansweredPrompt } from "./session-domain"
 
 const IDLE = createSessionRevertState()
 
@@ -285,6 +286,27 @@ export function createSessionRevert(input: {
         revertMessageID: data.session.get(id)?.revert?.messageID,
         ...snapshot(id),
       })),
+    /**
+     * After Stop interrupted the Session: takes its latest prompt back if the model had not answered it yet. Nothing
+     * of an answer is lost, so the revert commits straight away instead of offering an Undo.
+     */
+    takeBack: async (sessionID: string) => {
+      const target = { composer: prompt.capture(), directory: location().directory }
+      // Interrupt acknowledges before the execution settles, so the start of an answer may still be on its way.
+      await server.api.experimental.session.wait({ sessionID })
+      const message = selectUnansweredPrompt(data.session.message.list(sessionID))
+
+      if (!message) return
+      // The commit releases the prompt's blob refs, so the draft takes local copies of its media first.
+      const restored = await pinPromptMedia(messageDraft(message, target.directory))
+      // The model called no tool, so any file that changed meanwhile is the user's own edit.
+      await server.api.session.revert.stage({ sessionID, messageID: message.id, files: false })
+      await server.api.session.revert.commit({ sessionID })
+      restore(target, message, restored)
+
+      if (input.session.identity.params.id === sessionID)
+        input.setActiveMessage(selectCursorAfterRevert(snapshot(sessionID), message.id))
+    },
     undo: () =>
       request(input.session.identity.params.id, (id) => ({
         type: "undo.requested",

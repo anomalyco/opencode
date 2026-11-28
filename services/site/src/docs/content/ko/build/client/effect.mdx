@@ -1,0 +1,149 @@
+---
+title: "Effect 클라이언트"
+description: "@opencode/client/effect로 Effect에서 OpenCode HTTP API를 호출하세요. 타입이 지정된 Effect와 Stream을 반환합니다."
+---
+
+`@opencode/client/effect`는 OpenCode HTTP API용 Effect 네이티브 클라이언트입니다. 타입이 지정된 Effect와 Stream을 반환하고 응답을 OpenCode 스키마 값으로 디코딩합니다.
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## 클라이언트 만들기
+
+서버 URL로 클라이언트를 만들고 API 리소스별로 묶인 메서드를 호출하세요.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## 헤더와 요청
+
+제공한 `HttpClient`에 기본 헤더를 설정하세요. 네이티브 작업은 Effect의 일반적인 중단 방식으로 취소할 수 있습니다.
+RPC 메서드에는 호출마다 위치, 헤더, 시그널 옵션도 지정할 수 있습니다.
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## 이벤트 스트리밍
+
+`event.subscribe()`와 `experimental.session.log()` 같은 스트리밍 작업은 Effect Stream을 반환합니다.
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+네이티브 이벤트와 RPC 이벤트 Stream은 클라이언트마다 연결 하나를 공유합니다. Stream을 만들 때는 연결하지 않고,
+이벤트를 읽기 시작할 때 연결합니다. 한 구독자가 읽기를 중단해도 다른 구독자는 계속 실행되며, 마지막 구독자가
+읽기를 중단하면 소스가 닫힙니다. 소스가 끝나거나 오류가 나면 자동 재시도나 재전송 없이 현재 구독이 종료됩니다.
+나중에 구독한 네이티브 구독자는 실시간 이벤트를 받기 전에 현재 연결 마커를 받습니다.
+
+## 플러그인 RPC
+
+Promise 클라이언트와 서버 플러그인이 쓰는 같은 공유 계약을 사용하세요.
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+메서드 인수와 결과는 계약에서 추론됩니다. 두 번째 선택적 인수는 `location`, `signal`, `headers`를 담고, 위치를
+생략하면 일반 요청 기본값을 사용합니다. 호출 결과를 사용하는 Effect가 중단되면 호출도 중단됩니다. 메서드 오류 맵은 Effect
+오류 채널에서 추론됩니다. 선언된 오류는 데이터 스키마로 디코딩됩니다. 타입이 지정된 서브클라이언트는 일반 HTTP
+RPC 오류 래퍼를 제거하며, 예약된 `rpc.*` 타입이 프레임워크 실패를 나타냅니다.
+
+RPC 이벤트는 콜백 스타일 `on` 리스너가 아니라 타입이 지정된 Stream입니다. 모든 위치에서 해당 RPC의 이벤트를
+받으며, 각 이벤트에는 필수 필드인 `location`과 `rpc.acme.updated`처럼 접두사가 붙은 일반 이벤트 타입이 있습니다. 자체 위치에 고정된
+서버 플러그인 핸들과는 다릅니다. 정의, 스키마, 등록, 실시간 구독 동작은
+[Effect 플러그인 RPC](/build/plugins/effect/rpc)를 참고하세요.
+
+## 로컬 백그라운드 서비스
+
+Node 전용 `@opencode/client/effect/service` 진입점은 로컬 백그라운드 서비스를 Effect로 찾고, 시작하고, 인증하고, 중지합니다.
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+서비스가 실행 중인지 확인한 다음, 해당 서비스에 연결할 인증된 클라이언트를 만드세요.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+서비스를 시작하지 않고 검색하거나, 등록된 바로 그 인스턴스를 중지할 수 있습니다.
+
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

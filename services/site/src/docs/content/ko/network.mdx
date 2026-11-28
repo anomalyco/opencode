@@ -1,0 +1,152 @@
+---
+title: "네트워크"
+description: "프록시, 커스텀 인증 기관, 클라이언트 인증서를 구성합니다."
+---
+
+표준 프록시 변수를 설정하세요. OpenCode에서 CLI와 백그라운드 서비스는 로컬 HTTP로 연결합니다. CLI는 루프백
+주소를 프록시 적용 대상에서 자동으로 제외합니다.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+`HTTP_PROXY`는 HTTP 대상, `HTTPS_PROXY`는 HTTPS 대상을 처리합니다. 두 변수 모두 프록시 URL 자체는 `http://`를
+사용할 수 있습니다. CLI는 시작할 때 `127.0.0.1`, `localhost`, `::1`을 `NO_PROXY`와 `no_proxy`에 모두 추가합니다.
+직접 연결해야 하는 다른 호스트는 `NO_PROXY`에 쉼표로 구분해 지정하세요.
+
+## 서비스
+
+셸에서 내보낸 변수는 그 셸에서 백그라운드 서비스를 시작할 때만 적용됩니다. 이후 서비스 시작에도 같은 네트워크 설정을
+쓰려면 변수를 관리형 서비스 구성에 저장하세요.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+관리형 환경 변수를 변경하면 실행 중인 서비스가 중지됩니다. `service start`로 새 환경에서 다시 시작하세요.
+관리형 서비스 변수는 서버 프로세스에만 적용되므로 CLI를 실행하는 셸에도 프록시 변수를 별도로 설정해야 합니다.
+양쪽 모두 루프백 주소를 프록시 적용 대상에서 자동으로 제외합니다.
+
+저장된 변수는 `service unset env`로 제거합니다.
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## 인증
+
+프록시가 URL을 통한 인증을 지원한다면 인증이 필요한 각 프록시 URL에 사용자 이름과 비밀번호를 넣으세요. 사용자 이름이나 비밀번호에 `@`, `:`, `/` 같은 문자가 있으면 퍼센트 인코딩하세요.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+백그라운드 서비스에는 전체 URL을 저장하세요. 이 값은 비공개 서비스 구성에 저장되고 `opencode service get env`로
+표시되므로 그 출력을 공유하지 마세요.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## 인증서
+
+프록시나 대상이 사설 인증 기관이 서명한 인증서를 사용하면 `NODE_EXTRA_CA_CERTS`를 PEM 파일로 설정하세요. 추가
+인증 기관은 프로세스가 시작될 때 런타임 신뢰 저장소에 추가됩니다.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+백그라운드 서비스에 파일 경로를 저장한 뒤 다시 시작하세요.
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## 백신과 HTTPS 검사
+
+백신의 “HTTPS 검사” 또는 “암호화 연결 검사”(Kaspersky, Avast, ESET 등)와 기업 SSL 검사 프록시는 서버 인증서를
+자체 인증서로 바꿉니다. OpenCode는 이를 거부하고 요청이 다음과 같은 오류로 실패합니다.
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+다음 두 가지 방법 중 하나로 해결하세요.
+
+- 백신 설정에서 `opencode.ai`와 `*.opencode.ai`를 HTTPS 검사 대상에서 제외합니다. 제공자에 직접 연결한다면
+  `api.anthropic.com`처럼 제공자의 API 호스트도 추가하세요.
+- HTTPS 검사에 쓰이는 인증 기관의 인증서를 PEM 파일로 내보내세요. 그런 다음 [인증서](#certificates)에 설명된 대로 `NODE_EXTRA_CA_CERTS`를 설정해 이 인증서를 신뢰하도록 하세요.
+
+## 클라이언트 인증서
+
+게이트웨이가 상호 TLS를 요구하는 제공자에는 `settings.tls`를 설정하세요. 해당 제공자의 모델 요청이 인증서를
+제시하며, TLS 핸드셰이크는 인증서를 요구하는 서버에만 이를 보냅니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert`와 `key`는 PEM 텍스트입니다. 파일에서 읽으려면 `{file:...}`을 사용하세요. 읽을 수 없는 파일이 있으면
+  `tls`가 설정되지 않은 상태로 남습니다.
+- `passphrase`는 암호화된 키에만 필요합니다.
+- Bun과 Node 빌드에서 동작합니다. Cloudflare Workers의 서버는 `fetch`로 클라이언트 인증서를 제시할 수 없습니다.
+- 클라이언트 인증서를 사용하는 요청은 리디렉션을 따르지 않으므로 인증서가 다른 호스트에 제시되지 않습니다.
+
+해당 제공자의 모든 모델 요청(채팅, 압축, 이미지, 결정 모델)이 인증서를 제시합니다. `tls`를 사용하는 제공자는
+WebSocket 대신 HTTP를 사용합니다. webfetch, 원격 MCP 서버, 플러그인 설치 같은 도구는 인증서를 제시하지
+않습니다.
+
+## 포그라운드
+
+`--standalone`과 `serve`는 자체 프로세스의 환경을 사용합니다. `opencode service set env`는 이 프로세스를 구성하지
+않습니다.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+포그라운드 서버에도 같은 방식을 적용하세요.
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## 확인
+
+설정을 적용한 뒤 CLI가 백그라운드 서비스에 도달할 수 있는지 확인하세요.
+
+```bash
+opencode api get /api/info
+```
+
+상태 확인 요청이 성공하면 로컬 클라이언트와 서비스 간 연결이 정상입니다. 평소처럼 제공자에 요청을 보내 서비스가 외부로 연결할 때 사용하는 프록시와 인증서 경로도 확인하세요.
+

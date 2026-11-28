@@ -1,0 +1,169 @@
+---
+title: "外掛"
+description: "在 opencode.json 中將 npm 套件或本機外掛目錄加入 OpenCode，並依 ID 或萬用字元啟用或停用外掛。"
+---
+
+在 `opencode.json(c)` 中加入已發布的套件（可指定版本或命名空間），或本機外掛目錄。
+
+## 設定
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+相對路徑會從包含該項目的設定檔解析。
+
+設定的本機路徑必須是目錄。指向單一檔案的路徑會略過。OpenCode 如何在目錄中找到每個部分，請參閱[載入](/build/plugins#load)。
+
+適用設定檔中的外掛陣列會依優先順序由低到高套用，而不是互相取代。
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## 探索
+
+OpenCode 也會從每個找到的 `.opencode/plugins/` 目錄載入直接的 `.ts` 與 `.js` 檔案，以及第一層外掛套件目錄。
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+全域外掛在 OpenCode 設定目錄下使用相同的探索配置。
+
+```text
+~/.config/opencode/plugins/
+```
+
+專案根目錄 `opencode.json(c)` 旁的 `plugins/` 目錄不會自動探索；請明確設定其外掛
+目錄，或將其移到 `.opencode/` 下。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## 控制
+
+外掛項目會依序處理。在 ID 或萬用字元前加上 `-` 可停用它，使用 `*` 表示所有外掛，使用
+`.*` 比對 ID 前綴。後面的 ID 會重新啟用外掛。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+若要停用建立工作階段分支時加入的提示，請將 `"-opencode.fork-notice"` 加入 `plugins`。
+
+兩個內建外掛會忽略移除，以免儲存庫關閉
+[原則](/policies)強制執行：`opencode.config.policy` 與
+`opencode.provider.opencode`，也就是傳遞組織
+原則的控制台連線。
+
+## 管理
+
+使用 CLI 安裝、列出、檢查、更新或移除全域套件外掛。
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` 會檢查伺服器、僅 GUI 與僅 TUI 的套件外掛是否有更新。`plugin update` 會更新每個過期的套件；
+傳入設定的套件目標即可只檢查或更新該套件。本機外掛與確切的套件修訂版會
+略過。
+
+套件會在指定要跟隨的目標時自行更新：`name@latest`、`name@^1.2.0`、
+`name@~1.2.0`、`name@1.x` 或 `name@>=1.2.0 <2` 等版本範圍、`github:acme/plugin#main` 等 Git 分支，或 Git `semver:` 範圍。
+OpenCode 會在啟動時與每 24 小時檢查、安裝較新版本並重新載入。範圍只會移至
+其中的版本。若新版本載入失敗，前一個版本會繼續執行並保持安裝。
+
+單獨名稱（`name`）或儲存庫（`github:acme/plugin`）會停留在安裝時的版本。`name@next` 與 Git 標籤等
+其他 npm 標籤也是如此。`plugin check` 仍會回報其更新，`plugin update` 則會安裝它們。確切版本與
+提交雜湊會固定。
+
+套件安裝接受帶版本、標籤或範圍的 npm 名稱，以及 npm 相容的 Git 套件規格。
+Git 儲存庫可以使用託管捷徑、HTTPS 或 SSH，包括透過你現有
+Git 憑證存取的私有儲存庫。
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+支援分支、標籤、完整提交雜湊與 npm 的 `::path:` 儲存庫子目錄選擇器。請直接設定
+本機路徑；`plugin add` 不接受 tarball 與 npm 別名目標。
+
+## 重新載入
+
+受監看設定目錄下的變更會自動重新載入。伺服器啟動時會立即載入快取的套件外掛、
+在背景安裝缺少的套件，並檢查未固定的 npm 與 Git 外掛是否有更新。確切的 npm 版本與
+完整 Git 提交雜湊會保持固定。未受監看之本機相依性的變更
+可能仍需要重新啟動 OpenCode。
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## 桌面
+
+匯出 `./gui-experimental` 的外掛也會為 OpenCode Desktop 新增面板、指令或設定。應用程式會從其執行的伺服器載入
+外掛，因此請在全域 `opencode.json(c)` 中設定外掛，讓每個視窗都能使用。
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+當選取應用程式自己的伺服器時，**Settings > Extensions > Plugins** 會列出它們。外掛的開關只會關閉
+其桌面介面，**Reload** 會在失敗後重新載入它。若要關閉整個外掛，請將 `-` 與其 ID 加入
+`plugins`，例如 `"-acme"`。
+
+## 終端機
+
+僅限 TUI 的外掛會另行設定，並在連接到遠端伺服器時保持作用中。
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  建立可新增工具、掛鉤、整合、指令、agent 與其他行為的外掛。
+</Card>

@@ -261,7 +261,7 @@ function prepareDiagram(
 export function createMermaidMarkdownRenderer(
   ctx: RenderContext,
   input: MermaidMarkdownRendererOptions | (() => MermaidMarkdownRendererOptions) = {},
-): NonNullable<MarkdownOptions["renderNode"]> {
+): NonNullable<MarkdownOptions["renderBlock"]> {
   return createMarkdownCodeBlockRenderer({ mermaid: createMermaidCodeBlockRenderer(ctx, input) })!
 }
 

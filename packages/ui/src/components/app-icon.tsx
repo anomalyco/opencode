@@ -18,6 +18,7 @@ import xcode from "../assets/icons/app/xcode.png"
 import zed from "../assets/icons/app/zed.svg"
 import zedDark from "../assets/icons/app/zed-dark.svg"
 import sublimetext from "../assets/icons/app/sublimetext.svg"
+import windowsTerminal from "../assets/icons/app/windows-terminal.svg"
 
 const icons = {
   vscode,
@@ -35,6 +36,7 @@ const icons = {
   textmate,
   powershell,
   "sublime-text": sublimetext,
+  "windows-terminal": windowsTerminal,
 } satisfies Record<IconName, string>
 
 const themed: Partial<Record<IconName, { light: string; dark: string }>> = {
@@ -45,7 +47,7 @@ const themed: Partial<Record<IconName, { light: string; dark: string }>> = {
 }
 
 const scheme = () => {
-  if (typeof document !== "object") return "light" as const
+  if (!("document" in globalThis)) return "light" as const
 
   if (document.documentElement.dataset.colorScheme === "dark") return "dark" as const
 

@@ -1,0 +1,38 @@
+---
+title: "Introdução ao Console"
+description: "O OpenCode Console é um serviço opcional que adiciona espaços de trabalho para equipes, inferência de modelos, orçamentos, políticas e pesquisa na web hospedada."
+---
+
+O [OpenCode Console](https://opencode.ai/console) é um serviço opcional que traz benefícios adicionais ao
+usar o OpenCode, sozinho ou em equipe.
+
+- [Espaços de trabalho](/console/workspaces) para compartilhar acesso com sua [equipe](/console/members)
+- [Inferência](/console/models) para modelos proprietários e de código aberto
+- [Provedores](/console/providers) para conectar suas próprias contas de provedor pelo gateway do Console
+- Acompanhamento de uso e controles de [orçamento](/console/budgets)
+- Aplicação de políticas a toda a equipe para controlar o comportamento do OpenCode
+- [Pesquisa na web](/console/websearch)
+- [Harnesses](/console/harnesses) para usar modelos do Console no Claude Code, no Codex e em outros agentes
+- [OpenCode Go, Go Plus e Go Teams](/console/go), assinaturas mensais de $10, $40 e $20 por membro para acesso a modelos de código aberto
+
+## Primeiros passos
+
+Você não precisa de uma equipe para usar o Console. Toda conta começa com um espaço de trabalho **Personal** no qual
+você é o único membro.
+
+1. Entre no [Console](https://opencode.ai/console).
+2. Assine o [Go](/console/go), adicione [créditos](/console/billing#add-credits) ou conecte um [provedor](/console/providers).
+3. Execute `/connect` no OpenCode e escolha o espaço de trabalho.
+4. Opcionalmente, [convide](/console/members#invite-members) sua equipe.
+
+```text
+/connect
+```
+
+## Políticas
+
+Regras de Provedores e Ferramentas da página de Políticas valem para todo cliente do OpenCode
+conectado ao espaço de trabalho. Elas são enviadas como regras de [política](/policies#console)
+que têm precedência sobre as configurações pessoais e de projeto do membro e entram em vigor
+em cerca de um minuto. As preferências gerenciadas e o arquivo de configuração do sistema ainda
+têm precedência sobre o espaço de trabalho; consulte [precedência](/policies#precedence).

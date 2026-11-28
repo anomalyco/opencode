@@ -1,0 +1,211 @@
+---
+title: "Dostawcy w Console"
+description: "Podłącz własne konta dostawców modeli do obszaru roboczego OpenCode Console i wybierz, z których modeli mogą korzystać członkowie."
+---
+
+Podłącz konta dostawców, za które już płacisz, takie jak Anthropic, OpenAI czy AWS Bedrock, i udostępnij ich modele
+wszystkim w obszarze roboczym. Console przechowuje poświadczenie i udostępnia każdego dostawcę przez swoją bramkę, więc
+członkowie korzystają z modeli, nigdy nie widząc klucza dostawcy. Ta sama bramka jest dostępna dla Twoich narzędzi przez
+[API dostawców](/console/api/providers).
+
+Właściciele i administratorzy zarządzają dostawcami na karcie **Providers**. Członkowie otrzymują włączone modele
+w OpenCode po uruchomieniu `/connect`.
+
+## Podłączanie dostawcy
+
+1. Otwórz **Providers** i kliknij **Connect Provider**.
+2. Wybierz dostawcę z katalogu i wpisz jego klucz API.
+3. Opcjonalnie kliknij **Test connection**, a następnie **Save**.
+
+Katalog obejmuje Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter i wiele innych. Dostawcy
+z katalogu mają wstępnie skonfigurowane modele.
+
+### Dostawcy chmurowi
+
+Dostawcy chmurowi wymagają kilku dodatkowych informacji.
+
+| Dostawca              | Szczegóły                              |
+| --------------------- | -------------------------------------- |
+| Azure                 | Nazwa zasobu i klucz API               |
+| AWS Bedrock           | Region i klucz API                     |
+| Google Vertex AI      | Region i JSON konta usługowego         |
+| Cloudflare AI Gateway | ID konta, ID bramki i token API        |
+| Databricks            | URL obszaru roboczego i token          |
+
+### Własni dostawcy
+
+Kliknij **Add Custom Provider**, aby podłączyć dowolny inny endpoint, a następnie dodaj jego modele przez **Add Model**.
+
+| Pole        | Opis                                                                            |
+| ----------- | ------------------------------------------------------------------------------- |
+| Base URL    | Dokąd Console przekazuje żądania, na przykład `https://api.deepseek.com/v1`.     |
+| Format      | Chat Completions, Responses API, Anthropic Compatible lub Google Generative AI. |
+| Auth mode   | Bearer, API key header lub Custom header.                                       |
+| Credential  | Klucz, który Console wysyła do dostawcy.                                        |
+
+## Wybór modeli
+
+Otwórz dostawcę, aby zobaczyć jego modele. Członkom są dostępne tylko włączone modele.
+
+- Przełącznikiem **Enabled** włącz lub wyłącz model.
+- Włącz **New models**, aby automatycznie włączać modele dodane przez dostawcę w przyszłości.
+
+## Edycja modeli
+
+Kliknij model, aby go edytować. Zmiany są zapisywane po zamknięciu panelu.
+
+| Sekcja        | Co możesz zmienić                                              |
+| ------------- | -------------------------------------------------------------- |
+| General       | Nazwa wyświetlana, API ID, obsługa narzędzi, typy wejścia i wyjścia |
+| Variants      | Warianty z własnymi nagłówkami lub treścią                     |
+| Configuration | Domyślny wariant, nagłówki i treść żądania, limity tokenów     |
+| Cost Tiers    | Ceny wejścia, wyjścia, odczytu cache i zapisu cache za 1 mln tokenów |
+
+### Własne ceny
+
+Modele z katalogu startują z ceną katalogową dostawcy. Jeśli masz wynegocjowane ceny, na przykład rabat w umowie
+z OpenAI, nadpisz je w **Cost Tiers**, aby raporty użycia i [budżety](/console/budgets) odpowiadały temu, co faktycznie
+płacisz.
+
+| Pole             | Cena katalogowa | Twoja cena |
+| ---------------- | --------------- | ---------- |
+| Cena wejścia     | $2.50           | $2.00      |
+| Cena wyjścia     | $15.00          | $12.00     |
+| Cena odczytu cache | $0.25         | $0.20      |
+
+Zmienione ceny są wyróżnione na stronie dostawcy. Użyj **Restore default value** przy polu lub **⋯ › Restore...**
+przy modelu, aby przywrócić cenę katalogową.
+
+Dodaj próg **Context**, gdy model pobiera wyższą opłatę powyżej określonego rozmiaru kontekstu, na przykład dla promptów
+ponad 200 tys. tokenów.
+
+### Własne modele
+
+Kliknij **Add Model**, aby dodać model spoza katalogu, podając jego **Display name** i **Model ID**. Użyj
+**⋯ › Duplicate...** przy istniejącym modelu, aby zacząć od jego ustawień.
+
+## Modele OpenCode
+
+Karta **Models** zarządza [modelami](/console/models) udostępnianymi przez Console, opłacanymi ze środków obszaru
+roboczego. Działa jak strona dostawcy:
+
+- Włączaj i wyłączaj poszczególne modele.
+- Wyłącz **Free models**, aby zablokować darmowe modele w obszarze roboczym.
+- Włącz **New models**, aby automatycznie włączać nowe modele Console.
+
+Wyłącz całego dostawcę przez **⋯ › Disable**, aby używać tylko własnych dostawców.
+
+## Użycie w OpenCode
+
+Członkowie uruchamiają `/connect` i wybierają obszar roboczy. Każdy włączony dostawca pojawia się jako nazwa obszaru
+roboczego, po której następuje nazwa dostawcy, a `/models` wyświetla jego włączone modele.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Włącz **Managed providers only** w **Settings › General**, aby ograniczyć OpenCode do dostawców obszaru roboczego
+dla wszystkich.
+
+## Przekazywanie tożsamości nadawcy
+
+Gdy dostawca jest bramką, którą sam prowadzisz, włącz **Send identity** na jego stronie. Console dodaje wtedy nagłówek
+`x-opencode-actor` do każdego wysyłanego tam żądania modelu. Nagłówek wskazuje członka lub konto usługowe stojące za
+żądaniem, więc Twoja bramka może logować żądania lub ograniczać je według nadawcy.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- Jest domyślnie wyłączone, a zmiana bazowego URL wyłącza je.
+- Dostawca korzystający nadal z API swojego producenta, taki jak `https://api.openai.com/v1`, nie pokazuje tego
+  ustawienia, ponieważ producent ignoruje nagłówek.
+- Console usuwa każdy nagłówek `x-opencode-*` wysłany przez klienta, więc jedynym `x-opencode-actor`, który otrzymuje
+  Twoja bramka, jest ten podpisany przez Console.
+- **Test connection** i wyświetlanie modeli wywołują `GET <base URL>/models` tylko z poświadczeniem, więc nie wymagaj
+  nagłówka na tej trasie.
+
+### Token
+
+Nagłówek to JWT podpisywany przez Console dla każdego żądania.
+
+| Pole         | Wartość                                          |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | Bazowy URL dostawcy bez końcowych ukośników      |
+| `iat`, `exp` | `exp` przypada 120 sekund po `iat`               |
+
+| Pole JWT             | Wartość                                                                |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | `user_id` dla członka, w przeciwnym razie `service_account_id`         |
+| `workspace_id`       | Obszar roboczy, w którym wykonano żądanie                              |
+| `user_id`, `email`   | Członek, gdy żądanie wysłał członek                                    |
+| `service_account_id` | Konto usługowe, gdy żądanie wysłało konto usługowe (w tym agenci)      |
+| `session_id`         | Identyfikator sesji klienta, jeśli został wysłany                      |
+| `request_id`         | Identyfikator, który klient otrzymuje w nagłówku odpowiedzi `x-opencode-log-id` |
+
+Żądanie członka zawiera taki ładunek:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Weryfikacja tokenu
+
+Console publikuje swoje klucze publiczne pod adresem `https://opencode.ai/inference/.well-known/jwks.json`, z nagłówkiem
+`Cache-Control: public, max-age=300`. Sprawdź podpis, wystawcę, odbiorcę, typ i wiek, a następnie obszar roboczy. Ten
+przykład używa [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Ustaw `audience` na bazowy URL dostawcy zapisany w Console, bez końcowych ukośników, i zastąp `org_...` identyfikatorem
+obszaru roboczego z adresu URL Console. Console publikuje nowy klucz podpisujący, zanim zacznie nim podpisywać, więc
+weryfikator wyszukujący klucze po `kid`, jak `createRemoteJWKSet`, działa poprawnie podczas rotacji.
+
+## Wyłączanie i usuwanie
+
+Otwórz menu **⋯** dostawcy:
+
+- **Disable** ukrywa dostawcę i jego modele przed członkami, ale zachowuje ustawienia.
+- **Remove...** usuwa dostawcę i jego modele. Okno pokazuje, kto ostatnio go używał, i oferuje **Disable instead**.
+
+Aby wymienić klucz, kliknij poświadczenie na stronie dostawcy i wpisz nowe.
+
+## Rozliczenia
+
+Dostawca rozlicza Cię za tokeny; Console nie pobiera za nie środków. Console nadal rejestruje każde żądanie i jego koszt
+według cennika modelu, więc raporty użycia i [budżety](/console/budgets) go uwzględniają.
+
+Aby wywoływać dostawcę z własnych narzędzi zamiast z OpenCode, użyj [API dostawców](/console/api/providers).

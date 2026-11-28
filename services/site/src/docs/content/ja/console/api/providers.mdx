@@ -1,0 +1,104 @@
+---
+title: "プロバイダー API"
+description: "Console のキーを使って、ワークスペースに接続したプロバイダーを Console のゲートウェイ経由で呼び出します。"
+---
+
+ワークスペースに接続したすべての[プロバイダー](/console/providers)は、それぞれ固有の URL で Console のゲートウェイから提供されます。OpenCode は `/connect` の後に自動的に使用します。自分のツールから同じプロバイダーを使うには、直接呼び出してください。Console は転送前にプロバイダーの認証情報を追加するため、プロバイダーのシークレットがワークスペースの外に出ることはありません。
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## プロバイダーの URL
+
+**Providers** のプロバイダーページから **Console API URL** をコピーします。
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## 認証
+
+`<token>` は、Console で作成した[サービスアカウントキー](/console/api#service-accounts)に置き換えます。Console はリクエストを転送する前に、このキーを接続先の認証情報に差し替えます。
+
+```text
+Authorization: Bearer <token>
+```
+
+Console は `x-api-key`、`api-key`、`x-goog-api-key` からもキーを読み取るため、プロバイダーの SDK を Console API URL に向ければそのまま動作します。
+
+## エンドポイント
+
+Console API URL にプロバイダーの API パスを追加します。Console はリクエストを接続のベース URL に転送し、プロバイダーのレスポンスをそのまま返します。
+
+| 形式                 | パス                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+| Embeddings           | `/embeddings`                     |
+
+モデル ID はプロバイダーページに表示されているとおりに送信します。上流でモデルの API ID が異なる場合、Console が書き換えます。接続で有効になっていないモデルへのリクエストは拒否されます。
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens` は必須です。
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+モデルとメソッドはパスの一部です。レスポンスをストリーミングするには、`:generateContent` を `:streamGenerateContent` に置き換えます。
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## 使用量
+
+リクエストは、各モデルに設定した料金で[予算](/console/budgets)に計上されます。トークンの料金はプロバイダーから請求されます。

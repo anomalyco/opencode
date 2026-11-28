@@ -1,0 +1,172 @@
+---
+title: "Plugins"
+description: "Tilføj npm-pakker eller lokale pluginmapper til OpenCode i opencode.json, og aktivér eller deaktivér plugins efter ID eller wildcard."
+---
+
+Tilføj publicerede pakker, versionsstyrede pakker, scoped-pakker eller lokale pluginmapper til `opencode.json(c)`.
+
+## Konfiguration
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Relative stier fortolkes i forhold til mappen med den konfigurationsfil, der indeholder posten.
+
+Konfigurerede lokale stier skal være mapper. En sti til en enkelt fil springes over. Se [Indlæsning](/build/plugins#load) for,
+hvordan OpenCode finder hver del i en mappe.
+
+Plugin-arrays fra gældende konfigurationsfiler anvendes fra laveste til højeste prioritet i stedet for at erstatte
+hinanden.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Søgning
+
+OpenCode indlæser også direkte `.ts`- og `.js`-filer og pluginpakkemapper på øverste niveau fra hver fundet
+`.opencode/plugins/`-mappe.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+OpenCode leder efter globale plugins med samme mappestruktur i sin konfigurationsmappe.
+
+```text
+~/.config/opencode/plugins/
+```
+
+En `plugins/`-mappe ved siden af en `opencode.json(c)` i projektroden findes ikke automatisk; konfigurer dens pluginmapper
+eksplicit, eller flyt den ind under `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Kontrol
+
+Pluginposter behandles i rækkefølge. Sæt `-` foran et ID eller wildcard for at deaktivere det, brug `*` for alle plugins, og
+brug `.*` til at matche et ID-præfiks. Et senere ID genaktiverer et plugin.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Hvis du vil deaktivere meddelelsen, der tilføjes til nye forks, skal du tilføje `"-opencode.fork-notice"` til `plugins`.
+
+To indbyggede plugins ignorerer fjernelse, så et repository ikke kan slå håndhævelse af
+[politikker](/policies) fra: `opencode.config.policy` og
+`opencode.provider.opencode`, Console-forbindelsen, der leverer organisationens
+politik.
+
+## Administration
+
+Installér, vis, kontrollér, opdater eller fjern globale pakkeplugins med CLI'en.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` kontrollerer server-, GUI-only- og TUI-only-pakkeplugins for opdateringer. `plugin update` opdaterer hver forældet pakke;
+angiv et konfigureret pakkemål for kun at kontrollere eller opdatere den pakke. Lokale plugins og eksakte pakkerevisioner
+springes over.
+
+En pakke opdaterer sig selv, når den angiver, hvad der skal følges: `name@latest`, et versionsinterval som `name@^1.2.0`,
+`name@~1.2.0`, `name@1.x` eller `name@>=1.2.0 <2`, en Git-branch som `github:acme/plugin#main` eller et Git-`semver:`-interval.
+OpenCode kontrollerer den ved start og hver 24. time, installerer en nyere version og genindlæser den. Et interval flytter kun til versioner
+inden for det. Hvis den nye version ikke kan indlæses, fortsætter den forrige med at køre og forbliver installeret.
+
+Et bart navn (`name`) eller repository (`github:acme/plugin`) bliver på den version, det installerede. Det samme gælder andre npm-tags som
+`name@next` og Git-tags. `plugin check` rapporterer stadig deres opdateringer, og `plugin update` installerer dem. Eksakte versioner og
+commit-hashes er pinnet.
+
+Pakkeinstallation accepterer npm-navne med versioner, tags eller intervaller samt npm-kompatible Git-pakkespecifikationer.
+Git-repositories kan bruge hostede genveje, HTTPS eller SSH, inklusive private repositories, der er tilgængelige gennem dine eksisterende
+Git-legitimationsoplysninger.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Branches, tags, komplette commit-hashes og npms `::path:`-vælgere til repositoryundermapper understøttes. Konfigurer
+lokale stier direkte; tarball- og npm-aliasmål accepteres ikke af `plugin add`.
+
+## Genindlæsning
+
+Ændringer under overvågede konfigurationsmapper genindlæses automatisk. Serverstart indlæser cachelagrede pakkeplugins med det samme,
+installerer manglende pakker i baggrunden og kontrollerer ikke-pinnede npm- og Git-plugins for opdateringer. Eksakte npm-versioner og
+fulde Git-commit-hashes forbliver pinnede. Ændringer i ikke-overvågede lokale afhængigheder
+kan stadig kræve genstart af OpenCode.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Desktop
+
+Et plugin, der eksporterer `./gui-experimental`, tilføjer også paneler, kommandoer eller indstillinger til OpenCode Desktop. Appen indlæser
+plugins fra den server, den kører, så konfigurer pluginnet i din globale `opencode.json(c)` for at bruge det i hvert vindue.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+**Settings > Extensions > Plugins** viser dem, når appens egen server er valgt. Et plugins kontakt slår kun
+dets desktop-UI fra, og **Reload** indlæser det igen efter en fejl. Hvis du vil slå hele pluginnet fra, skal du tilføje `-` og dets ID til
+`plugins`, f.eks. `"-acme"`.
+
+## Terminal
+
+Plugins, der kun gælder TUI'en, konfigureres separat og forbliver aktive, når du opretter forbindelse til en ekstern server.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  Opret plugins, der tilføjer værktøjer, hooks, integrationer, kommandoer, agenter og anden adfærd.
+</Card>

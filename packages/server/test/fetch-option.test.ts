@@ -94,11 +94,11 @@ it.live("sends Console config and remote MCP requests through the embedder's fet
       Mcp.Service.use((service) => service.callTool({ server: "gateway", name: "echo" })),
     )
     expect(result.content).toEqual([{ type: "text", text: "called echo" }])
-    expect(methods).toEqual(expect.arrayContaining(["initialize", "tools/list", "tools/call"]))
+    expect(methods).toEqual(expect.arrayContaining(["server/discover", "tools/list", "tools/call"]))
 
     // A reconnect requested over the API starts the connection in the request's fiber rather than the MCP service's.
     methods.length = 0
     expect(yield* request("POST", "/api/experimental/mcp/gateway/connect")).toBe(204)
-    expect(methods).toContain("initialize")
+    expect(methods).toContain("server/discover")
   }),
 )

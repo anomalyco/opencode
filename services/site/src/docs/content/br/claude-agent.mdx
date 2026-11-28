@@ -1,0 +1,179 @@
+---
+title: "Claude Agent"
+description: "Use um plano Claude ou um login do Claude Code no OpenCode pelo Claude Agent, que executa o Claude Code na sua máquina."
+noindex: true
+---
+
+Use seu plano Claude ou outro login do Claude Code. Como o Claude Agent executa o Claude Code na sua máquina, primeiro instale o Claude Code
+2.1.248 ou mais recente e faça login.
+
+```bash
+claude auth login
+```
+
+Depois conecte o **Claude Agent** e escolha um modelo. A lista de modelos vem do Claude Code. Os níveis de esforço são variantes, como
+`claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+Você também pode conectar pela CLI com `auth login claude-agent`.
+
+O OpenCode encontra `claude` no seu `PATH`. Para usar outra cópia, defina `OPENCODE_CLAUDE_PATH` no servidor.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## Como funciona
+
+O Claude Code chama o modelo, e o OpenCode faz todo o resto.
+
+- O Claude recebe o prompt de sistema do Claude Code, mais o prompt do seu agente, os arquivos `AGENTS.md`, as skills e as instruções de MCP.
+- O Claude usa as ferramentas e permissões do OpenCode em vez das ferramentas integradas do Claude Code.
+- As suas configurações do Claude Code, os arquivos `CLAUDE.md`, os hooks, os servidores MCP, as skills e a memória não são carregados.
+- O OpenCode executa a compactação e os subagentes.
+- Você pode alternar entre o Claude Agent e outros modelos na mesma sessão.
+
+## Custo
+
+O custo depende de como o Claude Code está conectado.
+
+| Login | Custo exibido |
+| --- | --- |
+| Assinatura Claude | Nenhum — o plano cobre o uso |
+| Chave de API da Anthropic, ou Claude Platform na AWS ou no Google Cloud | Preços da Anthropic |
+| Amazon Bedrock | Preços do Bedrock, ou preços da Anthropic no Bedrock Mantle |
+| Google Vertex | Preços do Vertex |
+| Microsoft Foundry | Preços do Azure |
+| URL base personalizada | Nenhum |
+
+## Configurar
+
+As configurações de conexão do provedor `claude-agent` são passadas ao Claude Code. Elas substituem as mesmas variáveis definidas no
+seu shell.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Configuração | Variável do Claude Code |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+Defina-as em um modelo para substituir os valores do provedor nesse modelo.
+
+## Usar uma segunda conta Claude
+
+Entre na segunda conta em uma pasta própria. O seu login habitual continua inalterado.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+No PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+Depois adicione modelos que usam essa pasta:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+Se quiser usar a mesma conta em todos os modelos de um projeto, defina `settings.configDir` no provedor, na configuração do projeto.
+
+## Alternar entre contas
+
+Se você tem várias contas que pode usar no lugar umas das outras, o OpenCode pode passar para a próxima quando uma delas atingir o limite de uso.
+Entre em cada conta extra em uma pasta própria. O seu login existente em `~/.claude` pode ficar como está:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Depois liste as pastas:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+Cada conversa continua com a conta que respondeu por último, e as novas conversas começam na última conta que funcionou. A alternância só
+vale para logins de assinatura Claude, não para `apiKey` ou `authToken`.
+
+## Pesquisa na web
+
+O Claude Agent também pode fornecer a pesquisa na web do OpenCode por meio do WebSearch do Claude Code. As pesquisas contam no seu plano
+Claude e não exigem uma chave de API de pesquisa. Qualquer modelo pode usar essa integração. Selecione-a em `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+Consulte [Pesquisa na web](/websearch#claude-agent) para detalhes.
+
+## Limitações
+
+- O Claude Code precisa estar instalado na mesma máquina que o servidor do OpenCode. O Claude Agent não está disponível em espaços de trabalho
+  remotos.
+- O prompt de sistema do Claude Code substitui o prompt integrado do OpenCode. Prompts de agentes personalizados continuam valendo.
+- Temperatura, top-p, top-k, seed e sequências de parada não são compatíveis.
+- Os hooks `http.request` e `http.response` de plugins não rodam, porque o Claude Code faz as chamadas de API.
+- Recursos do Claude Code como `/usage`, `/loop`, modo automático e agent teams não estão disponíveis.
+
+## Erros
+
+| Erro ou sintoma | Verifique |
+| --- | --- |
+| `Claude Code is not installed` | Instale o Claude Code ou defina `OPENCODE_CLAUDE_PATH` com o caminho dele. |
+| `Claude Code is not logged in` | Execute `claude auth login` e conecte o Claude Agent de novo. Com `configDir`, execute o comando que o erro mostra para essa pasta. |
+| `Claude Code ... is too old` | Execute `claude update`. |

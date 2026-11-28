@@ -19,9 +19,13 @@ import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
 import { makeBlobGet } from "./blob"
+import { makeBrowserTunnel } from "./experimental/browser-tunnel"
 import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
+import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
+import { makePush } from "./push"
+import { makeSpace } from "./space"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -31,14 +35,39 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
     const job = yield* makeJob
+    const space = yield* makeSpace
     const mediaGet = yield* makeMediaGet
     const blobGet = yield* makeBlobGet
     const automation = yield* makeAutomation
+    const machine = yield* makeMachine
+    const machineLink = yield* makeMachineLink
+    const browserTunnel = yield* makeBrowserTunnel
+    const push = yield* makePush
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
       .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
+      .handleRaw("browser.tunnel", (ctx) => browserTunnel(ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
+      .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))
+      .handleRaw("machine.link", (ctx) => machineLink(ctx.request))
+      .handle("machine.list", () => machine.list())
+      .handle("machine.add", (ctx) => machine.add(ctx.payload))
+      .handle("machine.remove", (ctx) => machine.remove(ctx.params.name))
+      .handle("push.get", () => push.get())
+      .handle("push.device.register", (ctx) => push.register(ctx.params.deviceID, ctx.payload))
+      .handle("push.device.remove", (ctx) => push.remove(ctx.params.deviceID))
+      .handle("push.device.update", (ctx) => push.update(ctx.params.deviceID, ctx.payload))
+      .handle("push.device.session.set", (ctx) => push.setDeviceBell(ctx.params.deviceID, ctx.params.sessionID, ctx.payload))
+      .handle("push.device.session.remove", (ctx) => push.removeDeviceBell(ctx.params.deviceID, ctx.params.sessionID))
+      .handle("push.session.set", (ctx) => push.setSessionBell(ctx.params.sessionID, ctx.payload))
+      .handle("push.session.remove", (ctx) => push.removeSessionBell(ctx.params.sessionID))
+      .handle("push.settings.set", (ctx) => push.setSettings(ctx.payload))
+      .handle("space.write", (ctx) => space.write(ctx.payload.changes))
+      .handle("space.sync", (ctx) => space.sync(ctx.payload.spaces))
+      .handle("space.subscribe", (ctx) => space.subscribe(ctx.payload))
+      .handle("space.unsubscribe", (ctx) => space.unsubscribe(ctx.payload))
+      .handle("space.reset", () => space.reset())
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))

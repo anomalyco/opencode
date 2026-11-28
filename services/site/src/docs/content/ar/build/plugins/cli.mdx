@@ -1,0 +1,672 @@
+---
+title: "بناء ملحقات TUI"
+description: "ابنِ جزء TUI من ملحق OpenCode لواجهة الطرفية باستخدام @opencode/plugin/tui."
+---
+
+توسّع ملحقات TUI واجهة الطرفية بإضافة أوامر ومسارات ومواضع إدراج وعارضات Markdown وإشعارات وحالة محلية.
+ملحق TUI هو جزء `./tui` من [حزمة الملحق](/build/plugins)، ويأتي عادةً إلى جانب [جزء الخادم](/build/plugins/server).
+
+```ts title="src/tui.tsx"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "TUI plugin loaded", variant: "success" })
+  },
+})
+```
+
+واستورد `@opencode/plugin/tui` مباشرةً. ويحل OpenCode هذا الاستيراد وقت التشغيل، فلا تحتاج ملحقات TUI المحلية إلى
+مسار مطلق لنسخة OpenCode.
+
+## السياق
+
+ويتلقى `setup` الإعداد والبيانات الوصفية للتطبيق والموقع الحالي وعميل OpenCode والبيانات المخزّنة مؤقتًا ورموز السمة
+وعارض OpenTUI وواجهات UI الموثّقة أدناه.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+وأعد دالة تنظيف للموارد التي يملكها الملحق.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## العميل
+
+`context.client` هو عميل OpenCode المولّد ويستطيع استدعاء الخادم المرتبط، بما في ذلك خادم بعيد.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## الأحداث
+
+استخدم `data.on` لحدث واحد محدّد النوع أو `data.listen` لكل حدث خادم؛ وكلاهما يعيد دالة إلغاء اشتراك.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## الجلسات
+
+تتيح بيانات الجلسات عرض قائمة الجلسات والبحث عنها ومعرفة ترتيبها الهرمي وتكلفتها وحالتها، ومزامنة البيانات أو إبطال صلاحيتها.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+ولعناصر صندوق الوارد المعلّقة والرسائل واجهات سرد وبحث ومزامنة وإبطال.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+ويمكن قراءة طلبات الأذونات وتحديثها لجلسة.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+ويمكن سرد النماذج وتحديثها والرد عليها أو إلغاؤها في موقع.
+
+```ts
+import type { SessionFormCancelInput, SessionFormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: SessionFormReplyInput, cancel: SessionFormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## المشاريع وجلسات shell
+
+وتدعم المشاريع والأذونات المحفوظة عمليات السرد والبحث والمزامنة والإبطال.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+وتدعم بيانات shell عمليات السرد والبحث والمزامنة والإبطال المحدودة بالموقع.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## بيانات الموقع
+
+تعرض حالة الموقع الموقع الافتراضي وأدوات التحديث.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+وتعرض حالة التحكم في الإصدارات معلومات المستودع في موقع.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+وتتشارك بيانات الوكلاء والأوامر والتكاملات والنماذج والمزوّدين والمراجع والمهارات وMCP طرق `list` و`sync`
+و`invalidate`.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## لفت الانتباه
+
+يمكن لطلبات لفت الانتباه عرض إشعار من النظام أو تشغيل الصوت المحدّد في الإعدادات أو القيام بالأمرين، بحسب ما إذا كانت الطرفية في موضع التركيز.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## السمة والعارض
+
+استخدم رموز السمة الدلالية مع عناصر OpenTUI ومرّر `context.renderer` إلى أدوات العارض الخاصة.
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+ويحتاج أي مورد OpenTUI يرسمه العارض إلى `context.renderer.nativeScene` مالكًا له. مثلًا، يحتاج `<markdown>`
+و`<code>` إلى `SyntaxStyle`. وأتلف المورد عندما يكون العارض خاملًا، بعد آخر إطار يرسمه.
+
+```tsx
+import { SyntaxStyle } from "@opentui/core"
+
+const style = SyntaxStyle.fromStyles({ default: { fg: context.theme.text.base } }, context.renderer.nativeScene)
+context.ui.slot({ append: "home.footer", render: () => <markdown content="Ready" syntaxStyle={style} /> })
+return () => context.renderer.idle().then(() => style.destroy())
+```
+
+لقراءة نمط تخطيط عنصر قابل للعرض، استدعِ الطريقة التي تحمل اسم طريقة القراءة المقابلة في عقدة Yoga، مثل
+`box.getPadding(Yoga.Edge.Bottom)` أو `box.getMaxWidth()`. والعناصر القابلة للعرض في المضيف ليست جزءًا من واجهة الملحقات. وقد يتغير
+بناؤها وأنماطها في أي إصدار.
+
+### ملحقات بُنيت لـOpenTUI 0.5
+
+يشغّل OpenCode الملحقات بـOpenTUI الخاص به. ومنذ OpenTUI 0.6:
+
+- تأخذ `SyntaxStyle.create()` و`SyntaxStyle.fromStyles()` و`SyntaxStyle.fromTheme()` و`TextBuffer.create()` و
+  `EditBuffer.create()` مالكًا كوسيطها الأخير. ويأخذه `OptimizedBuffer.create()` في خيار `owner`.
+  فمرّر `context.renderer.nativeScene`. ويتجاهل OpenTUI 0.5 الوسيط الإضافي، فيعمل الملحق على إصدارات
+  OpenCode الأقدم.
+- وتأخذ `generateSyntax()` من `@opencode/theme/tui` المالك كوسيطها الثاني:
+  `generateSyntax(context.theme, context.renderer.nativeScene)`. وإصدارات `@opencode/theme` الأقدم تبني النمط
+  بلا مالك، فحدّث الحزمة أيضًا.
+- وأُزيلت `getLayoutNode()`. فاستبدل `getLayoutNode().getMaxWidth()` وغيره من أدوات جلب الأنماط بالطريقة
+  القابلة للعرض بالاسم نفسه، على OpenTUI 0.6.5 أو أحدث. واستبدل `getComputedLayout()` وغيره من أدوات جلب الموضع
+  والحجم المحسوبة بـ`getLayout()`، و`markDirty()` بـ`invalidateIntrinsicSize()`. ولا بديل للحشو والهامش
+  والحدود المحسوبة، وتقرأ `getPadding(edge)` الحشو المضبوط لتلك الحافة فقط. ولإعادة نمط
+  يفيد جالبه بأنه غير مضبوط (`Unit.Undefined`)، عيّن `undefined` للخاصية، على OpenTUI 0.6.6 أو
+  أحدث.
+
+وتسرد [ملاحظات إصدار OpenTUI 0.6.0](https://opentui.com/docs/releases/0.6.0) كل تغيير.
+
+## مكوّنات Solid
+
+استخدم `usePlugin` للوصول إلى السياق الحالي داخل JSX يعرضه مسار أو مربع حوار أو موضع إدراج.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+سجّل عارضًا لكتل الشيفرة المسيّجة بحسب لغة البرمجة. تلغي الدالة المُعادة تسجيله.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## الأوامر وخرائط المفاتيح
+
+سجّل أوامر لوحة الأوامر وأوامر الشرطة المائلة وأوامر لوحة المفاتيح في طبقة تفاعلية من خرائط المفاتيح.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+واستدعِ `layer` من `setup`، بما في ذلك بعد `await`، أو من مكوّن. وتُزال كل طبقة عند أول ما يلي:
+
+- تعطيل الملحق أو إعادة تحميله أو فشل إعداده.
+- إزالة المكوّن أو إنهاء الحساب التفاعلي الذي أنشأها، مثل موضع إدراج أو مسار أو مربع حوار.
+
+يجب أن تكون دالة إنشاء الطبقة خالصة. يقيّمها OpenCode مرة واحدة من دون تتبّع التبعيات للتحقّق من البنية الأولية للأوامر، ثم يعيد تقييمها تفاعليًا. وترمي `layer()` أخطاء البنية الأولية، مثل غياب معرّف أمر في لوحة الأوامر. ويتولّى OpenTUI معالجة أخطاء تحليل اختصارات المفاتيح، بينما يتولّى Solid معالجة أخطاء التحديثات التفاعلية اللاحقة.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+يمكن للطبقة أن تستهدف عنصرًا واحدًا قابلًا للعرض في OpenTUI، ويمكن لأمر أن يعيد `false` لمواصلة تمرير حدث لوحة المفاتيح.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+أرسل الأوامر، أو افحص الاختصارات وحالة الأوامر، أو ادفع وضع إدخال مؤقت.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## التخزين
+
+يحفظ التخزين الدائم JSON عبر إعادات التشغيل ويزامن بين نسخ TUI.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+ويبقى تخزين الذاكرة عبر إعادات تحميل الملحق لكنه يُهمل عند خروج TUI.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## مربعات الحوار والإشعارات
+
+استخدم مربعات حوار قائمة على Promise للتنبيهات والتأكيدات وإدخال النص والاختيار.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### البحث في الاختيار
+
+مرّر `search` لتتولى المطابقة وترتيب النتائج. ويعمل لكل استعلام، بما في ذلك الفارغ، ولا يتلقى إلا الخيارات المفعّلة. وتُسرد النتائج بالترتيب المعاد، مع عرض كل فئة ضمنيًا.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### إجراءات الاختيار
+
+وتظهر الإجراءات في التذييل وتعمل من ربط لوحة المفاتيح الخاص بها أو نقرة أو تركيز Tab ثم Enter. وهي تتلقى القيمة المختارة افتراضيًا ولا تتاح دون اختيار. واستخدم `selection: "none"` للإجراءات التي لا تحتاج اختيارًا.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- لا يغلق الإجراء مربع الحوار ولا يُنهي Promise.
+- يُتمّ الضغط على Enter أو النقر على خيار Promise بالقيمة المختارة.
+- يُتمّ الضغط على Escape أو استدعاء `clear()` أو عرض مربع حوار آخر Promise بالقيمة `undefined`.
+- لا تخصّص `ctrl+n` أو `ctrl+p` لإجراء. فمربع الحوار يحتفظ بهما للتنقّل، وتكون الأولوية لاختصاراته.
+
+يمكن لمربعات حوار JSX المخصّصة ضبط حجمها وإغلاق نفسها. استدعِ `set` بعد `show`، لأن عرض مربع الحوار يعيد حجمه إلى `medium` ويلغي توسيطه. يبلغ عرض `medium` 60 عمودًا، و`large` 88 عمودًا، و`xlarge` 116 عمودًا.
+
+```tsx
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.clear()
+```
+
+تدعم الإشعارات تحديد العنوان والرسالة والنمط ومدة العرض.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## المسارات وعلامات التبويب
+
+سجّل مسار JSX، وافحص المسار الحالي، وانتقل إلى الرئيسية أو جلسة أو صفحة الملحق.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+ويمكن سرد علامات تبويب الجلسات وفتحها وتركيزها ونقلها وإغلاقها عند تفعيلها. و`open` يترك التركيز دون تغيير؛
+و`focus` يفتح علامة التبويب عند الحاجة.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## النموذج
+
+اقرأ النموذج المختار للمطالبة وغيّر صيغته. تتصرّف `current()` و`variant.list()` تفاعليًا عند قراءتهما في
+حساب Solid. وإذا كانت قيمة `variant` هي `undefined`، تُستخدم الصيغة الافتراضية للنموذج.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+يعيد `variant.set` القيمة `false` إذا لم تختر نموذجًا أو إذا كان النموذج لا يتيح تلك الصيغة. اربطه بأمر
+ليحلّ محلّ التنقّل المدمج بين الصيغ، مثلًا لتخطّي الصيغة الافتراضية للنموذج:
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## مواضع الإدراج
+
+تتيح مواضع الإدراج إضافة JSX أو استبداله في `app` أو `home.footer` أو `home.footer.status` أو `prompt.footer` أو `prompt.footer.status`
+أو `prompt.footer.file` أو `session.composer.top` أو `sidebar.content` أو `sidebar.footer`.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+واستخدم `prepend` أو `append` أو `before` أو `after` أو `replace` للتحديد الموضعي.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+واستخدم `home.footer.status` لإضافة محتوى إلى صف التذييل المدمج دون استبداله. وتظهر إسهامات الحالة
+بعد مؤشرات صحة OpenCode وقبل الإصدار.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### لوحات الجلسة
+
+سجّل محتوى لإضافته إلى `session.panel`، ثم افتح اللوحة بأمر. يدير المضيف الحجم والتركيز
+والعرض بملء الشاشة، ويتولّى الملحق إدارة المحتوى. ويُمرَّر الاسم المختار إلى كل إضافة في
+`panel.name` لتقرّر ما إذا كانت ستعرض محتواها.
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- والفتح خارج جلسة يعيد `false`.
+- هذا موضع إدراج عادي تنطبق عليه خيارات التمركز الخمسة وقواعد ترتيب الاستبدال المعتادة.
+- استخدم `append` للإضافات التي يمكن اختيارها كلٌّ على حدة كي تتعايش. ويظلّ `replace` يستبدل محتوى موضع الإدراج بالكامل.
+- الأسماء قيم اختيار مشتركة وليست أسماء محجوزة بالتسجيل. ابدأ الاسم باسم الملحق، كما في `acme.review`، لتجنّب التعارض. وإذا فتحت لوحة باسم لا يقابله عارض، بقي موضع الإدراج فارغًا.
+- عند تغيير طريقة العرض، تبقى الإضافات التي سبق تركيبها. يغلق المضيف هذه الإضافات عند إغلاق اللوحة، ويزيل إضافات أي ملحق تعطّله ضمن عملية التنظيف المعتادة لمواضع الإدراج.
+- لا تنشط طبقات لوحة المفاتيح وأوضاع الإدخال الخاصة باللوحة إلا ما دامت هي التي تتلقّى الإدخال.
+
+يتلقّى موضع الإدراج الخصائص التفاعلية `name` و`sessionID` و`width` و`presentation` و`focused`، إضافة إلى إجراءات `focus`
+و`close` و`toggleFullscreen`. ويبقي المضيف الطرفيات الضيقة بملء الشاشة؛ ولا أثر لـ`toggleFullscreen`
+حتى تتوفر مساحة كافية للوحة جانبية.
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+ويمكنك طلب العرض بملء الشاشة ابتداءً، أو فحص لوحتك النشطة، أو إغلاقها دون التأثير في لوحة
+ملحق آخر.
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## التنسيق
+
+نسّق مسارات نظام الملفات للعرض، بما في ذلك اختصار المجلد الرئيسي.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## النشر والتحميل
+
+أتِح ملحق TUI عبر `./tui`، وأضف تبعيات OpenTUI النظيرة عندما يعرض الملحق JSX.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+وصدّر `./tui` بجانب [جزء خادم](/build/plugins/server) أو [جزء GUI](/build/plugins/gui) للتحميل التلقائي.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+وأعدّ حزمة TUI وحدها في [`cli.json`](/cli/plugins) لتبقى نشطة مع الخوادم البعيدة.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

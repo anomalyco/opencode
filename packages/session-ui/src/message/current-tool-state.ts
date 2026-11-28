@@ -31,6 +31,21 @@ export function currentToolOutput(tool: SessionMessageAssistantTool) {
   return text || undefined
 }
 
+/**
+ * The images a call's result carries, which the model sees but its text output leaves out: the files a script read, a
+ * screenshot, a generated image. A read of an image previews it from its path in its own row instead.
+ */
+export function currentToolImages(tool: SessionMessageAssistantTool) {
+  if (!("content" in tool.state) || !tool.state.content) return []
+
+  if (tool.name === "read" && readImagePath(currentToolInput(tool))) return []
+
+  // Each keeps its call and position, so a host that dropped its bytes can read it again.
+  return tool.state.content.flatMap((item, index) =>
+    item.type === "file" && item.mime.startsWith("image/") ? [{ ...item, callID: tool.id, index }] : [],
+  )
+}
+
 export function currentToolError(tool: SessionMessageAssistantTool) {
   if (tool.state.status !== "error") return undefined
 
@@ -51,7 +66,7 @@ export function shellResultFailed(metadata: Schema.JsonObject) {
 }
 
 function executeToolFailed(metadata: Schema.JsonObject) {
-  return metadata.error === true || executeToolCalls(metadata).some((call) => call.status === "error")
+  return metadata.error === true || executeToolErrorIndex(metadata) >= 0
 }
 
 const decodeExecuteCall = Schema.decodeUnknownOption(
@@ -64,14 +79,34 @@ const decodeExecuteCall = Schema.decodeUnknownOption(
 
 export type ExecuteToolCall = Option.Option.Value<ReturnType<typeof decodeExecuteCall>>
 
-// Code Mode streams the tools a script calls through metadata rather than child tool parts.
-export function executeToolCalls(metadata: ToolProps["metadata"]): ExecuteToolCall[] {
+// Code Mode streams the tools a script calls through metadata rather than child tool parts. A script can make thousands
+// of calls, so readers count and search them as they are and decode only the calls they show.
+function executeToolCallList(metadata: ToolProps["metadata"]): readonly unknown[] {
   const calls = metadata.toolCalls
 
-  if (!Array.isArray(calls)) return []
-
-  return calls.flatMap((call) => Option.toArray(decodeExecuteCall(call)))
+  return Array.isArray(calls) ? calls : []
 }
+
+export function executeToolCallCount(metadata: ToolProps["metadata"]) {
+  return executeToolCallList(metadata).length
+}
+
+/** The position of the last call that failed, or -1. */
+export function executeToolErrorIndex(metadata: ToolProps["metadata"]) {
+  return executeToolCallList(metadata).findLastIndex(callFailed)
+}
+
+/** The calls from `start` on, each with its position among all of them. */
+export function executeToolCalls(metadata: ToolProps["metadata"], start = 0) {
+  return executeToolCallList(metadata)
+    .slice(start)
+    .flatMap((call, offset) =>
+      Option.toArray(decodeExecuteCall(call)).map((value) => ({ index: start + offset, call: value })),
+    )
+}
+
+// Matches only calls the rows can decode, so a failure is never counted on a call that shows nowhere.
+const callFailed = Schema.is(Schema.Struct({ tool: Schema.String, status: Schema.Literal("error") }))
 
 const isCallArg = Schema.is(Schema.Union([Schema.String, Schema.Number, Schema.Boolean]))
 
@@ -82,8 +117,10 @@ export function executeToolCallArgs(call: ExecuteToolCall) {
 }
 
 // Collapsed rows name the failed call, or else the latest one.
-export function executeToolSubtitle(calls: readonly ExecuteToolCall[]) {
-  const call = calls.find((item) => item.status === "error") ?? calls.at(-1)
+export function executeToolSubtitle(metadata: ToolProps["metadata"]) {
+  const calls = executeToolCallList(metadata)
+  const failed = calls.findIndex(callFailed)
+  const call = Option.getOrUndefined(decodeExecuteCall(calls[failed >= 0 ? failed : calls.length - 1]))
 
   if (!call) return undefined
   const args = executeToolCallArgs(call)

@@ -4,7 +4,7 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/client"
 import { Environment } from "@opencode/core/environment/index"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Global } from "@opencode/util/global"
-import { Deferred, Effect, Layer, Sink, Stream } from "effect"
+import { Deferred, Effect, Layer, Logger, References, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 
@@ -71,6 +71,52 @@ test("closes the connection on a line one byte over 16 MiB", async () => {
   expect(output.messages).toEqual([])
 })
 
+test("drains server stderr into the layer's debug logger", async () => {
+  const logs: Array<{ level: string; message: unknown; annotations: Record<string, unknown> }> = []
+  const logging = Logger.layer(
+    [
+      Logger.map(Logger.formatStructured, (entry) => {
+        logs.push({ level: entry.level, message: entry.message, annotations: entry.annotations })
+      }),
+    ],
+    { mergeWithExisting: false },
+  ).pipe(Layer.merge(Layer.succeed(References.MinimumLogLevel, "Debug")))
+  const environment = spawnerLayer({
+    stdout: Stream.empty,
+    stderr: Stream.fromIterable([encoder.encode("booting\n"), encoder.encode("   \n"), encoder.encode("ready\n")]),
+  })
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* McpStdio.make({
+          server: "stderr-test",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const closed = new Promise<void>((resolve) => (transport.onclose = resolve))
+        yield* Effect.promise(() => transport.start())
+        yield* Effect.promise(() => closed)
+      }).pipe(Effect.annotateLogs({ connectionID: "conn_1" }), Effect.provide(Layer.merge(environment, logging))),
+    ),
+  )
+
+  expect(logs).toEqual([
+    {
+      level: "DEBUG",
+      message: ["mcp server stderr", { server: "stderr-test", output: "booting\n" }],
+      annotations: { connectionID: "conn_1" },
+    },
+    {
+      level: "DEBUG",
+      message: ["mcp server stderr", { server: "stderr-test", output: "ready\n" }],
+      annotations: { connectionID: "conn_1" },
+    },
+  ])
+})
+
 function frame(size: number) {
   const prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"'
   const suffix = '"}}\n'
@@ -83,15 +129,18 @@ function chunks(bytes: Uint8Array, size: number) {
   )
 }
 
-/** Runs the transport against a process whose stdout yields `output`, then ends or, with `open`, waits to be killed. */
-async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean }) {
-  const killed = Deferred.makeUnsafe<void>()
-  const messages: Array<JSONRPCMessage> = []
-  const errors: Array<string> = []
+function spawnerLayer(input: {
+  stdout: Stream.Stream<Uint8Array>
+  stderr?: Stream.Stream<Uint8Array>
+  kill?: () => Effect.Effect<unknown>
+}) {
   const driver = Environment.makeMemoryDriver()
-  const environment = Layer.succeed(
+  return Layer.succeed(
     Environment.Service,
     Environment.Service.of({
+      id: Environment.localID,
+      local: true,
+      path,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.succeed(
@@ -99,14 +148,10 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
             pid: ProcessId(1),
             exitCode: Effect.succeed(ExitCode(0)),
             isRunning: Effect.succeed(false),
-            kill: () => Deferred.succeed(killed, undefined),
+            kill: () => (input.kill ? Effect.asVoid(input.kill()) : Effect.void),
             stdin: Sink.drain,
-            stdout: Stream.fromIterable(output).pipe(
-              Stream.concat(
-                options?.open ? Stream.fromEffect(Deferred.await(killed)).pipe(Stream.drain) : Stream.empty,
-              ),
-            ),
-            stderr: Stream.empty,
+            stdout: input.stdout,
+            stderr: input.stderr ?? Stream.empty,
             all: Stream.empty,
             getInputFd: () => Sink.drain,
             getOutputFd: () => Stream.empty,
@@ -116,6 +161,19 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
       ),
     }),
   )
+}
+
+/** Runs the transport against a process whose stdout yields `output`, then ends or, with `open`, waits to be killed. */
+async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean }) {
+  const killed = Deferred.makeUnsafe<void>()
+  const messages: Array<JSONRPCMessage> = []
+  const errors: Array<string> = []
+  const environment = spawnerLayer({
+    stdout: Stream.fromIterable(output).pipe(
+      Stream.concat(options?.open ? Stream.fromEffect(Deferred.await(killed)).pipe(Stream.drain) : Stream.empty),
+    ),
+    kill: () => Deferred.succeed(killed, undefined),
+  })
 
   await Effect.runPromise(
     Effect.scoped(

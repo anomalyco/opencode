@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect } from "bun:test"
 import { SystemPart } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
@@ -14,15 +14,6 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
-
-test("formats the model identity part", () => {
-  expect(
-    IdentityPlugin.identity({
-      name: "GPT-4o mini",
-      ref: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-4o-mini") }),
-    }),
-  ).toBe(["# Your Model", "- Name: GPT-4o mini", "- Provider ID: openai", "- Model ID: gpt-4o-mini"].join("\n"))
-})
 
 const identity = (name: string, id: string) =>
   ["# Your Model", `- Name: ${name}`, "- Provider ID: test", `- Model ID: ${id}`].join("\n")

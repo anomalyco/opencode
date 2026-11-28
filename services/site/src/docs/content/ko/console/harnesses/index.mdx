@@ -1,0 +1,117 @@
+---
+title: "Harnesses"
+description: "다른 코딩 에이전트와 AI 앱에서 Console 및 Go 모델을 사용하세요."
+---
+
+Console은 OpenCode 외의 코딩 에이전트도 지원합니다. harness를 API 키로 Console 게이트웨이에 연결하면
+모든 유료 모델과 Go 모델을 사용할 수 있습니다. 다른 요청과 마찬가지로 사용 요금은 워크스페이스에 청구됩니다.
+
+| Harness                                       | 종량제        | Go        | MCP |
+| --------------------------------------------- | ------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | 예            | 예        | 예  |
+| [Codex](/console/harnesses/codex)             | 예            | 예        | 예  |
+| [Hermes](/console/harnesses/hermes)           | 내장          | 내장      | 예  |
+| [OpenClaw](/console/harnesses/openclaw)       | 플러그인      | 내장      | 예  |
+| [Pi](/console/harnesses/pi)                   | 내장          | 내장      | 예  |
+| [Raycast](/console/harnesses/raycast)         | 확장 프로그램 | 확장 프로그램 | 예  |
+
+무료 등급 채팅 모델은 OpenCode 안에서만 사용할 수 있습니다. 다른 harness는 Console API 키가 있어도 해당 모델에서
+HTTP `403`을 받습니다. 유료 모델이나 Go 구독을 사용하세요.
+
+## Console CLI
+
+[Console CLI](https://github.com/anomalyco/opencode-console-cli)는 명령 하나로 harness를 워크스페이스에
+연결합니다. Node.js 22 이상이 필요합니다.
+
+| Harness          | 명령어                                         |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+브라우저에서 Console이 열리면 로그인을 승인하고 워크스페이스를 선택하세요. 그러면 harness에 다음 항목이 적용됩니다.
+
+- Console을 통한 워크스페이스의 모델
+- 모든 도구 호출 전에 확인하는 워크스페이스의 정책
+- 워크스페이스의 MCP 서버, 스킬, 지침
+
+CLI는 harness 설정을 워크스페이스와 동기화하고 CLI 자체도 자동으로 업데이트합니다.
+
+Claude 또는 ChatGPT 구독처럼 harness 자체 로그인과 모델을 유지하려면 `--keep-provider`를 추가하세요. 그래도
+harness는 워크스페이스의 정책, MCP 서버, 스킬, 지침을 받습니다. Claude Code, Codex, Hermes, OpenClaw에서 동작합니다.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+직접 harness를 설정하거나 CLI가 지원하지 않는 harness를 설정하려면 API 키와 아래 기본 URL을 사용하세요.
+
+## API 키 발급
+
+Harness는 Console API 키로 인증합니다. 가장 빠른 방법은 [개인 API 키](/console/api#personal-api-keys)이며,
+이 키는 본인 자격으로 모델을 호출합니다.
+
+1. [Console](https://opencode.ai/console)의 계정 메뉴에서 **Account**를 여세요.
+2. **Personal API keys**에서 **Add API key**를 클릭하세요.
+3. 워크스페이스를 선택하고 키 이름을 지정한 뒤 **Create**를 클릭하세요.
+4. 키를 복사하세요. 키는 한 번만 표시됩니다.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+사용량은 [멤버 예산](/console/budgets#member-budgets)에 반영됩니다. 종량제에는 크레딧이 있는 워크스페이스의 키를,
+Go에는 [Go](/console/go)를 구독한 워크스페이스의 키를 사용하세요.
+
+공유 머신이나 CI에서는 소유자와 관리자가 대신 [서비스 계정](/console/api#service-accounts) 키를 만들어 사용량이 한
+사람에게 묶이지 않게 할 수 있습니다.
+
+## 기본 URL
+
+종량제와 Go는 서로 다른 기본 URL에서 제공됩니다. 요금제에 맞는 URL을 사용하세요.
+
+| 요금제        | 기본 URL                           |
+| ------------- | ---------------------------------- |
+| 종량제        | `https://opencode.ai/inference`    |
+| Go            | `https://opencode.ai/inference/go` |
+
+harness가 사용하는 API의 경로를 뒤에 붙이세요. 모든 API가 모든 유료 및 Go 텍스트 모델을 제공합니다. Console은
+모델이 해당 API를 지원하면 모델 자체 엔드포인트로 요청을 보내고, 그렇지 않으면 변환합니다.
+
+| API                     | 경로                                            |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## 세션
+
+모든 요청에 고정된 세션 ID를 보내면 Console이 대화를 일관되게 라우팅하고 프롬프트 캐시를 재사용할 수 있습니다. Go는
+[이를 필수로 요구](/console/go#where-can-i-use-it)합니다.
+
+```text
+x-opencode-session: ses_...
+```
+
+Console은 Claude Code, Codex, Hermes, Pi가 보내는 자체 세션 헤더도 인식하며, OpenClaw는 `x-opencode-session`을 직접
+보냅니다. 따라서 이 harness들은 별도로 설정할 필요가 없습니다.
+
+## Console MCP
+
+MCP를 지원하는 harness는 Console MCP 서버를 통해 워크스페이스를 관리할 수 있습니다. 동적 클라이언트 등록을 사용하는
+OAuth를 쓰므로 키를 붙여 넣지 않고 브라우저에서 로그인합니다.
+
+```text
+https://opencode.ai/console/mcp
+```
+
+각 harness 페이지에서 추가 방법을 확인할 수 있습니다. 워크스페이스에서 활성화하면 OpenCode가 `opencode_console`로
+서버를 자동 추가하고, 처음 사용할 때 브라우저 로그인을 요청합니다.

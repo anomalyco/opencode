@@ -2,8 +2,6 @@ import { createMemo, Show, type JSX } from "solid-js"
 import { SessionElicitationDock } from "@/session/requests/session-elicitation-dock"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
-import { questionMotion } from "@/session/requests/question-motion"
-import { useSettings } from "@/settings/model"
 import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 import { ComposerMorph, Grow } from "./spring-height"
@@ -31,7 +29,6 @@ export function SessionComposerRegion(props: {
   subagent: JSX.Element
 }) {
   const controller = props.controller
-  const settings = useSettings()
 
   const face = createMemo(() => {
     const websearch = controller.state.websearch.request()
@@ -47,6 +44,7 @@ export function SessionComposerRegion(props: {
     <div
       ref={controller.setDockRef}
       data-component="session-composer-dock"
+      data-focus-scope
       class="w-full shrink-0 flex flex-col justify-center items-center pb-3 pointer-events-none"
     >
       {/* Only the docks and composer take the pointer; the gaps beside them belong to the timeline underneath. */}
@@ -58,22 +56,13 @@ export function SessionComposerRegion(props: {
       >
         <div class="relative z-[70] flex flex-col">
           {props.above}
-          <ComposerMorph
-            face={face()}
-            instant={(face) => !!face.question && (!settings.general.newQuestionUI() || !questionMotion())}
-          >
+          <ComposerMorph face={face()} instant={(face) => !!face.question}>
             {(current) => (
               <div class="flex flex-col">
                 <Grow when={current().websearch} fade card class={controller.child() ? "mb-2" : undefined}>
                   <SessionWebSearchDock model={controller.state.websearch} onSubmit={controller.onResponseSubmit} />
                 </Grow>
-                <Grow
-                  when={current().question}
-                  instant={!settings.general.newQuestionUI() || !questionMotion()}
-                  fade
-                  card
-                  class={controller.child() ? "mb-2" : undefined}
-                >
+                <Grow when={current().question} instant fade card class={controller.child() ? "mb-2" : undefined}>
                   {(request) => <SessionQuestionDock request={request} onSubmit={controller.onResponseSubmit} />}
                 </Grow>
 

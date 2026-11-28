@@ -1,0 +1,122 @@
+---
+title: "Harnesses"
+description: "Nutze Console- und Go-Modelle aus anderen Coding-Agenten und AI-Apps."
+---
+
+Die Console funktioniert auch mit anderen Coding-Agenten als OpenCode. Konfiguriere den Harness mit einem
+API-Schlüssel für das Console-Gateway, um kostenpflichtige Modelle und Go-Modelle zu nutzen. Wie bei anderen
+Anfragen wird die Nutzung über deinen Workspace abgerechnet.
+
+| Harness                                       | Pay-as-you-go | Go        | MCP |
+| --------------------------------------------- | ------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | Ja            | Ja        | Ja  |
+| [Codex](/console/harnesses/codex)             | Ja            | Ja        | Ja  |
+| [Hermes](/console/harnesses/hermes)           | Integriert    | Integriert | Ja  |
+| [OpenClaw](/console/harnesses/openclaw)       | Plugin        | Integriert | Ja  |
+| [Pi](/console/harnesses/pi)                   | Integriert    | Integriert | Ja  |
+| [Raycast](/console/harnesses/raycast) | Erweiterung | Erweiterung | Ja |
+
+Chat-Modelle des Free-Tarifs sind nur aus OpenCode heraus verfügbar. Andere Harnesses erhalten für diese Modelle
+HTTP `403`, selbst mit einem Console-API-Schlüssel. Nutze kostenpflichtige Modelle oder ein Go-Abo.
+
+## Console-CLI
+
+Die [Console-CLI](https://github.com/anomalyco/opencode-console-cli) verbindet den Harness mit einem einzigen
+Befehl mit deinem Workspace. Voraussetzung ist Node.js 22 oder neuer.
+
+| Harness          | Befehl                                         |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+Dein Browser öffnet die Console, wo du die Anmeldung bestätigst und den Workspace wählst. Der Harness erhält dann
+
+- die Modelle des Workspace über die Console
+- die Policies des Workspace, geprüft vor jedem Tool-Aufruf
+- die MCP-Server, Skills und Anweisungen des Workspace
+
+Die CLI hält den Harness mit dem Workspace synchron und aktualisiert sich selbst.
+
+Füge `--keep-provider` hinzu, wenn du die Anmeldung und die Modelle des Harness beibehalten willst, etwa bei
+einem Abo für Claude oder ChatGPT. Die Policies, MCP-Server, Skills und Anweisungen des Workspace werden
+trotzdem übernommen. Die Option funktioniert mit Claude Code, Codex, Hermes und OpenClaw.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+Um einen Harness von Hand einzurichten oder einen, den die CLI nicht abdeckt, nutze einen API-Schlüssel und die
+folgenden Basis-URLs.
+
+## API-Schlüssel erhalten
+
+Harnesses authentifizieren sich mit einem Console-API-Schlüssel. Am einfachsten geht das mit einem
+[persönlichen API-Schlüssel](/console/api#personal-api-keys), der Modelle in deinem Namen aufruft.
+
+1. Öffne **Account** über das Kontomenü in der [Console](https://opencode.ai/console).
+2. Klicke unter **Personal API keys** auf **Add API key**.
+3. Wähle den Workspace, benenne den Schlüssel und klicke auf **Create**.
+4. Kopiere den Schlüssel. Er wird nur einmal angezeigt.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Die Nutzung wird auf dein [Mitgliederbudget](/console/budgets#member-budgets) angerechnet. Für Pay-as-you-go
+brauchst du einen Schlüssel aus einem Workspace mit Guthaben, für Go einen aus einem Workspace mit
+[Go](/console/go)-Abo.
+
+Für gemeinsam genutzte Maschinen oder CI können Owner und Admins stattdessen einen
+[Service-Konto](/console/api#service-accounts)-Schlüssel erstellen, damit die Nutzung nicht an eine Person gebunden ist.
+
+## Basis-URLs
+
+Pay-as-you-go und Go werden über unterschiedliche Basis-URLs bereitgestellt. Nutze die, die zu deinem Tarif passt.
+
+| Tarif         | Basis-URL                          |
+| ------------- | ---------------------------------- |
+| Pay-as-you-go | `https://opencode.ai/inference`    |
+| Go            | `https://opencode.ai/inference/go` |
+
+Hänge den Pfad für die API an, die dein Harness unterstützt. Über jede dieser APIs kannst du alle
+kostenpflichtigen Textmodelle und alle Go-Textmodelle aufrufen. Wenn das Modell dieselbe API unterstützt,
+leitet die Console die Anfrage an seinen eigenen Endpunkt weiter. Andernfalls übersetzt sie die Anfrage.
+
+| API                     | Pfad                                            |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## Sessions
+
+Sende mit jeder Anfrage eine stabile Session-ID, damit die Console eine Unterhaltung konsistent routen und ihren
+Prompt-Cache wiederverwenden kann. Go [erfordert sie](/console/go#where-can-i-use-it).
+
+```text
+x-opencode-session: ses_...
+```
+
+Die Console erkennt auch die nativen Session-Header, die Claude Code, Codex, Hermes und Pi senden, und OpenClaw sendet
+`x-opencode-session` selbst, daher braucht keiner davon eine zusätzliche Konfiguration.
+
+## Console-MCP
+
+Harnesses mit MCP-Unterstützung können deinen Workspace über den Console-MCP-Server verwalten. Er nutzt OAuth mit
+dynamischer Client-Registrierung, sodass du dich im Browser anmeldest, statt einen Schlüssel einzufügen.
+
+```text
+https://opencode.ai/console/mcp
+```
+
+Die Seite jedes Harness zeigt, wie du ihn hinzufügst. OpenCode fügt den Server automatisch als `opencode_console` hinzu,
+wenn dein Workspace ihn aktiviert, und bittet dich bei der ersten Nutzung, dich im Browser anzumelden.

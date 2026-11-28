@@ -1,0 +1,3828 @@
+---
+title: "GUI"
+description: "@opencode/plugin/gui로 OpenCode Desktop용 OpenCode 플러그인의 GUI 파트를 만드세요."
+---
+
+GUI 플러그인은 GUI 플러그인 SDK인 `@opencode/plugin/gui`로 OpenCode Desktop에 패널, 명령어, 설정 페이지, 네이티브 통합을
+추가합니다. [플러그인 패키지](/build/plugins)의 `./gui-experimental` 파트이며, 단독으로 또는
+[서버 파트](/build/plugins/server), [TUI 파트](/build/plugins/cli)와 함께 존재합니다.
+
+<Callout type="note">
+  GUI 플러그인 API는 실험적이며 릴리스마다 바뀔 수 있습니다. 패키지의 내보내기 이름에 붙은 `-experimental`이 이를 나타냅니다.
+</Callout>
+
+`./gui-experimental` 파일은 서버 파트와 TUI 파트처럼 `Plugin.define`을 기본 내보내기합니다.
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () => void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})
+```
+
+GUI 플러그인은 두 프로세스에서 실행될 수 있습니다.
+
+- **`setup`**은 모든 데스크톱 앱 창에서 실행됩니다. 패널, 명령어, 설정 페이지, 슬롯, 서버 소스, 링크 핸들러,
+  스타일을 제공합니다. [창](#the-window)을 참고하세요.
+- **`main`**은 Electron 메인 프로세스에서 한 번 실행됩니다. 타입이 지정된 `Ipc` 계약, 네이티브 메뉴 항목,
+  `WebContentsView` 임베드, Node와 Electron 통합을 제공합니다. [메인 프로세스](#the-main-process)를 참고하세요.
+
+## 패키지
+
+플러그인 패키지는 하나의 npm 패키지에서 서버, TUI, GUI 코드를 함께 제공할 수 있습니다. `./tui` 옆에
+`./gui-experimental` 내보내기를 추가하면 OpenCode Desktop이 자체 백그라운드 서버에서 플러그인별로 이를 로드합니다.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
+```
+
+사용자는 다른 플러그인과 똑같이 설치합니다. GUI를 따로 설치하는 단계는 없습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+GUI는 id를 선언하지 않습니다. 플러그인의 id, 서버 파트의 `id`, 서버 파트가 없는 패키지라면 패키지 이름을 그대로
+씁니다(로컬 디렉터리에 `name`이 없으면 디렉터리 이름). `ctx.id`로 읽습니다.
+
+### 하나의 파일, 두 프로세스
+
+각 프로세스는 `./gui-experimental` 파일 전체를 평가하고 기본 내보내기를 읽습니다. 창은 `setup`을, 데스크톱 앱의 메인
+프로세스는 `main`을 실행합니다.
+
+```tsx title="src/gui.tsx"
+import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // Window code: Solid components, ctx.layout, ctx.add(Command, …).
+  },
+  main(ctx) {
+    // Main code: electron, Node built-ins, ctx.windows.
+    ctx.windows.on("open", () => shell.beep())
+  },
+})
+```
+
+두 프로세스가 같은 파일을 평가하므로, 각 프로세스는 상대 프로세스의 모듈 자리에 아무 동작도 하지 않는
+플레이스홀더를 넣습니다.
+
+- **창에서는** `electron`과 Node 내장 모듈이 아무 동작도 하지 않는 플레이스홀더입니다.
+- **메인 프로세스에서는** Solid와 창 전용 모듈이 아무 동작도 하지 않는 플레이스홀더입니다.
+
+플레이스홀더는 모듈 스코프에서 속성을 읽거나 함수로 호출하거나 생성자로 사용해도 오류를 내지 않습니다. Solid가 호이스팅한
+템플릿이나 번들러가 호이스팅한 `require` 호출이 그 예입니다. 각 프로세스의 코드는 해당 setup 안에 두세요. 다른 프로세스에서
+실행하면 실제로 동작하는 값 대신 플레이스홀더를 받습니다.
+
+`Plugin.define`과 계약 헬퍼는 두 프로세스 모두 같은 SDK에서 옵니다. 메인 프로세스에서 `@opencode/plugin/gui`는 메인
+SDK로 해석되며, 같은 `Plugin`, `Store`, `Ipc`, `Contract`, `Registry`를 내보냅니다. 정의 하나가 두 프로세스를 모두
+처리합니다. `Command`, `bindPlugin`, `createKeyed` 같은 창 전용 내보내기는 메인 프로세스에서 `undefined`이므로 `setup`
+안에서만 사용하세요.
+
+## 번들 빌드
+
+`./gui-experimental`은 미리 빌드한 CommonJS 파일 하나여야 합니다. `@opencode/plugin/gui/vite`의 Vite 프리셋으로
+빌드하세요.
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })
+```
+
+```bash
+vite build
+```
+
+이 프리셋은 다음을 수행합니다.
+
+- `vite-plugin-solid`로 Solid JSX를 컴파일합니다.
+- CommonJS 파일 하나를 출력하고 모든 동적 `import()`를 인라인합니다. 앱이 두 번째 청크를 로드할 수 없기
+  때문입니다.
+- 앱의 [공유 모듈](#shared-modules), Electron, Node 내장 모듈은 외부로 두고 나머지 의존성은 모두 번들합니다.
+- 그 밖의 `effect/*`, `solid-js/*`, `@opencode/*` 모듈을 사용하면 빌드가 실패합니다. 앱이 해당 모듈을 제공하지 않으며,
+  번들에 포함한 사본으로는 앱과 같은 인스턴스를 쓸 수 없기 때문입니다.
+
+```text
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+```
+
+대신 공유 엔트리에서 가져오세요. 예를 들어 `import { Schema } from "effect"`입니다.
+
+### 프리셋 옵션
+
+`gui()`에 옵션을 전달해 엔트리나 출력 파일을 바꿉니다.
+
+```ts title="vite.config.ts"
+export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
+```
+
+- `entry`는 `Plugin.define`을 기본 내보내기하는 파일입니다. 기본값은 `src/gui.tsx`입니다.
+- `outFile`은 `./gui-experimental` 내보내기가 가리키는 번들입니다. 기본값은 `dist/gui-experimental.cjs`입니다.
+
+#### 참조
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
+
+### 의존성
+
+빌드 도구를 devDependencies에 추가하세요. 앱이 런타임에 `@opencode/plugin/gui`를 제공하므로, 번들은
+`@opencode/plugin` 의존성에서 타입만 가져오면 됩니다.
+
+```bash
+bun add -d vite vite-plugin-solid solid-js
+```
+
+`main`에서 Electron과 Node 타입도 쓰려면 `electron`과 `@types/node`를 추가하세요.
+
+```bash
+bun add -d electron @types/node
+```
+
+### 공유 모듈
+
+각 프로세스는 다음 모듈을 번들에 제공합니다. 어느 프로세스도 제공하지 않는 모듈을 불러오면 플러그인의 GUI가 로드되지 않습니다.
+
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **두 프로세스 모두:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
+  `@opencode/schema/rpc`, `@opencode/client`, `@opencode/client/effect`.
+- **창 전용:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid`,
+  `@opencode/plugin/gui/{file,review,browser}`. 메인 프로세스는 아무 동작도 하지 않는 플레이스홀더를 받습니다.
+- **메인 프로세스 전용:** `electron`과 `node:fs` 같은 Node 내장 모듈. 창은 아무 동작도 하지 않는 플레이스홀더를
+  받습니다.
+
+## GUI 엔트리가 로드되는 곳
+
+OpenCode Desktop은 자체 백그라운드 서버에서 GUI 엔트리를 로드합니다. 이 서버는 이미 설정의 플러그인을 로드하므로,
+GUI가 새로운 코드 소스를 추가하는 일은 없습니다. 전역 `opencode.json(c)`에서 플러그인을 설정하면 모든 창에서 GUI를
+사용할 수 있습니다.
+
+<Callout type="note">
+  TUI는 `cli.json`에서 플러그인 목록을 읽지만 데스크톱 앱은 `opencode.json(c)`만 읽습니다. TUI 파트만 제공하던 패키지를
+  `cli.json`에 등록해 사용 중이라면, 패키지에 `./gui-experimental`이 추가된 뒤에는 `opencode.json(c)`에도 등록해야 합니다.
+</Callout>
+
+데스크톱 앱의 메인 프로세스는 플러그인을 나열하고, 자체 서버에서 그 번들을 읽습니다. 이때 메인 프로세스만 가진
+자격 증명을 사용하며, 모든 창에 같은 플러그인 번들을 보냅니다. 창은 메인 프로세스 코드를 제공할 수 없습니다.
+
+서버 파트가 로드에 실패한 플러그인에는 GUI가 없습니다.
+
+## 다시 로드와 업데이트
+
+플러그인을 로컬 디렉터리에서 로드하고 변경할 때마다 다시 빌드하세요.
+
+```bash
+vite build --watch
+```
+
+- 로컬 디렉터리의 `package.json`에 `name`과 `exports`가 있으면 이를 통해 `./gui-experimental`을 찾습니다. 이 조건을 충족하지 않으면
+  루트의 `gui-experimental.cjs`(또는 `.js`)를 로드합니다. 엔트리는 `.cjs`나 `.js`여야 하며, 다른 파일은 무시합니다.
+- 다시 빌드할 때마다 모든 창과 메인 프로세스에서 플러그인의 GUI가 다시 로드됩니다. 서버 엔트리는 재시작하지
+  않습니다.
+- 설치된 패키지의 GUI는 버전이 바뀔 때만 바뀝니다.
+- `opencode.json(c)`에서 플러그인의 `options`를 바꾸면 플러그인이 다시 로드됩니다.
+- `opencode plugin update`는 업데이트가 끝나면 패키지의 GUI를 교체합니다.
+- [**Settings > Extensions > Plugins**](/plugins#desktop)에 플러그인이 표시되며, 스위치로 GUI를 끌 수 있습니다.
+  제거하려면 `opencode.json(c)`에서 제거하거나 `opencode plugin remove <package>`를 실행하세요.
+
+<Callout type="note">
+  앱 자체 플러그인이 쓰는 id는 예약되어 있습니다. 플러그인의 id가 그중 하나이거나, `.`으로 그 아래에 중첩되거나, 그
+  아래에 중첩된 예약 id가 있거나, `opencode` 네임스페이스에 속하면 GUI가 로드되지 않습니다.
+  **Settings > Extensions > Plugins**에도 로드되지 않은 것으로 표시됩니다.
+</Callout>
+
+## GUI 플러그인 정의
+
+`Plugin.define`은 플러그인이 실행되는 시스템, 저장하는 창 상태, 아이콘, 문구를 선언합니다. 호스트는 두 setup 중
+어느 것도 실행되기 전에 이 선언을 읽습니다.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})
+```
+
+- 호스트가 플러그인에 id를 부여하며, `ctx.id`로 읽습니다. 서버 파트의 `id`이거나, 서버 파트가 없는 패키지라면 패키지
+  이름입니다(`name`이 없는 로컬 디렉터리는 디렉터리 이름). 이 id는 플러그인이 만드는 모든 id 앞에 붙습니다. 명령어
+  (`<id>.<command>`), 패널 키(`<id>:<tab>`), 저장 키(`plugin.<id>.<key>`), 플러그인이 제공하는
+  [계약과 Ipc](#contracts-and-tokens)의 id가 그렇습니다.
+- `os`는 플러그인을 일부 운영 체제로 제한합니다. 생략하면 모든 OS에서 실행됩니다. `os`에 현재 시스템이 없는 플러그인은
+  실행되지 않습니다. **Settings > Extensions > Plugins**의 해당 행에 "Not available on this system."이 표시됩니다.
+- `stores`는 창의 [저장 상태](#stored-state)를 선언합니다. `ctx.stores.<key>`로 읽습니다.
+- `icons`는 플러그인의 [자체 아이콘](#icons)을 선언하며, 각각 SVG 파일의 텍스트입니다. 아이콘 이름은
+  `ctx.icons.<name>`으로 읽습니다.
+- `i18n`은 로캘별 문구를 담습니다. 모든 로캘을 인라인으로 작성하고, 로캘에 빠진 키는 영어가 채웁니다.
+  `ctx.t(key, params)`와 `ctx.plural(key, count)`로 읽습니다. 창에서 `ctx.t`는 `common.*` 같은 앱의 공유 키도
+  읽습니다. `main`에서는 키가 없으면 키 자체를 반환합니다.
+- `setup`, `main` 또는 둘 다 정의하세요. 둘 다 없는 GUI는 로드에 실패합니다.
+- setup이 없으면 `Plugin.define`은 선언을 `Plugin.Declarations`로 반환하므로, 다른 파일의 setup에서 이 선언으로
+  타입을 지정할 수 있습니다. `Plugin.Definition`은 전체 정의의 타입입니다.
+- 플러그인은 제공하거나 사용하는 계약을 선언하지 않습니다. 런타임에 제공하고 읽습니다.
+  [계약과 토큰](#contracts-and-tokens)을 참고하세요.
+
+#### 참조
+
+```ts
+interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext<this>): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Messages = Record<string, string>
+
+type Cleanup = () => void | Promise<void>
+```
+
+### 파일로 나누기
+
+작은 GUI 플러그인은 `src/gui.tsx` 하나에 담깁니다. 더 큰 플러그인이라면 `definition.ts`에서 플러그인을 선언하고,
+공유 토큰은 `contract.ts`에 두고, 각 setup은 자체 파일에 작성한 뒤 `src/gui.tsx`에서 합치세요.
+
+```text
+src/
+├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── rpc.ts              RPC contract between the server part and its clients
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
+    ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
+    ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
+    ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
+    ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
+    └── i18n/en.ts      English copy
+```
+
+창이 시작될 때 `./gui-experimental` 파일 전체를 평가하므로 모듈 스코프와 `setup`에서는 작업을 최소화하세요. 여기서는
+플러그인 기능을 등록하고, 비용이 큰 작업은 컴포넌트나 `createKeyed`, `createLatest` 안에서 처리하세요.
+
+더 큰 플러그인이라면 플러그인을 먼저 선언하고, 선언으로 각 setup의 타입을 지정한 다음, 선언과 함께 플러그인을
+정의하세요.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})
+```
+
+```tsx title="src/gui/window.tsx"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.provide(Notes, { count: () => ctx.stores.notes.value.count })
+}
+```
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  ctx.log.write("info", "acme started")
+}
+```
+
+```tsx title="src/gui.tsx"
+import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })
+```
+
+- `Plugin.Setup<typeof definition>`은 창 setup의 타입입니다. 선언된 stores에서 `ctx.stores`의 타입을, 선언된
+  icons에서 `ctx.icons`의 타입을 만듭니다.
+- `Plugin.MainSetup`은 메인 setup의 타입이고, `Plugin.Cleanup`은 두 setup이 반환할 수 있는 정리 함수의 타입입니다.
+- `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`, `Registry`, `Store`, `createKeyed`, `usePlugin`,
+  `bindPlugin` 같은 레지스트리, 토큰, 헬퍼는 `@opencode/plugin/gui`에서 가져오세요.
+- `MenubarItem` 같은 메인 전용 레지스트리는 `@opencode/plugin/gui/main`에서 가져오세요.
+
+## 공유 컨텍스트
+
+두 setup 모두 서버 파트와 TUI 파트처럼 플러그인의 옵션, OpenCode 서버 클라이언트, 앱 메타데이터를 받습니다.
+
+### 옵션
+
+`ctx.options`는 플러그인의 `opencode.json(c)` 항목에 있는 `options`를 담습니다. 서버 파트가 받는 것과 같은
+값입니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}
+```
+
+```ts
+setup(ctx) {
+  const team = ctx.options.team
+}
+```
+
+- 옵션을 바꾸면 플러그인이 다시 로드됩니다.
+
+### 서버 클라이언트
+
+`ctx.client`는 플러그인을 실행하는 서버, 즉 데스크톱 앱 자체 서버의 OpenCode 클라이언트입니다. 이를 사용해
+[RPC](/build/plugins/rpc)로 서버 파트를 호출하세요.
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () => ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () => {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))
+```
+
+- 호출하는 곳에서 `ctx.client`를 읽으세요. 서버가 재시작하면 이 값이 바뀝니다.
+- 서버에 연결할 수 없으면 모든 호출이 거부됩니다.
+
+### 앱 메타데이터
+
+`ctx.app`은 실행 중인 앱을 설명합니다.
+
+```ts
+if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
+```
+
+- `name`은 서버 플러그인의 `ctx.app.name`과 마찬가지로 `"opencode"`입니다.
+- `platform`은 Electron 앱과 `main`에서 `"desktop"`이고, 브라우저 탭에서 `"web"`입니다.
+- `packaged`는 패키징된 데스크톱 앱을 실행할 때 `true`입니다. 웹에서는 항상 `false`입니다.
+- 서버 플러그인은 `name`, `version`, `channel`을 받고, TUI 플러그인은 `version`, `channel`을 받습니다.
+
+#### 참조
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
+
+## 계약과 토큰
+
+토큰을 사용하면 GUI 플러그인이 서로의 런타임 코드를 가져오지 않고도 프로세스 간에 또는 다른 플러그인과 통신할 수 있습니다.
+모든 토큰은 `contract.ts`에 두세요. 토큰은 종류와 id, 그리고 `Ipc`의 스키마만 담으므로 다른 플러그인이 런타임 코드 없이
+가져올 수 있습니다.
+
+- `ctx.provide(token, impl)`은 플러그인 자신의 토큰을 제공합니다. 창 setup에서는 `Contract`를, `main`에서는 `Ipc`를
+  제공합니다.
+- `ctx.use(token)`은 다른 플러그인이 제공하는 계약이나 `Ipc`를 구독합니다.
+  [`Live`](#live-dependencies-and-failure-handling) 접근자를 반환합니다.
+- `ctx.main(ipc)`는 플러그인 자신의 `main`이 제공하는 `Ipc`의 클라이언트를 반환합니다.
+
+플러그인은 id가 자신의 id이거나 그 id로 시작하는(`<id>.<name>`) 토큰만 제공할 수 있습니다. 다른 id에는 `ctx.provide`가
+예외를 던지고, 플러그인의 id 밖에 있는 `Ipc`에는 `ctx.main`이 예외를 던집니다. 이 페이지의 예제는 플러그인 id `acme`를
+사용하므로 토큰 id가 `acme.`로 시작합니다.
+
+```ts
+Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
+Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acme.
+```
+
+### 계약
+
+한 플러그인의 창 setup이 다른 플러그인의 창 setup에 API나 Solid 컴포넌트를 제공할 때는 `Contract.define`을 사용하세요.
+
+```ts title="src/gui/contract.ts"
+import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define<AcmeBadge, "acme.badge">("acme.badge")
+```
+
+창 setup에서 `ctx.provide`로 제공하세요. 계약이 컴포넌트를 담고 있다면 setup 중에 `bindPlugin`으로 감싸세요. 그러면 그
+안의 `usePlugin()`이 소비자가 아니라 제공자의 컨텍스트를 읽습니다.
+
+```tsx title="src/gui.tsx"
+import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) => (
+        <span>
+          {ctx.t("title")}: {props.label}
+        </span>
+      )),
+      count: () => 42,
+    })
+  },
+})
+```
+
+- `bindPlugin`으로 감싸는 컴포넌트의 props에는 `bindPlugin((props: FileTreeProps) => ...)`처럼 타입을 붙이세요.
+  `ctx.provide` 안에서는 TypeScript가 이를 추론하지 못합니다.
+- `count` 같은 데이터 메서드는 감싸지 마세요.
+- `ctx.provide`는 계약 제공을 미리 중단하는 함수를 반환합니다. 호스트도 현재 소유자가 정리될 때, 소유자가 없으면
+  플러그인이 중지될 때 계약 제공을 중단합니다.
+
+### 다른 플러그인의 계약 사용
+
+패키지에서 `contract.ts`를 `./contract` 같은 이름으로 내보내 다른 플러그인이 그 토큰을 가져올 수 있게 하세요. 다른
+플러그인은 `ctx.use(token)`으로 계약을 구독합니다. 제공자가 시작, 중지, 재시작하면 접근자의 값이 바뀌므로 사용하는 곳에서
+읽으세요.
+
+```tsx title="src/gui.tsx"
+import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () => {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () => <span>{count()}</span> })
+  },
+})
+```
+
+- 같은 토큰으로 호출하면 `ctx.use`가 항상 같은 접근자를 반환합니다.
+- 제공자가 꺼져 있어도 소비자는 계속 동작합니다.
+  [Live 의존성과 실패 처리](#live-dependencies-and-failure-handling)를 참고하세요.
+
+### main과 창 사이의 IPC
+
+Effect `Schema` 코덱과 함께 `Ipc.define`을 사용해 `main`과 `setup` 사이에 타입이 지정된 브리지를 정의하세요. `main`은
+`ctx.provide`로 구현하고, 창은 `ctx.main`으로 호출합니다.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})
+```
+
+```ts
+const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)
+```
+
+- 다른 플러그인은 계약과 마찬가지로 `ctx.use(KeepAwake)`로 `Ipc`를 구독합니다.
+- 상태, 이벤트, 제공자는 [Ipc 정의와 제공](#define-and-provide-an-ipc)을 참고하세요.
+
+### 플러그인이 소유하는 레지스트리
+
+플러그인 자체 목록에는 `Registry.define`을 사용하세요. 다른 플러그인은 `ctx.add`로 항목을 추가하고, 목록을 소유한
+플러그인은 `ctx.list`로 항목을 읽습니다.
+
+```ts title="src/gui/contract.ts"
+import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define<Exporter>("acme.exporter")
+```
+
+```tsx
+// Another plugin contributes an item.
+ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
+
+// The owner lists every contribution. Reactive: read it in render or in a memo.
+const exporters = () => ctx.list(Exporter)
+```
+
+## 창
+
+플러그인의 `setup`은 모든 데스크톱 앱 창에서 실행됩니다. 플러그인의
+[`./gui-experimental` 파일](#define-the-gui-plugin)에서 `@opencode/plugin/gui`의 `Plugin.define`에 전달하세요. `setup`은
+동기식이며 정리 함수를 반환할 수 있습니다. [수명과 정리](#lifetimes-and-cleanup)를 참고하세요.
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () => ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})
+```
+
+## 컴포넌트
+
+Solid 컴포넌트 안에서는 `setup`이 받는 것과 같은 컨텍스트 객체를 얻으려면 `usePlugin<typeof definition>()`을 호출하세요.
+선언이 담긴 별도 파일([파일로 나누기](#split-across-files))에서 타입을 지정하세요. 그러면 컴포넌트와 정의가 서로를
+가져오지 않습니다.
+
+```tsx title="src/gui/window.tsx"
+import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin<typeof definition>()
+
+  return <span>{ctx.t("title")}</span>
+}
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Slot, { at: "window.bottom", render: () => <StatusLabel /> })
+}
+```
+
+`usePlugin`을 플러그인이 등록한 UI 밖에서 호출하면 예외가 발생합니다. 다른 플러그인이 렌더링하는 컴포넌트에서는 그 플러그인의 컨텍스트를
+반환하므로, 계약으로 제공하는 컴포넌트는 `bindPlugin`으로 감싸세요. [계약](#contracts)을 참고하세요.
+
+## 아이콘
+
+SDK의 모든 `icon` 필드와 `ctx.ui.Icon`은 `IconName`을 받습니다. 앱 자체 아이콘의 이름이거나 플러그인이 선언한 아이콘의
+이름입니다. 다른 문자열은 컴파일에 실패합니다.
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### 자체 아이콘 선언
+
+앱에 없는 그림(예: 제품 로고)은 SVG 파일을 패키지에 두고 `icons`에 선언하세요. `?raw`로 파일을 가져오면 `gui()`
+프리셋이 텍스트로 번들합니다.
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+그다음 `IconName`이 들어가는 곳마다 `ctx.icons`의 아이콘 이름을 전달하세요.
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons`에는 선언한 아이콘마다 이름이 하나씩 있습니다. 선언하지 않은 이름은 컴파일에 실패합니다.
+- 호스트는 `setup`이 실행되기 전에 아이콘을 등록하고, 플러그인이 사라질 때 철회합니다.
+- SVG 문서가 아닌 값은 플러그인이 시작될 때 실패를 일으킵니다.
+- `?raw` 가져오기의 타입 검사를 통과하려면 `tsconfig.json`의 `types`에 `"vite/client"`를 추가하세요.
+
+### 아이콘 그리기
+
+호스트는 자체 아이콘과 같은 방식으로 플러그인의 아이콘을 그립니다. 아이콘이 표시되는 위치에 맞춰 크기와 색상을 적용합니다.
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- `viewBox`가 그림의 프레임을 정하고, 없으면 `width`와 `height`가 정합니다. 호스트가 14, 16, 20픽셀로 확대·축소하므로
+  16픽셀 그리드에 그리세요.
+- `currentColor`로 그리세요. 그러면 아이콘이 캡슐형 항목의 `tone`이나 메뉴 행의 톤을 낮춘 아이콘 색처럼 표시 위치의 색을 따릅니다.
+- 그림 안의 `id`는 창 전체에 속합니다. id를 고유하게 유지하거나 아예 넣지 마세요.
+
+### 아이콘 애니메이션
+
+아이콘은 움직일 수 있습니다. 작업이 진행 중임을 보여 줄 때 씁니다. 파일 안에서 `animate`, `animateTransform` 같은 SVG
+애니메이션 요소를 사용하세요.
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- 같은 아이콘은 어디에 표시되든 애니메이션이 동기화됩니다.
+- 캡슐형 항목의 `show`가 다시 실행되는 등 호스트가 아이콘이 있는 UI를 다시 렌더링해도 애니메이션은 계속됩니다.
+- 사용자가 동작 줄이기를 설정하면 호스트는 모든 아이콘을 첫 프레임에 고정합니다. 첫 프레임을 정지 상태의 그림으로
+  만드세요.
+- 어떤 위치에도 표시되지 않는 아이콘은 비용이 들지 않습니다.
+
+### 저장되는 아이콘 이름
+
+아이콘 이름은 `<plugin id>:<name>` 형식의 문자열이므로 호스트는 자체 아이콘 이름처럼 저장합니다.
+[입력창 메모나 인용](#attach-to-the-composer)은 초안과 전송한 메시지에 아이콘을 함께 보관하고,
+[닫힌 탭](#reopen-closed-tabs)은 세션 레이아웃에 보관합니다.
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- 플러그인이 활성 상태가 아니면 아이콘은 아무것도 그리지 않고 크기만 유지합니다.
+- 사용하는 곳에서 `ctx.icons`로 이름을 읽으세요. 손으로 쓴 이름은 컴파일에 실패합니다.
+
+#### 참조
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
+
+## 레지스트리
+
+창 셸에 항목을 추가하려면 레지스트리 토큰과 항목을 `ctx.add`에 전달하세요. 언어 같은 반응형 상태를 따르는 항목은
+`() => item | undefined` 함수로 전달하세요. 함수가 읽는 값이 바뀌면 호스트가 함수를 다시 실행합니다. 함수가 다시 항목을
+반환할 때까지 항목을 철회하려면 `undefined`를 반환하세요.
+
+```ts
+ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
+```
+
+- 함수 안에서 `ctx.t`로 레이블을 읽으세요. 고정 항목에서 한 번 읽은 레이블은 읽은 시점의 언어로 남습니다.
+- 항목에 `hidden: true`, `section`, `icon`, 메뉴 이름처럼 리터럴 타입 필드가 있으면 함수의 반환 타입을
+  `(): Command => ({ ... })`처럼 지정하세요. 지정하지 않으면 TypeScript가 필드를 `string`이나 `boolean`으로 넓혀 어떤
+  오버로드와도 맞지 않습니다.
+- [스타일](#styles)처럼 절대 바뀌지 않는 항목은 고정 항목으로 전달하세요.
+- 호스트는 일부 객체를 교체하지 않고 유지합니다. 패널이 `list`에서 반환하는 탭과, 패널이나 설정 페이지처럼 `render`가 있는
+  항목입니다. 이런 항목의 레이블은 `get title() { return ctx.t("title") }` 같은 getter에서 읽으세요.
+- `ctx.add`는 등록한 항목을 미리 제거하는 함수를 반환합니다.
+
+### 명령어
+
+`Command`는 명령어 팔레트, **Settings > Shortcuts**, 선택적으로 입력창의 `/` 메뉴에 작업을 추가합니다. 호스트는 명령어를
+`<plugin id>.<command id>`로 게시합니다.
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command => ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () => {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)
+```
+
+- `title`은 팔레트 레이블이고, `description`은 두 번째 줄, `group`은 카테고리이며, 모두 번역된 텍스트입니다.
+- `keywords`는 팔레트 검색에 사용할 추가 키워드입니다. 공백으로 구분하세요.
+- `section`은 **Settings > Shortcuts** 섹션입니다. 기본값은 `general`입니다.
+- `bind`는 기본 키바인드입니다. 예를 들어 `mod+shift+t`입니다. 사용자가 바꿀 수 있습니다.
+- `slash`는 `/` 메뉴에도 명령어를 제공합니다. `arguments: true`이면 이름 뒤의 텍스트가 `run(input)`으로 전달됩니다.
+- `hidden`은 명령어를 팔레트에서 빼지만 키바인드는 계속 동작합니다.
+- `suggested`는 명령어가 활성화된 동안 **Suggested** 아래에도 나열합니다. `featured`는 검색어 없이 팔레트를 열 때
+  나열합니다.
+- `enabled: false`는 명령어를 팔레트에서 빼고 키바인드를 끕니다. 반응형입니다.
+- `scope`는 CSS 선택자로 키바인드의 적용 범위를 지정합니다. 키보드 포커스가 그 범위 안에 있어야 바인딩이 적용됩니다.
+  `editable`을 사용하면 텍스트 필드에 포커스가 있을 때도 동작합니다.
+- 자신의 코드에서 명령어를 실행하려면 `ctx.commands.run`을 사용하세요. [명령어 실행](#run-commands)을 참고하세요.
+
+키바인드에서 `run`이 `false`를 반환하면 키를 거절할 수 있습니다. 그러면 명령어에 키바인드가 없었던 것처럼 이벤트가 원래
+대상으로 넘어갑니다. 다음 명령어는 사용자가 빈 프롬프트에서 Enter를 누르면 세션을 이어 가고, 그 밖의 Enter는 모두
+프롬프트에 맡깁니다.
+
+```ts
+ctx.add(Command, () => ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () => {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))
+```
+
+- `false`는 동기식으로 반환하세요. Promise를 반환하면 키를 처리한 것으로 간주합니다.
+- 팔레트나 슬래시 명령어에서의 `false`는 더 아무것도 하지 않습니다.
+
+#### 참조
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise<void>
+}
+```
+
+### 패널
+
+`Panel`은 세션의 측면 영역(`region: "side"`)에 탭을 추가합니다. 사용자는 탭을 타임라인 아래의 하단 창으로 끌 수
+있습니다.
+
+```tsx
+import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) => (input.open.includes("main") ? [mainTab] : []),
+  render: (props) => <NotesView session={props.session} screen={props.screen} tab={props.tab} />,
+})
+```
+
+모든 패널 콜백(`list`, `render`, `focus`, `enter`, `close`, `closed`, `restore`, `normalize`)은 입력 객체 하나를
+받습니다.
+
+- `props.session`과 `props.tab`은 사용하는 곳에서 반응형 getter로 읽으세요. `render` 맨 위에서 구조 분해하지 마세요.
+  사용자가 세션 A에서 세션 B로 전환하면 패널은 마운트된 채로 남고 `props.session`이 제자리에서 갱신됩니다.
+- `props.screen`은 패널을 소유한 `SessionScreen`(`file`, `comment`, `composer`)을 가리키는 고정 참조입니다.
+  이 객체의 액션은 항상 라우팅된 세션을 대상으로 합니다.
+- 탭이 바뀌지 않았으면 `list`에서 같은 `PanelTab` 객체를 반환해 호스트가 트리거를 다시 마운트하지 않게 하세요.
+  레이블은 getter에서 읽어 새 객체 없이도 언어를 따르게 하세요.
+
+패널 콜백은 다음과 같습니다.
+
+- `list`는 표시할 탭을 반환합니다. `input.open`은 세션에 저장된 이 플러그인의 탭 id를 담습니다. 반응형입니다.
+- `render`는 탭의 내용을 한 번 렌더링합니다.
+- `focus`는 탭이 선택될 때 실행됩니다. 영역이 마운트될 때 이미 선택된 탭의 경우 `restored`는 `true`입니다.
+- `enter`는 사용자가 토글로 측면 영역을 열어 해당 탭이 화면에 표시된 뒤 실행됩니다. 텍스트 필드처럼 탭 안의 대상에
+  키보드 포커스를 옮기세요. 포커스가 아직 영역 밖에 있으면 호스트가 영역에 포커스를 옮깁니다.
+- `close`는 호스트가 탭을 제거한 뒤 실행됩니다.
+- `closed`와 `restore`는 사용자가 닫힌 탭을 다시 열 수 있게 합니다.
+  [닫힌 탭 다시 열기](#reopen-closed-tabs)를 참고하세요.
+- `normalize`는 여러 방식으로 저장될 수 있는 저장된 탭 id의 정규 형식을 반환합니다.
+
+패널 옵션은 다음과 같습니다.
+
+- `mobile`은 패널의 좁은 화면 보기를 추가합니다. `cached: true`이면 사용자가 다른 보기를 표시하는 동안에도 보기가
+  마운트된 채로 남습니다. 기본적으로 보기는 표시될 때마다 마운트됩니다.
+- `wide`는 측면 영역이 열려 있는 동안 세션의 최소 너비를 늘리도록 요청합니다.
+- `width`는 패널에 자체 측면 영역 너비를 줍니다. [패널 너비](#panel-width)를 참고하세요.
+- `transient` 패널의 탭은 복원되지 않습니다.
+
+#### 패널 너비
+
+기본적으로 측면 영역의 모든 탭은 대화의 너비를 공유합니다. 패널이 리뷰나 브라우저보다 좁거나 넓은 공간을 필요로 하면
+`width`를 설정하세요. CSS 픽셀이나, 영역의 최소 너비를 뜻하는 `"narrow"`를 전달합니다.
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- 너비는 측면 창이 패널의 탭 중 하나를 표시하는 동안 적용됩니다. 다른 탭은 대화의 너비를 유지합니다.
+- 사용자가 패널의 탭에서 구분선을 끌어 너비를 바꾸면 호스트는 앱 전체에서 해당 패널에 `width` 대신 사용자가 정한 너비를 적용합니다.
+- 호스트는 대화가 최소 너비보다 좁아지지 않게 하고, 측면 영역에 최소 `"narrow"`만큼의 너비를 확보합니다.
+- `ctx.layout.side.width(panel)`은 저장된 너비를 읽고, `ctx.layout.side.resize(panel, width)`는 끌기와 마찬가지로
+  너비를 저장합니다. 저장된 너비는 `width`가 없는 패널에도 적용됩니다.
+
+탭 옵션은 다음과 같습니다.
+
+- `id`는 탭 id이며, 호스트 키는 `<plugin id>:<id>`입니다. `title`은 접근성 이름이고, `label`은 사용자 지정 트리거
+  내용을 렌더링합니다.
+- `pinned` 탭은 열리지 않은 채로 나열되고, 맨 앞에 오며, 닫히거나 끌리지 않습니다.
+- `draggable`은 사용자가 탭 순서를 바꿀 수 있게 합니다. 기본값은 `true`입니다.
+- `closable`은 닫기 버튼의 모양을 정합니다. `"compact"`, `"hover"`, 없음이면 `false`입니다.
+- `transient`는 **Open file**처럼 다음 미리보기 탭으로 대체되는 실행기 탭을 표시합니다.
+- `fallback`은 저장된 선택이 없을 때 대체 선택을 받도록 합니다.
+- 하나의 `group`에 속한 탭은 마운트된 채로 유지되는 렌더링 하나를 공유합니다.
+- `missing`은 탭에 취소선을 긋습니다. 더 이상 존재하지 않는 파일일 때 씁니다.
+- `hidden`은 내용을 아직 알 수 없는 동안 복원된 탭을 목록에 두고 선택할 수 있게 하되 그리지 않습니다.
+- `file`은 탭이 표시하는 워크스페이스 경로이며, 세션의 열린 파일 중 하나로 나열됩니다.
+- `tabbable`은 포커스 가능한 요소가 없는 콘텐츠를 위해 탭 패널을 탭 순서에 넣습니다.
+
+#### 참조
+
+```ts
+interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}
+```
+
+### 닫힌 탭 다시 열기
+
+호스트는 사용자가 닫은 각 측면 탭의 항목을 보관합니다. 포커스가 측면 영역에 있을 때 ⌘⇧T를 누르면 가장 최근 탭이 다시
+열립니다. 측면 영역의 **New tab** 보기는 `file`을 표시하는 닫힌 탭을 **Recently closed** 아래에 나열합니다. `closed`와
+`restore`를 추가해 탭이 그곳에 표시되는 방식과 다시 열리는 방식을 제어하세요.
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed`는 사용자가 탭을 닫을 때 실행됩니다. 이 시점에 행에 표시할 정보와 탭을 다시 여는 데 필요한 `data`를 반환하세요.
+  이 데이터는 `restore`에 전달됩니다. 다시 열 수 없는 탭이면 `false`를 반환하세요.
+- `title`의 기본값은 탭 제목이고, `icon`의 기본값은 패널의 모바일 아이콘입니다. `file`이 있는 탭은 파일 아이콘을
+  표시하고 폴더를 `detail`로 표시합니다.
+- 호스트가 항목을 저장하므로 `data`는 URL처럼 작게 유지하세요.
+- `restore`는 닫힌 탭의 `id`와 `closed`가 반환한 `data`를 받습니다. `restore`가 없으면 호스트가 같은 키를 다시
+  엽니다.
+- `closed`가 없으면 `transient`가 아닌 탭은 탭 제목으로 목록에 표시되고 같은 키로 다시 열립니다.
+
+#### 참조
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}
+```
+
+### 설정 페이지
+
+`SettingsPage`는 **Settings**에 새 페이지를 추가합니다. `page: "general"` 또는 `page: "servers"`로 기존 호스트 페이지에
+섹션을 추가하거나, `page: "general", section: "general"`로 호스트의 General 섹션에 행을 추가할 수도 있습니다.
+
+```tsx
+import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) => <AcmeSettings highlight={input.target} />,
+})
+```
+
+- `id`는 페이지의 설정 탭 값(`/settings?tab=<id>`)이며 `ctx.layout.settings`의 인자입니다.
+- `page`는 페이지 대신 호스트 페이지에 섹션을 추가합니다. `section: "general"`이면 해당 페이지의 General 섹션에 행을
+  추가합니다.
+- `title`과 `icon`은 페이지의 탐색 레이블과 아이콘입니다.
+- `entries`는 검색 메타데이터이며 페이지를 마운트하지 않고도 색인됩니다. 검색을 통해 항목을 표시할 때 `render`가
+  그 id를 `target`으로 받습니다.
+- 설정 페이지에는 `render`가 있으므로 호스트가 같은 객체를 유지합니다. 레이블과 검색 항목은 getter에서 읽으세요.
+
+앱의 설정 컴포넌트로 페이지를 렌더링하세요. 앱 자체 페이지와 같은 모양이 되고, 검색으로 개별 행을 표시할 수 있습니다.
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- 자체 페이지는 `SettingsLayout`을, 호스트 페이지의 섹션(`page`)은 `SettingsSection`을, 호스트 섹션의 행(`section`)은
+  `SettingsRow`를 렌더링합니다.
+- 행의 `id`는 검색에서 해당 행을 찾는 데 쓰는 `SettingEntry.id`입니다. 검색을 통해 해당 행으로 스크롤하고 강조 표시할 수 있습니다.
+- 각 컴포넌트의 props는 [설정 컴포넌트](#settings-components)를 참고하세요.
+
+#### 참조
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
+
+### 슬롯
+
+`Slot`은 창의 네 슬롯 중 하나에 UI를 렌더링합니다.
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) => <UsageRing session={input.session} active={input.active} />,
+})
+```
+
+- `window.bottom`은 창 아래쪽, 토스트 위의 전체 너비 띠입니다.
+- `session.header`는 세션 타임라인의 제목 행입니다. 캐시된 타임라인은 숨겨진 동안에도 마운트된 채로 남고 `active`가
+  `false`입니다.
+- `session.location.menu`는 프로젝트 메뉴의 위치 세부 정보 뒤에 항목을 추가합니다.
+- `session.panel.end`는 측면 영역 탭 스트립의 끝부분에 액션을 둡니다.
+- `order`는 한 슬롯 안의 항목 순서를 정합니다.
+
+`session.location.menu`는 `shown`을 받습니다. 이 값은 프로젝트 메뉴가 열려 있는 동안 `true`입니다. 이 값이 `true`일
+때만 위치 데이터를 구독하세요.
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+프로젝트 메뉴는 호스트 메뉴입니다. 행을 `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup`, `MenuSeparator`로 렌더링해 호스트의
+행처럼 키보드로 탐색하고 메뉴를 닫을 수 있게 하세요. [메뉴 행](#menu-rows)을 참고하세요.
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
+})
+```
+
+#### 참조
+
+```ts
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record<string, never>
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}
+```
+
+### 메뉴 항목
+
+`MenuItem`은 측면 패널의 **+** 메뉴(`"session.panel"`), **Add server** 메뉴(`"server.add"`), Settings의 서버별 행
+메뉴(`"server.row"`)에 항목을 추가합니다.
+
+```ts
+import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () => {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})
+```
+
+- `order`는 항목을 오름차순으로 정렬합니다. 기본값은 `0`입니다.
+- `server.row` 항목의 `run`은 행의 서버 키를 받습니다. `when`은 일부 행에서만 항목을 나열하고, `enabled`는 다른
+  행에서 비활성 상태로 표시합니다.
+
+`session.panel` 항목은 실행기이기도 합니다. 사용자가 탭 없이 측면 영역을 열거나, `primary` 항목이 없을 때 **+**를
+클릭하면 호스트가 실행기 목록이 담긴 **New tab** 보기를 표시합니다.
+
+- `icon`은 항목의 아이콘입니다. `keybind`로 공개된 명령어의 id를 지정하면 항목에 해당 명령어의 단축키를 표시합니다.
+- `description`은 실행기 행에서 제목 뒤에 톤을 낮춰 표시하는 짧은 부가 정보입니다. 예를 들어 개수를 표시할 수 있습니다.
+- `opened: true`는 항목이 여는 탭이 이미 열려 있음을 뜻합니다. 실행기 목록에서는 항목을 빼지만 **+** 메뉴에는 여전히
+  나열됩니다.
+- `primary: true`이면 **+**가 실행기를 표시하는 대신 항목을 바로 실행합니다. 기본 실행 항목 중 `order`가 가장 앞선
+  항목을 실행합니다. 탭 없이 측면 영역을 열면 여전히 **New tab** 보기가 표시되며, 기본 실행 항목이 아니고 열려 있지 않은 항목을
+  나열합니다.
+- `ctx.layout.side.menu()`는 자체 실행기를 만들 때 모든 플러그인의 `session.panel` 항목을 나열합니다.
+  [레이아웃](#layout)을 참고하세요.
+
+#### 참조
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
+
+### 타이틀바 항목
+
+`TitlebarItem`은 창 타이틀바나 탭 푸터에 캡슐형 버튼을 렌더링합니다. 레이블은 마우스를 올리면 표시됩니다.
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
+)
+```
+
+- `title`은 `label`과 다를 때 접근성 이름입니다.
+- `busy`는 스피너를 표시하고 버튼을 비활성화합니다. `pressed`는 버튼을 눌린 상태로 표시합니다.
+- `run`은 클릭할 때 실행됩니다. 표시만 하는 항목이면 생략하세요.
+
+#### 참조
+
+```ts
+interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
+
+### 입력창의 캡슐형 항목
+
+`ComposerPill`은 세션 입력창 위에 캡슐형 항목을 추가합니다. 앱의 백그라운드 작업과 할 일 항목이 있는 행에 나란히 표시됩니다.
+해당 브랜치의 풀 리퀘스트처럼 사용자가 작업 중인 세션의 상태를 표시하는 데 사용하세요. 항목은 타임라인 위에 떠 있어 나타나거나
+사라져도 입력창 크기가 바뀌지 않습니다. 이 행은 사용자가 설정한 백그라운드 활동 정렬을 따르며, 서브에이전트 세션에는 표시되지 않습니다.
+
+`show`는 해당 세션에 표시할 캡슐형 항목을 반환합니다. 표시할 항목이 없으면 `undefined`를 반환합니다. 호스트는 마운트된
+입력창마다 이 함수를 실행하고, 함수가 읽는 값이 바뀌면 다시 실행합니다. 다음 플러그인은 서버 파트의
+[RPC](/build/plugins/rpc)로 세션 디렉터리별 열린 풀 리퀘스트를 조회하고 캡슐형 항목 하나에 표시합니다.
+
+```tsx
+import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
+
+createKeyed(
+  () => ctx.sessions.current()?.directory,
+  (directory) =>
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) => setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) => {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) => pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) => ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () => ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})
+```
+
+- `label`은 캡슐형 항목의 텍스트이며 길면 잘립니다. `icon`은 선택 사항입니다.
+- `tone`은 아이콘 색을 정합니다. `"success"`, `"warning"`, `"danger"`입니다.
+- 앱에 없는 글리프(예: 움직이는 상태 표시)는 [자체 아이콘을 선언](#icons)하고 `ctx.icons.<name>`을 전달하세요. 다른
+  아이콘처럼 `tone`을 따르며, `show`가 다시 실행되어도 애니메이션이 계속됩니다.
+- `rows`가 있으면 캡슐형 항목을 클릭할 때 메뉴가 열립니다. 메뉴 제목은 `title`이며, 없으면 `label`을 사용합니다. 각
+  행은 자체 `icon`, `tone`, 톤을 낮춰 표시하는 `detail`을 가지며, 선택하면 `run`을 실행합니다. `run`이 없는 행은 표시만 합니다.
+- `rows`가 없으면 캡슐형 항목을 클릭할 때 `run`을 실행합니다.
+- `title`은 `label`과 다를 때 캡슐형 항목의 접근성 이름이기도 합니다.
+- `order`는 여러 플러그인의 캡슐형 항목을 함께 정렬하며, 값이 낮을수록 먼저 표시합니다. 앱 자체 항목이 그보다 먼저 옵니다.
+- `show`에서 예외가 발생하면 해당 플러그인이 등록한 이 항목만 표시되지 않습니다.
+
+#### 참조
+
+```ts
+interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### 코드 블록
+
+`CodeBlock`은 나열한 언어의 펜스 코드 블록을 강조 표시된 코드 대신 자체 UI로 렌더링합니다. 소스로 읽는 것보다 그려서
+보는 편이 나은 내용에 사용하세요. ` ```csv ` 표나 ` ```latex ` 수식이 그렇습니다.
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- `languages`는 펜스 info 문자열의 첫 단어를 소문자로 바꿔 비교합니다. ` ```CSV title="Q3" `는 `csv`와 일치합니다.
+  호스트는 별칭을 해석하지 않으므로 받아들이려는 이름을 모두 나열하세요.
+- `render`는 블록의 `code`, `language`, 블록을 표시하는 `session`을 받습니다. 강조 표시된 코드를 유지하려면
+  `undefined`나 `null`을 반환하세요. 소스가 파싱되지 않을 때가 그렇습니다.
+- render에서 예외가 발생하면 호스트는 해당 플러그인의 오류로 기록하고 블록에 코드를 표시합니다. 플러그인의 다른 기능은 계속 동작합니다.
+- 여러 플러그인이 같은 언어를 지정하면 가장 먼저 등록된 렌더러가 처리합니다. `mermaid`를 지정하면 플러그인의 렌더러가 앱 자체
+  Mermaid 다이어그램도 대체합니다.
+
+#### 스트리밍
+
+호스트는 블록을 닫는 펜스를 수신한 뒤에만 플러그인 UI를 렌더링합니다. 블록을 스트리밍하는 중이거나 메시지가 블록 중간에서
+멈추면 사용자는 강조 표시된 코드를 봅니다. 닫는 펜스가 들어오면 플러그인 UI가 그 자리의 코드를 대신합니다.
+render에는 완성된 블록만 전달됩니다.
+
+#### 적용되는 곳
+
+| UI 위치                                                        | 코드 블록 내용     |
+| -------------------------------------------------------------- | ------------------ |
+| 타임라인: 어시스턴트 텍스트와 도구 출력                        | 예                 |
+| 세션 화면의 측면 패널(예: Markdown 미리보기)                   | 예                 |
+| 세션 화면에서 렌더링된 `ctx.ui.Markdown`                       | 예                 |
+| `ctx.ui.Code`와 자체 `CodeBlock` render 안의 Markdown          | 아니요             |
+| 설정 페이지, 대화 상자 등 세션 화면에 속하지 않는 UI            | 아니요             |
+
+#### 레이아웃과 성능
+
+- 어느 플러그인도 지정하지 않은 언어의 블록에는 추가 비용이 들지 않습니다. 지정된 언어의 블록만, 그중에서도 타임라인 행이
+  화면에 보일 때만 플러그인 UI를 렌더링합니다.
+- 블록의 크기는 UI에 맞춰 바뀝니다. 비동기 콘텐츠에 최소 높이를 지정해 두면 콘텐츠가 들어올 때 타임라인이 덜 움직입니다.
+- 블록은 소스 코드를 복사하는 Copy 버튼을 그대로 표시하고, 상단 끝쪽 모서리에 `CodeBlockAction` 버튼을 배치합니다.
+
+### 코드 블록 액션
+
+`CodeBlockAction`은 나열한 언어의 코드 블록에서 Copy 버튼 옆에 버튼을 추가합니다. `run`은 `CodeBlock` render가 받는
+것과 같은 블록을 받습니다.
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- 블록을 닫는 펜스를 받은 뒤에만 버튼을 표시하므로 미완성 명령어를 처리하지 않습니다.
+- 버튼은 마우스를 올리거나 키보드 포커스를 주면 Copy와 함께 나타나며, Copy 앞에 `order` 오름차순으로 놓입니다.
+- `title`은 로캘을 따르도록 getter에서 읽으세요.
+- `run`에서 예외가 발생하거나 반환한 Promise가 거부되면 해당 플러그인의 오류로 기록합니다. 다른 상태는 바뀌지 않습니다.
+
+#### 참조
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
+### 링크 핸들러
+
+`LinkHandler`는 사용자가 메시지나 입력창 칩에서 클릭한 로컬 파일 링크나 사용자 지정 링크를 엽니다. `match`가 true를
+반환하는 핸들러 중 `priority`가 가장 높은 핸들러가 링크를 엽니다.
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+- `href`는 대상입니다. 경로, URL, `file://` 링크입니다.
+- `origin`은 링크된 항목을 만든 플러그인입니다.
+- `exact`는 경로가 텍스트에서 추측한 것이 아니라 알려진 워크스페이스 파일임을 뜻합니다.
+- `background` 링크는 좁은 화면 보기를 전환해서는 안 됩니다.
+- `base`는 링크가 작성된 곳의 워크스페이스 상대 디렉터리입니다.
+- `exists`가 없으면 `ctx.links.exists`가 `false`를 반환합니다. 따라서 핸들러가 열 수 없는 대상을 텍스트에서 링크처럼 표시하지 않습니다.
+
+#### 참조
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
+
+### 서버
+
+`Server`는 서버 연결 목록을 제공합니다. 예를 들어 플러그인이 다른 머신에서 시작하는 서버를 등록할 수 있습니다.
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server => ({
+    ready: loaded(),
+    entries: machines().map((machine) => ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)
+```
+
+- 시작 시 모든 소스가 `ready`가 될 때까지 기다립니다. 준비된 소스가 반환한 항목이 해당 소스의 전체 목록입니다.
+- `order`는 소스를 오름차순으로 정렬합니다.
+- 각 항목의 키는 `<plugin id>:<id>`입니다. `label`은 `name` 옆의 짧은 배지입니다.
+- `auth`는 서버가 사용자의 로그인을 기다림을, `incompatible`은 이 앱이 지원하지 않는 버전을 실행함을 뜻합니다.
+- `listed: false`는 항목을 앱의 서버 목록에서 제외합니다. Settings에는 여전히 표시됩니다.
+- `http`는 서버가 `ready`가 된 뒤의 엔드포인트입니다.
+- `reconnect`는 연결이 끊긴 엔드포인트를 다시 찾고, `connect`는 아직 준비되지 않은 서버를 준비하며, `remove`는 항목이 제거되기
+  전에 실행됩니다.
+- `row`는 서버의 설정 행을 렌더링하고, `cover`는 서버가 준비되지 않은 동안 라우팅된 세션을 덮습니다.
+- `row`는 호스트의 상태 `Indicator`, 최신 `health()` 검사, 행의 `server.row` 메뉴 `Items`를 받습니다. `remove()`는
+  항목의 `remove`를 실행한 뒤 서버의 탭을 닫습니다.
+
+#### 참조
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
+
+### 스타일
+
+`Style`은 등록한 스타일이 활성 상태인 동안 문서에 CSS 문자열을 삽입합니다.
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
+```
+
+### 테마
+
+`Theme`는 Settings › Appearance › Theme에 색상 테마를 추가합니다. 앱 자체 테마 파일과 같은 형식을 사용하므로 테마
+파일을 그대로 가져올 수 있습니다.
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+테마 파일은 스스로 이름을 정하고 라이트와 다크 변형을 제공합니다. 각 변형은 `palette`나 `seeds`에서 시작하며 둘 다는
+아닙니다. `overrides`로 개별 토큰을 고정할 수 있습니다.
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- 선택기는 플러그인 테마를 앱 테마와 함께 `name` 알파벳순으로 나열합니다.
+- 호스트는 각 테마에 `<plugin id>:<theme id>`를 키로 사용하므로 앱 테마나 다른 플러그인의 테마를 덮어쓰지 않습니다.
+- 테마를 철회하거나 플러그인을 비활성화하면 선택기에서 테마가 빠집니다. 테마를 고른 사용자는 그 선택을 유지하며,
+  테마가 돌아올 때까지 창은 기본 테마를 표시합니다.
+- 창이 시작될 때는 플러그인이 테마를 다시 등록할 때까지 이전 실행에서 캐시한 색을 표시합니다.
+
+## 호스트 API
+
+호스트 API는 `ctx`의 속성입니다. 앱 인터페이스가 마운트되기 전에도 예외가 발생하지 않습니다. 읽기 작업은 문서에 명시된
+기본값을 반환합니다. `ctx.layout.open`, `ctx.dialogs.open`, 스토어 갱신처럼 마운트 전에 호출한 쓰기 작업은 대기하다가
+첫 라우트가 렌더링되면 호출 순서대로 적용됩니다.
+
+```ts
+ctx.add(Command, () => ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))
+```
+
+아래 섹션은 각 API를 다룹니다. `ctx.options`, `ctx.client`, `ctx.app`은 [공유 컨텍스트](#shared-context)이고,
+`ctx.provide`, `ctx.use`, `ctx.main`은 [계약과 토큰](#contracts-and-tokens)과 함께 동작하며, `ctx.stores`는
+플러그인이 [선언](#define-the-gui-plugin)한 스토어를, `ctx.icons`는 선언한 [아이콘](#icons)의 이름을 담습니다.
+
+#### 참조
+
+```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  use<T>(token: Contract<T>): () => Live<T>
+  use<S extends IpcSpec>(token: Ipc<S>): () => Live<IpcClient<S>>
+  main<S extends IpcSpec>(token: Ipc<S>): IpcClient<S>
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
+
+### 레이아웃
+
+`ctx.layout.open(key, session, options?)`은 키(`<plugin id>:<tab id>`)로 패널 탭을 엽니다. 마운트되지 않은 세션에도
+동작합니다.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+- `tab: "open"`(기본값)은 미리보기 슬롯에서 탭을 선택합니다. `"preview"`는 새 미리보기로 만들고, `"append"`는 선택하지
+  않고 추가하며, `"select"`는 미리보기를 유지한 채 추가하고 선택합니다.
+- `background: true`는 사용자가 패널에서 시작하지 않은 액션일 때 좁은 화면에서 현재 보기를 유지하고 측면 영역을
+  엽니다.
+- `close(key, session)`은 탭을 제거하고 해당 패널의 `close`를 호출합니다. `toggle(key, session)`은 보이는 탭을 닫고,
+  아니면 엽니다.
+- `hide(key, session)`은 보이는 탭을 표시하는 창(측면 영역, 또는 사용자가 옮긴 탭이면 하단 창)을 탭을 닫지 않고
+  숨깁니다. 탭을 다시 열면 그 창이 표시됩니다.
+- `state(key, session)`은 탭이 스트립에 없으면 `"closed"`, 스트립에 있지만 창이 다른 탭을 표시하면 `"open"`, 창이
+  탭을 표시하지만 창이 숨겨져 있으면(측면 영역이 닫혔거나 하단 창이 숨겨짐) `"active"`, 화면에 있으면 `"visible"`입니다.
+- `stored(session)`은 세션의 측면 스트립에 저장된 이 플러그인의 탭 id입니다.
+- `ready()`는 저장된 레이아웃이 로드되면 `true`이고, `narrow()`는 뷰포트가 768px 미만인 동안 참입니다.
+- `side.opened(session)`은 측면 영역이 열려 있는 동안 `true`이고, `side.toggle(session)`은 이를 열거나 닫습니다.
+- `side.menu()`는 자체 실행기를 만들 때 모든 플러그인의 `session.panel` [메뉴 항목](#menu-items)을 `order` 순으로
+  나열합니다.
+- `side.width(panel)`과 `side.resize(panel, width)`는 플러그인의 특정 패널에 대한 측면 영역 너비를 읽고 저장합니다.
+  [패널 너비](#panel-width)를 참고하세요.
+- `sidebar.opened()`는 모든 측면 패널이 공유하는 내부 사이드바 설정입니다.
+- `scroll`은 세션과 키별로 스크롤 오프셋을 저장합니다.
+- `settings(page?)`는 Settings를 엽니다. `project(server, title)`는 프로젝트의 디렉터리 선택기와 새 초안을 엽니다.
+- `draft({ server, directory, prompt })`는 자체 탭에 새 초안 세션을 열고, 사용자가 검토하고 전송할 수 있도록
+  프롬프트를 채워 둡니다.
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
+
+#### 참조
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
+
+### 세션과 세션 화면
+
+`ctx.sessions.current()`는 라우팅된 세션을, `ctx.screen.current()`는 그 세션 화면을 반환합니다. Home이나 초안에서는 둘 다
+`undefined`입니다. `setup`에서 한 번 읽어 두지 말고 실제로 사용할 때마다 읽으세요.
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+- `key`는 `<server id>\n<session id>` 형식이며 서버가 달라도 고유합니다. 세션별 상태를 저장할 때 이 값을 키로 사용하세요.
+- `tab`은 세션을 소유한 셸 탭의 키입니다. `pending`은 서버가 아직 세션을 만드는 중일 때 `true`입니다.
+- `directory`는 세션의 워크스페이스 디렉터리이고, `local`은 그것이 프로젝트 루트일 때 `true`입니다.
+- `listedProject`는 세션이 속한 사이드바 프로젝트입니다.
+- `visit`은 세션이 라우팅될 때마다 새로 만들어지는 객체입니다.
+- `background`는 세션에서 실행 중인 서브에이전트와 셸 명령을 나열합니다.
+- `ctx.sessions.list()`는 열린 셸 탭의 세션을 반환합니다.
+- 화면의 `file`은 워크스페이스의 파일을 읽고, `comment`는 다음 프롬프트에 포함할 줄 주석을 담습니다. `composer`는 다음
+  프롬프트의 텍스트, 첨부 항목, 모델을 다룹니다. [입력창에 첨부](#attach-to-the-composer)를 참고하세요.
+- `file.sync(path)`는 파일을 로드하고 서버에 변경 감시를 요청합니다. 파일의 탭이 닫힐 때 `file.unwatch(path)`를
+  호출하세요.
+
+#### 참조
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
+
+### 입력창에 첨부
+
+이벤트 핸들러나 명령어에서 `ctx.screen.current()?.composer`를 사용해 사용자의 다음 프롬프트에 파일, 메모, 인용을
+첨부하세요.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element <button id="submit">Save</button>',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})
+```
+
+- `attach`는 키보드 포커스를 그대로 둡니다. 프롬프트로 옮기려면 `focus()`를 호출하세요.
+- `update(commentID, { comment?, preview? })`는 첨부 항목을 수정합니다. 메모나 인용은 새 `comment`만 받습니다.
+- `detach(commentID)`는 첨부 항목을 제거합니다.
+- 메모의 `live`는 메모가 이 앱 프로세스에 남아 있는 동안 `subject`와 `href`를 대체합니다. 페이지 요소처럼 이
+  프로세스만 해석할 수 있는 참조에 씁니다. 저장된 초안에서는 사라지고, 되돌리기나 포크가 복원한 전송
+  메시지에서도 사라집니다.
+
+인용은 사용자가 플러그인에서 표시한 로그 출력 등의 내용에서 가져온 텍스트입니다. 필요한 경우 주석을 붙일 수 있습니다.
+세션 타임라인의 인용과 마찬가지로 출처의 아이콘과 레이블 아래에 표시됩니다. 먼저 `quotable()`을 확인하세요. 입력창이 없는
+서브에이전트 세션에서나 입력창이 셸 명령을 실행하는 동안에는 `false`입니다.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject`는 모델에게 소스의 이름을 알려 줍니다. 예를 들어 `the terminal`입니다. 번역되지 않습니다.
+- `comment`를 생략하면 사용자가 칩에서 주석을 추가할 수 있습니다.
+- `focus(commentID)`는 첨부한 인용의 주석 편집기를 엽니다. 좁은 화면에서 패널을 열었을 때처럼 입력창이 보이지 않으면
+  입력창이 표시된 뒤 편집기가 열립니다.
+- 모델은 `The user quoted the following from <subject>:`를 읽고, 각 줄 앞에 `> `가 붙은 텍스트를 읽은 뒤, 주석이
+  있으면 주석을 읽습니다.
+
+#### 참조
+
+```ts
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}
+```
+
+### 프롬프트 읽기와 쓰기
+
+`text()`로 사용자가 입력한 내용을 읽고, `focused()`로 프롬프트에 키보드 포커스가 있는지 확인하세요.
+
+```ts
+const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()
+```
+
+- `text()`는 프롬프트를 일반 텍스트로 반환합니다. 멘션은 `@`로 시작하는 텍스트로 표시되며 첨부 파일과 그 밖의 첨부 항목은 빠집니다.
+  셸 모드에서는 셸 명령입니다. 세션의 초안이 로드될 때까지, 그리고 입력창이 없는 서브에이전트 세션에서는 `""`입니다.
+  반응형입니다.
+- `focused()`는 키보드 포커스가 프롬프트에 있을 때 `true`입니다. 반응형이 아니므로 명령어의 `run`처럼 동작하는
+  곳에서 읽으세요.
+
+`insert(text)`는 사용자가 검토하고 전송할 수 있도록 프롬프트에 텍스트를 입력합니다. 입력창의 어떤 동작도 프롬프트를
+전송하지 않습니다.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()
+```
+
+- `insert`는 사용자가 프롬프트에 마지막으로 두고 간 커서 위치에, 그런 위치가 없으면 끝에 텍스트를 추가하고 커서를
+  그 뒤로 옮깁니다. 선택한 텍스트를 대체하지는 않습니다.
+- 텍스트는 파싱되지 않습니다. `@path`는 멘션이 아니라 텍스트로 남습니다.
+- `setText(text)`는 멘션을 포함해 프롬프트의 텍스트를 대체합니다. 첨부 파일과 그 밖의 첨부 항목은 남습니다. `setText("")`는
+  텍스트를 지웁니다.
+- 둘 다 키보드 포커스를 그대로 둡니다. 프롬프트로 옮기려면 `focus()`를 호출하세요.
+- 쓰기 작업(`insert`, `setText`, `attach`, `update`, `detach`)을 세션의 저장된 초안이 로드되기 전에 호출하면 로드가 끝날
+  때까지 대기합니다. 이후 호출 시점에 라우팅되어 있던 세션에 호출 순서대로 적용됩니다. 저장된 초안을 통째로 대체하지는 않습니다.
+- 입력창이 없는 서브에이전트 세션에서는 쓰기 작업이 적용되지 않습니다.
+
+### 모델 선택
+
+`model()`은 다음 프롬프트를 보낼 모델이고, `setModel`은 모델 선택기처럼 모델을 고릅니다.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer && !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}
+```
+
+- `model()`은 라우팅된 세션에 대한 사용자의 선택이고, 없으면 에이전트의 기본값, 그것도 없으면 앱의 기본값입니다. 모델
+  카탈로그가 로드되는 동안, 연결된 제공자가 모델을 제공하지 않을 때, 서브에이전트 세션에서는 `undefined`입니다.
+  반응형입니다.
+- `setModel`은 세션에서 해당 모델을 선택하고 최근 사용 모델 목록의 맨 앞에 올립니다. `variant`를 생략하면 모델 선택기에
+  표시될 변형을 그대로 사용합니다.
+- `setVariant(variant)`는 현재 모델의 변형을 선택합니다. `undefined`는 모델의 기본 변형을 선택합니다.
+- `setModel`은 카탈로그가 로드되는 동안, 연결된 제공자가 모델을 제공하지 않을 때, 또는 모델에 그런 변형이 없을 때
+  `false`를 반환하고 아무것도 바꾸지 않습니다.
+- `setVariant`는 현재 모델이 없거나 모델에 그런 변형이 없을 때 `false`를 반환하고 아무것도 바꾸지 않습니다.
+- 둘 다 서브에이전트 세션에서는 `false`를 반환합니다.
+
+#### 참조
+
+```ts
+interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+```
+
+### 서버와 서버 이벤트
+
+`ctx.servers.get(id)`는 라이브 `ServerRef`를 반환합니다. 플러그인을 실행하는 데스크톱 앱 자체 서버의 id는
+`"sidecar"`입니다. `data.on`으로 그 이벤트에 반응하세요.
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+- `id`는 호스트 키입니다. `"sidecar"`, http URL, 또는 [플러그인이 등록한 서버](#servers)의 `<plugin id>:<id>`입니다.
+- `data`는 세션과 프로젝트 같은 서버의 동기화된 데이터이고, `on(type, handler)`로 이벤트를 구독합니다. 반응형입니다.
+- `builtin`은 앱 자체 서버일 때 `true`입니다.
+- `compatible`은 서버 버전이 이 앱과 호환될 때 `true`이고, `connected`는 이벤트 연결이 유지되는 동안 참입니다.
+- `password`는 사용자가 설정한 HTTP 기본 인증 비밀번호입니다(있는 경우).
+- `client`, `data`, `url`은 매번 라이브 `ServerRef`에서 읽으세요. 재시작한 서버는 같은 id 아래에서 새 클라이언트를
+  받습니다.
+- `ctx.servers.list()`는 앱이 나열하는 서버의 id를 반환합니다.
+
+#### 참조
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
+
+### 대화 상자
+
+`ctx.dialogs.open(render, { replace? })`는 열린 대화 상자 위에 대화 상자를 열고, `close()`로 닫는 핸들을 반환합니다.
+대화 상자는 소유 스코프가 끝날 때도 닫힙니다.
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+- `replace: true`는 먼저 열린 대화 상자를 모두 닫습니다. 호스트와 다른 플러그인의 대화 상자도 포함됩니다.
+- `ctx.dialogs.active()`는 대화 상자가 하나라도 열려 있는 동안 `true`입니다.
+- 앱의 대화 상자 프레임을 쓰려면 내용을 `ctx.ui.Dialog`에 렌더링하세요. [앱 컴포넌트](#app-components)를
+  참고하세요.
+
+### 사용자에게 묻기
+
+`confirm`, `alert`, `prompt`, `select`는 앱 자체 대화 상자로 질문하므로 플러그인에 별도 대화 상자 UI가 필요하지
+않습니다. 각 메서드는 사용자의 응답을 담은 Promise를 반환합니다.
+
+```ts
+const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })
+```
+
+- `confirm`은 사용자가 확인한 경우에만 `true`를 결과로 반환합니다. `danger`를 사용하면 확인 버튼에 되돌리기 어려운 동작을
+  나타내는 스타일을 적용하고 초기 포커스를 Cancel에 둡니다.
+- 각 대화 상자는 `open`과 같은 방식으로 열립니다. 대화 상자를 연 소유자의 스코프가 끝나면 닫히며, 소유자가 없으면
+  플러그인이 종료될 때 닫힙니다.
+- 취소하거나 Escape를 누르거나 대화 상자 밖을 클릭하는 경우, 다른 대화 상자가 대신 열리는 경우, 소유자 스코프가 끝나는 경우에는
+  `confirm`의 결과가 `false`이고 `prompt`와 `select`의 결과는 `undefined`입니다.
+
+`alert`는 사용자가 확인해야 하는 내용과 버튼 하나를 표시합니다. 닫는 방식과 관계없이 대화 상자가 닫히면 Promise가 완료됩니다.
+
+```ts
+await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
+```
+
+`prompt`는 한 줄의 텍스트를 요청합니다. 초기 `value`가 선택되어 있으므로 새로 입력하면 초기값이 바뀝니다. 빈 문자열은
+결과로 반환하지 않습니다. 필드가 비어 있으면 제출해도 아무 일도 일어나지 않습니다. `secret: true`는 비밀번호나 토큰 등
+사용자가 입력하는 내용을 가립니다.
+
+```ts
+const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })
+```
+
+`select`는 명령어 팔레트처럼 검색 가능한 목록에 옵션을 표시하고, 사용자가 선택한 옵션의 `value`를 결과로 반환합니다.
+
+```ts
+const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) => ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)
+```
+
+- 검색은 각 옵션의 `title`과 `description`을 대상으로 합니다.
+- 같은 `group`을 가진 옵션은 그 제목 아래에 함께 나열됩니다.
+- `current`는 처음 강조할 옵션의 값입니다.
+
+#### 참조
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise<boolean>
+  alert(options: AlertOptions): Promise<void>
+  prompt(options: PromptOptions): Promise<string | undefined>
+  select<T>(options: SelectOptions<T>): Promise<T | undefined>
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions<T> {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}
+```
+
+### 앱 컴포넌트
+
+플러그인 번들은 `@opencode/ui`를 가져올 수 없으므로 `ctx.ui`가 앱 자체 컴포넌트를 제공합니다. 이 컴포넌트는 사용자의
+테마, 글꼴, 언어로 렌더링되므로 플러그인의 UI가 앱처럼 보이고 동작합니다.
+
+```tsx
+import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () => [summaryTab],
+  render: () => (
+    <div>
+      <ui.Tooltip value={ctx.t("copy")}>
+        <ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() => void ctx.system.copy(summary.latest ?? "")} />
+      </ui.Tooltip>
+      <Show when={summary.latest} fallback={<ui.Loader size="large" />}>
+        {(text) => <ui.Markdown text={text()} />}
+      </Show>
+    </div>
+  ),
+})
+```
+
+- `Icon`, `Button`, `IconButton`은 SDK의 모든 `icon` 필드처럼 어떤 `IconName`이든 받습니다. 앱 아이콘 중 하나이거나
+  `ctx.icons`에 있는 [자체 아이콘](#icons)입니다. `IconButton`의 `label`은 접근성 이름이며, 마우스를 올리면
+  표시하려면 `Tooltip`으로 감싸세요.
+- 버튼의 `busy`는 아이콘을 로딩 표시로 바꾸고 다시 `false`가 될 때까지 버튼을 비활성화합니다.
+- AI가 작업 중일 때를 제외한 모든 로딩 상태에는 `Loader`를 사용하세요. 예를 들어 창이나 검색 결과를 로드하거나 연결을 설정할 때 사용합니다.
+- `Menu`는 `items` 목록을 엽니다. 액션, `{ type: "separator" }`, `{ type: "group", label, items }`입니다.
+- `Switch`와 `TextInput`은 상태를 유지하지 않습니다. `onChange`나 `onInput`의 값을 다시 `checked`나 `value`로
+  전달하세요.
+- `Keybind`는 키를 칩으로 표시합니다. 예를 들어 `ctx.keybinds.keybind(command)`입니다.
+- `Markdown`은 타임라인의 메시지와 같은 방식으로 렌더링하고, `Code`는 강조 표시된 읽기 전용 코드 블록을 표시합니다.
+  두 컴포넌트 모두 마운트 직후 내용이 표시됩니다.
+
+`Dialog`는 제목, 내용, 버튼으로 구성된 앱의 대화 상자 프레임입니다. `ctx.dialogs.open`에서 렌더링하세요. 다른 곳에서는
+대화 상자로 동작하지 않습니다.
+
+```tsx
+const ui = ctx.ui
+
+ctx.dialogs.open((dialog) => (
+  <ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      <ui.Button variant="contrast" onClick={dialog.close}>
+        {ctx.t("done")}
+      </ui.Button>
+    }
+  >
+    <ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus />
+  </ui.Dialog>
+))
+```
+
+- `size`의 기본값은 `"fit"`이며 너비 480px에 내용 높이만큼 늘어납니다. `"normal"`, `"large"`, `"x-large"`는 고정
+  크기입니다.
+- Escape와 바깥 클릭은 대화 상자를 닫습니다. `closable: false`는 헤더의 닫기 버튼을 숨깁니다.
+
+#### 메뉴 행
+
+`MenuItem`, `MenuSub`, `MenuGroup`, `MenuSeparator`는 호스트가 렌더링하는 메뉴(예: `session.location.menu` 슬롯)의
+행입니다. 사용자는 키보드로 행을 탐색할 수 있습니다. 각 행에는 호스트의 톤을 낮춘 아이콘과 단축키 칩이 표시되며, 항목을 선택하면
+메뉴가 닫힙니다.
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem`은 `Menu`의 `items` 항목과 같은 필드를 받습니다.
+- `MenuSub`는 행 옆에 하위 메뉴를 열고 그 안에 자식 항목을 표시합니다. `onOpenChange`가 열고 닫는 시점을 알려 주므로 열려 있는 동안에만
+  행을 로드할 수 있습니다.
+- `MenuGroup`은 행을 제목 아래에 두고, `MenuSeparator`는 행 사이에 선을 긋습니다.
+- `MenuItem`, `MenuSub`, `MenuGroup`을 메뉴 밖에서 사용하면 예외가 발생합니다. 호스트는 오류를 기록하고 해당 항목을
+  렌더링하지 않습니다.
+
+#### 선택 상자
+
+`Select`는 앱의 설정에서 언어를 선택하는 것처럼 목록에서 항목 하나를 선택하는 컴포넌트입니다. 값은 문자열이며,
+`options`의 타입으로 가능한 값의 범위를 좁힙니다.
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label`은 선택 상자의 접근성 이름이고, 표시되는 것은 선택된 옵션의 `label`입니다.
+- 어떤 옵션에도 없는 `value`는 `placeholder`를 표시합니다. 이미 선택된 선택지를 다시 고르면 `onChange`를 호출하지
+  않습니다.
+
+#### 설정 컴포넌트
+
+`SettingsLayout`, `SettingsSection`, `SettingsRow`는 앱이 자체 설정 페이지를 렌더링하는 방식으로
+[설정 페이지](#settings-pages)를 렌더링합니다. 페이지에는 헤더가 있고 각 섹션에는 제목과 테두리가 있는 목록이 있습니다.
+각 행에는 제목과 설명이 있고 끝에 컨트롤이 배치됩니다.
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- 자체 페이지에는 `SettingsLayout`을, 호스트 페이지의 섹션에는 `SettingsSection`을, 호스트 섹션의 행에는
+  `SettingsRow`만 사용하세요. 어느 경우든 행은 호스트의 행과 정렬됩니다.
+- 행의 `id`는 검색에서 해당 행을 찾는 데 쓰는 `SettingEntry.id`입니다. 검색으로 페이지 자체의 id를 표시하면 헤더를 강조합니다.
+- `actions`는 제목 행의 끝에 놓입니다. 섹션의 `footer`는 목록 아래, 테두리 밖에 놓입니다.
+- Settings 화면의 스타일에서 모양을 가져오므로 `SettingsPage`에서 렌더링하세요.
+
+#### 참조
+
+```ts
+interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) => void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) => void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}
+```
+
+### 토스트
+
+`ctx.toast.show`는 창 모서리에 짧은 메시지를 표시하고, `dismiss()`로 닫는 핸들을 반환합니다.
+
+```ts
+ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
+```
+
+- `variant`는 `"default"`, `"success"`, `"error"`, `"loading"`입니다. `success` 토스트는 `icon`을 설정하지 않으면
+  체크 아이콘을 표시합니다.
+- `duration`은 토스트가 표시되는 시간(밀리초)입니다. 기본값은 5초입니다.
+- `persistent: true`는 사용자나 `dismiss()`가 닫을 때까지 토스트를 유지하고 `duration`을 무시합니다.
+- 이미 표시 중인 토스트와 같은 토스트가 들어오면 중복해서 쌓지 않고 기존 토스트를 교체합니다.
+- 플러그인이 중지되면 토스트가 닫힙니다. 따라서 버튼이 실행할 코드가 사라진 뒤에도 버튼이 남는 일은 없습니다. 토스트를
+  표시한 컴포넌트가 사라지거나 `createKeyed` 실행이 끝나도 토스트는 닫히지 않습니다.
+
+작업이 실행되는 동안 `loading` 토스트를 표시하고, 작업이 끝나면 닫으세요.
+
+```ts
+const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()
+```
+
+`actions`는 버튼을 추가합니다. 클릭하면 액션을 실행하고 토스트를 닫습니다.
+
+```ts
+ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () => void sync() }],
+})
+```
+
+#### 참조
+
+```ts
+interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}
+```
+
+### 알림
+
+`ctx.attention.notify`는 사용자가 다른 곳을 보고 있을 때 시스템 알림과 소리로 주의를 끕니다. 앱 자체 알림과 같은
+규칙을 따릅니다.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}
+```
+
+- 시스템 알림은 어떤 앱 창에도 포커스가 없을 때만 표시됩니다. 소리는 어느 경우든 재생됩니다.
+- 둘 다 **Settings > Notifications**를 따릅니다. `variant: "default"`는 **Agent** 행을, `variant: "error"`는
+  **Errors** 행을 따릅니다. 둘 다 데스크톱 알림은 기본적으로 꺼져 있고 소리는 켜져 있습니다.
+- `sound: false`는 소리를 재생하지 않습니다.
+- 알림을 클릭하면 앱을 앞으로 가져오고, `session`을 지정했다면 그 세션을 엽니다.
+- 각 앱 창은 플러그인의 사본을 따로 실행합니다. 실행 id 같은 이벤트의 `id`를 전달하면 가장 먼저 보낸 창만 알림을
+  표시하고 소리를 재생합니다. `id`가 없으면 모든 호출이 알림을 표시합니다.
+- 앱 인터페이스가 마운트되기 전에는 `notify`가 이를 기다립니다.
+
+`notify`의 Promise는 거부되지 않으며 처리 결과를 반환합니다. 앱이 시스템에 알림 표시를 요청했다면 `notification`이
+`true`이고, 소리 재생이 시작되었다면 `sound`가 `true`입니다.
+
+```ts
+const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })
+```
+
+- `notification`은 사용자가 알림을 껐거나, 앱 창에 포커스가 있거나, 다른 창이 이미 `id`를 보냈을 때 `false`입니다.
+  사용자가 브라우저 권한을 거부한 경우처럼 앱이 요청한 알림을 시스템이 숨길 수도 있습니다.
+
+#### 참조
+
+```ts
+interface Attention {
+  notify(options: NotifyOptions): Promise<NotifyResult>
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}
+```
+
+### 사용량 데이터
+
+세션의 토큰, 비용, 요금제 수치는 서버의 데이터에 있습니다. 앱이 헤더의 “28k · $0.28”을 읽는 것과 같은 반응형
+스토어입니다. opencode 데이터베이스가 아니라 그곳에서 읽으세요.
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()`은 현재 컨텍스트 창을 채우는 토큰을 담은 어시스턴트 스텝입니다. 앱의 컨텍스트 링도 이 값을 사용합니다.
+  이 스텝의 `tokens`를 `data.location.model.list`에서 가져온 모델의 `limit.context`와 비교하세요.
+- `limits()`는 `data.location.usage.sync(location)`이 로드한 뒤의 OpenCode Console 예산과 Go 요금제 허용량을
+  담습니다. 서버가 아무것도 보고하지 않으면 `null`입니다.
+
+### 탭
+
+`ctx.tabs`는 셸의 탭 스트립(탭으로 열린 세션과 초안)을 읽고 바꿉니다. 다음 코드는 실행이 끝난 세션의 탭을 맨 앞으로
+옮깁니다.
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) =>
+    onCleanup(
+      data.on("session.execution.succeeded", (event) => {
+        const tab = ctx.tabs.list().find((item) => item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)
+```
+
+- `list()`는 열린 탭을 스트립 순서로 반환합니다. 반응형입니다. 초안이면 탭의 `session`이 `undefined`이고, 화면에
+  있는 탭은 `active`가 `true`입니다.
+- `open({ server, id }, { focus? })`는 세션을 스트립 끝에 탭으로 엽니다. `focus`가 `true`가 아니면 백그라운드로
+  엽니다. 이미 열린 세션은 탭을 유지하고, 상위 탭이 표시하는 서브에이전트도 마찬가지입니다.
+- `focus(key)`는 탭을 표시하고, `move(key, index)`는 옮기며, `close(key)`는 사용자가 닫는 것처럼 닫습니다.
+- 열린 탭에 없는 키는 아무 일도 하지 않습니다. 앱 인터페이스가 마운트되기 전에 한 쓰기는 마운트를 기다립니다.
+
+#### 참조
+
+```ts
+interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}
+```
+
+### 키바인드
+
+`ctx.keybinds`는 게시된 명령어 id에 대한 사용자의 단축키를 읽습니다.
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+- `keybind(command)`는 명령어의 실제 키바인드를 표시용 부분으로 반환합니다. 예를 들어 `["Ctrl", "K"]`입니다.
+  명령어에 바인딩이 없으면 비어 있습니다.
+- `keys(bind)`는 앱이 소유하지 않는 조합(예: 페이지가 직접 처리하는 조합)의 표시용 부분을 반환합니다.
+- `matches(command, event)`는 이벤트가 명령어의 실제 키바인드와 일치할 때 `true`입니다.
+
+#### 참조
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### 명령어 실행
+
+`ctx.commands.run(id)`는 명령어 팔레트에서 고르는 것처럼 명령어를 실행합니다. 명령어를 실행할 수 없으면 `false`를
+반환합니다.
+
+```ts
+if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })
+```
+
+- `id`는 모든 플러그인의 게시된 플러그인 명령어 `<plugin id>.<command id>`이거나, `command.palette` 같은 앱 자체
+  명령어입니다.
+- 앱의 명령어 id는 안정적인 API가 아니며 릴리스마다 바뀔 수 있습니다.
+- 활성화된 명령어 중 id를 가진 것이 없으면 `run`은 `false`를 반환합니다. 나열되어 있어도 비활성화된 명령어는
+  실행되지 않습니다.
+- 앱 인터페이스가 마운트되기 전에는 등록된 명령어가 없으므로 `run`이 `false`를 반환합니다.
+- `run`은 명령어의 비동기 작업을 기다리지 않습니다.
+
+#### 참조
+
+```ts
+interface Commands {
+  run(id: string): boolean
+}
+```
+
+### 시스템과 환경
+
+`ctx.system`은 모든 플랫폼에서 동작합니다. `ctx.desktop`은 데스크톱 전용 기능을 추가하며 웹에서는 `undefined`입니다.
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save`는 데스크톱에서 저장 대화 상자를 표시하고 웹에서는 다운로드합니다. 사용자가 대화 상자를 취소하면
+  `false`를 반환합니다.
+- `system.openExternal`은 시스템 브라우저에서 URL을 엽니다. 앱 안의 링크에는 `ctx.links.open`을 사용하세요. `Link`를
+  [링크 핸들러](#link-handlers)로 라우팅합니다.
+- `desktop.launch(path, app?)`는 앱으로, 또는 기본 앱으로 경로를 엽니다. `desktop.reveal(path)`는 파일 관리자에서
+  경로를 표시합니다.
+- `ctx.embeds`는 메인 프로세스의 웹 뷰를 창에 렌더링합니다. [임베드된 웹 뷰](#embedded-web-views)를 참고하세요.
+- `ctx.locale`은 인터페이스 언어와 쓰기 방향을 읽습니다. `ctx.appearance.font("mono")`는 사용자 터미널 글꼴의 CSS
+  글꼴 패밀리입니다.
+- `ctx.router`는 현재 라우트 경로와 라우트 전환 진행 여부를 읽습니다.
+- `ctx.workspaces.on("remove", handler)`는 사용자가 서버에서 워크스페이스 디렉터리를 제거할 때 실행되므로 그
+  디렉터리에 한정된 스토어를 정리할 수 있습니다.
+
+`desktop.pick(options)`은 시스템의 열기 대화 상자에서 사용자가 파일이나 폴더를 선택하도록 하고, 선택한 항목의 절대 경로를 결과로 반환합니다.
+
+```ts
+const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })
+```
+
+- `directory: true`는 파일 대신 폴더를 고르고, `multiple: true`는 사용자가 여러 개를 고를 수 있게 합니다.
+- `extensions`는 제안할 파일을 제한합니다. 점 없이 `["json"]`처럼 씁니다. 폴더에는 적용되지 않습니다.
+- `title`은 대화 상자의 제목입니다. 모든 시스템이 이를 표시하지는 않습니다.
+- 사용자가 취소하면 빈 경로 목록을 반환합니다. 대화 상자를 열 수 없으면 `pick`의 Promise가 거부됩니다.
+- `pick`은 데스크톱 전용입니다. 브라우저는 페이지에 고른 파일의 위치를 알려 주지 않습니다.
+
+`ctx.appearance.mode()`는 인터페이스가 표시하는 색상 구성표로, `"light"` 또는 `"dark"`입니다. 반응형입니다.
+
+```ts
+const background = () => (ctx.appearance.mode() === "dark" ? "#000" : "#fff")
+```
+
+- **Settings > Appearance**에서의 사용자 선택을 따르며, **System**은 시스템의 현재 구성표로 해석됩니다.
+- 앱 인터페이스가 마운트되기 전에는 시스템 구성표입니다.
+
+#### 참조
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  pick(options?: PickOptions): Promise<string[]>
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
+## 저장 상태
+
+데스크톱 창은 IPC로 저장 상태를 로드하고, 웹은 `localStorage`를 즉시 읽습니다. `Plugin.define({ stores })`에 스토어를
+선언하면 호스트가 이를 대신 로드합니다.
+
+- **`Store.global`**은 앱 전체에 값 하나를 유지합니다. `setup`이 실행되기 전에 로드되므로 `ctx.stores.name.value`가
+  `undefined`인 경우는 없습니다.
+- **`Store.session`**은 세션별로 값 하나를 유지합니다. 세션이 마운트될 때 로드되며, 그전까지
+  `ctx.stores.name(session).value`는 `undefined`입니다.
+
+선언한 스토어는 창용입니다. `main`은 동기식으로 읽는 `ctx.storage.store`로 상태를 엽니다.
+[메인 컨텍스트](#main-context)를 참고하세요.
+
+`update(draft => …)`로 값을 제자리에서 변경하거나(아무것도 반환하지 않아야 합니다) `set(next)`로 대체하세요.
+
+```ts
+const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) => {
+  draft.enabled = !draft.enabled
+})
+```
+
+- `ready()`는 값이 로드되면 `true`입니다. 그전에 한 쓰기는 대기했다가 호출 순서대로 적용됩니다.
+- `from`은 스토어에 아직 값이 없을 때 값을 한 번 가져올 원래 키를 지정합니다. 예를 들어 스토어 이름을 변경했다면 이전 키
+  `"plugin.acme.settings"`를 지정할 수 있습니다. 키 목록을 전달하면 최신 키부터 순서대로 시도합니다. 원래 키의 사본은
+  스토어를 제거할 때까지 남습니다.
+
+```ts
+stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}
+```
+
+#### 참조
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted<T, V = T | undefined> {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
+
+### 런타임 스토어
+
+`ctx.storage.store(key, options)`는 런타임에만 알 수 있는 키의 스토어를 엽니다. `scope`는 서버, 디렉터리, 세션별로
+값 하나를 유지합니다.
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+- `scope: "global"`(기본값)은 앱 전체에 값 하나를 유지합니다.
+- `scope: { server, directory? }`는 서버별로, 또는 그 서버의 워크스페이스 디렉터리별로 값 하나를 유지합니다.
+- `scope: { session }`은 세션별로 값 하나를 유지하며, 세션이 새 디렉터리로 이동하면 다시 엽니다.
+- 런타임 스토어의 `value`는 로드될 때까지 `undefined`입니다.
+- `ctx.storage.memory(key, { initial })`는 해당 창에만 적용되는 상태를 유지합니다. 플러그인을 다시 로드해도 상태가
+  남지만, 창을 다시 로드하면 사라집니다.
+- `ctx.storage.remove(key, { scope, from })`는 값을 삭제하므로 키가 다시 `initial`로 읽힙니다.
+
+#### 참조
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
+
+## 반응형 기본 요소
+
+`createEffect`, `createRenderEffect`, `createComputed`를 직접 호출하기보다 이 헬퍼를 사용하세요. effect를 직접 작성할 때
+놓치기 쉬운 플러그인의 수명과 의존성 재시작을 헬퍼가 처리합니다.
+
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })`는 키마다 새 소유자에서 `fn`을 실행합니다. `ctx.use` 접근자의 활성
+세대마다, 또는 일반 접근자의 값마다입니다. `fn` 안에서 등록한 것은 모두 그 실행과 함께 끝납니다.
+
+```tsx
+import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
+```
+
+- `otherwise`는 소스에 키가 없는 동안 실행됩니다. 활성 상태가 아닌 `Live` 접근자이거나, 값이 `undefined`, `null`,
+  `false`인 일반 접근자가 그렇습니다.
+- `equals`는 일반 접근자의 새 값이 같은 키인지 판단해 `fn`이 다시 실행되지 않게 합니다. 소스가 매번 새 객체를 만들 때
+  사용하세요. `Live` 접근자는 항상 세대를 키로 사용합니다.
+
+#### 참조
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)`는 `source`가 바뀔 때마다 데이터를 가져오고 이전 요청을 취소합니다.
+데이터를 기다리느라 렌더링을 중단하지는 않습니다.
+
+```ts
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+const text = () => summary.latest ?? ""
+```
+
+- `latest`는 마지막 결과이며 새 요청이 진행 중이어도 유지됩니다. 첫 결과를 받기 전에는 `undefined`입니다.
+- `loading`은 현재 값에 대한 요청이 진행 중인 동안 `true`입니다.
+- `error`는 현재 요청의 거부 사유입니다(있는 경우).
+
+#### 참조
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
+
+### createVisitState
+
+`createVisitState(initial)`은 사용자가 세션을 떠났다가 돌아올 때마다 초기화되는 `[value, setValue]` 시그널을
+만듭니다.
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+#### 참조
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
+### usePanel과 useDrawer
+
+`usePanel()`은 현재 UI를 감싸는 패널 프레임을 읽습니다. 패널의 렌더링 범위 밖에서 호출하면 예외가 발생합니다.
+`useDrawer()`는 플러그인이 등록한 UI를 감싸는 모바일 서랍을 반환합니다. 서랍 밖에서는 `undefined`를 반환합니다.
+
+```ts
+const panel = usePanel()
+const drawer = useDrawer()
+const compact = () => panel.placement() === "mobile"
+const close = () => drawer?.close()
+```
+
+- `placement()`는 측면 영역에서 `"side"`, 좁은 화면 보기에서 `"mobile"`입니다.
+- `visible()`은 영역이 열려 있고 이 탭이 선택되어 있는 동안 `true`입니다. `present()`는 영역이 닫히는 애니메이션
+  중에도 `true`로 남습니다.
+- `reserve()`는 헤더 끝에 호스트의 영역 토글을 위한 공간을 남기라고 알려 줍니다.
+- `sidebar`는 모든 측면 패널이 공유하는 내부 사이드바 설정입니다. 사이드바가 있는 패널은 자체 토글을
+  렌더링합니다.
+- `drawer.open(view)`는 뒤로 가기 컨트롤과 함께 서랍의 보기 자리에 내용을 표시합니다.
+
+#### 참조
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}
+```
+
+## 앱 계약
+
+앱은 모든 플러그인에 다음 계약을 제공합니다. `ctx.use(token)`으로 계약을 구독하고, 다른 플러그인의 계약과 마찬가지로 `active`가
+아닐 때를 처리하세요. 예를 들어 `Browser`는 웹에서 `inactive`입니다.
+
+### 파일
+
+`@opencode/plugin/gui/file`은 앱의 파일 트리와 **Open in** 버튼, `FileViewer` 레지스트리를 내보냅니다.
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+- **`FileTree`**는 계약입니다. `Tree`와 `List`는 변경 표시가 있는 워크스페이스 파일의 가상화된 트리나 목록을
+  렌더링합니다. `ctx.use(FileTree)`로 읽습니다. 트리의 `labels`는 폴더 이름 뒤에 텍스트를 추가합니다. 항목 개수 같은
+  값입니다.
+- **`OpenInApp`**은 계약입니다. `Button`은 세션 워크스페이스용 데스크톱 **Open in** 버튼입니다.
+- **`FileViewer`**는 레지스트리입니다. 뷰어는 렌더링할 `kinds`를 지정하고 `problem`으로 입력 바이트를 거부할 수 있습니다.
+  `View`를 렌더링하며, 세부 정보와 오류는 `onDetails`와 `onError`로 보고합니다.
+
+#### 참조
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<FileViewerProps>
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}
+```
+
+### 변경 사항 리뷰
+
+`@opencode/plugin/gui/review`는 앱의 세션 변경 사항 보기인 `Changes`와 `ChangeKind`(`"add"`, `"del"`, `"mix"`)를
+내보냅니다.
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () => {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" && session ? live.value.diffs(session).length : 0
+}
+```
+
+- `diffs(session)`은 현재 리뷰 모드의 diff이고, `ready(session)`은 로드가 끝나면 `true`입니다. 둘 다 반응형입니다.
+  라우팅된 세션에만 변경 사항이 있고, 다른 세션은 비어 있는 것으로 읽힙니다.
+- `kinds(session)`은 변경된 각 파일과 디렉터리를 `ChangeKind`에 매핑합니다.
+- `active(session)`은 리뷰 패널이 표시하는 파일입니다.
+- `details(session)`은 리뷰 모드와 관계없이 세션 디렉터리의 커밋되지 않은 변경 사항입니다.
+- `focus(session, path)`는 리뷰 패널에 파일을 표시하고, `open(session)`은 모든 변경 사항을 표시합니다.
+- `watch(screen, source)`는 뷰에 변경 사항이 표시되는 동안 해당 데이터를 로드된 상태로 유지합니다. 뷰가 다른 세션으로
+  전환되어도 감시는 계속됩니다. 패널이나 슬롯이 받은 입력에서 해당 뷰를 소유한 화면을 전달하세요. 감시를 중지하는 함수를 반환합니다.
+  [createKeyed](#createkeyed)를 참고하세요.
+- `tree` 감시는 지속적인 변경 목록이며 측면 영역을 열면 갱신됩니다. `details` 감시는 `details(session)`을
+  로드합니다.
+
+#### 참조
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
+
+### 브라우저
+
+`@opencode/plugin/gui/browser`는 세션의 데스크톱 브라우저 창인 `Browser`를 내보냅니다.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+- `attached(session)`은 세션에 브라우저 창이 있을 때 `true`입니다.
+- `canOpen(session, path?)`는 워크스페이스 파일이나 http(s) URL을 창에서 열 수 있을 때 `true`입니다.
+- `open(session, url)`은 세션의 측면 패널에 URL을 브라우저 탭으로 엽니다.
+- `openFile(session, path)`는 워크스페이스 파일을 `file://` 탭으로 엽니다.
+
+#### 참조
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
+
+## 메인 프로세스
+
+OpenCode Desktop에서 플러그인의 `main` setup은 Electron 메인 프로세스에서 앱 전체 싱글턴으로 한 번 실행됩니다. Node.js
+내장 모듈, `electron`, 메인 호스트 API에 완전히 접근할 수 있습니다. 플러그인의
+[`./gui-experimental` 파일](#define-the-gui-plugin)에서 창 `setup` 옆에 또는 단독으로 `Plugin.define`에 전달하세요.
+
+```tsx title="src/gui.tsx"
+import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () => {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) => {
+      if (enabled && blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () => blockerId !== undefined && powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) => setActive(enabled),
+    })
+
+    return release
+  },
+})
+```
+
+창에서 `electron`은 아무 동작도 하지 않는 플레이스홀더이므로 공유 `./gui-experimental` 파일에서 가져와도 안전합니다.
+[하나의 파일, 두 프로세스](#one-file-two-processes)를 참고하세요.
+
+## 메인 컨텍스트
+
+`main`은 `MainContext`를 받습니다. 창 `setup`과 달리 `main`은 `async`일 수 있으며, 정리 함수를 직접 반환하거나
+Promise의 결과로 반환할 수 있습니다.
+
+```ts
+main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}
+```
+
+- `ctx.options`, `ctx.client`, `ctx.app`은 [공유 컨텍스트](#shared-context)입니다. `main`에서 `ctx.app.platform`은
+  항상 `"desktop"`입니다.
+- `ctx.storage.store(key, { schema, initial })`는 플러그인의 네임스페이스에 스토어를 동기식으로 엽니다. `value`는
+  항상 정의되어 있으며, `set`이나 `update`가 반환되기 전에 변경 사항을 데이터베이스에 기록합니다. `ctx.storage.remove(key)`는 값을
+  삭제합니다.
+- `ctx.signal`은 플러그인이 비활성화되거나, 다시 로드되거나, 제거되거나, 앱이 종료될 때 중단됩니다. 그때
+  `ctx.onCleanup(fn)`이 `fn`을 실행합니다. [수명과 정리](#lifetimes-and-cleanup)를 참고하세요.
+- `ctx.provide`는 플러그인의 id 아래에 `Ipc`를 구현합니다. [Ipc 정의와 제공](#define-and-provide-an-ipc)을
+  참고하세요.
+- `ctx.add`는 [`MenubarItem`](#native-app-menu) 같은 메인 프로세스 레지스트리에 항목을 추가합니다.
+- `ctx.windows`는 앱의 창을 나열하고 창이 열리거나 닫힐 때 알립니다.
+- `ctx.embeds`는 창의 레이아웃에 `WebContentsView`를 배치합니다. [임베드된 웹 뷰](#embedded-web-views)를
+  참고하세요.
+- `ctx.serverEndpoints.get(id)`는 서버의 URL과 자격 증명을 반환합니다. 데스크톱 앱 자체 서버는 `"sidecar"`입니다.
+- `ctx.cli`는 데스크톱 앱이 실행하는 OpenCode CLI를 설명합니다.
+- `ctx.log.write`는 데스크톱 로그 파일에 기록합니다.
+
+#### 참조
+
+`@opencode/plugin/gui/main`은 아래의 `MainStorage`와 `MainEmbeds`를 `Storage`와 `Embeds`로 내보냅니다.
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted<T, T>
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  sameMachine: boolean
+  password?: string
+}
+```
+
+## Ipc 정의와 제공
+
+`Ipc` 스펙은 창별 `state`, 호출 가능한 `methods`, 푸시되는 `events`를 선언할 수 있습니다. Effect `Schema`가 브리지를
+건너는 모든 값을 검증하고 인코딩합니다.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})
+```
+
+- id는 플러그인의 id이거나 그 id로 시작합니다. `acme.counter`처럼 씁니다. 다른 id에는 `main`의 `ctx.provide`와 창의
+  `ctx.main`이 예외를 던집니다.
+- 인자가 없는 메서드는 `input`을, 아무것도 반환하지 않는 메서드는 `output`을 생략하세요.
+
+#### 참조
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
+### main에서 제공자 구현
+
+각 메서드는 디코딩된 입력과 `Caller`(`{ window, signal }`)를 받습니다. `state`가 바뀌면
+`provider.changed(window?)`를 호출해 새 스냅샷을 구독한 창에 푸시하고, 이벤트를 보내려면
+`provider.emit(name, payload, window?)`를 호출하세요.
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const counts = new Map<number, number>()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) => ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) => {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next > 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) => {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}
+```
+
+- `state`가 있는 스펙은 구현에도 `state(window)`가 필요합니다. 메인은 창이 구독할 때와 `changed`마다 이를 읽습니다.
+- 예외를 던지는 메서드는 창의 호출을 거부합니다.
+- `window`를 생략하면 `changed`와 `emit`이 모든 창에 도달합니다.
+- `dispose()`는 `Ipc` 제공을 미리 중단합니다. 플러그인이 다시 제공하거나 중지될 때까지 창에서 상태는 `pending`이고
+  `ctx.main` 호출은 대기합니다. 플러그인이 중지되면 호스트도 제공을 중단합니다.
+
+#### 참조
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}
+```
+
+### 창에서 Ipc 사용
+
+창에서 `ctx.main(Counter)`는 여러분의 `main`이 제공하는 `Ipc`의 클라이언트를 반환합니다. `input` 스키마가 없는
+메서드는 선택적 호출 옵션 `{ signal }`만 받습니다. 첫 인자로 `undefined`를 전달하지 마세요.
+
+```tsx title="src/gui/window.tsx"
+import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  const counter = ctx.main(Counter)
+
+  // Follows main across restarts; removed when the plugin stops.
+  counter.on("overflow", (data) => console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () => ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () => {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}
+```
+
+- 호출은 `main`이 시작되는 동안 대기합니다. `main`이 답할 수 없으면 거부됩니다. 웹에서, 플러그인의 `main`이 꺼져
+  있거나 실패한 동안, 또는 메서드가 예외를 던질 때입니다. 사용자에게 피드백이 필요한 곳에서 거부를 처리하세요.
+- `state()`와 `on()`은 `main`이 재시작해도 계속 추적합니다. 현재 소유자의 수명이 끝나면 리스너가 해제됩니다. 소유자가
+  없으면 플러그인이 종료될 때 해제됩니다.
+- 같은 토큰으로 호출하면 `ctx.main`이 항상 같은 클라이언트를 반환합니다.
+
+이 창의 `state`는 `client.state()`로 읽습니다. 첫 스냅샷이 도착할 때까지 `undefined`이고, `main`이 `changed`를
+호출할 때마다 갱신됩니다.
+
+```tsx
+const count = () => ctx.main(Counter).state()?.count ?? 0
+```
+
+#### 참조
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
+}
+```
+
+`src/gui.tsx`에서 두 setup과 함께 플러그인을 정의하세요. `Plugin.define({ ...definition, setup, main })`입니다.
+
+### 다른 플러그인
+
+다른 플러그인은 계약과 마찬가지로 `ctx.use(Counter)`로 `Ipc`를 구독합니다. `active`인 동안 접근자의 값은 같은
+`IpcClient`입니다.
+
+```ts
+const counter = ctx.use(Counter)
+
+const count = () => {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+- 웹에서는 메인 프로세스가 실행되지 않으므로 모든 `Ipc`가 `inactive`입니다.
+
+## 네이티브 앱 메뉴
+
+`main`은 `@opencode/plugin/gui/main`의 `MenubarItem`으로 네이티브 메뉴(macOS 앱 메뉴, File, Edit, View, Go, Window,
+Help)와 Windows 및 Linux의 앱 내 메뉴에 항목을 추가합니다.
+
+```ts
+import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem => ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () => true,
+    run: (focusedWindow) => {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)
+```
+
+- `after`는 항목이 뒤따를 항목을 지정합니다. 이 플러그인의 항목이면 id로, 내장 항목이면 명령어로, 그것도 없으면
+  액션으로, 그것도 없으면 역할로 지정합니다. `logs.export`, `edit.copy`, `about`이 그렇습니다. 아무것도 일치하지
+  않으면 항목은 메뉴 끝에 놓입니다.
+- `app` 항목은 macOS에서만 나타납니다.
+- `run`은 포커스된 창을 받습니다(있는 경우).
+- 메인 프로세스는 메뉴를 구성할 때마다 함수를 평가하므로 레이블이 현재 언어로 표시됩니다.
+
+#### 참조
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
+
+## 임베드된 웹 뷰
+
+격리된 `WebContentsView`를 패널에 임베드하려면 `main`에서 뷰를 만들고 창에서 그 상자를 렌더링하세요.
+
+```ts title="src/gui/main.ts"
+import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const attach = (window: BrowserWindow) => {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // Send embed.id to the window over your Ipc.
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}
+```
+
+```tsx title="src/gui/pane.tsx"
+<ctx.embeds.View id={embedId} visible radius={8} />
+```
+
+- `"open"` 이벤트는 이후 새로 열리는 창에서만 발생하므로 먼저 `ctx.windows.list()`에서 가져온 기존 창에 웹 뷰를 연결하세요.
+- 창은 임베드의 `id`를 `ctx.embeds.View`와 `ctx.embeds.capture`에 전달합니다.
+- `show(visible)`는 페이지 쪽에서 표시 여부를 제어합니다. 창이 뷰를 배치하고 `show(true)`로 표시를 허용한 상태일 때만
+  뷰가 보입니다.
+- `on("visible", handler)`는 뷰가 화면에 나타나거나 사라질 때 실행됩니다. 창이 뷰 자리에 정지 이미지를 그릴 때도
+  그렇습니다.
+- `capture()`는 페이지의 정지 이미지를 반환하고, 숨겨져 있는 동안에는 `undefined`를 반환합니다.
+- `dispose()`는 창에서 뷰를 제거하지만 그 페이지를 닫지는 않습니다. 뷰를 다 썼으면 `view.webContents.close()`를
+  호출하세요. 호스트도 플러그인이 사라질 때 임베드를 정리합니다.
+- 창에서 `View`는 할당된 영역을 임베드로 채웁니다. 호스트는 뷰의 위치와 크기, 확대·축소, 둥근 모서리, 대화 상자에 의한 가림을
+  창과 동기화합니다. 창이 숨겨져 있거나 대화 상자가 열려 있는 동안에는 뷰를 숨깁니다.
+- `frozen`은 라이브 뷰 자리에 정지 이미지를 그려 DOM 콘텐츠가 그 위에 뜰 수 있게 합니다. `radius`는 아래쪽 모서리를
+  둥글게 하고, `background`는 모서리에 보이는 색입니다.
+- `page`는 임베드가 표시하는 콘텐츠를 식별하는 값으로, URL을 예로 들 수 있습니다. 패널이 움직이는 동안 호스트는 임베드 자리에 정지 이미지를
+  그리고, `page`가 다른 값이었을 때 찍은 정지 이미지는 버립니다.
+- 창의 `capture(id)`는 JPEG 정지 이미지를 반환합니다. 임베드가 숨겨져 있거나 웹에서 실행 중이면 `undefined`를 반환합니다.
+
+#### 참조
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```
+
+## Live 의존성과 실패 처리
+
+`ctx.use(token)`은 토큰을 제공하는 플러그인의 상태를 나타내는 반응형 `Live<T>`의 접근자를 반환합니다. 제공자가 꺼져 있어도
+플러그인은 계속 실행되므로 `active`가 아닌 상태를 처리하세요. 눌러도 반응하지 않는 컨트롤이나 끝없이 도는 스피너가 남지
+않도록 하세요.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () => {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" && !!session,
+    run: () => {
+      if (live.status === "active" && session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})
+```
+
+- **`pending`:** 제공자가 아직 시작되지 않았습니다. 플러그인이 로드되거나 재시작되는 동안이 그렇습니다. 로딩 상태를
+  표시하거나 선택적 컨트롤을 숨기세요.
+- **`active`:** 제공자가 실행 중이고 `value`는 제공자의 계약이나 `Ipc` 클라이언트입니다. `generation`은 활성화 횟수를
+  나타내므로 제공자가 재시작하면 새 값이 할당됩니다.
+- **`inactive`, `disabled`:** 제공자가 꺼져 있거나, 없거나, 이 플랫폼에서 사용할 수 없습니다. 웹의 모든 `Ipc`가
+  그렇습니다. 사용할 수 없음 상태를 표시하거나 컨트롤을 생략하세요.
+- **`inactive`, `failed`:** 제공자의 setup이 예외를 던졌습니다. 사용할 수 없음 상태를 표시하세요.
+- 같은 플러그인의 `main`에는 `Live` 상태가 없습니다. [`ctx.main`](#use-the-ipc-in-a-window)을 통한 호출은 메인 설정 함수가
+  시작되는 동안 대기하고, 응답을 받을 수 없으면 거부됩니다.
+
+#### 참조
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }
+```
+
+## 수명과 정리
+
+`ctx`로 등록한 모든 것(`ctx.add`, `ctx.provide`, `ctx.dialogs.open`, `ctx.embeds.create`, `Ipc` 이벤트 리스너)은
+소유 스코프가 끝날 때 철회됩니다.
+
+- 컴포넌트나 `createKeyed` 콜백에서 등록한 항목은 해당 컴포넌트나 `createKeyed` 실행이 정리될 때 등록 해제됩니다.
+- `setup`의 최상위에서 등록한 항목은 플러그인이 비활성화되거나, 다시 로드되거나, 제거되거나, 창이 닫힐 때 등록 해제됩니다.
+- `main`에서 등록한 항목은 플러그인이 비활성화되거나, 다시 로드되거나, 제거되거나, 앱이 종료될 때 등록 해제됩니다.
+  임베드는 해당 창이 닫힐 때도 정리됩니다.
+
+타이머나 소켓 같은 다른 리소스는 setup에서 정리 함수를 반환하세요. 같은 시점에 실행됩니다.
+
+- **창 `setup`**은 Solid 소유자 아래에서 실행되므로 `async`일 수 없습니다. 정리 함수를 반환하거나 `onCleanup` 또는
+  `ctx.signal`을 사용하세요.
+- **`main`**은 `async`일 수 있습니다. 정리 함수를 직접 반환하거나 Promise의 결과로 반환하세요. 또는 `ctx.onCleanup(fn)`으로 등록하세요.
+
+### 창 setup
+
+창 `setup`은 동기식이어야 합니다. 비동기 작업은 `createKeyed`나 `createLatest` 안에서 시작하세요.
+
+```tsx title="src/gui.tsx"
+import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // Runs once per active generation of Changes; the command is withdrawn with it.
+    createKeyed(ctx.use(Changes), (changes) => {
+      ctx.add(Command, () => ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () => {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() => console.log("still here"), 60_000)
+
+    return () => clearInterval(timer)
+  },
+})
+```
+
+### 메인 setup
+
+`main`은 `async`일 수 있습니다. 여기서 연 리소스의 정리 함수를 직접 반환하거나 Promise의 결과로 반환하세요. 또는
+`ctx.onCleanup(fn)`으로 등록하세요.
+
+```ts
+async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() => socket.close())
+}
+```
+
+- `ctx.onCleanup`은 플러그인이 비활성화되거나, 다시 로드되거나, 제거되거나, 앱이 종료될 때 등록의 역순으로 함수를
+  실행합니다. 플러그인이 이미 사라졌다면 함수를 즉시 실행합니다.
+- `await` 뒤에는 항목을 등록하거나 변경하기 전에 `ctx.signal`을 확인하세요. 중단되었다면 즉시 반환하세요.
+- 앱은 `async` 정리 함수의 Promise가 완료되거나 거부될 때까지 최대 3초간 종료를 늦춥니다.

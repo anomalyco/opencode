@@ -304,6 +304,20 @@ const layer = Layer.effect(
   }),
 )
 
+/** Pseudo-terminals need a local host process, which runtimes like workerd don't have. */
+export const unsupportedLayer = Layer.succeed(
+  Service,
+  Service.of({
+    list: () => Effect.succeed([]),
+    get: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
+    create: () => Effect.die(new Error("Pty.create is not supported in this runtime")),
+    update: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
+    remove: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
+    write: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
+    attach: (ptyID) => Effect.fail(new NotFoundError({ ptyID })),
+  }),
+)
+
 export const node = makeLocationNode({
   service: Service,
   layer,

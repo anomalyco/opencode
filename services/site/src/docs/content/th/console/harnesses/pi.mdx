@@ -1,0 +1,71 @@
+---
+title: "Pi"
+description: "ใช้โมเดลของ Console และ Go จากเอเจนต์เขียนโค้ด Pi"
+---
+
+[Pi](https://pi.dev) มีผู้ให้บริการ OpenCode สำหรับแบบจ่ายตามการใช้งานและ Go ในตัว จะเลือก API ที่ถูกต้องสำหรับโมเดล
+แบบเสียค่าใช้จ่ายหรือ Go แต่ละตัว โมเดลแชตระดับฟรีต้องใช้ OpenCode และจะคืน HTTP `403` จาก Pi
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) ตั้งค่า Pi ได้ด้วยคำสั่งเดียว รวมถึงนโยบายของเวิร์กสเปซ เซิร์ฟเวอร์
+  MCP สกิล และคำแนะนำ รัน `npx @opencode/console setup pi` ขั้นตอนด้านล่างเป็น
+  การตั้งค่าด้วยตัวเอง
+</Callout>
+
+| ผู้ให้บริการ  | แพ็กเกจ        |
+| ------------- | ------------- |
+| `opencode`    | จ่ายตามการใช้งาน |
+| `opencode-go` | Go            |
+
+## การกำหนดค่า
+
+ผู้ให้บริการทั้งสองอ่านคีย์จาก `OPENCODE_API_KEY` สร้าง[คีย์ API ส่วนตัว](/console/harnesses#get-an-api-key)
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+คุณยังรัน `/login` ใน Pi แล้วเลือกผู้ให้บริการได้ Pi เก็บคีย์ไว้ที่ `~/.pi/agent/auth.json`
+
+```text
+/login opencode
+```
+
+## Go
+
+ใช้ผู้ให้บริการ `opencode-go` กับคีย์จากเวิร์กสเปซที่มีการสมัครสมาชิก [Go](/console/go)
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## โมเดล
+
+เลือกโมเดลในรูปแบบ `<provider>/<model-id>` โดยใช้ ID จากตาราง [Console](/console/models#endpoints) หรือ
+[Go](/console/go#endpoints) ดูรายการโมเดลที่ Pi รู้จักด้วย `--list-models`
+
+```bash
+pi --list-models opencode-go
+```
+
+ตั้งค่าเริ่มต้นใน `~/.pi/agent/settings.json` หรือกด `Ctrl+S` ในตัวเลือก `/model`
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+รัน `pi update --models` เมื่อโมเดลใหม่ของ Console ยังไม่ปรากฏ
+
+## Console MCP
+
+Pi v0.99.0 ขึ้นไปรองรับ MCP เพิ่มเซิร์ฟเวอร์ [Console MCP](/console/harnesses#console-mcp) แล้วลงชื่อเข้าใช้จาก
+เบราว์เซอร์
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```

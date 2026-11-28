@@ -31,9 +31,8 @@ describe("legacy redirects", () => {
 
   test("moved pages match exact paths only, keep the query and leave the inference API alone", () => {
     const zen = get("/zen/", { search: "?ref=app" })
-    expect(zen?.status).toBe(302)
+    expect(zen?.status).toBe(301)
     expect(zen?.headers.get("Location")).toBe("/console/models?ref=app")
-    expect(zen?.headers.get("Cache-Control")).toBe("no-store")
     expect(get("/zen/go")?.headers.get("Location")).toBe("/console/go")
     expect(get("/teams")?.headers.get("Location")).toBe("/console/teams")
     for (const path of ["/zen/v1/models", "/zen/go/v1/chat/completions", "/go/v1", "/models.json", "/gopher"])
@@ -41,8 +40,13 @@ describe("legacy redirects", () => {
     expect(get("/go", { method: "POST" })).toBeUndefined()
   })
 
-  test("localized go, zen and enterprise follow to the Console; other localized moves don't", () => {
-    expect(get("/enterprise", { locale: "de" })?.headers.get("Location")).toBe("/console/enterprise")
+  test("localized go, zen and enterprise follow to the Console in their language; other localized moves don't", () => {
+    expect(get("/go", { locale: "de" })?.headers.get("Location")).toBe("/de/console/go")
+    expect(get("/zen", { locale: "de" })?.headers.get("Location")).toBe("/de/console/models")
+    expect(get("/zen", { locale: "de", search: "?ref=app" })?.headers.get("Location")).toBe(
+      "/de/console/models?ref=app",
+    )
+    expect(get("/enterprise", { locale: "de" })?.headers.get("Location")).toBe("/de/console/enterprise")
     expect(get("/pricing", { locale: "de" })).toBeUndefined()
   })
 

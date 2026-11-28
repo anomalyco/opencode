@@ -1,0 +1,652 @@
+---
+title: "V1'den geçiş"
+description: "OpenCode 1'den eklentilerde, sunucu API'sinde ve terminal istemcisi yapılandırmasında uyumsuz değişiklikler içeren OpenCode 2'ye yükseltin."
+---
+
+OpenCode 1 ve OpenCode 2 aynı `opencode` komutunu kullanır ve artık varsayılan olarak yan yana kurulmaz. V2'yi kurmadan önce
+paket yöneticisiyle kurulmuş bir V1 kurulumunu kaldırın; V2 curl kurucusu V1 ikili dosyasının yerini alır.
+
+## Uyumsuz değişiklikler
+
+V2'de kasıtlı üç uyumsuz değişiklik var:
+
+- [Eklentiler](/build/plugins/migrate-v1) yeni bir eklenti API'si kullanır.
+- [Sunucu API'si ve istemciler](#server-api-and-clients) yeni sözleşmelere sahiptir.
+- [Terminal istemcisi yapılandırması](/cli/config) katmanlı `tui.json(c)` dosyalarından tek bir genel `cli.json` dosyasına
+  geçer (otomatik taşınır).
+
+Bu alanların dışındaki desteklenen V1 işlevselliğinin V1 ile uyumlu kalması amaçlanmıştır. V1 şemasının kabul ettiği bazı
+alanların hiçbir zaman V2 karşılığı olmadı ve kasıtlı olarak yok sayılır; bunlar
+[Kabul edilen ancak desteklenmeyen alanlar](#accepted-but-unsupported-fields) bölümünde listelenmiştir.
+
+Mevcut desteklenen sunucu yapılandırma alanları, agent tanımları, komut tanımları, skill'ler ve `.opencode/` içindeki diğer
+dosyalar değişiklik yapılmadan çalışmaya devam etmelidir. Bu rehberde açıklanan desteklenen bir davranış V2'de çalışmayı
+bırakırsa bunu beklenen bir geçiş gereksinimi değil uyumluluk hatası olarak değerlendirin.
+
+<Callout type="tip">
+  Desteklenen V1 işlevselliği V2'de çalışmıyorsa [Sorun giderme](/troubleshooting) bölümündeki sorun bildirme
+  yönergelerini izleyin ve bir uyumluluk sorunu açın.
+</Callout>
+
+## V2'yi kurma
+
+V2 terminal istemcisini [kurulum talimatları](/#cli) ile kurun.
+
+V2'ye başlamadan önce her şeyi yeniden yazmanız gerekmez. Pratik bir geçiş şöyledir:
+
+1. Mevcut yapılandırmanızı ve dosya tabanlı tanımlarınızı koruyun.
+2. V2'yi başlatın ve modelleri, kimlik bilgilerini, agent'ları, izinleri ve MCP sunucularını doğrulayın.
+3. Eklentileri taşıyın; çünkü V1 eklenti uygulamaları V2'de çalışmaz.
+4. Sunucu API'sini çağıran entegrasyonları taşıyın.
+5. Hazır olduğunuzda yapılandırmayı native V2 biçimine dönüştürün. Bu adım isteğe bağlıdır.
+
+Geçişi doğrularken V1 kurulumunuzun bir kopyasını saklayın. V1 ve V2 aynı yapılandırma konumlarını kullanır; bu nedenle
+dosyaları yalnızca V2'ye özgü biçimlere dönüştürdükten sonra V1'i bu dosyalara yönlendirmeyin.
+
+## Yapılandırma
+
+Bu bölüm hem JSON/JSONC yapılandırmasını hem de `.opencode/` altındaki dosya tabanlı tanımları kapsar.
+
+### Mevcut yapılandırmanızı kullanma
+
+V2 mevcut sistem, genel ve proje yapılandırmasını V1 ile aynı konumlardan okur:
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 desteklenen V1 ve native V2 alanlarını, kaynak dosyayı yeniden yazmadan bellekte normalleştirir. Mevcut desteklenen V1
+yapılandırması çalışmaya devam etmelidir; bu nedenle V2'yi denemek veya benimsemek için onu dönüştürmeniz gerekmez.
+
+V1'de olduğu gibi sistem yapılandırması ve macOS yönetilen tercihleri en yüksek önceliğe sahiptir; bu nedenle ayarları
+genel ve proje dosyalarını geçersiz kılar. Taşınmış `enabled_providers` ve `disabled_providers` dahil
+[politikaları](/policies#precedence) da genel ve proje politikalarının önüne geçer. Bir ayarı geçersiz kılmak
+kullanıcıların sağlayıcı, MCP sunucusu, agent veya eklenti eklemesini engelleyemez; bu nedenle yöneticinin uyguladığı
+kısıtlamaları `permissions` gibi olağan ayarlar yerine `policies` olarak ifade edin.
+
+### OpenCode'dan geçiş yapmasını isteme
+
+V1 yapılandırma biçimi desteklenmeye devam eder. Native V2 biçimi isteğe bağlıdır ve birkaç ayarı daha açık ve kullanışlı
+hale getirir.
+
+Önerilen geçiş yolu, OpenCode'dan yapılandırmayı sizin için güncellemesini istemektir:
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode dosyanın tamamını inceleyebilir, aşağıdaki ilgili değişiklikleri uygulayabilir ve değişmesi gerekmeyen ayarları
+yeniden yazmaktan kaçınabilir. Dönüşümün tek seferde yapılması gerekmez: desteklenen V1 ve native V2 alanları üst düzeyde
+bir arada bulunabilir. İki biçim de aynı kurallı değeri ayarladığında, JSON anahtar sırasından bağımsız olarak geçerli bir
+native V2 değeri öncelik kazanır.
+
+İç içe karıştırma kasıtlı olarak sınırlıdır. OpenCode `mcp`, `compaction` ve `experimental` içinde karışık V1 ve V2
+üyelerini tanır, ancak tek tek agent'lar, sağlayıcılar, komutlar veya modeller içinde biçimleri özyinelemeli olarak
+çıkarsamaz. Bu iç içe girdilerin her birini tamamen tek bir biçimde tutun. Desteklenen V1 sözdizimi tek başına sessiz kalır;
+bozuk değerler, desteklenmeyen eski alanlar ve çelişen V1/V2 değerleri uyarı üretirken ilgisiz geçerli ayarlar yüklenmeye
+devam eder.
+
+### İzinler ve araçlar
+
+V1 izin etkilerini araca göre gruplar. V2 tek bir sıralı `permissions` dizisi kullanır ve öncelik ile istisnaları açık hale
+getirir:
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+İzin eylemleri de değişti: `bash` artık `shell`, `task` artık `subagent`, `write` ve `patch` artık `edit` oldu. Sıralı V2
+kural biçimi için [İzinler](/permissions) sayfasına bakın.
+
+V2'de yapılacaklar listesi varsayılan olarak kapalıdır. Açmak için deneysel bayrağı kullanın. Gelecek bir sürümde değişebilir
+veya kaldırılabilir; bkz. [Deneysel](/config#experimental).
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
+<Callout type="warning">
+  V1 proje dışındaki yollara erişmeden önce onay ister. V2 istemez: `external_directory` varsayılan olarak izinlidir. V1
+  davranışını korumak için `permissions` içine `{ "action": "external_directory", "resource": "*", "effect": "ask" }`
+  ekleyin.
+</Callout>
+
+### Agent'lar ve modlar
+
+Tekil `agent` ve kullanımdan kaldırılmış `mode` eşlemeleri `agents` olur. Agent alanları V2 yapılandırmasının geri kalanıyla
+daha tutarlı hale gelir:
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` `system` olur, `disable` `disabled` olur ve ayrı bir `variant`, `#` sonrasında model referansına katılır. `maxSteps`
+`steps` olur. Eski `mode` eşlemesindeki girdiler birincil agent olur.
+
+Agent [`request.body`](/agents#request) korunur ancak modele gönderilmez; bu nedenle V1 `temperature`, `top_p` ve `options`
+orada etkisizdir. Bunları bunun yerine bir model varyantında ayarlayın. DeepSeek `temperature` değerini yalnızca düşünme
+kapalıyken uygular; bu nedenle bu varyant düşünmeyi de kapatır:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+Sağlayıcı JSON alanları için `body`, sağlayıcı paketi seçenekleri için `settings` kullanın. Bkz.
+[model seçenekleri](/models#options).
+
+### Anlık görüntüler
+
+Tekil `snapshot` alanını `snapshots` olarak yeniden adlandırın. Boolean değeri değişmez:
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### Medya
+
+Tekil `attachment` nesnesini `media` olarak yeniden adlandırın. İç içe görsel ayarları aynı adları korur:
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### MCP sunucuları
+
+V2 sunucuları `mcp.servers` altında gruplar, `enabled` yerine tersi `disabled` kullanır ve zaman aşımı amaçlarını ayırır:
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+Uzak OAuth alanları snake case kullanır: `clientId` `client_id`, `clientSecret` `client_secret`, `callbackPort`
+`callback_port` ve `redirectUri` `redirect_uri` olur. V1 `experimental.mcp_timeout` değeri de varsayılan
+`mcp.timeout.catalog` ve `mcp.timeout.execution` değerleri olur. Bkz. [MCP sunucuları](/mcp-servers).
+
+### Sıkıştırma
+
+V2 korunan bağlam token bütçesini `keep` altında gruplar ve yedek alana daha açık bir ad verir:
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+V1 token sayısı olduğu gibi taşınır. V2 ayrıca modelin penceresinin bir yüzdesini, örneğin `"buffer": "15%"`, kabul eder;
+bu farklı pencere boyutlarına sahip modellere uyar.
+
+`auto` adını korur. V2'de yerel bir `tail_turns` veya `prune` alanı yoktur; iki eski alan da uyarıyla yok sayılır. Son bağlam
+bunun yerine token bütçesiyle korunur. Bkz. [Sıkıştırma](/compaction).
+
+### Skill'ler
+
+V1 ek skill yollarını ve URL'lerini ayırır. V2 ikisini tek sıralı dizide birleştirir:
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+Mevcut skill dosyaları ve otomatik `.opencode/skills/` keşfi değişmez. Bkz. [Skill'ler](/skills).
+
+### Komutlar
+
+Tekil `command` eşlemesini `commands`, `subtask` alanını `subagent` olarak yeniden adlandırın. Ayrı model `variant` değerini
+model referansına ekleyin:
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`, `description` ve `agent` adlarını korur. Eski `subtask` kabul edilmeye devam eder; devredilen komutlar artık
+otomatik olarak arka planda çalışır ve sonuçlarını üst oturuma bildirir. Mevcut Markdown komut tanımları desteklenmeye devam
+eder. Bkz. [Komutlar](/commands).
+
+### Referanslar
+
+Kullanımdan kaldırılmış tekil `reference` eşlemesini `references` olarak yeniden adlandırın:
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 `references` alanını zaten kabul eder; bu nedenle dosya onu kullanıyorsa değişiklik gerekmez. Referans girdileri aynı
+biçimleri korur. Bkz. [Referanslar](/references).
+
+### Sağlayıcılar
+
+Tekil `provider` eşlemesini `providers` olarak yeniden adlandırın. V2 çalışma zamanı paketini, endpoint'i ve istek
+ayarlarını ayırır:
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1 `npm` `package` olur ve AI SDK paketleri `aisdk:` önekini alır. `api` `settings.baseURL` olur. Sağlayıcı `options`
+değerleri istek rollerine göre `settings`, `headers` ve `body` olarak ayrılır. `options.setCacheKey`, sağlayıcıda
+`compatibility.supportsPromptCacheKey` olur. Bkz. [Sağlayıcılar](/providers).
+
+V2 iki eski sağlayıcı ad alanını birleştirdi:
+
+| V1 sağlayıcı kimliği       | Kurallı V2 sağlayıcı kimliği |
+| -------------------------- | -------------------------- |
+| `azure-cognitive-services` | `azure`                  |
+| `google-vertex-anthropic`  | `google-vertex`          |
+
+Belirsiz olmayan V1 sağlayıcı, agent, komut ve sağlayıcı filtresi alanlarının geçişi bu kurallı kimlikleri kullanır.
+Paylaşılan üst düzey `model` alanı tam sağlayıcı kimliğini korur; çünkü aynı sözdizimi native V2 yapılandırmasında da
+geçerlidir. Eski bir yerleşik sağlayıcıyı taşırken o alanı kurallı kimliğe güncelleyin.
+
+### Modeller ve varyantlar
+
+Modeller sağlayıcılarının altında iç içe kalır, ancak birkaç model alanı daha açık hale gelir:
+
+- `id` `modelID` olur.
+- `tool_call` ve `modalities` `capabilities.tools`, `capabilities.input` ve `capabilities.output` olur.
+- `"deprecated"` durumundaki bir `status` `disabled: true` olur.
+- Önbellek maliyetleri `cache_read` ve `cache_write` alanlarından `cache.read` ve `cache.write` alanlarına geçer.
+- Sağlayıcıya özgü `options` `settings` olur.
+- V1 varyant nesnesi, her girdide bir `id` bulunan V2 dizisi olur.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+Tam native model biçimi için [Modeller](/models) sayfasına bakın.
+
+### Doğrudan native karşılığı olmayan desteklenen alanlar
+
+Aynı biçimi koruyan çoğu alan, `shell`, `model`, `default_agent`, `watcher`, `formatter`, `instructions`, `enterprise` ve
+`tool_output` dahil, geçiş gerektirmez.
+
+V2 `lsp` yapılandırmasını kabul eder ve korur, ancak dil sunucularını çalıştırmaz, LSP araçlarını sunmaz veya LSP
+tanılaması üretmez. Bu yeteneklere dayanan iş akışlarını projenin lint, typecheck veya derleyici komutlarıyla değiştirin.
+
+V1 sağlayıcı filtrelerinin bire bir native V2 yapılandırma alanları yoktur, ancak davranışları
+[politikalar](/policies) aracılığıyla desteklenmeye devam eder:
+
+- `enabled_providers`, önce tüm sağlayıcıları varsayılan olarak engelleyen, ardından listedeki sağlayıcılara izin veren
+  dahili bir politikaya dönüşür.
+- `disabled_providers`, listedeki sağlayıcılar için dahili ret politikaları olur.
+- `autoupdate` `update` olur: `false` `"disable"`, `"notify"` `"notify"` ve `true` `"auto"` ile eşleşir.
+- `small_model`, yerleşik `title` agent'ı için `model` seçimi olur. Native V2 yapılandırması bunun yerine
+  `agents.title.model` kullanmalıdır.
+
+Bu alanları V1 sözdiziminde tutabilirsiniz. OpenCode onları uyarı vermeden normalleştirir.
+
+### Kabul edilen ancak desteklenmeyen alanlar
+
+V1 şeması ayrıca desteklenen V2 davranışı olmayan alanları da kabul ediyordu. V2 bu değerleri yok sayar ve etkin
+yapılandırmayla karıştırılmamaları için bir uyarı yayar:
+
+- `logLevel`: OpenCode'u başlatırken `OPENCODE_LOG_LEVEL` kullanın.
+- `server`: V2 hizmetini ve açık sunucu seçeneklerini kullanın; sunucu API'si kasıtlı bir uyumsuz değişikliktir.
+- Üst düzey `subagent_depth`: bunun yerine `experimental.subagent_depth` kullanın.
+- `compaction.tail_turns` ve `compaction.prune`: V2 bunun yerine `compaction.keep.tokens` ve kontrol noktası tabanlı
+  sıkıştırma kullanır.
+- V1 JSON yapılandırması içindeki agent `name`.
+- `type` alanı olmayan, yalnızca etkin V1 MCP girdisi.
+- V1 deneysel alanları `batch_tool`, `openTelemetry`, `primary_tools` ve `continue_loop_on_deny`.
+- V1 sağlayıcı alanları `id`, `whitelist` ve `blacklist`.
+- V1 sağlayıcı-model alanları `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, `deprecated`
+  olmayan bir `status` ve boolean `interleaved`.
+
+Bu alanları yok saymak kasıtlıdır ve uyumluluk gerilemesi değildir. V2 bu rehberin başka bir yerinde desteklenen olarak
+tanımlanan bir davranışı korumuyorsa [Sorun giderme](/troubleshooting) bölümündeki sorun bildirme yönergelerini izleyin.
+
+### Agent dosyaları
+
+V1 agent dosyaları `agent/`, `agents/`, `mode/` veya `modes/` kullanabilir. V2 dört dizini de keşfetmeye devam eder.
+Tercih edilen V2 konumu şudur:
+
+```text
+.opencode/agents/<name>.md
+```
+
+V1 `mode/` veya `modes/` dizini altındaki dosyalar birincil agent'ları temsil eder. Birini `agents/` altına taşırken
+frontmatter'ına `mode: primary` ekleyin. `agent/` altındaki dosyalar, yoldan türetilen kimliklerini değiştirmeden
+`agents/` altına taşınabilir.
+
+Frontmatter'ı native V2 alanlarına dönüştürürken:
+
+- Markdown gövdesini agent'ın sistem talimatları olarak koruyun.
+- JSON yapılandırmasında göründüğünde `prompt` alanını `system` olarak yeniden adlandırın; dosya gövdeleri `system` alanı
+  gerektirmez.
+- `disable` alanını `disabled`, `permission` alanını `permissions` olarak yeniden adlandırın.
+- `model` ve `variant` değerlerini `provider/model#variant` olarak birleştirin.
+- Örnekleme ve sağlayıcı seçeneklerini [yukarıda](#agents-and-modes) gösterildiği gibi bir model varyantında ayarlayın.
+
+V1 agent frontmatter'ı kullanımdan kaldırılmıştır ancak yine otomatik olarak çevrilir. Her dosya tek bir biçimde okunur.
+`permissions`, `request`, `system` veya `disabled` alanlarından herhangi birini kullanan bir dosya V2 olarak okunur ve
+içindeki `name`, `tools`, `permission` veya `temperature` gibi V1 alanları günlükte bir uyarıyla yok sayılır. V1 alanları
+kullanan diğer dosyalar V1 olarak okunur. Bir dosyanın frontmatter'ını iki biçimi karıştırmak yerine tek seferde dönüştürün.
+Bkz. [Agent'lar](/agents).
+
+### Komut dosyaları
+
+V1 komut dosyaları `command/` veya `commands/` kullanabilir. V2 ikisini de keşfeder. Tercih edilen konum şudur:
+
+```text
+.opencode/commands/<name>.md
+```
+
+Komut adlarını korumak için dosyaları `command/` altından `commands/` altındaki aynı göreli yola taşıyın. Markdown gövdesi
+komut şablonu olarak kalır ve `description` ile `agent` frontmatter'ı aynı adları korur. Arka plan devri için native adı
+kullanmak üzere `subtask` alanını `subagent` olarak yeniden adlandırın. Frontmatter'da ayrı `model` ve `variant` alanları
+varsa varyantı modele ekleyin ve `variant` alanını kaldırın:
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-5-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-5-5#high
+subagent: true
+```
+
+Bkz. [Komutlar](/commands).
+
+### Skill dosyaları
+
+V2 skill'leri hem `.opencode/skill/` hem de `.opencode/skills/` altından keşfeder. Tercih edilen düzen şudur:
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+Yalnızca `SKILL.md` dosyasını değil skill dizininin tamamını taşıyın; böylece göreli betikler, referanslar ve diğer
+destekleyici dosyalar kullanılabilir kalır. Skill kimliğini korumak için dizin adını sabit tutun. Mevcut skill frontmatter'ı
+ve Markdown gövdeleri V2 için yeniden yazım gerektirmez. Bkz. [Skill'ler](/skills).
+
+### Talimat dosyaları
+
+Mevcut `AGENTS.md` dosyaları yerinde kalır. V2 genel `~/.config/opencode/AGENTS.md` dosyasını ve geçerli dizinden ana dizine
+kadar ortamdaki `AGENTS.md` dosyalarını keşfeder. Ana dizin dışındaki projelerde keşif proje kökünde durur.
+
+V2, V1 `CLAUDE.md` yedeğini korur: `AGENTS.md` olmayan bir dizin `CLAUDE.md` dosyasını kullanır ve `~/.claude/CLAUDE.md`,
+eksik genel `AGENTS.md` yerine geçer. `OPENCODE_DISABLE_CLAUDE_CODE` her `CLAUDE.md` dosyasını atlar; V1'de yalnızca
+`~/.claude/CLAUDE.md` dosyasını atlayan `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` de öyle. Ağaçta herhangi bir yerde bulunan
+ilk dosya adında duran V1'in aksine V2 dizin başına seçim yapar; bu nedenle kökteki bir `AGENTS.md` artık iç içe bir
+`CLAUDE.md` dosyasını gizlemez. Bkz. [Talimatlar](/instructions).
+
+## Terminal istemcisi yapılandırması
+
+V2, katmanlı V1 `tui.json(c)` dosyalarının yerine tek bir genel terminal istemcisi yapılandırma dosyası kullanır:
+
+```text
+~/.config/opencode/cli.json
+```
+
+Bu dosya terminal istemcisine aittir; arka plan hizmeti onu yüklemez. `cli.json` yoksa ilk V2 terminal istemcisi başlangıcı
+desteklenen genel `tui.json` ayarlarını ve kalıcı tercihleri taşır, V1 dosyalarını değiştirmeden bırakır. Projeye özel
+istemci yapılandırması taşınmaz; çünkü V2 istemci yapılandırması geneldir. Güncel istemci ayarları referansı için
+[CLI ayarları](/cli/config) sayfasına bakın.
+
+`cli.json` oluşturulduktan sonra `tui.json` dosyasına yaptığınız değişiklikler yok sayılır. Bkz.
+[Eski `tui.json` dosyası](/cli/config#legacy-tuijson).
+
+## Eklentiler
+
+`plugin` alanını `plugins` olarak yeniden adlandırın. Paket ve seçeneklerden oluşan tanımlama grubunu bir nesneyle değiştirin:
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 yerel eklentileri hem `.opencode/plugin/` hem de `.opencode/plugins/` altından keşfeder; V2 dosyaları için
+`.opencode/plugins/` kullanın. Yapılandırılmış yerel yollar dizin olmalıdır; bu nedenle taşınan eklentiyi
+`./plugin/local/index.ts` konumuna taşıyın.
+
+<Callout type="warning">
+  V1 eklenti uygulamaları V2'de çalışmaz. Bir dosyayı taşımak veya yapılandırma girdisini yeniden adlandırmak yeterli
+  değildir.
+</Callout>
+
+Giriş noktalarını, kancaları, araçları, olayları ve paket dışa aktarımlarını özel
+[eklenti geçiş rehberiyle](/build/plugins/migrate-v1) taşıyın.
+
+## Sunucu API'si ve istemciler
+
+OpenCode 2 yenilenmiş, daha kullanışlı bir sunucu API'sine ve yeni bir istemci kümesine sahiptir. V1 sunucu API'sini
+çağıran entegrasyonlar V2 API'sine geçmelidir.
+
+Yayımlanan V2 API'sine erişmek için `@opencode/client` paketini kullanın. Endpoint'ler, istek türleri ve yanıtlar için
+oluşturulan [API referansına](/api) bakın.
+
+### Sunucu kimlik doğrulaması
+
+V2 sunucuları HTTP Basic auth kullanmaya devam eder, şu değişikliklerle:
+
+- `OPENCODE_PASSWORD` parolayı ayarlar. `OPENCODE_SERVER_PASSWORD` hâlâ çalışır.
+- `OPENCODE_SERVER_USERNAME` artık desteklenmez. Kullanıcı adı her zaman `opencode`dur.
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+Bkz. [Web](/cli/web#authentication).
+
+## Kurulumunuzu doğrulama
+
+V2'ye düzenli işler için güvenmeden önce bir projede modelinizi, sağlayıcı kimlik bilgilerinizi, agent'ları, izinleri, MCP
+sunucularını ve eklentileri doğrulayın. İhtiyaç duyduğunuz V2 davranışını doğrulayana kadar V1 kurulumunuzu koruyun ve V1'i
+native V2 biçimine dönüştürdüğünüz yapılandırmaya yönlendirmeyin.

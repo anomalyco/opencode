@@ -1,0 +1,44 @@
+---
+title: "Console-nettsøk"
+description: "Nettsøk for OpenCode, driftet via Console."
+---
+
+Console tilbyr driftet nettsøk til OpenCode-brukere som er koblet til arbeidsområdet. En eier eller administrator slår på nettsøk én gang for hele arbeidsområdet. Medlemmene trenger ingen egen nøkkel fra søkeleverandøren.
+
+Hvert vellykkede søk koster **$0.01**, trekkes fra arbeidsområdets saldo og regnes med i medlemmets forbruksgrense.
+
+## Slå på
+
+1. Logg inn på [Console](https://opencode.ai/console) som eier eller administrator av arbeidsområdet.
+2. Åpne **Integrations** og klikk **Set up** på **Hosted Web Search**.
+3. Klikk **Enable**.
+
+Deretter kobler hvert medlem OpenCode til arbeidsområdet med `/connect`.
+
+```text
+/connect
+```
+
+Arbeidsområdekonfigurasjonen velger **OpenCode Web Search** som standardleverandør. Medlemmene trenger ikke angi `websearch.provider` eller legge til en API-nøkkel for leverandøren. Et medlem som angir sin egen `websearch.provider`, beholder det valget.
+
+## Søk
+
+Be OpenCode om oppdatert informasjon i en prompt. Søk kjøres fra OpenCode, ikke fra en interaktiv side i Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+Søkeleverandøren søker på det åpne nettet og returnerer opptil åtte resultater. OpenCode bruker resultatene til å svare på prompten og oppgi kilder.
+
+Se [veiledningen for nettsøk](/websearch) for å konfigurere tillatelser eller slå av verktøyet.
+
+## Fakturering
+
+Console belaster **$0.01** når et søk gir et gyldig sett med resultater. Du betaler ikke for søk som mislykkes eller blir avvist på grunn av hastighetsbegrensningen.
+
+Nettsøk vises separat fra modellbruk i **Activity › Usage**, **Activity › Overview**, medlemsaktivitet, fakturaer og CSV-eksporter. Gjeldende policyer for alt forbruk inkluderer nettsøkkostnader.
+
+## Personvern
+
+Nettsøktjenesten lagrer ingen data. Console og søkeleverandøren behandler hvert søk og resultatene uten å lagre innholdet.

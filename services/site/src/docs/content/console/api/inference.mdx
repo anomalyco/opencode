@@ -34,6 +34,9 @@ Authorization: Bearer <token>
 | OpenAI Responses        | `/inference/openai/v1/responses`                          |
 | Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
 | Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (decisions)  | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
 
 Each model is served by one API family. See the [model endpoints](/console/models#endpoints) table, or fetch the live
 list:
@@ -41,6 +44,9 @@ list:
 ```bash
 curl https://opencode.ai/inference/v1/models
 ```
+
+The [model list API](/console/api/models) explains every field in the response, and the Console list that includes your
+connected providers.
 
 ### OpenAI Chat Completions
 
@@ -98,6 +104,42 @@ curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:
     "contents": [{ "parts": [{ "text": "Say hi" }] }]
   }'
 ```
+
+### System One
+
+Decision models such as `jev-1.14`, `gemini-decision-1`, and `gpt-6-luna-decision` answer typed questions about a
+`state` instead of generating text. See [decision models](/console/models#jev) for question types and media inputs.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+The same models also take OpenAI's Decisions format at `/inference/openai/v1/decisions`.
+
+### OpenAI Embeddings
+
+Embedding models such as `text-embedding-3-small` and `qwen3-embedding-8b` use the Embeddings API. See
+[embedding models](/console/models#embedding-models) for every model and option.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints) serves the decision and embedding models it includes at the same paths under
+`/inference/go`.
 
 ## Cost
 

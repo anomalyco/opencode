@@ -1,0 +1,567 @@
+---
+title: "MCP-servere"
+description: "Koble OpenCode til lokale og eksterne Model Context Protocol-servere med opencode mcp add eller i konfigurasjonen, inkludert OAuth-pålogging."
+---
+
+OpenCode kobler til [Model Context Protocol](https://modelcontextprotocol.io/)-servere og gjør funksjoner som verktøy, prompter, ressurser og instruksjoner tilgjengelige. MCP-verktøy tar plass i modellens kontekstvindu, så legg bare til serverne du trenger.
+
+## Oppsett
+
+Legg til en ekstern server fra prosjektet som skal bruke den, og sjekk deretter tilkoblingen:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+Kommandoen skriver serveren til prosjektets [konfigurasjon](/config). Legg til `--global` for å gjøre den tilgjengelig i alle prosjekter:
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+Eksterne servere bruker OAuth som standard. Hvis listen viser `needs authentication`, åpne OpenCode, kjør `/mcps`, velg serveren og logg inn. En tilkoblet server er klar for en agent å bruke:
+
+```text
+✓ context7  connected
+```
+
+## Konfigurasjon
+
+For å konfigurere en server manuelt, gi den et unikt navn under `mcp.servers`. V2 plasserer ikke servernavn direkte under `mcp`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+Servere kobles til automatisk. Bruk `disabled`, ikke et `enabled`-felt, for å beholde en konfigurert uten å koble den til:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+En prosjektkonfigurasjon med høyere prioritet erstatter hele serverobjektet med samme navn. Bruk forskjellige navn for separate tilkoblinger eller kontoer; ellers må du gjenta hvert påkrevde felt i overstyringen:
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## Lokal
+
+En lokal server er en kommando OpenCode starter over MCP stdio-transporten. Legg til en med en kommando etter `--`:
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+Send miljøvariabler med gjentatte `--env`-flagg:
+
+```sh
+opencode mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
+```
+
+Bruk konfigurasjon for andre prosessalternativer, som en arbeidskatalog:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| Felt | Påkrevd | Beskrivelse |
+| --- | --- | --- |
+| `type` | Ja | Må være `"local"`. |
+| `command` | Ja | Kjørbar fil etterfulgt av argumentene. |
+| `cwd` | Nei | Prosesskatalog. Relative baner løses fra arbeidsområdet, som også er standard. |
+| `environment` | Nei | Strengvariabler som legges til OpenCodes arvede prosessmiljø. |
+| `disabled` | Nei | Hindrer tilkobling når `true`. Standard er `false`. |
+| `codemode` | Nei | Sett til `false` for å eksponere verktøy direkte i stedet for gjennom Code Mode. Standard er `true`. |
+| `timeout` | Nei | Tidsavbrudd per server som overstyrer. |
+| `protocol` | Nei | `auto` (standard), `legacy` eller `2026-07-28`. Se [Protokollversjon](#protocol-version). |
+| `pool` | Nei | Del én tilkobling på tvers av kataloger. Standard er `false`. Se [Delte tilkoblinger](#shared-connections). |
+
+Bruk `{env:NAME}` for å sette inn verdien av en miljøvariabel. Shell-uttrykk som `$NAME` utvides ikke i JSON-strenger:
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## Ekstern
+
+En ekstern server bruker MCP Streamable HTTP-transporten og krever en absolutt URL:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Oppgi én `--header` per forespørselsheader. Sett `{env:NAME}`-referanser i anførselstegn, slik at shell-prosessen sender dem videre uendret:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
+```
+
+Bruk konfigurasjon for andre alternativer. Lagre hemmeligheter i miljøvariabler i stedet for i filen:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| Felt | Påkrevd | Beskrivelse |
+| --- | --- | --- |
+| `type` | Ja | Må være `"remote"`. |
+| `url` | Ja | Absolutt URL til et Streamable HTTP-endpoint. |
+| `headers` | Nei | HTTP-headere med strengverdier som sendes til endpointet. |
+| `oauth` | Nei | OAuth-innstillinger, eller `false` for å slå av OAuth. |
+| `disabled` | Nei | Hindrer tilkobling når `true`. Standard er `false`. |
+| `codemode` | Nei | Sett til `false` for å eksponere verktøy direkte i stedet for gjennom Code Mode. Standard er `true`. |
+| `timeout` | Nei | Tidsavbrudd per server som overstyrer. |
+| `protocol` | Nei | `auto` (standard), `legacy` eller `2026-07-28`. Se [Protokollversjon](#protocol-version). |
+| `pool` | Nei | Del én tilkobling på tvers av kataloger. Standard er `false`. Se [Delte tilkoblinger](#shared-connections). |
+
+Bruk `oauth: false` bare når serveren utelukkende bruker en API-nøkkel eller andre tilgangsopplysninger i en header:
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+OAuth er slått på for eksterne servere med mindre `oauth` er `false`. OpenCode finner autorisasjonsserveren, logger inn med PKCE og fornyer tokens. Tilgangsopplysningene lagres utenfor prosjektkonfigurasjonen.
+
+De fleste servere trenger bare URLen:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+Hvis serveren trenger autentisering, kjør `/mcps`, velg den og fullfør autorisasjonen i nettleseren. CLI-en kan starte samme flyt:
+
+```sh
+opencode mcp auth sentry
+```
+
+### Nettleser på en annen maskin
+
+Når OpenCode kjører over SSH, i en container eller på en ekstern server, kan ikke nettleseren nå OpenCode etter at du logger inn, og viser en side som ikke lastes. Kopier sidens URL fra adressefeltet og lim den inn i påloggingsspørsmålet:
+
+```text
+http://127.0.0.1:52817/callback?code=...&state=...
+```
+
+Spørsmålet vises i `/mcps`, i `opencode mcp auth` og i påloggingsdialogen til desktop- og webappen mens OpenCode venter på nettleseren.
+
+### Klientregistrering
+
+OpenCode identifiserer seg til autorisasjonsserveren med den første metoden som gjelder:
+
+| Metode | Brukes når |
+| --- | --- |
+| Forhåndsregistrert klient | `oauth.client_id` er konfigurert. |
+| [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Autorisasjonsserveren støtter CIMD og offentlige klienter, og `oauth.redirect_uri` er ikke satt. |
+| [Dynamisk klientregistrering](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Ingen av de andre metodene kan brukes. OpenCode registrerer en klient og bruker den på nytt ved senere pålogginger ved å lytte på porten den registrerte. Hvis porten er opptatt, registrerer OpenCode klienten på nytt. |
+
+En autorisasjonsserver velger CIMD gjennom metadataene sine:
+
+```json
+{
+  "issuer": "https://auth.example.com",
+  "client_id_metadata_document_supported": true,
+  "token_endpoint_auth_methods_supported": ["none"]
+}
+```
+
+Med CIMD sender OpenCode metadata-dokumentets URL som `client_id` og hopper over registrering:
+
+```text
+https://opencode.ai/oauth/opencode/client.json
+```
+
+Dokumentet tillater disse loopback-omdirigeringene uten port:
+
+- `http://127.0.0.1/callback`
+- `http://localhost/callback`
+- `http://127.0.0.1/mcp/oauth/callback` for eldre klienter
+
+Autorisasjonsservere godtar enhver loopback-port for disse omdirigeringene, som [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3) krever, så `callback_port` virker med CIMD. En egendefinert `redirect_uri` gjør det ikke, så OpenCode faller tilbake til DCR.
+
+Hvis autorisasjonsserveren verken støtter CIMD eller DCR, konfigurer en forhåndsregistrert klient.
+
+### Forhåndsregistrerte klienter
+
+Når en leverandør gir deg tilgangsopplysninger for klienten, bruker du OAuth-feltene i V2, som er skrevet i snake_case:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| Felt | Beskrivelse |
+| --- | --- |
+| `client_id` | Forhåndsregistrert klient-ID. Har forrang over CIMD og DCR. |
+| `client_secret` | Hemmelighet for en konfidensiell klient, sendt i tokenforespørselens body. Utelat den for offentlige klienter. |
+| `scope` | Tilgangsomfang du ber om, atskilt med mellomrom. Som standard brukes omfanget serveren oppgir når den avviser en uautentisert forespørsel. OpenCode sender det innvilgede omfanget på nytt når tokenet fornyes. |
+| `callback_port` | Lokal callback-port fra `1` til `65535`. Som standard brukes porten i `redirect_uri`, deretter porten til en klient som ble registrert ved en tidligere pålogging, og til slutt en ledig midlertidig port. |
+| `redirect_uri` | Forhåndsregistrert loopback-URI der bane og port når den lokale callback-lytteren. Å sette den slår av CIMD. |
+| `auth_server_metadata_url` | URL til autorisasjonsserverens OAuth- eller OpenID Connect-metadata-dokument. Angi den når MCP-serveren ikke publiserer beskyttet ressursmetadata som navngir autorisasjonsserveren. |
+
+Fjern lagrede tilgangsopplysninger for OAuth når du må logge inn på nytt eller bytte konto:
+
+```sh
+opencode mcp logout sentry
+```
+
+## Tidsavbrudd
+
+Tidsavbrudd er positive heltall i millisekunder. Angi standarder under `mcp.timeout`; en servers `timeout`-objekt overstyrer samsvarende standarder.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| Tidsavbrudd | Standard | Gjelder for |
+| --- | --- | --- |
+| `startup` | 30 sekunder | Transporttilkobling og serverinitialisering. |
+| `catalog` | 30 sekunder | Listing av verktøy, prompter, ressurser og ressursmaler. |
+| `execution` | 12 timer | Verktøykall, prompthenting og ressurslesing. |
+
+## Protokollversjon
+
+Som standard sjekker OpenCode om serveren støtter 2026-07-28-revisjonen. Hvis ikke, bruker OpenCode det klassiske MCP-håndtrykket med `initialize`. Angi `protocol` til `legacy` på serveren for å hoppe over sjekken:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "older": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "legacy",
+      },
+    },
+  },
+}
+```
+
+| Verdi | Atferd |
+| --- | --- |
+| `auto` | Standard. Sonderer med `server/discover` for 2026-07-28-revisjonen og faller tilbake til `legacy` når serveren ikke støtter den, også når en ekstern server svarer på sonderingen med en HTTP 5xx-feil. |
+| `legacy` | Sender `initialize` og snakker protokollrevisjoner opp til 2025-11-25. |
+| `2026-07-28` | Krever 2026-07-28-revisjonen. Tilkoblingen mislykkes mot eldre servere. |
+
+Sondering av en eldre lokal server legger til en kortvarig ekstra prosess og kan vente opptil oppstartstidsavbruddet når serveren ignorerer ukjente forespørsler, så angi `legacy` på servere du vet er eldre enn 2026-07-28-revisjonen.
+
+## Delte tilkoblinger
+
+Én OpenCode-server kan ha mange kataloger åpne, og hver av dem kobler til hver MCP-server på egen hånd. Angi `pool` til `true` for å la kataloger med samme serverinnstillinger dele én tilkobling og én verktøyliste:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cloudflare": {
+        "type": "remote",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "pool": true,
+      },
+    },
+  },
+}
+```
+
+- Bare tilkoblinger på 2026-07-28-revisjonen deles. En server som svarer med en eldre revisjon, eller en som er satt til `legacy`, beholder én tilkobling per katalog.
+- Kataloger deler en tilkobling bare når alt som endrer den, samsvarer: URLen, headerne, OAuth-innstillingene og den påloggede kontoen for en ekstern server, og kommandoen, arbeidskatalogen og miljøet for en lokal. Tidsavbrudd og `protocol` må også samsvare. Servernavnet trenger ikke, men pålogginger lagres per navn, så en OAuth-server deles bare under samme navn.
+- En lokal server deles bare mellom kataloger på denne maskinen, ikke kataloger i et arbeidsområde. Å dele den på tvers av prosjekter krever en fast `cwd`, for eksempel `"~"`. Uten en kjører den i hvert prosjekts mappe, så hvert prosjekt får sin egen, og OpenCode logger en advarsel.
+- En delt tilkobling har ingen røtter. Når et verktøy ber om inndata, vises forespørselen i katalogen som kalte det.
+- Tilkoblingen lukkes så snart den siste katalogen som bruker den, lukkes eller kobler fra serveren.
+
+## Navn
+
+OpenCode gir verktøy navn på formen `<server>_<tool>`. Tegn som ikke er bokstaver, tall, `_` eller `-`, erstattes med `_`:
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+MCP-prompter blir kommandoer som heter `<server>:<prompt>` med samme normalisering. For eksempel:
+
+```text
+/context_7:find_docs
+```
+
+Kommandoteksten fyller promptens argumenter i rekkefølge. Skill dem med mellomrom og sett verdier som inneholder mellomrom, i anførselstegn:
+
+```text
+/context_7:find_docs react "server components"
+```
+
+Velg korte servernavn som forblir unike etter normalisering. Under standard Code Mode grupperes verktøy etter det normaliserte servernavnet:
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## Tillatelser
+
+Code Mode er standard. Angi `codemode` til `false` når en servers verktøy må forbli på leverandørens native verktøyliste:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+Bruk tillatelseshandlinger for å skjule eller nekte verktøy uten å koble fra serveren. Samsvar med det normaliserte `<server>_<tool>`-navnet:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## Ressurser
+
+Agenter leser MCP-ressurser gjennom to innebygde verktøy, `list_mcp_resources` og `read_mcp_resource`. Styr dem med disse tillatelseshandlingene:
+
+| Handling | Ressurs |
+| --- | --- |
+| `opencode_list_mcp_resources` | Servernavnet. |
+| `opencode_read_mcp_resource` | `<server>:<uri>` |
+
+For eksempel, tillat hver lesing fra `docs`-serveren:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "opencode_read_mcp_resource",
+      "resource": "docs:*",
+      "effect": "allow",
+    },
+  ],
+}
+```
+
+## Serverinstruksjoner
+
+Når en server returnerer instruksjoner under initialisering, legger OpenCode dem til i systemprompten:
+
+```text
+<mcp_instructions>
+  <server name="sentry">
+    Search for an existing issue before creating a new one.
+  </server>
+</mcp_instructions>
+```
+
+For servere som bruker Code Mode, legger OpenCode til en linje som sier hvor agenten finner serverens verktøy.
+
+En servers instruksjoner utelates når agentens tillatelser nekter hvert av verktøyene dens. Når de nekter `execute`, listes serverens verktøy direkte, og instruksjonene beholdes uten Code Mode-linjen.
+
+## Inndataforespørsler
+
+Servere kan be om inndata under et kall gjennom MCP-elicitation. OpenCode viser forespørselen som et skjema, eller som en lenke å åpne for URL-forespørsler:
+
+```text
+sentry is requesting input
+```
+
+Lukking av skjemaet avbryter forespørselen.
+
+## Kontekst
+
+For kall som gjøres på vegne av en økt, sender OpenCode økt-ID-en i `CallToolRequest.params._meta["ai.opencode/sessionID"]`. Dette gjelder direkte verktøy og Code Mode over stdio og Streamable HTTP:
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+ID-en er forespørselsmetadata, ikke et verktøyargument, så den er fraværende i det modell-synlige skjemaet. Behandle den som en ugjennomsiktig korrelasjonsverdi:
+
+| Regel | Atferd |
+| --- | --- |
+| Identitet | Den identifiserer den kallende OpenCode-økten, ikke MCP-transportøkten. |
+| Tilstedeværelse | Den kan mangle for kall uten øktkontekst. |
+| Sikkerhet | Ikke bruk den alene til autentisering eller autorisasjon. |
+| Personvern | Eksterne servere mottar den rå ID-en og kan logge eller beholde den. |
+
+## Administrasjon
+
+List servere og deres gjeldende tilkoblingstilstand fra et hvilket som helst prosjekt:
+
+```sh
+opencode mcp list
+```
+
+Bruk `/mcps` i OpenCode for å vise servere, koble dem til eller fra, eller autentisere deg mot dem. Bruk CLI-en til å legge til servere og administrere tilgangsopplysninger for OAuth:
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+Kjør `opencode mcp auth` uten navn for å velge blant serverne som støtter OAuth:
+
+```sh
+opencode mcp auth
+```
+
+For å fjerne en server, slett oppføringen fra prosjekt- eller globalkonfigurasjonen der den ble lagt til:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+Frakobling av en server i `/mcps` endrer ikke konfigurasjonen. Rediger konfigurasjonen direkte for OAuth-klientinnstillinger, tidsavbrudd, arbeidskataloger, eller for å holde en server frakoblet:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

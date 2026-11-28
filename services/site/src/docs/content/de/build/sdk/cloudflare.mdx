@@ -1,0 +1,107 @@
+---
+title: "Cloudflare"
+description: "Führe OpenCode in einem Cloudflare Durable Object mit @opencode/sdk/workerd aus, gestützt auf den SQLite-Speicher des Objekts."
+---
+
+Nutze `@opencode/sdk/workerd` in einem Cloudflare Durable Object. Dieses Profil nutzt dessen SQLite-Speicher.
+Es speichert dauerhafte Events, damit sich der Zustand wiederherstellen lässt, nachdem die Instanz aus dem
+Speicher entfernt wurde, und ersetzt nicht verfügbare lokale Dateisystem- und Prozessdienste.
+
+```sh
+bun add @opencode/sdk
+```
+
+Halte einen Host für die Lebensdauer der Durable-Object-Instanz, statt für jede Anfrage einen zu erstellen.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` hält jedes Durable-Object-Event zurück, bis der Host bereit ist, und setzt das Objekt zurück,
+wenn die Initialisierung fehlschlägt. Das aufbewahrte Promise gibt Request-Handlern nach dem Start direkten Zugriff
+auf denselben Host.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler wählt über die Paketbedingung `workerd` die mit Workerd kompatiblen Implementierungen von OpenCode
+aus. Cloudflare kann ein Durable Object aus dem Speicher entfernen, ohne die Bereinigung auszuführen. Die
+Implementierung funktioniert daher auch dann korrekt, wenn `close()` nicht aufgerufen wird.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Ausgehende Anfragen routen
+
+Übergib `fetch`, um die ausgehenden HTTP-Anfragen von OpenCode (OpenCode Console-Konfiguration, Modellanfragen, Web
+Fetch und Websuche, Well-known-Konfiguration und entfernte MCP-Server) über einen eigenen Handler wie eine Service
+Binding zu leiten. Agent-Code im Code Mode verwendet weiterhin `globalThis.fetch`.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## Anpassen
+
+Passe deine OpenCode-Instanz an, indem du Plugins registrierst, die mit deinem
+Worker gebündelt werden. Übergib Plugins an `OpenCodeWorkerd.create()`, um Agenten,
+Modelle, Tools und anderes Verhalten anzupassen:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Siehe die [vollständige Plugin-Dokumentation](/build/plugins/server) für Plugin-Hooks,
+Transforms, Tools und den vollständigen Plugin-Kontext.

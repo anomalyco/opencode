@@ -4,7 +4,7 @@ import { resolve } from "node:path"
 import { VitePWA } from "vite-plugin-pwa"
 
 // The Office previews' engines and fonts (about 52 MB) load only when an Office file opens, so they stay out of the
-// precache. The app's own fonts have no hyphenated name, such as `assets/Inter.ttf`.
+// precache. The app's own fonts stay in it: `assets/Inter.ttf` has no hyphenated name, and OpenMono is WOFF2.
 const officeAsset =
   /(?:^|\/)(?:(?:docx_\w+|ooxml_opc|pptx_wasm|xlsx_wasm)_bg-[\w-]+\.wasm|residentEngineWorker-[\w-]+\.js|(?:Carlito|Caladea|LiberationSans|LiberationSerif|LiberationMono|NotoSansArabic|NotoNaskhArabic|NotoSansHebrew|Gelasio|ComicRelief|Inter|Roboto|SourceSans3|DMSans|DMSerifDisplay|OpenSans|Montserrat|Poppins|Oswald|Heebo)-[\w-]+\.ttf)$/
 
@@ -19,6 +19,22 @@ export function serviceWorker(directory: string) {
     registerType: "prompt",
     injectRegister: false,
     manifest: false,
+    integration: {
+      // The fallback and denylist follow Vite's resolved `base`, such as `/opencode/` for `vite build --base=/opencode/`.
+      configureOptions(config, options) {
+        const prefix = config.base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+        options.workbox = {
+          ...options.workbox,
+          navigateFallback: `${config.base}index.html`,
+          // Pairing links must reach the server so it can set the session cookie.
+          navigateFallbackDenylist: [
+            new RegExp(`^${prefix}(?:api|auth)(?:/|$)`),
+            new RegExp(`^${prefix}(?:_assets|assets)(?:/|$)`),
+          ],
+        }
+      },
+    },
     workbox: {
       // Workbox runs after Sentry's upload and cleanup, so do not publish an unuploaded map.
       sourcemap: false,
@@ -27,9 +43,6 @@ export function serviceWorker(directory: string) {
       // Keep each open tab on its complete build until all old clients close.
       skipWaiting: false,
       inlineWorkboxRuntime: true,
-      navigateFallback: "/index.html",
-      // Pairing links must reach the server so it can set the session cookie.
-      navigateFallbackDenylist: [/^\/(?:api|auth)(?:\/|$)/, /^\/(?:_assets|assets)(?:\/|$)/],
       // Include lazy chunks and non-JS dependencies, not just the startup bundle.
       globPatterns: ["**/*"],
       globIgnores: ["**/*.map", "_headers", "_redirects"],

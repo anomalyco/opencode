@@ -15,6 +15,7 @@ import {
   localized,
   pageLocale,
   parseLocale,
+  consoleRoute as localeConsoleRoute,
   route as localeRoute,
   tag as localeTag,
 } from "~/lib/language"
@@ -80,6 +81,9 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       dir: localeDir,
       route(pathname: string) {
         return localeRoute(current(), pathname)
+      },
+      consoleRoute(pathname: string) {
+        return localeConsoleRoute(current(), pathname)
       },
       setLocale(next: Locale) {
         setCurrent(next)

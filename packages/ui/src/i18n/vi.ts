@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Bình luận về ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Thêm nhận xét",
+  "ui.lineComment.add": "Thêm nhận xét",
+  "ui.lineComment.actions": "Thao tác với phần đã chọn",
   "ui.lineComment.contextPlaceholder": "Thêm ngữ cảnh cho thay đổi này",
   "ui.lineComment.submit": "Bình luận",
   "ui.lineComment.cancel": "Hủy",
@@ -228,7 +230,7 @@ export const dict = {
   "ui.promptInput.dropFiles.pdf": "Thả tệp PDF hoặc tệp để thêm",
   "ui.promptInput.dropFiles.imagePdf": "Thả hình ảnh, tệp PDF hoặc tệp để thêm",
   "ui.promptInput.exitShell": "Thoát",
-  "ui.sessionTimeline.notice.agentChanged": "Đã đổi tác tử",
+  "ui.sessionTimeline.notice.agentChanged": "Đã đổi tác nhân",
 
   "ui.sessionTurn.retry.attemptWaiting.one": "Hãy thử {{attempt}} - thử lại sau {{count}} giây",
   "ui.sessionTurn.retry.attemptWaiting.other": "Hãy thử {{attempt}} - thử lại sau {{count}} giây",

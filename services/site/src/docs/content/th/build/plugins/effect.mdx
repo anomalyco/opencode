@@ -1,0 +1,1598 @@
+---
+title: "ปลั๊กอิน Effect"
+description: "เขียนปลั๊กอินเซิร์ฟเวอร์ด้วย API ปลั๊กอินที่ใช้ Effect โดยตรง"
+---
+
+`@opencode/plugin/effect` เป็น API ปลั๊กอิน OpenCode เวอร์ชันที่ใช้ Effect โดยตรง การดำเนินการในบริบทคืน
+Effect หรือ Stream คอลแบ็กคืน Effect และอายุปลั๊กอินแสดงด้วย `Scope`
+
+OpenCode ให้ `effect` (รวมพาธย่อย `effect/*` ที่ส่งออก) และ `@opencode/plugin` ขณะรันเมื่อโหลด
+ปลั๊กอินและ Dependency ใน `node_modules` ให้ติดตั้งเป็น peer/dev dependency สำหรับการตรวจชนิดและการทดสอบในเครื่อง
+แทนการรวมเข้าในปลั๊กอิน
+
+```sh
+bun add --peer @opencode/plugin effect@4.0.1
+```
+
+ส่งออกปลั๊กอิน Effect จาก `.opencode/plugins/` เพื่อโหลดอัตโนมัติ
+
+```ts title=".opencode/plugins/concise/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "example",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("loaded", true)
+    }),
+})
+```
+
+แพ็กเกจที่เผยแพร่และไดเรกทอรีปลั๊กอินนอก `.opencode/plugins/` ใช้การกำหนดค่า `plugins` เดียวกับปลั๊กอินเซิร์ฟเวอร์
+อื่น
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-effect-plugin",
+    "opencode-acme-effect-plugin@1.2.0",
+    "@acme/opencode-effect-plugin",
+    "./plugins/local-effect",
+    {
+      "package": "@acme/opencode-effect-plugin",
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
+}
+```
+
+ดู[การกำหนดค่าปลั๊กอิน](/plugins)สำหรับวิธีเปิดใช้งาน วิธีค้นหาแพ็กเกจ และลำดับความสำคัญของการกำหนดค่า
+
+```ts title="plugins/local-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "local-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Effect plugin loaded", { version: ctx.app.version })
+    }),
+})
+```
+
+## วงจรชีวิต
+
+`effect` ทำงานเมื่อโหลดปลั๊กอิน Scope จะปิดเมื่อโหลดปลั๊กอินใหม่หรือเลิกโหลด การลงทะเบียน Fiber
+แบบมีขอบเขต และ finalizer จึงถูกปล่อยพร้อมกัน
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "lifecycle",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("loaded", { version: ctx.app.version })
+      yield* Effect.addFinalizer(() => Effect.logInfo("unloaded"))
+    }),
+})
+```
+
+ใช้ Fiber ที่ผูกกับ Scope สำหรับงานเบื้องหลัง เมื่อคืนทรัพยากร Scope ของปลั๊กอินจะหยุด Fiber นั้น
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* Effect.repeat(
+      storage.set("heartbeat", { time: Date.now() }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+### บริบท
+
+บริบทเปิดไคลเอนต์ Effect สำหรับเซิร์ฟเวอร์ OpenCode ที่เชื่อมต่อ พร้อมการแปลง ฮุก ที่เก็บข้อมูล
+การโหลดใหม่ และตัวเลือกเฉพาะปลั๊กอิน ไม่เปิดบริการ Core ภายในของ OpenCode
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugins = ctx.plugin
+    const active = yield* plugins.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("active plugins", { count: active.data.length })
+  }),
+```
+
+คำจำกัดความปลั๊กอินและบริบททั้งหมดประกาศดังนี้
+
+```ts
+interface Context {
+  readonly app: App
+  readonly location: Location.Info
+  readonly options: PluginOptions
+  readonly agent: AgentDomain
+  readonly aisdk: AISDKDomain
+  readonly command: CommandDomain
+  readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+    readonly generate: GenerateApi<unknown>
+  }
+  readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
+  readonly model: ModelDomain
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
+  readonly permission: PermissionDomain
+  readonly plugin: Pick<PluginApi<unknown>, "list">
+  readonly provider: ProviderDomain
+  readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
+  readonly session: SessionDomain
+  readonly shell: ShellDomain
+  readonly skill: SkillDomain
+  readonly storage: StorageDomain
+  readonly tool: ToolDomain
+  readonly vcs: VcsDomain
+  readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
+}
+
+interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
+
+### ตัวเลือก
+
+ส่งตัวเลือกด้วยรูปแบบออบเจกต์ใน `opencode.json(c)`
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
+}
+```
+
+อ่านตัวเลือกจาก `ctx.options` จำกัดชนิดค่าที่ไม่รู้จักก่อนใช้
+
+```ts title="plugins/company-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const strict = ctx.options.strict === true
+      yield* Effect.logInfo("company plugin configured", { strict })
+    }),
+})
+```
+
+## การแปลง
+
+การแปลงแก้ไขสถานะแบบซิงโครนัสผ่านตัวแก้ไข OpenCode ใช้การแปลงตามลำดับการลงทะเบียนภายในแต่ละ
+โดเมน แหล่งให้ผู้ให้บริการและคำจำกัดความโมเดลที่ไม่เปลี่ยนรูปก่อน จากนั้นการแปลงโมเดลจึงแก้ไข
+ตัวเลือกของผู้ให้บริการที่ใช้งาน การ yield การลงทะเบียนจะเก็บไว้ใน Scope ของปลั๊กอิน
+
+```ts title="plugins/models-effect/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company.models",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.make("acme")
+      const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+      yield* ctx.provider.transform((editor) => {
+        editor.add({
+          info: {
+            ...Provider.Info.empty(providerID),
+            name: "Acme",
+            activation: "enabled",
+            package: "@opencode/ai/providers/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:8000/v1" },
+          },
+          models,
+        })
+      })
+    }),
+})
+```
+
+การแปลงโมเดลบังคับนโยบายกับคอลเลกชันตัวเลือกของผู้ให้บริการที่ใช้งานทั้งหมดได้
+
+```ts title="plugins/model-budget-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  }),
+```
+
+เรียก `reload` เมื่อสถานะภายนอกที่การแปลงใช้อ้างอิงเปลี่ยนไป ในตัวอย่างนี้ `loadFromSource()` คืนรายการ `{ info: Provider.Info, models: readonly Model.Info[] }` เมื่อโหลดผู้ให้บริการใหม่ ระบบจะถือว่าผลลัพธ์ของโมเดลทั้งหมดไม่เป็นปัจจุบันด้วย
+
+```ts title="plugins/models-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { providers: yield* loadFromSource() }
+
+    yield* provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    yield* Effect.repeat(
+      Effect.gen(function* () {
+        source.providers = yield* loadFromSource()
+        yield* provider.reload()
+      }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+## API
+
+### Agent
+
+อ่านข้อมูลเอเจนต์ทั้งหมดหรือดึงข้อมูลเอเจนต์ตาม ID การตอบกลับของไคลเอนต์มี location ที่ระบบระบุแล้วและข้อมูล schema
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    const agents = yield* agent.list().pipe(Effect.orDie)
+    const build = yield* agent.get({ agentID: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("agents", { count: agents.data.length, build: build.data.name })
+  }),
+```
+
+แปลงหรือโหลดเอเจนต์ใหม่
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    yield* agent.transform((editor) => {
+      editor.default("build")
+      editor.update("build", (item) => (item.description = "Builds features and fixes bugs"))
+      editor.remove("legacy")
+    })
+    yield* agent.reload()
+  }),
+```
+
+Schema: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentEditor {
+  list(): readonly Types.DeepMutable<Agent.Info>[]
+  get(id: string): Types.DeepMutable<Agent.Info> | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  remove(id: string): void
+}
+
+interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Providers
+
+อ่านผู้ให้บริการที่ใช้ได้หรือดูข้อมูลเมตาของผู้ให้บริการหนึ่งตาม ID
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const providers = yield* provider.list().pipe(Effect.orDie)
+    const anthropic = yield* provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("providers", {
+      providers: providers.data.length,
+      anthropic: anthropic.data.name,
+    })
+  }),
+```
+
+การแปลงผู้ให้บริการแก้ไขการตั้งค่าผู้ให้บริการและคำจำกัดความแหล่ง การอ่านของตัวแก้ไขรวมผู้ให้บริการที่ไม่ใช้งาน
+และเปิดคำจำกัดความที่ไม่เปลี่ยนรูป `models.update` แก้ไขสำเนาของโมเดลแหล่งที่ตัวแก้ไขเป็นเจ้าของ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.provider.transform((editor) => {
+      editor.update("anthropic", (provider) => {
+        provider.headers = { ...provider.headers, "x-company": "engineering" }
+      })
+      editor.models.update("anthropic", "claude-sonnet-5-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.remove("anthropic", "legacy-model")
+      editor.remove("legacy-provider")
+    })
+  }),
+```
+
+แทนที่รายการแหล่งด้วย `models.set` แล้วโหลดใหม่หลังคำจำกัดความที่จับไว้เปลี่ยน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { models: yield* loadModels() }
+    yield* provider.transform((editor) => editor.models.set("acme", source.models))
+    source.models = yield* loadModels()
+    yield* provider.reload()
+  }),
+```
+
+สำหรับการค้นพบเฉพาะบัญชี ให้ส่งการเชื่อมต่อที่ใช้โหลดรายการเป็น `sourceConnection` OpenCode จะตัด
+ผู้ให้บริการนั้นออกขณะเลือกการเชื่อมต่ออื่น จนกว่าปลั๊กอินของคุณจะเผยแพร่รายการที่รีเฟรชแล้ว
+
+{/* prettier-ignore */}
+```ts
+const connection = yield* ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = yield* loadInventory(connection)
+yield* ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+
+interface ProviderDomain extends ProviderApi<unknown> {
+  readonly transform: Transform<ProviderEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Models
+
+อ่านโมเดลที่ใช้ได้และการเลือกเริ่มต้น
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    const models = yield* model.list().pipe(Effect.orDie)
+    const selected = yield* model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("models", { count: models.data.length, selected: selected.data?.name })
+  }),
+```
+
+การแปลงโมเดลแก้ไขคอลเลกชันตัวเลือกของผู้ให้บริการที่ใช้งานทั้งหมด ตัวเลือกที่ปิดใช้งานยังแก้ไขได้จนกว่า
+การแปลงทั้งหมดจะเสร็จ `update` เพิ่มโมเดลได้เฉพาะภายใต้ผู้ให้บริการที่พร้อมใช้
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor.list("anthropic").forEach((model) => {
+        editor.update(model.providerID, model.id, (draft) => {
+          draft.enabled = draft.capabilities.tools
+        })
+      })
+      editor.default.set("anthropic", "claude-sonnet-5-5")
+      editor.remove("anthropic", "legacy-model")
+    })
+  }),
+```
+
+คอลแบ็กแก้ไขการแทนที่โมเดลดิบ ค่าเริ่มต้นของผู้ให้บริการถูกรวมครั้งเดียวเมื่อ OpenCode ยืนยันผล การอ่านที่ไม่เปลี่ยน
+ใช้ผลนั้นซ้ำ `editor.provider` อ่านคำจำกัดความแหล่งที่ไม่เปลี่ยนรูป รวมถึงเทมเพลตที่ไม่ใช้งาน แทน
+ผลของการแปลงโมเดล
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    yield* model.transform((editor) => {
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+      if (!source) return
+      editor.update("anthropic", source.id, (draft) => {
+        draft.limit.context = Math.min(draft.limit.context, source.limit.context)
+      })
+    })
+    yield* model.reload()
+  }),
+```
+
+Schema: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelEditor {
+  list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+
+interface ModelDomain extends ModelApi<unknown> {
+  readonly transform: Transform<ModelEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Commands
+
+อ่านคำสั่งที่ใช้ได้ที่ location ปัจจุบัน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const commands = yield* command.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("commands", { names: commands.data.map((item) => item.name) })
+  }),
+```
+
+การแปลงคำสั่งปัจจุบันเป็นการเพิ่มเท่านั้น ตัวเรียกใช้ได้รับเซสชัน ไฟล์แนบพรอมต์ และโหมดการส่ง
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+Schemas: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
+}
+
+interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
+  readonly transform: Transform<CommandEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Integrations
+
+อ่านข้อมูลการเชื่อมต่อและดึงข้อมูลรับรองที่ใช้งานอยู่ หากมี
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const integrations = yield* integration.list().pipe(Effect.orDie)
+    const github = yield* integration.get({ integrationID: Integration.ID.make("github") }).pipe(Effect.orDie)
+    const connection = yield* integration.connection.active("github")
+    const credential = connection ? yield* integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+    yield* Effect.logInfo("integration", {
+      count: integrations.data.length,
+      github: github.data.name,
+      credential: credential?.type,
+    })
+  }),
+```
+
+เชื่อมต่อด้วยคีย์หรือดำเนินการ OAuth ผ่าน API ที่เชื่อมต่อ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const token = yield* Config.Redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    yield* integration.connect
+      .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
+      .pipe(Effect.orDie)
+
+    const attempt = yield* integration.oauth
+      .connect({
+        integrationID: Integration.ID.make("acme"),
+        methodID: Integration.MethodID.make("oauth"),
+      })
+      .pipe(Effect.orDie)
+    const status = yield* integration.oauth
+      .status({
+        integrationID: Integration.ID.make("acme"),
+        attemptID: attempt.data.attemptID,
+      })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("OAuth status", { status: status.data })
+  }),
+```
+
+แปลงการเชื่อมต่อและวิธีตรวจสอบสิทธิ์ คอลแบ็กวิธี OAuth เป็น Effect และอาจได้ทรัพยากร
+แบบมีขอบเขต
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    yield* integration.transform((editor) => {
+      editor.update("acme", (item) => (item.name = "Acme"))
+      editor.method.update({
+        integrationID: "acme",
+        method: { id: "device", type: "oauth", label: "Sign in with Acme" },
+        authorize: () =>
+          Effect.succeed({
+            mode: "code",
+            url: "https://acme.example/device",
+            instructions: "Enter the displayed code",
+            callback: (code) => exchangeCode(code),
+          }),
+      })
+    })
+    yield* integration.reload()
+  }),
+```
+
+Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+type IntegrationOAuthAuthorization = {
+  readonly url: string
+  readonly instructions: string
+  readonly expiresAt?: number
+} & (
+  | { readonly mode: "auto"; readonly callback: Effect.Effect<Credential.OAuth, unknown> }
+  | { readonly mode: "code"; readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown> }
+)
+
+type IntegrationOAuthMethodRegistration = {
+  readonly integrationID: string
+  readonly method: IntegrationOAuthMethod
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  readonly method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+
+interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
+  readonly transform: Transform<IntegrationEditor>
+  readonly reload: () => Effect.Effect<void>
+  readonly connection: {
+    readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
+    readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+  }
+}
+```
+
+### MCP
+
+แสดงรายการเซิร์ฟเวอร์ MCP และสถานะการเชื่อมต่อปัจจุบัน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    const servers = yield* mcp.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("MCP servers", { count: servers.data.length })
+  }),
+```
+
+ปลั๊กอินจัดการเซิร์ฟเวอร์ MCP ผ่านการแปลงเท่านั้น ใช้ `editor.set` เพื่อเพิ่มหรือแทนที่เซิร์ฟเวอร์ `editor.update` เพื่อ
+เปลี่ยนการกำหนดค่า และ `editor.remove` เพื่อนำออก ตรวจการกำหนดค่าด้วย `editor.list` และ `editor.get`
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.transform((editor) => {
+      const servers = editor.list()
+      const docs = editor.get("docs")
+      editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+      editor.update("docs", (server) => (server.disabled = false))
+      editor.remove("legacy")
+    })
+  }),
+```
+
+ตั้ง `disabled: true` ในการแปลงเพื่อปิดเซิร์ฟเวอร์และยกเลิกการเชื่อมต่อ หรือ `disabled: false` เพื่อเปิดและให้
+OpenCode เชื่อมต่อ OpenCode ปรับวงจรชีวิตเซิร์ฟเวอร์จากการกำหนดค่าที่แปลงแล้ว
+
+เรียก `reload()` หลังสถานะภายนอกที่การแปลงใช้เปลี่ยน เพื่อใช้การแปลงซ้ำและปรับเซิร์ฟเวอร์
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.reload()
+  }),
+```
+
+Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPEditor {
+  list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
+  get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set(name: string, config: Mcp.ServerConfig): void
+  update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
+  remove(name: string): void
+}
+
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
+  readonly transform: Transform<MCPEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Plugins
+
+แสดงรายการปลั๊กอินที่ใช้งานอยู่ ปลั๊กอินที่โหลดไม่สำเร็จ และปลั๊กอินที่ระบบหาแหล่งโหลดได้แล้วใน location ปัจจุบัน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const plugins = yield* plugin.list().pipe(Effect.orDie)
+    yield* Effect.forEach(plugins.data, (item) => Effect.logInfo("plugin", item), { discard: true })
+  }),
+```
+
+กรองค่าตาม schema ในไปป์ไลน์ Effect เมื่อต้องการเฉพาะปลั๊กอินที่ใช้งานอยู่
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const active = yield* plugin.list().pipe(
+      Effect.orDie,
+      Effect.map((result) => result.data.filter((item) => item.state.status === "active")),
+    )
+    yield* Effect.logInfo("active plugin count", { count: active.length })
+  }),
+```
+
+Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginApi<E = never> {
+  readonly list: PluginListOperation<E>
+}
+
+interface Context {
+  readonly plugin: PluginApi<unknown>
+}
+```
+
+### References
+
+อ่านการอ้างอิงที่ใช้ได้ที่ location ปัจจุบัน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    const references = yield* reference.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("references", { count: references.data.length })
+  }),
+```
+
+เพิ่มหรือนำการอ้างอิงในเครื่องและ Git ออก แล้วโหลดใหม่หลังสถานะภายนอกเปลี่ยน `get(name)` คืนแหล่งที่กำหนดค่า
+ปัจจุบัน หรือ `undefined` เมื่อไม่มีชื่อนั้น
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    yield* reference.transform((editor) => {
+      editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+      editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
+      editor.remove("legacy")
+    })
+    yield* reference.reload()
+  }),
+```
+
+Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceEditor {
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+}
+
+interface ReferenceDomain extends ReferenceApi<unknown> {
+  readonly transform: Transform<ReferenceEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Sessions
+
+สร้างหรืออ่านเซสชัน แล้วเลือกเอเจนต์และโมเดลที่งานถัดไปใช้
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Review" }).pipe(Effect.orDie)
+    const current = yield* session.get({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* session.switchAgent({ sessionID: current.id, agent: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* session
+      .switchModel({
+        sessionID: current.id,
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-5-5") },
+      })
+      .pipe(Effect.orDie)
+  }),
+```
+
+ส่งพรอมต์ คำขอสร้างชั่วคราว คำสั่ง หรือข้อความสังเคราะห์
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Automation" }).pipe(Effect.orDie)
+    yield* session.prompt({ sessionID: created.id, text: "Review the current changes" }).pipe(Effect.orDie)
+    const summary = yield* session
+      .generate({ sessionID: created.id, prompt: "Summarize this project" })
+      .pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, name: "review", text: "--staged" }).pipe(Effect.orDie)
+    yield* session
+      .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
+      .pipe(Effect.orDie)
+  }),
+```
+
+แสดงรายการเซสชันทีละหน้า หากต้องการหน้าถัดไป ให้ส่ง `cursor.next` กลับเป็น `cursor` เคอร์เซอร์จำ
+ตัวกรองของคุณ จึงไม่ต้องระบุซ้ำ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const page = yield* ctx.session.list({ directory: ctx.location.directory, limit: 20 }).pipe(Effect.orDie)
+    const next = page.cursor.next
+      ? yield* ctx.session.list({ cursor: page.cursor.next, limit: 20 }).pipe(Effect.orDie)
+      : undefined
+  }),
+```
+
+นำเซสชันชั่วคราวออกด้วย `remove` การนำออกหยุดการทำงานที่ใช้งานและลบเซสชันลูกซ้ำ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+ขอบีบอัดด้วย `compact` คืนรายการอินบ็อกซ์ที่รับแล้ว ไม่ใช่สรุปที่เสร็จ การบีบอัดทำงานที่
+ขอบเขตขั้นถัดไปโดยค่าเริ่มต้น ส่ง `delivery: "queue"` เพื่อรักษาลำดับคิวแทน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+แนบ แสดงรายการ หรือนำรายการคำแนะนำเซสชันแบบมีคีย์ออกด้วย `instructions.entry` รายการแสดงเป็นบล็อก
+`<context key="...">` ในคำแนะนำของเซสชัน และการอัปเดตหรือการนำออกจะประกาศที่ขอบเขตขั้นถัดไปโดยไม่เข้าคิวข้อความ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry
+      .put({ sessionID: created.id, key: "deploy-target", value: "production" })
+      .pipe(Effect.orDie)
+    const entries = yield* ctx.session.instructions.entry.list({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* ctx.session.instructions.entry.remove({ sessionID: created.id, key: "deploy-target" }).pipe(Effect.orDie)
+  }),
+```
+
+Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User),
+[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+type SessionDomain = Pick<
+  SessionApi<unknown>,
+  | "list"
+  | "create"
+  | "get"
+  | "remove"
+  | "switchAgent"
+  | "switchModel"
+  | "prompt"
+  | "generate"
+  | "command"
+  | "compact"
+  | "synthetic"
+  | "interrupt"
+  | "update"
+  | "move"
+  | "wait"
+  | "context"
+  | "instructions"
+>
+```
+
+### Skills
+
+อ่านสกิลที่ location ปัจจุบัน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    const skills = yield* skill.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
+  }),
+```
+
+แปลงและโหลดสกิลใหม่ ใช้ตัวสร้าง schema ของ Effect ที่ปลั๊กอินส่งออกต่อสำหรับค่าที่มี branded type ส่วน `get(id)` คืน
+รายการตัวแก้ไขปัจจุบัน หรือ `undefined` เมื่อไม่มีสกิลนั้น
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    yield* skill.transform((editor) => {
+      editor.add(Skill.Info.make({
+        id: Skill.ID.make("review"),
+        name: Skill.Name.make("Review"),
+        description: "Review the current changes",
+        path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+        content: "Review the current changes for correctness and missing tests.",
+      }))
+      const review = editor.get("review")
+      editor.update("review", (item) => (item.autoinvoke = true))
+      editor.remove("legacy")
+    })
+    yield* skill.reload()
+  }),
+```
+
+Schema: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillEditor {
+  list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
+  add(skill: Skill.Info): void
+  update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
+  remove(id: string): void
+}
+
+interface SkillDomain extends SkillApi<unknown> {
+  readonly transform: Transform<SkillEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Storage
+
+เก็บ อ่าน และลบค่า JSON ถาวรที่ผูกกับ ID ปลั๊กอิน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* storage.set("settings", { strict: true })
+    const settings = yield* storage.get("settings")
+    yield* Effect.logInfo("settings", { settings })
+    yield* storage.remove("settings")
+  }),
+```
+
+สแกนคีย์ตามคำนำหน้าด้วยการแบ่งหน้าด้วยเคอร์เซอร์
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    const first = yield* storage.scan({ prefix: "cache/", limit: 100 })
+    const second = first.next
+      ? yield* storage.scan({ prefix: "cache/", after: first.next, limit: 100 })
+      : { entries: [] }
+    yield* Effect.logInfo("cache entries", { count: first.entries.length + second.entries.length })
+  }),
+```
+
+ที่เก็บข้อมูลรับชนิด JSON ของ Effect และคืน Effect โดยตรง
+
+```ts
+interface StorageDomain {
+  readonly get: (key: string) => Effect.Effect<Schema.Json | undefined>
+  readonly set: (key: string, value: Schema.Json) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
+  readonly scan: (options: StorageScanOptions) => Effect.Effect<StorageScanResult>
+}
+```
+
+### Tools
+
+ใช้ `Schema` ของ Effect เพื่อลงทะเบียนเครื่องมือที่ระบุชนิดข้อมูล ตัวเรียกใช้จะได้รับอินพุตที่ถอดรหัสแล้วและคืน Effect ที่มีเอาต์พุตที่ระบุชนิดข้อมูล เนื้อหาสำหรับแสดงผล หรือข้อมูลเมตา
+
+ตัวแก้ไขรองรับ `add`, `update` และ `remove` คอลแบ็กการแปลงเป็นซิงโครนัส: ต้องไม่คืน Effect หรือ Promise โหลด
+ข้อมูลภายนอกก่อนลงทะเบียนหรือโหลดใหม่ OpenCode เล่นการแปลงที่ใช้งานตามลำดับการลงทะเบียนบน
+ตัวแก้ไขใหม่ สำหรับชื่อเครื่องมือที่มีผลเดียวกัน การลงทะเบียนที่ถูกต้องภายหลังจะแทนที่ก่อนหน้า
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.transform((editor) => {
+      editor.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: Schema.Struct({ name: Schema.String }),
+        output: Schema.Struct({ greeting: Schema.String }),
+        options: { namespace: "acme", codemode: true },
+        execute: ({ name }, context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ status: "greeting" })
+            return { output: { greeting: `Hello ${name}!` } }
+          }),
+      })
+    })
+  }),
+```
+
+เรียก `yield* ctx.tool.reload()` หลังเปลี่ยนข้อมูลแหล่งที่คอลแบ็กจับไว้ การโหลดใหม่เล่นการแปลงที่ใช้งาน
+โดยไม่เปลี่ยนลำดับ ไม่ได้รัน effect ของปลั๊กอินใหม่
+
+เครื่องมือ Effect รับ[การประกาศอินพุต freeform](/build/plugins/server#freeform-tool-input)เดียวกับเครื่องมือ Promise หากโมเดลไม่ประกาศรูปแบบนั้น เครื่องมือจะคงอินพุตออบเจกต์ปกติ
+
+ค่า `id` ของเครื่องมือคือชื่อที่ระบบใช้จริง และ `get()` จะคืน `undefined` หากไม่พบ ID นั้น เมื่อเรียก
+`update` หรือ `remove` ให้ใช้ชื่อที่ระบบใช้จริงซึ่งรวมเนมสเปซด้วย (เช่น `acme_greeting` ข้างต้น) ระบบจะแทนจุดในเนมสเปซด้วย `_`
+และแทนอักขระในชื่อเครื่องมือด้วย `_` หากไม่ใช่ตัวอักษร ตัวเลข `_` หรือ `-` ระบบจะข้ามชื่อที่ไม่พบ หากต้องการสร้างเครื่องมือ ให้ใช้
+`add` พร้อมคำจำกัดความที่สมบูรณ์ การอัปเดตจะคงชื่อและเนมสเปซไว้ ให้แทนที่ด้วย schema หรือตัวเลือกใหม่
+แทนการแก้ไขค่าที่ซ้อน การอัปเดตที่ไม่ถูกต้องจะถูกบันทึกและคงคำจำกัดความก่อนหน้าไว้
+
+{/* prettier-ignore */}
+```ts
+yield* ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+การอัปเดตและการนำออกเล่นตามลำดับพร้อมการเพิ่ม รวมถึงหลังการรีเฟรชแคตตาล็อก MCP
+
+`transform` คืนการลงทะเบียนที่มีขอบเขตกำกับ เรียก `yield* registration.dispose` เพื่อนำการแปลงนั้นออกและสร้างผลลัพธ์ใหม่จากการแปลงที่เหลือ คำจำกัดความเดิมที่เคยถูกแทนที่จึงกลับมาใช้ได้ การยกเลิกซ้ำไม่เปลี่ยนผล และการปิด Scope ของปลั๊กอินจะยกเลิกการลงทะเบียนของปลั๊กอินด้วย
+
+คำขอโมเดลแต่ละรายการจะบันทึกสแนปช็อตของเครื่องมือไว้ การโหลดใหม่และการยกเลิกการลงทะเบียนมีผลกับสแนปช็อตในอนาคตเท่านั้น ไม่เปลี่ยนคำจำกัดความหรือตัวเรียกใช้ที่คำขอเดิมบันทึกไว้แล้ว
+ตัวเรียกใช้ที่อ้างถึงข้อมูลปลั๊กอินซึ่งแก้ไขได้ผ่าน closure จะยังเห็นการเปลี่ยนแปลงของข้อมูลนั้น หากต้องการให้ค่าหนึ่งผูกกับคำจำกัดความเดิม ให้บันทึกค่าจากภายในการแปลง
+
+Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolEditor {
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
+}
+
+interface ToolDomain {
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
+  readonly transform: Transform<ToolEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### VCS
+
+อ่านข้อมูลรีโพ สถานะสำเนาทำงาน หรือ diff ของไฟล์
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branch.list({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const changes = yield* vcs.status().pipe(Effect.orDie)
+    const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
+    yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
+  }),
+```
+
+ลงทะเบียนผู้ให้บริการ VCS ตามขอบเขต location ผ่านการแปลงแบบมีขอบเขต ผู้ให้บริการที่ตรงกับชนิดรีโพที่ตรวจพบจะ
+ถูกเลือกอัตโนมัติ ใช้ `editor.default.set` เพื่อเลือกผู้ให้บริการอื่น
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    yield* vcs.transform((editor) => {
+      editor.add({
+        id: "custom",
+        name: "Custom VCS",
+        info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
+        status: (scope) => readStatus(scope.worktree),
+        diff: (input) => readDiff(input),
+      })
+      editor.default.set("custom")
+    })
+  }),
+```
+
+คอลแบ็กผู้ให้บริการได้รับ location ปัจจุบัน รากสำเนาทำงาน รากโปรเจกต์มาตรฐาน และที่เก็บรีโพ
+ที่ไม่บังคับ คอลแบ็ก diff ยังได้รับโหมดที่เลือก บริบทที่ขอ และงบไบต์เอาต์พุต การค้นพบรีโพ
+ยังใช้ตัวตรวจ Git และ Mercurial ในตัวของ OpenCode
+
+ผู้ให้บริการเลือกใช้ `init(scope)` เพื่อสร้างรีโพใน `scope.worktree` ได้ การเริ่มต้นเลือก
+ผู้ให้บริการตาม ID (Git โดยค่าเริ่มต้น) ไม่ใช่ตามชนิดรีโพที่ตรวจพบ ลงทะเบียนผู้ให้บริการที่มี `init` แม้
+location ยังไม่มีรีโพ OpenCode จะตรวจว่าไดเรกทอรีมีอยู่และไม่มีรีโพก่อนเรียก
+แล้วจึงค้นพบโปรเจกต์ใหม่ รูปแบบรีโพใหม่ยังต้องมีการรองรับการค้นพบนอกเหนือจากคอลแบ็กนี้
+
+Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  readonly default: {
+    get(): string | undefined
+    set(selection: string): void
+  }
+}
+
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
+  readonly transform: Transform<VcsEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Websearch
+
+แสดงรายการผู้ให้บริการหรือรันคำค้นผ่านผู้ให้บริการที่เลือก
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    const providers = yield* websearch.providers().pipe(Effect.orDie)
+    const results = yield* websearch
+      .query({ query: "OpenCode plugins", providerID: WebSearch.ID.make("internal") })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("websearch", { providers: providers.data.length, results: results.data.results.length })
+  }),
+```
+
+ลงทะเบียนตัวเรียกใช้ Effect และเลือกผู้ให้บริการเริ่มต้น ตั้งค่าเริ่มต้นเป็น `false` เพื่อปิดการค้นหาเว็บ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    yield* websearch.transform((editor) => {
+      editor.add({
+        id: "internal",
+        name: "Internal search",
+        execute: ({ query }) => searchInternal(query),
+      })
+      editor.default.set("internal")
+    })
+    yield* websearch.reload()
+  }),
+```
+
+Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider),
+[`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchDefinition {
+  readonly id: string
+  readonly name: string
+  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+}
+
+interface WebSearchEditor {
+  add(definition: WebSearchDefinition): void
+  readonly default: {
+    get(): string | false | undefined
+    set(selection: string | false): void
+  }
+}
+
+interface WebSearchDomain extends WebsearchApi<unknown> {
+  readonly transform: Transform<WebSearchEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Events
+
+การสมัครรับอีเวนต์สาธารณะของเซิร์ฟเวอร์จะได้ `Stream` ของ Effect ให้แยกงานที่อ่านสตรีมไปทำงานใน Fiber ภายใน Scope ของปลั๊กอิน เพื่อให้ระบบหยุดงานนั้นโดยอัตโนมัติเมื่อปิด Scope
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.tap((item) => Effect.logDebug("OpenCode event", { type: item.type })),
+      Stream.runDrain,
+      Effect.forkScoped,
+    )
+  }),
+```
+
+ส่ง `types` เพื่อรับเฉพาะชนิดอีเวนต์ที่ต้องการ สตรีมมีชนิดให้ตรง จึงไม่ต้องใช้ type guard
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe({ types: ["config.updated"] }).pipe(
+      Stream.runForEach(() => Effect.logInfo("configuration changed")),
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventDomain {
+  readonly subscribe: <Type extends EventType = EventType>(input?: {
+    readonly types?: ReadonlyArray<Type>
+  }) => Stream.Stream<Extract<OpenCodeEvent, { type: Type }>, unknown>
+}
+```
+
+## ฮุก
+
+ฮุกดักการดำเนินการสด ปลั๊กอินหลายตัวลงทะเบียนฮุกเดียวกันได้ OpenCode รันตามลำดับปลั๊กอิน
+ฮุกภายหลังจึงเห็นการเปลี่ยนแปลงก่อนหน้า การลงทะเบียนคงอยู่ตลอด Scope ของปลั๊กอิน
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", () => Effect.void)
+  }),
+```
+
+### Sessions
+
+แก้ไขคำแนะนำระบบ ข้อความ หรือเครื่องมือที่ประกอบแล้วทันทีก่อนส่งถึงโมเดล `context` ทำงานสำหรับ
+ลูปเอเจนต์ ส่วน `compaction`, `generate` และ `title` ทำงานสำหรับคำขอเสริมเหล่านั้น `compaction` และ `title` รับ
+`result` ที่ข้ามการเรียกโมเดล
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+        delete event.tools.write
+      }),
+    )
+    yield* session.hook("compaction", (event) =>
+      Effect.map(summarize(event.messages), (summary) => {
+        event.result = { summary }
+      }),
+    )
+  }),
+```
+
+ข้อความในฮุก `context`, `compaction` และ `generate` มี `metadata` ของข้อความที่จัดเก็บไว้อ่านอย่างเดียว
+(เช่นสิ่งที่ฮุก `prompt` ตั้งไว้) ไม่ได้ส่งถึงโมเดล
+
+ส่วน `system` ที่เก็บคำแนะนำของ OpenCode ยังแสดงแต่ละแหล่งใน `metadata.experimental.instructions` เป็น
+`{ key, text }` เช่น `core/date` หรือ `core/environment` ฮุกจึงแยกแหล่งได้ รายการเป็นสำเนา:
+การแก้ `text` ของส่วนนั้นไม่อัปเดตรายการ นี่เป็นฟีเจอร์ทดลองและอาจเปลี่ยน
+
+แก้ไขการตั้งค่าคำขอโมเดลและจำกัดฮุกให้ผู้ให้บริการเดียวได้ อีเวนต์มี `kind` เดียวกับ
+ฮุก HTTP ด้านล่าง
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook(
+      "model.request",
+      (event) => Effect.sync(() => (event.headers["x-plugin"] = "review")),
+      { providerID: "anthropic" },
+    )
+  }),
+```
+
+แก้ไขคำขอหรือการตอบกลับของผู้ให้บริการเนทีฟ บอดีเป็นสตรีมใช้ครั้งเดียว ให้โคลนหรือแทนที่บอดีก่อนอ่าน
+ฮุกทั้งสองทำงานทุกคำขอที่เซสชันส่ง `event.kind` เป็น `"primary"`, `"compaction"`, `"title"` หรือ
+`"generate"` ขึ้นกับโฟลว์ที่ส่ง
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("http.request", (event) =>
+      Effect.sync(() => {
+        event.request.headers.set("x-session-id", event.sessionID)
+        if (event.kind === "title") event.request.headers.set("x-priority", "background")
+      }),
+    )
+    yield* session.hook("http.response", (event) =>
+      Effect.sync(() => {
+        event.response = new Response(event.response.body, {
+          status: event.response.status,
+          headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+        })
+      }),
+    )
+  }),
+```
+
+ผู้ให้บริการที่สตรีมผ่าน WebSocket ใช้การเชื่อมต่อเดียวต่อเซสชัน ฮุก HTTP จึงไม่เห็นทราฟฟิกนั้น ฮุกทดลอง
+`experimental.ws.handshake` ทำงานครั้งเดียวต่อการเรียกโมเดลก่อนเลือกการเชื่อมต่อ และเปิดเผย `url`
+กับ `headers` ของการเชื่อมต่อ การเปลี่ยนอย่างใดอย่างหนึ่งจะเปิดซ็อกเก็ตใหม่ ฮุก HTTP ยังทำงานสำหรับคำขอใดๆ
+ที่เส้นทาง WebSocket ถอยกลับไปใช้
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
+`experimental.ws.send` และ `experimental.ws.receive` เปิดเฟรมเอง: `send` ทำงานหลังไดรเวอร์ผู้ให้บริการ
+สร้างเฟรมขาออก ส่วน `receive` ทำงานทุกเฟรมขาเข้าก่อนไดรเวอร์เห็น สิ่งที่ `frame` เก็บเมื่อฮุกคืนคือสิ่งที่ส่งผ่านสายหรือถึงไดรเวอร์
+OpenCode ไม่ตรวจสอบ
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
+แทนที่การตัดสินใจลองใหม่สำหรับความล้มเหลวของผู้ให้บริการหรือแทนที่เวลาหน่วงเป็นมิลลิวินาที ฮุกทำงานหลัง OpenCode
+จำแนกความล้มเหลวและเสนอ นโยบาย แต่ก่อนกำหนดเวลาลองใหม่ ไม่เปิดเผยว่า OpenCode
+ดำเนินการพยายามครั้งถัดไปภายในอย่างไร
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+ค่า `decision` เริ่มต้นมาจากนโยบายของ OpenCode ฮุกจึงเลือกให้ลองใหม่แม้ปกติจะหยุดเมื่อพบข้อผิดพลาดแบบนั้น หรือยกเลิกการลองใหม่ที่ระบบเสนอได้ ฮุกทำงานตามลำดับการลงทะเบียน โดยฮุกถัดไปจะเห็นผลการตัดสินใจล่าสุด และยังเกินจำนวนครั้งสูงสุดที่ระบบกำหนดไม่ได้
+`attempt` คือลำดับการส่งคำขอจริงที่ระบบกำลังเสนอ คำขอแรกคือครั้งที่ `1` การลองใหม่ครั้งแรกจึงเป็นครั้งที่ `2` หากเวลาหน่วงไม่ถูกต้อง (`NaN`, ค่าอนันต์ หรือค่าลบ) ระบบจะใช้เวลาหน่วงที่คำนวณไว้
+การกู้คืนเมื่อบริบทล้นใช้กลไกแยกต่างหาก เพราะเป็นการบีบอัดบทสนทนาแทนการส่งคำขอเดิมซ้ำ
+
+#### Reference
+
+```ts
+interface SessionHooks {
+  readonly context: SessionContext
+  readonly compaction: SessionCompaction
+  readonly generate: SessionGenerate
+  readonly title: SessionTitle
+  readonly "model.request": SessionModelRequest
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionHookDomain {
+  readonly hook: ModelHooks<SessionHooks>
+}
+```
+
+### Shell
+
+แก้ไขคำสั่ง shell ไดเรกทอรีทำงาน เวลาหมดอายุ ไฟล์ปฏิบัติการ หรือตัวแปรสภาพแวดล้อมก่อนเรียกใช้
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const shell = ctx.shell
+    yield* shell.hook("create.before", (event) =>
+      Effect.sync(() => {
+        if (event.command === "npm") event.command = "bun"
+        event.timeout = Math.min(event.timeout, 60_000)
+        event.env.COMPANY_ENV = "development"
+      }),
+    )
+  }),
+```
+
+#### Reference
+
+```ts
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+
+interface ShellHooks {
+  readonly "create.before": ShellCreateBefore
+}
+
+interface ShellHookDomain {
+  readonly hook: Hooks<ShellHooks>
+}
+```
+
+### Tools
+
+ฮุกก่อนอาจแทนที่อินพุตหรือล้มเหลวด้วย `Tool.Error`
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.before", (event) =>
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
+    )
+  }),
+```
+
+ฮุกหลังอาจตรวจหรือแทนที่ผลลัพธ์ที่สำเร็จและความล้มเหลว
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.after", (event) => {
+      if (event.status === "error") return Effect.logWarning("tool failed", { message: event.error.message })
+      return Effect.sync(() => {
+        event.result = { ...event.result, metadata: { observed: true } }
+      })
+    })
+  }),
+```
+
+#### Reference
+
+```ts
+interface ToolHooks {
+  readonly "execute.before": ToolExecuteBefore
+  readonly "execute.after": ToolExecuteAfter
+}
+
+interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
+interface ToolHookDomain {
+  readonly hook: Hooks<ToolHooks, ToolFailures>
+}
+```
+
+ชนิดการลงทะเบียนที่ใช้ร่วมกันแสดงว่าการดำเนินการใดต้องใช้ Scope ของปลั๊กอิน
+
+```ts
+interface Registration {
+  readonly dispose: Effect.Effect<void>
+}
+
+type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <Name extends keyof Spec>(
+  name: Name,
+  callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>
+```
+
+## การเผยแพร่
+
+ปลั๊กอินแพ็กเกจใช้ default export เดียวกับปลั๊กอิน Effect ในเครื่อง ส่งออกการใช้งาน Effect จากจุดเข้า
+หลักและประกาศ `effect` เป็น `peerDependency` ภายใต้ `devDependencies` ให้ปักหมุดเวอร์ชันที่ `@opencode/plugin` ใช้
+เพื่อให้การติดตั้งสำหรับพัฒนามีเพียงสำเนาเดียว
+
+```json title="package.json"
+{
+  "name": "opencode-acme-effect-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.1"
+  },
+  "devDependencies": {
+    "effect": "4.0.1"
+  }
+}
+```
+
+OpenCode เปลี่ยนเส้นทางการนำเข้า `effect` พาธย่อย `effect/*` ที่ส่งออก และ `@opencode/plugin` (รวมการนำเข้าจาก
+แพ็กเกจที่ปลั๊กอินใช้ใน `node_modules`) ไปยังอินสแตนซ์รันไทม์ของโฮสต์ เพื่อให้ Fiber ตัวเขียนบันทึก และตัวแยกวิเคราะห์ `Schema`
+ใช้สำเนารันไทม์เดียว
+
+- อย่าใส่ `effect` ไว้ในบันเดิลปลั๊กอินที่เผยแพร่ หากใช้บันเดิลเลอร์ ให้ตั้งค่า `effect` และ `effect/*`
+  เป็น external
+- ปลั๊กอินและ Dependency ใน `node_modules` รันกับอินสแตนซ์ `effect` ของรุ่น OpenCode โฮสต์เสมอ
+  ใช้ API และพาธโมดูลของ `effect` ที่เข้ากันได้กับรุ่น OpenCode ที่กำหนดเป้าหมาย Dependency ที่สร้างบน
+  `effect` เมเจอร์อื่น (เช่น Effect 3) ก็ได้รับ `effect` ของโฮสต์และไม่รองรับ
+- ให้เฉพาะพาธย่อย `effect` สาธารณะ ปลั๊กอินที่นำเข้าโมดูล `internal` ส่วนตัวของ Effect จะโหลดไม่สำเร็จ
+  พร้อมข้อผิดพลาดที่ระบุพาธ
+- ไบนารี OpenCode ที่คอมไพล์แล้วไม่รวมแอสเซท Scalar และ Swagger UI ที่หน้าเอกสาร HTTP API ของ Effect ใช้
+  การให้บริการหน้าเหล่านั้นจากปลั๊กอินจะแสดงประกาศแทน
+
+จุดเข้าแพ็กเกจส่งออก `Plugin.define` พร้อมฟังก์ชัน `effect`
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.published",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("installed", true)
+    }),
+})
+```
+
+ใช้เวอร์ชันที่เข้ากันได้กับรุ่น OpenCode ที่กำหนดเป้าหมาย และทดสอบแพ็กเกจที่ติดตั้ง ไม่ใช่เฉพาะ
+สำเนาที่ลิงก์กับเวิร์กสเปซ
+
+```sh
+bun pm pack
+bun add ./opencode-acme-effect-plugin-1.0.0.tgz
+```

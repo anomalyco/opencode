@@ -1,0 +1,126 @@
+---
+title: "企業"
+description: "控制組織中的人員可以在 OpenCode 中使用哪些模型、供應商與整合。"
+---
+
+使用[原則](/policies)控制 OpenCode 能在組織的機器上使用什麼。請將它們放在受管理
+設定中，讓使用者與專案無法變更。
+
+## 部署
+
+將原則放在系統設定檔中：
+
+| 平台 | 檔案 |
+| --- | --- |
+| macOS | `/Library/Application Support/opencode/opencode.json` |
+| Linux | `/etc/opencode/opencode.json` |
+| Windows | `%ProgramData%\opencode\opencode.json` |
+
+在 macOS 上，你也可以透過 MDM 將它們部署為 `ai.opencode.managed` 網域的受管理偏好設定。請參閱
+[設定位置](/config#locations)。
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+這些檔案中的原則優先於使用者與專案設定，因此使用者或儲存庫無法允許你拒絕的項目。
+請參閱[優先順序](/policies#precedence)。
+
+## 封鎖免費模型
+
+封鎖未登入就能使用的免費方案。其他功能不受影響，使用者仍可連接自己的供應商與帳號。
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+免費方案是沒有帳號的 `opencode` 整合。已登入的控制台帳號是 `opencode#<account>`，因此
+此陳述式不會影響它們。
+
+控制台工作區也可以提供免費模型。若要封鎖它們：
+
+- 在你自己的工作區中，於控制台的「模型」分頁關閉 **Free models**。請參閱
+  [OpenCode 模型](/console/providers#opencode-models)。
+- 若要在每個帳號中隱藏免費模型，請在 OpenCode 服務上設定 `OPENCODE_DISABLE_FREE_MODELS=1`。請參閱
+  [免費模型](/models#free-models)。
+
+## 要求使用你的控制台工作區
+
+只允許你組織的控制台工作區。其他任何項目都無法連接或使用。
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` 只會列出 OpenCode 控制台，讓人們可以登入。
+- 只有你的工作區可運作。免費方案、個人控制台帳號、其他組織、來自環境
+  變數的 API 金鑰，以及來自 `opencode.json` 的供應商都會被封鎖。
+- 你工作區的模型、MCP 伺服器與網路搜尋可運作。在控制台中變更它們，無需重新部署原則。
+
+請將 `org_01M3CAP8H43Z49CER6NT0Y3ZF1` 替換為你工作區的組織 ID。若也要在工作區中封鎖免費模型，
+請在控制台關閉 **Free models**。
+
+## 只允許核准的供應商
+
+拒絕所有供應商，然後允許你核准的項目。此範例只允許內部的 OpenAI 相容閘道。
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+被拒絕的供應商會遭到移除，即使有人擁有其憑證。請參閱[供應商](/policies#providers)。
+
+## 限制 MCP 伺服器與工具
+
+只允許核准的 MCP 伺服器，並封鎖你不希望 agent 執行的工具。
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+請參閱 [MCP 伺服器、技能與外掛](/policies#mcp-servers-skills-and-plugins)與[工具](/policies#tools)。
+
+## 檢查是否生效
+
+- 以使用者身分執行 `/connect` 與 `/models`，確認只列出你允許的項目。
+- 檢查伺服器日誌是否有警告。驗證失敗的陳述式會遭到捨棄，其餘仍會套用。
+- 被封鎖的工具呼叫會以 `Blocked by configuration policy` 失敗。
+
+## 版本
+
+| 動作 | 需要 |
+| --- | --- |
+| `integration.connect`、`integration.use`、`mcp.use`、`skill.use`、`plugin.use` | 2.2.3 |
+| `websearch.use` | 2.2.6 |
+
+較舊的用戶端會忽略這些陳述式。

@@ -1,0 +1,3866 @@
+---
+title: "GUI"
+description: "Zbuduj część GUI pluginu OpenCode dla OpenCode Desktop za pomocą @opencode/plugin/gui."
+---
+
+Plugin GUI dodaje panele, polecenia, strony ustawień i natywne integracje do OpenCode Desktop za pomocą SDK pluginów
+GUI, `@opencode/plugin/gui`. To część `./gui-experimental` [pakietu pluginu](/build/plugins), samodzielna lub obok
+[części serwerowej](/build/plugins/server) i [części TUI](/build/plugins/cli).
+
+<Callout type="note">
+  API pluginów GUI jest eksperymentalne i może się zmieniać między wydaniami. Nazwa eksportu `-experimental` mówi o tym
+  w Twoim pakiecie.
+</Callout>
+
+Plik `./gui-experimental` domyślnie eksportuje `Plugin.define`, podobnie jak części serwerowa i TUI:
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+export default Plugin.define({
+  i18n: { en: { "command.open": "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("command.open"),
+      run: () => void ctx.client.rpc(Acme).open({}),
+    }))
+  },
+  main(ctx) {
+    ctx.log.write("info", "acme started")
+  },
+})
+```
+
+Plugin GUI może działać w dwóch procesach:
+
+- **`setup`** działa w każdym oknie aplikacji desktopowej. Wnosi panele, polecenia, strony ustawień, sloty, źródła
+  serwerów, procedury obsługi linków i style. Zobacz [Okno](#the-window).
+- **`main`** działa raz, w głównym procesie Electron. Udostępnia typowane kontrakty `Ipc`, natywne pozycje menu, osadzenia
+  `WebContentsView` oraz integracje Node i Electron. Zobacz [Proces główny](#the-main-process).
+
+## Pakiet
+
+Pakiet pluginu może dostarczać kod serwera, TUI i GUI z jednego pakietu npm. Dodaj jeden eksport `./gui-experimental`
+obok `./tui`, a OpenCode Desktop wczyta go dla każdego pluginu na własnym serwerze w tle.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "solid-js": "^1.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
+```
+
+Użytkownicy instalują go jak każdy inny plugin; nie ma osobnego kroku instalacji GUI.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+GUI nie deklaruje własnego ID, tylko przejmuje ID pluginu: `id` części serwerowej albo, jeśli pakiet nie ma takiej
+części, nazwę pakietu. W przypadku lokalnego katalogu bez `name` używana jest nazwa katalogu. ID odczytasz jako `ctx.id`.
+
+### Jeden plik, dwa procesy
+
+Każdy proces wykonuje kod całego pliku `./gui-experimental` i odczytuje jego eksport domyślny. Okna uruchamiają `setup`,
+a proces główny aplikacji desktopowej uruchamia `main`.
+
+```tsx title="src/gui.tsx"
+import { shell } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  setup(ctx) {
+    // Window code: Solid components, ctx.layout, ctx.add(Command, …).
+  },
+  main(ctx) {
+    // Main code: electron, Node built-ins, ctx.windows.
+    ctx.windows.on("open", () => shell.beep())
+  },
+})
+```
+
+Ponieważ oba procesy wykonują kod tego samego pliku, każdy z nich podstawia atrapy modułów dostępnych tylko w drugim procesie:
+
+- **W oknie** `electron` i wbudowane moduły Node są zastępowane atrapami.
+- **W procesie głównym** atrapy zastępują Solid i moduły dostępne tylko w oknie.
+
+Na poziomie modułu atrapa pozwala odczytywać dowolne właściwości, wywoływać funkcje i tworzyć instancje — także wtedy,
+gdy Solid przenosi szablony lub bundler przenosi wywołania `require` na początek zakresu. Umieszczaj kod danego procesu
+w przeznaczonej dla niego funkcji inicjalizacyjnej: w niewłaściwym procesie kod dostanie atrapy zamiast działających wartości.
+
+Oba procesy używają `Plugin.define` i funkcji pomocniczych kontraktów z tego samego SDK. W procesie głównym import
+`@opencode/plugin/gui` wskazuje na SDK procesu głównego, które eksportuje te same `Plugin`, `Store`, `Ipc`, `Contract` i `Registry`. Jedna
+definicja obsługuje oba procesy. Jej eksporty dostępne tylko w oknie, takie jak `Command`, `bindPlugin` i `createKeyed`,
+są w procesie głównym `undefined`, więc używaj ich tylko w `setup`.
+
+## Budowanie bundle'a
+
+`./gui-experimental` musi być jednym wstępnie zbudowanym plikiem CommonJS. Zbuduj go presetem Vite z
+`@opencode/plugin/gui/vite`:
+
+```ts title="vite.config.ts"
+import { defineConfig } from "vite"
+import { gui } from "@opencode/plugin/gui/vite"
+
+export default defineConfig({ plugins: [gui()] })
+```
+
+```bash
+vite build
+```
+
+Preset robi następujące rzeczy:
+
+- Kompiluje JSX Solid przez `vite-plugin-solid`.
+- Emituje jeden plik CommonJS i wstawia każdy dynamiczny `import()`, ponieważ aplikacja nie może wczytać drugiego
+  fragmentu.
+- Pozostawia jako external [moduły współdzielone](#shared-modules) aplikacji, Electron i wbudowane moduły Node, a każdą
+  inną zależność dołącza do pakietu.
+- Przerywa budowanie przy każdym innym module `effect/*`, `solid-js/*` lub `@opencode/*`. Aplikacja go nie udostępnia,
+  a dołączona kopia nie współdzieliłaby instancji aplikacji.
+
+```text
+effect/Schema is not a module the OpenCode app provides to plugin GUIs: effect, @opencode/plugin/gui, …
+```
+
+Importuj zamiast tego ze współdzielonego punktu wejścia, na przykład `import { Schema } from "effect"`.
+
+### Opcje presetu
+
+Przekaż opcje do `gui()`, aby zmienić punkt wejścia lub plik wyjściowy.
+
+```ts title="vite.config.ts"
+export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
+```
+
+- `entry` to plik, który domyślnie eksportuje `Plugin.define`. Domyślnie `src/gui.tsx`.
+- `outFile` to plik bundle'a, na który wskazuje eksport `./gui-experimental`. Domyślnie `dist/gui-experimental.cjs`.
+
+#### Referencja
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
+
+### Zależności
+
+Dodaj narzędzia budowania jako devDependencies. Aplikacja udostępnia `@opencode/plugin/gui` w czasie działania, więc
+pakiet potrzebuje tylko typów z zależności `@opencode/plugin`.
+
+```bash
+bun add -d vite vite-plugin-solid solid-js
+```
+
+Dla typów Electron i Node w `main` dodaj też `electron` i `@types/node`:
+
+```bash
+bun add -d electron @types/node
+```
+
+### Współdzielone moduły
+
+Każdy proces udostępnia bundle'owi odpowiednie moduły. Jeśli bundle spróbuje załadować moduł, którego nie udostępnia
+żaden z procesów, GUI pluginu zgłosi błąd.
+
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **Oba procesy:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
+  `@opencode/schema/rpc`, `@opencode/client` i `@opencode/client/effect`.
+- **Tylko okna:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid` i
+  `@opencode/plugin/gui/{file,review,browser}`. Proces główny otrzymuje obojętne symbole zastępcze.
+- **Tylko proces główny:** `electron` i wbudowane moduły Node, takie jak `node:fs`. Okna otrzymują obojętne symbole
+  zastępcze.
+
+## Skąd wczytują się wpisy GUI
+
+OpenCode Desktop wczytuje wpisy GUI z własnego serwera w tle, który już wczytuje pluginy z Twojej konfiguracji, więc
+nigdy nie dodają nowego źródła kodu. Skonfiguruj plugin w globalnym `opencode.json(c)`, aby jego GUI było dostępne
+w każdym oknie.
+
+<Callout type="note">
+  TUI odczytuje pluginy z `cli.json`, ale aplikacja desktopowa odczytuje tylko `opencode.json(c)`. Pakiet, który
+  dostarczał tylko część TUI i który użytkownicy wymieniają w `cli.json`, musi też zostać wymieniony w `opencode.json(c)`,
+  gdy dodaje `./gui-experimental`.
+</Callout>
+
+Proces główny aplikacji desktopowej pobiera listę pluginów i ich bundle'e z własnego serwera, używając poświadczenia
+dostępnego tylko w tym procesie. Do wszystkich okien wysyła ten sam zestaw. Okno nie może dostarczyć kodu procesu głównego.
+
+Plugin, którego część serwerowa nie wczyta się, nie ma GUI.
+
+## Przeładowanie i aktualizacje
+
+Wczytaj plugin z jego lokalnego katalogu i przebudowuj przy każdej zmianie:
+
+```bash
+vite build --watch
+```
+
+- Lokalny katalog, którego `package.json` ma `name` i `exports`, rozwiązuje `./gui-experimental` przez nie. Bez nich
+  wczytuje `gui-experimental.cjs` (lub `.js`) w katalogu głównym. Wpis musi mieć rozszerzenie `.cjs` lub `.js`; każdy
+  inny plik jest ignorowany.
+- Każda przebudowa przeładowuje GUI pluginu w każdym oknie i w procesie głównym. Wpis serwera nie restartuje się.
+- GUI zainstalowanego pakietu zmienia się tylko wraz z jego wersją.
+- Zmiana `options` pluginu w `opencode.json(c)` przeładowuje plugin.
+- `opencode plugin update` zastępuje GUI pakietu po zakończeniu aktualizacji.
+- [**Settings > Extensions > Plugins**](/plugins#desktop) wyświetla plugin z przełącznikiem wyłączającym jego GUI. Aby
+  go usunąć, usuń go z `opencode.json(c)` lub uruchom `opencode plugin remove <package>`.
+
+<Callout type="note">
+  Wbudowane pluginy aplikacji rezerwują swoje ID. Jeśli ID Twojego pluginu jest jednym z nich, zagnieżdża się pod nim
+  z `.`, ma zagnieżdżony pod sobą inny albo należy do przestrzeni nazw `opencode`, jego GUI się nie wczyta, a
+  **Settings > Extensions > Plugins** wyświetli go jako niewczytany.
+</Callout>
+
+## Definiowanie pluginu GUI
+
+`Plugin.define` deklaruje systemy, na których plugin działa, jego zapisany stan okna, ikony i teksty. Host odczytuje te
+deklaracje przed uruchomieniem którejkolwiek konfiguracji.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  os: ["macos", "linux"],
+  stores: {
+    prefs: Store.global(Schema.Struct({ enabled: Schema.Boolean }), { enabled: true }),
+  },
+  i18n: {
+    en: { title: "Acme", "command.open": "Open Acme" },
+    de: { title: "Acme", "command.open": "Acme öffnen" },
+  },
+})
+```
+
+- Host nadaje pluginowi identyfikator `ctx.id`: `id` części serwerowej albo nazwę pakietu dla pakietu bez części serwerowej
+  (nazwę katalogu dla lokalnego katalogu bez `name`). Poprzedza nim każde ID tworzone przez plugin: polecenia
+  (`<id>.<command>`), klucze paneli (`<id>:<tab>`), zapisane klucze (`plugin.<id>.<key>`) i ID [kontraktów oraz
+  Ipc](#contracts-and-tokens), które udostępnia.
+- `os` ogranicza plugin do niektórych systemów operacyjnych. Pomiń, aby działał na każdym. Plugin, którego `os` pomija
+  ten system, nie działa, a **Settings > Extensions > Plugins** zachowuje jego wiersz z „Not available on this system.”
+- `stores` deklaruje [zapisany stan](#stored-state) okien. Odczytuj go jako `ctx.stores.<key>`.
+- `icons` deklaruje [własne ikony](#icons) pluginu, każdą jako tekst pliku SVG. Odczytuj nazwę ikony jako
+  `ctx.icons.<name>`.
+- `i18n` przechowuje teksty według języka. Umieść każdą wersję językową bezpośrednio w definicji; jeśli brakuje w niej
+  klucza, używana jest wersja angielska. Odczytuj teksty przez `ctx.t(key, params)` i `ctx.plural(key, count)`. W oknie
+  `ctx.t` odczytuje też wspólne klucze aplikacji, takie jak `common.*`. W `main` dla brakującego klucza dostajesz sam klucz.
+- Zdefiniuj `setup`, `main` lub obie funkcje. Jeśli zabraknie obu, GUI się nie wczyta.
+- Bez konfiguracji `Plugin.define` zwraca deklaracje jako `Plugin.Declarations`, więc konfiguracje w innych plikach mogą
+  być z nich typowane. `Plugin.Definition` to typ pełnej definicji.
+- Plugin nie deklaruje kontraktów, które udostępnia lub używa. Udostępnia je i odczytuje w czasie działania; zobacz
+  [Kontrakty i tokeny](#contracts-and-tokens).
+
+#### Referencja
+
+```ts
+interface Declarations {
+  os?: ("macos" | "windows" | "linux")[]
+  stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: SetupContext<this>): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Messages = Record<string, string>
+
+type Cleanup = () => void | Promise<void>
+```
+
+### Podział na pliki
+
+Mały plugin GUI mieści się w `src/gui.tsx`. W większym zadeklaruj plugin w `definition.ts`, umieść współdzielone tokeny
+w `contract.ts`, zapisz każdą konfigurację w osobnym pliku i połącz je w `src/gui.tsx`.
+
+```text
+src/
+├── index.ts            Server part: Plugin.define from @opencode/plugin
+├── rpc.ts              RPC contract between the server part and its clients
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
+└── gui/
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
+    ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
+    ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
+    ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
+    ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
+    └── i18n/en.ts      English copy
+```
+
+Przy starcie okna wykonywany jest kod całego pliku `./gui-experimental`. Na poziomie modułu i w `setup` wykonuj tylko
+lekkie operacje, takie jak rejestracja elementów pluginu. Kosztowne operacje zostaw komponentom, `createKeyed` lub
+`createLatest`.
+
+W większym pluginie najpierw zadeklaruj plugin, potem otypuj każdą konfigurację z deklaracji, a następnie zdefiniuj
+plugin z nimi.
+
+```ts title="src/gui/definition.ts"
+import { Schema } from "effect"
+import { Plugin, Store } from "@opencode/plugin/gui"
+
+export const definition = Plugin.define({
+  stores: { notes: Store.global(Schema.Struct({ count: Schema.Number }), { count: 0 }) },
+})
+```
+
+```tsx title="src/gui/window.tsx"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Notes } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.provide(Notes, { count: () => ctx.stores.notes.value.count })
+}
+```
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  ctx.log.write("info", "acme started")
+}
+```
+
+```tsx title="src/gui.tsx"
+import { Plugin } from "@opencode/plugin/gui"
+import { definition } from "./gui/definition"
+import { main } from "./gui/main"
+import { setup } from "./gui/window"
+
+export default Plugin.define({ ...definition, setup, main })
+```
+
+- `Plugin.Setup<typeof definition>` to typ konfiguracji okna. Typuje `ctx.stores` z zadeklarowanych stores i `ctx.icons`
+  z zadeklarowanych ikon.
+- `Plugin.MainSetup` to typ konfiguracji głównej, a `Plugin.Cleanup` to typ funkcji sprzątającej, którą może zwrócić
+  każda konfiguracja.
+- Importuj rejestry, tokeny i pomocniki, takie jak `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`,
+  `Registry`, `Store`, `createKeyed`, `usePlugin` i `bindPlugin`, z `@opencode/plugin/gui`.
+- Importuj rejestry dostępne tylko w procesie głównym, takie jak `MenubarItem`, z `@opencode/plugin/gui/main`.
+
+## Wspólny kontekst
+
+Obie konfiguracje otrzymują opcje pluginu, klienta serwera OpenCode i metadane aplikacji, podobnie jak części serwerowa
+i TUI.
+
+### Opcje
+
+`ctx.options` zawiera `options` z wpisu pluginu w `opencode.json(c)`: te same wartości, które otrzymuje część serwerowa.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode-acme-plugin", "options": { "team": "core" } }],
+}
+```
+
+```ts
+setup(ctx) {
+  const team = ctx.options.team
+}
+```
+
+- Zmiana opcji przeładowuje plugin.
+
+### Klient serwera
+
+`ctx.client` to klient OpenCode serwera, który uruchamia plugin: serwera własnego aplikacji desktopowej. Użyj go, aby
+wywołać część serwerową przez jej [RPC](/build/plugins/rpc).
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+import { Acme } from "./rpc"
+
+ctx.add(Command, () => ({
+  id: "search",
+  title: ctx.t("command.search"),
+  run: async () => {
+    const result = await ctx.client.rpc(Acme).search({ query: "todo" })
+    console.log(result)
+  },
+}))
+```
+
+- Odczytuj `ctx.client` w miejscu wywołania. Zmienia się po restarcie tego serwera.
+- Gdy serwer jest nieosiągalny, każde wywołanie jest odrzucane.
+
+### Metadane aplikacji
+
+`ctx.app` opisuje działającą aplikację.
+
+```ts
+if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
+```
+
+- `name` to `"opencode"`, jak w `ctx.app.name` pluginu serwera.
+- `platform` to `"desktop"` w aplikacji Electron i w `main`, a `"web"` w karcie przeglądarki.
+- `packaged` ma wartość `true`, gdy aplikacja desktopowa działa w wersji spakowanej. W sieci zawsze `false`.
+- Pluginy serwera otrzymują `name`, `version` i `channel`; pluginy TUI otrzymują `version` i `channel`.
+
+#### Referencja
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
+
+## Kontrakty i tokeny
+
+Tokeny pozwalają pluginom GUI komunikować się między procesami i ze sobą bez importowania kodu środowiska drugiej
+strony. Umieść każdy token w `contract.ts`. Token zawiera tylko swój rodzaj i ID oraz schematy `Ipc`, więc inne pluginy
+mogą go zaimportować bez Twojego kodu środowiska uruchomieniowego.
+
+- `ctx.provide(token, impl)` udostępnia jeden z Twoich tokenów: `Contract` z konfiguracji okna lub `Ipc` z `main`.
+- `ctx.use(token)` korzysta z kontraktu lub `Ipc` udostępnianego przez inny plugin. Zwraca akcesor
+  [`Live`](#live-dependencies-and-failure-handling).
+- `ctx.main(ipc)` zwraca klienta `Ipc` udostępnianego przez Twoje `main`.
+
+Plugin udostępnia tylko tokeny, których ID jest jego własnym ID lub zaczyna się od niego, jako `<id>.<name>`.
+`ctx.provide` zgłasza błąd dla każdego innego ID, a `ctx.main` dla `Ipc` poza Twoim ID. Przykłady na tej stronie używają
+ID pluginu `acme`, więc ich ID tokenów zaczynają się od `acme.`.
+
+```ts
+Contract.define<AcmeBadge, "acme.badge">("acme.badge") // Plugin acme can provide it.
+Contract.define<AcmeBadge, "badge">("badge") // ctx.provide throws in plugin acme.
+```
+
+### Kontrakty
+
+Użyj `Contract.define`, gdy konfiguracja okna jednego pluginu udostępnia API lub komponent Solid konfiguracjom okien
+innych pluginów.
+
+```ts title="src/gui/contract.ts"
+import type { JSX } from "solid-js"
+import { Contract } from "@opencode/plugin/gui"
+
+export interface AcmeBadge {
+  Badge(props: { readonly label: string }): JSX.Element
+  count(): number
+}
+
+export const AcmeBadge = Contract.define<AcmeBadge, "acme.badge">("acme.badge")
+```
+
+Udostępnij go z konfiguracji okna przez `ctx.provide`. Gdy kontrakt zawiera komponent, opakuj go przez `bindPlugin`
+podczas konfiguracji. Wtedy `usePlugin()` wewnątrz niego odczytuje kontekst dostawcy, a nie konsumenta.
+
+```tsx title="src/gui.tsx"
+import { bindPlugin, Plugin } from "@opencode/plugin/gui"
+import { AcmeBadge } from "./gui/contract"
+
+export default Plugin.define({
+  i18n: { en: { title: "Acme" } },
+  setup(ctx) {
+    ctx.provide(AcmeBadge, {
+      Badge: bindPlugin((props: { readonly label: string }) => (
+        <span>
+          {ctx.t("title")}: {props.label}
+        </span>
+      )),
+      count: () => 42,
+    })
+  },
+})
+```
+
+- Otypuj propsy komponentu opakowanego w `bindPlugin`, jak w `bindPlugin((props: FileTreeProps) => ...)`. TypeScript nie
+  potrafi ich wywnioskować wewnątrz `ctx.provide`.
+- Pozostaw metody danych, takie jak `count`, nieopakowane.
+- `ctx.provide` zwraca funkcję wycofującą kontrakt wcześniej. Host wycofuje go też wraz z bieżącym właścicielem albo
+  gdy plugin się zatrzyma.
+
+### Korzystanie z kontraktu innego pluginu
+
+Wyeksportuj `contract.ts` z pakietu, na przykład jako `./contract`, aby inne pluginy mogły importować jego tokeny. Inny
+plugin korzysta z kontraktu przez `ctx.use(token)`. Wartość akcesora zmienia się, gdy dostawca startuje, zatrzymuje się
+i restartuje, więc odczytuj ją w miejscu użycia.
+
+```tsx title="src/gui.tsx"
+import { Plugin, Slot } from "@opencode/plugin/gui"
+import { AcmeBadge } from "opencode-acme-plugin/contract"
+
+export default Plugin.define({
+  setup(ctx) {
+    const badge = ctx.use(AcmeBadge)
+
+    const count = () => {
+      const live = badge()
+
+      return live.status === "active" ? live.value.count() : 0
+    }
+
+    ctx.add(Slot, { at: "window.bottom", render: () => <span>{count()}</span> })
+  },
+})
+```
+
+- `ctx.use` zwraca ten sam akcesor dla każdego wywołania z tym tokenem.
+- Konsument działa dalej, gdy dostawca jest wyłączony. Zobacz
+  [Zależności Live i obsługa błędów](#live-dependencies-and-failure-handling).
+
+### IPC między procesem głównym a oknami
+
+Użyj `Ipc.define` z kodekami Effect `Schema`, aby zdefiniować typowany most między `main` a `setup`. `main` implementuje
+go przez `ctx.provide`, a okno wywołuje go przez `ctx.main`.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const KeepAwake = Ipc.define({
+  id: "acme.awake",
+  methods: {
+    screenActive: { output: Schema.Boolean },
+    setScreenActive: { input: Schema.Boolean },
+  },
+})
+```
+
+```ts
+const awake = ctx.main(KeepAwake)
+
+await awake.setScreenActive(true)
+```
+
+- Inne pluginy korzystają z Twojego `Ipc` przez `ctx.use(KeepAwake)`, jak z kontraktu.
+- Zobacz [Definiowanie i udostępnianie Ipc](#define-and-provide-an-ipc), aby poznać stan, zdarzenia i dostawcę.
+
+### Rejestry należące do pluginu
+
+Użyj `Registry.define` dla listy należącej do pluginu. Inne pluginy wnoszą elementy przez `ctx.add`, a Twój plugin
+odczytuje je przez `ctx.list`.
+
+```ts title="src/gui/contract.ts"
+import { Registry } from "@opencode/plugin/gui"
+
+export interface Exporter {
+  readonly id: string
+  readonly title: string
+  run(text: string): void
+}
+
+export const Exporter = Registry.define<Exporter>("acme.exporter")
+```
+
+```tsx
+// Another plugin contributes an item.
+ctx.add(Exporter, () => ({ id: "gist", title: ctx.t("exporter.gist"), run: (text) => upload(text) }))
+
+// The owner lists every contribution. Reactive: read it in render or in a memo.
+const exporters = () => ctx.list(Exporter)
+```
+
+## Okno
+
+`setup` pluginu działa w każdym oknie aplikacji desktopowej. Przekaż go do `Plugin.define` z `@opencode/plugin/gui`
+w [pliku `./gui-experimental`](#define-the-gui-plugin) pluginu. `setup` jest synchroniczny i może zwrócić funkcję
+sprzątającą; zobacz [Czasy życia i sprzątanie](#lifetimes-and-cleanup).
+
+```tsx title="src/gui.tsx"
+import { Command, Plugin } from "@opencode/plugin/gui"
+
+export default Plugin.define({
+  i18n: { en: { open: "Open Acme" } },
+  setup(ctx) {
+    ctx.add(Command, () => ({
+      id: "open",
+      title: ctx.t("open"),
+      run: () => ctx.system.openExternal("https://acme.example"),
+    }))
+  },
+})
+```
+
+## Komponenty
+
+W komponentach Solid wywołaj `usePlugin<typeof definition>()`, aby otrzymać ten sam obiekt kontekstu, który dostaje
+`setup`. Otypuj go z deklaracji w ich własnym pliku ([podział na pliki](#split-across-files)), aby komponent i definicja
+nie importowały się nawzajem.
+
+```tsx title="src/gui/window.tsx"
+import { Slot, usePlugin, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function StatusLabel() {
+  const ctx = usePlugin<typeof definition>()
+
+  return <span>{ctx.t("title")}</span>
+}
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Slot, { at: "window.bottom", render: () => <StatusLabel /> })
+}
+```
+
+`usePlugin` zgłasza błąd poza wkładem pluginu. W komponencie renderowanym przez inny plugin zwraca kontekst tego
+pluginu, więc komponent udostępniany na kontrakcie opakuj w `bindPlugin`; zobacz [Kontrakty](#contracts).
+
+## Ikony
+
+Każde pole `icon` SDK oraz `ctx.ui.Icon` przyjmuje `IconName`: nazwę jednej z ikon aplikacji lub ikony zadeklarowanej
+przez plugin. Każdy inny ciąg nie kompiluje się.
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### Deklarowanie własnych ikon
+
+Dla grafiki, której aplikacja nie ma, takiej jak znak Twojego produktu, trzymaj plik SVG w pakiecie i zadeklaruj go
+w `icons`. Importuj plik z `?raw`, który preset `gui()` dołącza jako tekst.
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+Następnie przekazuj nazwę ikony z `ctx.icons` wszędzie, gdzie trafia `IconName`.
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons` ma jedną nazwę dla każdej zadeklarowanej ikony. Nazwa niezadeklarowana nie kompiluje się.
+- Host rejestruje ikony przed uruchomieniem `setup` i wycofuje je, gdy plugin znika.
+- Wartość, która nie jest dokumentem SVG, powoduje błąd pluginu przy starcie.
+- Aby import `?raw` przeszedł sprawdzanie typów, dodaj `"vite/client"` do `types` w `tsconfig.json`.
+
+### Rysowanie ikony
+
+Host rysuje ikonę tak jak własne: w rozmiarze i kolorze miejsca, które ją pokazuje.
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- `viewBox` określa ramę rysunku, a gdy go nie ma, `width` i `height`. Host skaluje go do 14, 16 lub 20 pikseli, więc
+  rysuj na siatce 16 pikseli.
+- Rysuj przez `currentColor`. Ikona przyjmuje wtedy kolor swojego miejsca, na przykład `tone` pigułki lub przygaszony
+  kolor ikony w wierszu menu.
+- `id` w rysunku należy do całego okna. Utrzymuj unikalne identyfikatory albo je pomiń.
+
+### Animowanie ikony
+
+Ikona może się poruszać, na przykład aby pokazać trwającą pracę. Użyj elementów animacji SVG, takich jak `animate`
+i `animateTransform`, wewnątrz pliku.
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- Każde miejsce pokazujące ikonę porusza się zgodnie.
+- Animacja trwa, gdy host ponownie renderuje miejsce, na przykład gdy `show` pigułki działa ponownie.
+- Przy włączonym ustawieniu ograniczenia ruchu host zatrzymuje każdą ikonę na pierwszej klatce. Ustaw pierwszą klatkę
+  jako rysunek spoczynkowy.
+- Ikona, której żadne miejsce nie pokazuje, nic nie kosztuje.
+
+### Zapisane nazwy ikon
+
+Nazwa ikony to ciąg `<plugin id>:<name>`, więc host zapisuje ją jak nazwę swojej ikony.
+[Notatka lub cytat kompozytora](#attach-to-the-composer) zachowuje ją wraz z wersją roboczą i wysłaną wiadomością,
+a [zamknięta karta](#reopen-closed-tabs) wraz z układem sesji.
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- Gdy plugin nie jest aktywny, ikona nic nie rysuje i zachowuje rozmiar.
+- Odczytuj nazwę z `ctx.icons` w miejscu użycia. Nazwa zapisana ręcznie nie kompiluje się.
+
+#### Referencja
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
+
+## Rejestry
+
+Przekaż token rejestru i element do `ctx.add`, aby wnieść wkład do powłoki okna. Przekaż element jako funkcję,
+`() => item | undefined`, gdy zależy od stanu reaktywnego, takiego jak język. Host uruchamia funkcję ponownie, gdy
+zmieni się to, co odczytuje. Zwróć `undefined`, aby wycofać element, dopóki funkcja nie zwróci go ponownie.
+
+```ts
+ctx.add(Command, () => ({ id: "open", title: ctx.t("command.open"), run: () => open() }))
+```
+
+- Odczytuj etykiety przez `ctx.t` wewnątrz funkcji. Etykieta odczytana raz, w stałym elemencie, zachowuje język,
+  w którym została odczytana.
+- Gdy element ma pole typu literałowego, takie jak `hidden: true`, `section`, `icon` lub nazwa menu, otypuj zwracany typ
+  funkcji: `(): Command => ({ ... })`. Bez tego TypeScript rozszerza pole do `string` lub `boolean` i żadne przeciążenie
+  nie pasuje.
+- Przekaż stały element, gdy nigdy się nie zmienia, taki jak [styl](#styles).
+- Host utrzymuje stabilność niektórych obiektów: kart zwracanych przez panel z `list` oraz elementów z `render`, takich
+  jak panele i strony ustawień. Odczytuj ich etykiety z getterów, takich jak `get title() { return ctx.t("title") }`.
+- `ctx.add` zwraca funkcję wycofującą element wcześniej.
+
+### Polecenia
+
+`Command` dodaje akcję do palety poleceń, **Settings > Shortcuts** i opcjonalnie menu `/` kompozytora. Host publikuje
+polecenie jako `<plugin id>.<command id>`.
+
+```ts
+import { Command } from "@opencode/plugin/gui"
+
+ctx.add(
+  Command,
+  (): Command => ({
+    id: "toggle",
+    title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
+    group: ctx.t("command.category.view"),
+    section: "terminal",
+    bind: "ctrl+`",
+    slash: { name: "notes", after: "open" },
+    featured: true,
+    enabled: !!ctx.sessions.current(),
+    run: () => {
+      const session = ctx.sessions.current()
+
+      if (session) ctx.layout.toggle(`${ctx.id}:main`, session)
+    },
+  }),
+)
+```
+
+- `title` to etykieta palety, `description` jej druga linia, a `group` kategoria, jako przetłumaczony tekst.
+- `keywords` zawiera dodatkowe słowa dopasowywane przez paletę, rozdzielone spacjami.
+- `section` to sekcja **Settings > Shortcuts**. Domyślnie `general`.
+- `bind` to domyślny skrót, na przykład `mod+shift+t`. Użytkownicy mogą go zmienić.
+- `slash` udostępnia polecenie też w menu `/`. Przy `arguments: true` tekst po nazwie trafia do `run(input)`.
+- `hidden` ukrywa polecenie w palecie, ale jego skrót nadal działa.
+- `suggested` wymienia polecenie też pod **Suggested**, gdy jest włączone. `featured` wymienia je, gdy paleta otwiera
+  się bez zapytania.
+- `enabled: false` usuwa polecenie z palety i wyłącza jego skrót. Jest reaktywne.
+- `scope` to selektor CSS, wewnątrz którego musi znajdować się fokus klawiatury, aby skrót działał. Przy `editable`
+  skrót działa też, gdy fokus ma pole tekstowe.
+- Aby uruchomić polecenie z własnego kodu, użyj `ctx.commands.run`; zobacz [Uruchamianie poleceń](#run-commands).
+
+Ze skrótu `run` może zwrócić `false`, aby odrzucić klawisz. Zdarzenie przechodzi wtedy do celu, jakby polecenie nie
+miało skrótu. To polecenie kontynuuje sesję, gdy użytkownik naciśnie Enter w pustym promptcie, a każdy inny Enter
+pozostawia promptowi:
+
+```ts
+ctx.add(Command, () => ({
+  id: "continue",
+  title: ctx.t("command.continue"),
+  bind: "enter",
+  editable: true,
+  hidden: true,
+  run: () => {
+    const composer = ctx.screen.current()?.composer
+    const session = ctx.sessions.current()
+
+    if (!composer?.focused() || composer.text().trim() || !session) return false
+    void session.server.client.session.prompt({ sessionID: session.id, text: ctx.t("continue") })
+  },
+}))
+```
+
+- Zwróć `false` synchronicznie; Promise obsługuje klawisz.
+- `false` z palety lub polecenia ukośnika nic więcej nie robi.
+
+#### Referencja
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | false | Promise<void>
+}
+```
+
+### Panele
+
+`Panel` wnosi karty do bocznego obszaru sesji (`region: "side"`). Użytkownik może przeciągnąć kartę do dolnego panelu
+pod osią czasu.
+
+```tsx
+import { Panel, type PanelTab } from "@opencode/plugin/gui"
+
+const mainTab: PanelTab = {
+  id: "main",
+  get title() {
+    return ctx.t("panel.title")
+  },
+  closable: "compact",
+  fallback: true,
+}
+
+ctx.add(Panel, {
+  id: "main",
+  region: "side",
+  mobile: {
+    get title() {
+      return ctx.t("panel.title")
+    },
+    order: 45,
+    kind: "menu",
+    icon: "file-tree",
+  },
+  list: (input) => (input.open.includes("main") ? [mainTab] : []),
+  render: (props) => <NotesView session={props.session} screen={props.screen} tab={props.tab} />,
+})
+```
+
+Wszystkie wywołania zwrotne panelu (`list`, `render`, `focus`, `enter`, `close`, `closed`, `restore`, `normalize`)
+otrzymują jeden obiekt wejściowy:
+
+- Odczytuj `props.session` i `props.tab` jako reaktywne gettery w miejscu użycia. Nigdy nie destrukturyzuj ich na początku
+  `render`: gdy użytkownik przełącza się z sesji A na sesję B, panel pozostaje zamontowany, a `props.session` aktualizuje
+  się w miejscu.
+- `props.screen` to stały obiekt `SessionScreen` (`file`, `comment`, `composer`). Jego akcje zawsze dotyczą sesji, do
+  której prowadzi routing.
+- Zwracaj ten sam obiekt `PanelTab` z `list`, dopóki karta się nie zmienia, aby host nie montował ponownie elementu
+  otwierającego kartę. Odczytuj etykiety z getterów, aby aktualizowały się po zmianie języka bez tworzenia nowego obiektu.
+
+Wywołania zwrotne panelu:
+
+- `list` zwraca karty do pokazania. `input.open` zawiera ID kart tego pluginu zapisane w sesji. Jest reaktywne.
+- `render` renderuje treść karty raz.
+- `focus` działa po wybraniu karty. `restored` ma wartość `true` dla wyboru, z którym obszar się montuje.
+- `enter` działa, gdy użytkownik otwiera boczny obszar na karcie jej przełącznikiem, po pojawieniu się karty na ekranie.
+  Przenieś fokus klawiatury do celu karty, takiego jak pole tekstowe. Gdy fokus nadal jest poza obszarem, host skupia
+  obszar.
+- `close` działa po usunięciu karty przez host.
+- `closed` i `restore` pozwalają użytkownikowi ponownie otworzyć zamkniętą kartę; zobacz
+  [Ponowne otwieranie zamkniętych kart](#reopen-closed-tabs).
+- `normalize` zwraca kanoniczną postać zapisanego ID karty, które można zapisać na więcej niż jeden sposób.
+
+Opcje panelu:
+
+- `mobile` dodaje widok panelu na wąskim ekranie. Przy `cached: true` widok pozostaje zamontowany, gdy użytkownik pokazuje
+  inny widok. Domyślnie widok montuje się przy każdym pokazaniu.
+- `wide` prosi o szersze minimum sesji, gdy boczny obszar jest otwarty.
+- `width` daje panelowi własną szerokość bocznego obszaru; zobacz [Szerokość panelu](#panel-width).
+- Karty paneli `transient` nie są przywracane.
+
+#### Szerokość panelu
+
+Domyślnie każda karta w bocznym obszarze dzieli szerokość rozmowy. Ustaw `width`, gdy panel potrzebuje mniej miejsca niż
+przegląd lub przeglądarka albo więcej. Podaj piksele CSS albo `"narrow"` dla najwęższej szerokości obszaru.
+
+```ts
+ctx.add(Panel, {
+  id: "quota",
+  region: "side",
+  width: "narrow",
+  list: (input) => (input.open.includes("quota") ? [tab] : []),
+  render: () => <Quota />,
+})
+```
+
+- Szerokość obowiązuje, gdy boczny panel pokazuje jedną z kart panelu. Inne karty zachowują szerokość rozmowy.
+- Gdy użytkownik przeciągnie separator na jednej z kart panelu, host zachowuje tę szerokość dla panelu w całej aplikacji,
+  zamiast `width`.
+- Host utrzymuje rozmowę na minimalnej szerokości, a obszar co najmniej na `"narrow"`.
+- `ctx.layout.side.width(panel)` odczytuje zapisaną szerokość, a `ctx.layout.side.resize(panel, width)` zapisuje ją tak
+  jak przeciąganie. Zapisana szerokość obowiązuje też panel bez `width`.
+
+Opcje karty:
+
+- `id` to ID karty; jej klucz hosta to `<plugin id>:<id>`. `title` to jej nazwa dostępna, a `label` renderuje własną
+  treść wyzwalacza.
+- Karty `pinned` są wymieniane bez otwierania, idą pierwsze i nigdy nie są zamykane ani przeciągane.
+- `draggable` pozwala zmieniać kolejność karty. Domyślnie `true`.
+- `closable` ustawia wygląd przycisku zamykania: `"compact"`, `"hover"` lub `false` dla braku.
+- `transient` oznacza kartę uruchamiającą, taką jak **Open file**, którą zastępuje następny podgląd.
+- `fallback` włącza wybór zapasowy, gdy zapisanego wyboru nie ma.
+- Karty w jednej `group` współdzielą jeden render, który pozostaje zamontowany.
+- `missing` przekreśla kartę, na przykład dla pliku, który już nie istnieje.
+- `hidden` utrzymuje przywróconą kartę na liście i wybieralną, ale nie rysuje jej, dopóki treść nie jest znana.
+- `file` to ścieżka obszaru roboczego pokazywana przez kartę, wymieniana wśród otwartych plików sesji.
+- `tabbable` umieszcza panel karty w kolejności tabulatora, dla treści bez elementów fokusowalnych.
+
+#### Referencja
+
+```ts
+interface Panel {
+  id: string
+  region: "side"
+  mobile?: MobileView
+  wide?: boolean
+  width?: number | "narrow"
+  transient?: boolean
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
+  close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+  cached?: boolean
+}
+```
+
+### Ponowne otwieranie zamkniętych kart
+
+Host przechowuje wpis dla każdej bocznej karty zamkniętej przez użytkownika. Gdy fokus jest w bocznym obszarze, ⌘⇧T
+otwiera najnowszą. Widok **New tab** bocznego obszaru wymienia zamknięte karty pokazujące `file` w sekcji
+**Recently closed**. Dodaj `closed` i `restore`, aby kontrolować, jak karta się tam czyta i wraca.
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed` działa przy zamykaniu karty. Zwróć informacje potrzebne do wyświetlenia jej pozycji na liście oraz `data`
+  potrzebne funkcji `restore`. Jeśli karty nie można ponownie otworzyć, zwróć `false`.
+- `title` domyślnie przyjmuje tytuł karty, a `icon` ikonę mobilną panelu. Karta z `file` pokazuje ikonę pliku, a jego
+  folder jako `detail`.
+- Host zapisuje wpis, więc trzymaj `data` małe, na przykład URL.
+- `restore` otrzymuje `id` zamkniętej karty i `data` zwrócone przez `closed`. Bez `restore` host otwiera ten sam klucz
+  ponownie.
+- Bez `closed` karta, która nie jest `transient`, jest wymieniana pod tytułem i otwiera się ponownie pod tym samym
+  kluczem.
+
+#### Referencja
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
+}
+```
+
+### Strony ustawień
+
+`SettingsPage` wnosi stronę do **Settings**, sekcję na stronie hosta (`page: "general"` lub `page: "servers"`) albo
+wiersze w sekcji General hosta (`page: "general", section: "general"`).
+
+```tsx
+import { SettingsPage } from "@opencode/plugin/gui"
+import { AcmeSettings } from "./settings"
+
+ctx.add(SettingsPage, {
+  id: "acme",
+  icon: "server",
+  get title() {
+    return ctx.t("title")
+  },
+  get entries() {
+    return [{ id: "sync", title: ctx.t("settings.sync"), keywords: "sync remote" }]
+  },
+  render: (input) => <AcmeSettings highlight={input.target} />,
+})
+```
+
+- `id` to wartość zakładki ustawień strony (`/settings?tab=<id>`) i argument `ctx.layout.settings`.
+- `page` dodaje sekcję do strony hosta zamiast strony. Przy `section: "general"` dodaje wiersze do sekcji General tej
+  strony.
+- `title` i `icon` to etykieta nawigacji i ikona strony.
+- `entries` to metadane wyszukiwania, indeksowane bez montowania strony. Gdy wyszukiwanie ujawnia wpis, `render`
+  otrzymuje jego ID jako `target`.
+- Strona ustawień ma `render`, więc host utrzymuje ją stabilną. Odczytuj jej etykiety i wpisy z getterów.
+
+Renderuj stronę komponentami ustawień aplikacji, aby wyglądała jak jej własne strony, a wyszukiwanie mogło ujawniać jej
+wiersze:
+
+```tsx
+const ui = ctx.ui
+
+const AcmeSettings = () => (
+  <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
+    <ui.SettingsSection title={ctx.t("settings.section")}>
+      <ui.SettingsRow id="sync" title={ctx.t("settings.sync")} description={ctx.t("settings.sync.description")}>
+        <ui.Switch label={ctx.t("settings.sync")} hideLabel checked={sync()} onChange={setSync} />
+      </ui.SettingsRow>
+    </ui.SettingsSection>
+  </ui.SettingsLayout>
+)
+```
+
+- Strona własna renderuje `SettingsLayout`, sekcja na stronie hosta (`page`) renderuje `SettingsSection`, a wiersze
+  w sekcji hosta (`section`) renderują `SettingsRow`.
+- `id` wiersza to `SettingEntry.id`, który go ujawnia: wyszukiwanie przewija do wiersza i go wyróżnia.
+- Propsy opisuje [Komponenty ustawień](#settings-components).
+
+#### Referencja
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
+
+### Sloty
+
+`Slot` renderuje interfejs w jednym z czterech slotów okna.
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+ctx.add(Slot, {
+  at: "session.header",
+  order: 10,
+  render: (input) => <UsageRing session={input.session} active={input.active} />,
+})
+```
+
+- `window.bottom` to pasek na całą szerokość na dole okna, nad powiadomieniami.
+- `session.header` to wiersz tytułu osi czasu sesji. Zapisana w cache oś czasu pozostaje zamontowana, gdy jest ukryta,
+  z `active` równym `false`.
+- `session.location.menu` dodaje pozycje do menu projektu, po jego szczegółach lokalizacji.
+- `session.panel.end` zawiera akcje na końcu paska kart bocznego obszaru.
+- `order` sortuje elementy w jednym slocie.
+
+`session.location.menu` otrzymuje `shown`, które ma wartość `true`, gdy menu projektu jest otwarte. Subskrybuj dane
+lokalizacji tylko wtedy, gdy jest `true`:
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
+
+Menu projektu to menu hosta: renderuj jego wiersze przez `ctx.ui.MenuItem`, `MenuSub`, `MenuGroup` i `MenuSeparator`,
+aby nawigowały klawiaturą i zamykały menu jak wiersze hosta. Zobacz [Wiersze menu](#menu-rows).
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <ctx.ui.MenuItem label={ctx.t("usage")} icon="status" onSelect={() => openUsage(input.session)} />,
+})
+```
+
+#### Referencja
+
+```ts
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
+
+interface SlotMap {
+  "window.bottom": Record<string, never>
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+}
+```
+
+### Pozycje menu
+
+`MenuItem` dodaje wpis do menu **+** panelu bocznego (`"session.panel"`), menu **Add server** (`"server.add"`) lub menu
+wiersza każdego serwera w Settings (`"server.row"`).
+
+```ts
+import { MenuItem } from "@opencode/plugin/gui"
+
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
+    menu: "session.panel",
+    id: "open",
+    title: ctx.t("menu.open"),
+    icon: "folder",
+    keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
+    run: () => {
+      if (session) ctx.layout.open(`${ctx.id}:main`, session)
+    },
+  }
+})
+```
+
+- `order` sortuje elementy rosnąco. Domyślnie `0`.
+- W pozycji `server.row` funkcja `run` otrzymuje klucz serwera z danego wiersza. `when` ogranicza widoczność pozycji
+  do wybranych wierszy, a `enabled` pozwala ją wyświetlić jako wyłączoną w innych.
+
+Pozycja `session.panel` służy też do otwierania karty. Gdy użytkownik otworzy obszar boczny bez kart albo kliknie **+**,
+a żadna pozycja nie ma ustawienia `primary`, host pokaże listę pozycji w widoku **New tab**.
+
+- `icon` to ikona elementu, a `keybind` opublikowane ID polecenia, którego skrót element pokazuje.
+- `description` to krótki przygaszony szczegół po tytule w wierszu launchującym, taki jak liczba.
+- `opened: true` oznacza, że karta otwierana przez element jest już otwarta. Listy launcherów pomijają element, a menu
+  **+** nadal go wymienia.
+- `primary: true` powoduje, że **+** uruchamia element bezpośrednio, zamiast pokazywać launchery. Wygrywa pierwszy
+  element primary w `order`. Otwarcie bocznego obszaru bez kart nadal pokazuje widok **New tab**, który wymienia elementy
+  niebędące primary i nieotwarte.
+- `ctx.layout.side.menu()` wymienia elementy `session.panel` wszystkich pluginów, dla własnego launchera; zobacz
+  [Układ](#layout).
+
+#### Referencja
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
+
+### Elementy paska tytułu
+
+`TitlebarItem` renderuje przycisk pigułki na pasku tytułu okna lub w stopce kart. Jego etykieta pojawia się po
+najechaniu.
+
+```ts
+import { TitlebarItem } from "@opencode/plugin/gui"
+
+ctx.add(TitlebarItem, (): TitlebarItem | undefined =>
+  syncing() ? { id: "sync", label: ctx.t("syncing"), icon: "server", busy: true, run: () => sync() } : undefined,
+)
+```
+
+- `title` to nazwa dostępna, gdy różni się od `label`.
+- `busy` pokazuje spinner i wyłącza pigułkę. `pressed` pokazuje ją wciśniętą.
+- `run` działa po kliknięciu. Pomiń go dla elementu, który tylko pokazuje.
+
+#### Referencja
+
+```ts
+interface TitlebarItem {
+  id: string
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
+
+### Pigułki kompozytora
+
+`ComposerPill` dodaje pigułkę do wiersza nad kompozytorem sesji, obok pigułek pracy w tle i zadań aplikacji. Używaj jej
+do statusu należącego do sesji, w której pracuje użytkownik, takiego jak pull requesty jej gałęzi. Pigułki unoszą się nad
+osią czasu, więc pojawienie się lub zniknięcie pigułki nigdy nie zmienia rozmiaru kompozytora. Wiersz podąża za
+wyrównaniem aktywności w tle użytkownika i nie pokazuje się w sesji subagenta.
+
+`show` zwraca pigułkę dla jednej sesji lub `undefined`, aby nie pokazywać jej tam. Host uruchamia ją dla każdego
+zamontowanego kompozytora i ponownie, gdy zmieni się to, co odczytuje. Ten plugin wymienia otwarte pull requesty katalogu
+każdej sesji przez [RPC](/build/plugins/rpc) swojej części serwerowej i pokazuje je jako jedną pigułkę:
+
+```tsx
+import { createStore } from "solid-js/store"
+import { ComposerPill, createKeyed } from "@opencode/plugin/gui"
+import { GitHub, type Pull } from "./rpc"
+
+const [pulls, setPulls] = createStore<Record<string, readonly Pull[]>>({})
+
+createKeyed(
+  () => ctx.sessions.current()?.directory,
+  (directory) =>
+    void ctx.client
+      .rpc(GitHub)
+      .pulls({ directory })
+      .then((list) => setPulls(directory, list)),
+)
+
+ctx.add(ComposerPill, {
+  id: "pulls",
+  show: (input) => {
+    const list = pulls[input.session.directory] ?? []
+
+    if (list.length === 0) return undefined
+
+    return {
+      icon: "github",
+      label: ctx.plural("pulls", list.length),
+      tone: list.some((pull) => pull.checks === "failure") ? "danger" : undefined,
+      title: ctx.t("pulls.title"),
+      rows: list.map((pull) => ({
+        id: String(pull.number),
+        label: `#${pull.number} ${pull.title}`,
+        icon: pull.checks === "failure" ? "circle-x" : "circle-check",
+        tone: pull.checks === "failure" ? "danger" : "success",
+        detail: pull.branch,
+        run: () => ctx.system.openExternal(pull.url),
+      })),
+    }
+  },
+})
+```
+
+- `label` to tekst pigułki, obcinany, gdy jest długi. `icon` jest opcjonalna.
+- `tone` koloruje ikonę: `"success"`, `"warning"` lub `"danger"`.
+- Dla glifu, którego aplikacja nie ma, takiego jak poruszający się znacznik statusu, [zadeklaruj własną ikonę](#icons)
+  i przekaż `ctx.icons.<name>`. Przyjmuje `tone` jak każda ikona, a jego animacja trwa, gdy `show` działa ponownie.
+- `rows` powodują, że pigułka otwiera menu pod nagłówkiem `title` lub `label`, gdy go nie ma. Każdy wiersz ma własne
+  `icon`, `tone` i przygaszony `detail` oraz uruchamia `run` po wybraniu; wiersz bez `run` tylko się pokazuje.
+- Bez `rows` pigułka uruchamia `run` po kliknięciu.
+- `title` to też nazwa dostępna pigułki, gdy różni się od `label`.
+- `order` sortuje Twoje pigułki wśród pigułek innych pluginów, od najniższego. Pigułki aplikacji idą pierwsze.
+- `show`, które zgłasza błąd, psuje tylko wkład Twojego pluginu.
+
+#### Referencja
+
+```ts
+interface ComposerPill {
+  id: string
+  order?: number
+  show(input: ComposerPillProps): ComposerPillView | undefined
+}
+
+interface ComposerPillProps {
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface ComposerPillView {
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  title?: string
+  rows?: ComposerPillRow[]
+  run?(): void
+}
+
+interface ComposerPillRow {
+  id: string
+  label: string
+  icon?: IconName
+  tone?: ComposerPillTone
+  detail?: string
+  run?(): void
+}
+
+type ComposerPillTone = "success" | "warning" | "danger"
+```
+
+### Bloki kodu
+
+`CodeBlock` renderuje bloki kodu języków, które wymienisz, jako własny interfejs zamiast podświetlonego kodu. Używaj go
+dla treści, które lepiej narysować niż pokazać jako źródło, na przykład tabeli ` ```csv ` lub wzoru ` ```latex `:
+
+```tsx
+import { For } from "solid-js"
+import { CodeBlock } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlock, {
+  languages: ["csv"],
+  render: (props) => {
+    const rows = props.code.split("\n").map((line) => line.split(","))
+
+    if (rows.length < 2) return undefined
+
+    return (
+      <table>
+        <tbody>
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <For each={row}>{(cell) => <td>{cell}</td>}</For>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    )
+  },
+})
+```
+
+- Host porównuje `languages` z pierwszym słowem po znaczniku otwierającym blok kodu, sprowadzonym do małych liter:
+  ` ```CSV title="Q3" ` pasuje do `csv`. Host nie uwzględnia aliasów, więc wymień każdą obsługiwaną nazwę.
+- `render` otrzymuje `code` bloku, jego `language` i `session`, która go pokazuje. Zwróć `undefined` lub `null`, aby
+  zachować podświetlony kod, na przykład gdy źródło się nie parsuje.
+- Render, który zgłasza błąd, zapisuje go pod Twoim pluginem, a blok pokazuje swój kod. Pozostałe wkłady działają dalej.
+- Gdy kilka pluginów wymienia język, renderuje go pierwszy wniesiony. Twój renderer zastępuje też własny diagram Mermaid
+  aplikacji, gdy wymienisz `mermaid`.
+
+#### Strumieniowanie
+
+Host renderuje blok dopiero po otrzymaniu znacznika zamykającego. Podczas strumieniowania oraz w wiadomościach
+przerwanych w środku bloku użytkownik widzi kod z podświetloną składnią. Gdy nadejdzie znacznik zamykający, Twój
+interfejs zastąpi kod w tym samym miejscu. Renderer nigdy nie dostaje niepełnego bloku.
+
+#### Gdzie obowiązuje
+
+| Powierzchnia                                                   | Treść bloku kodu |
+| -------------------------------------------------------------- | ---------------- |
+| Oś czasu: tekst asystenta i dane wyjściowe narzędzi            | Tak              |
+| Panele boczne na ekranie sesji, np. podgląd Markdown           | Tak              |
+| `ctx.ui.Markdown` renderowany na ekranie sesji                 | Tak              |
+| `ctx.ui.Code` i Markdown wewnątrz własnego renderu `CodeBlock` | Nie              |
+| Strony ustawień, okna i inne powierzchnie poza ekranem         | Nie              |
+
+#### Układ i wydajność
+
+- Bloki języków, których żaden plugin nie wymienia, nic nie kosztują; tylko blok wymienionego języka renderuje Twój
+  interfejs i tylko wtedy, gdy jego wiersz osi czasu jest na ekranie.
+- Blok rośnie i maleje wraz z Twoim interfejsem. Daj treści asynchronicznej minimalną wysokość, aby oś czasu przesuwała
+  się mniej po jej nadejściu.
+- Blok zachowuje przycisk Copy, który kopiuje źródło, a przyciski `CodeBlockAction` nad jego górnym końcem.
+
+### Akcje bloków kodu
+
+`CodeBlockAction` dodaje przycisk obok przycisku Copy bloków kodu języków, które wymienisz. `run` otrzymuje ten sam
+blok co render `CodeBlock`:
+
+```ts
+import { CodeBlockAction } from "@opencode/plugin/gui"
+
+ctx.add(CodeBlockAction, {
+  id: "run",
+  languages: ["sh", "bash", "shell", "zsh"],
+  icon: "terminal",
+  get title() {
+    return ctx.t("run")
+  },
+  run: (input) => runInTerminal(input.code, input.session),
+})
+```
+
+- Przycisk pojawia się dopiero po otrzymaniu znacznika zamykającego blok, więc nie zadziała na niepełnym poleceniu.
+- Przyciski pokazują się z Copy po najechaniu lub fokusie klawiatury, przed nim, w rosnącym `order`.
+- Odczytuj `title` z gettera, aby podążał za językiem.
+- `run`, które zgłasza błąd lub jest odrzucane, jest zapisywane pod Twoim pluginem i niczego więcej nie zmienia.
+
+#### Referencja
+
+```ts
+interface CodeBlock {
+  languages: string[]
+  render(props: CodeBlockProps): JSX.Element | undefined
+}
+
+interface CodeBlockAction {
+  id: string
+  languages: string[]
+  icon: IconName
+  title: string
+  order?: number
+  run(input: CodeBlockProps): void | Promise<void>
+}
+
+interface CodeBlockProps {
+  code: string
+  language: string
+  session?: MountedSession
+}
+```
+
+### Procedury obsługi linków
+
+`LinkHandler` otwiera lokalne pliki lub własne linki klikane przez użytkownika w wiadomościach lub chipach kompozytora.
+Link otwiera procedura o najwyższym `priority`, której `match` zwraca true.
+
+```ts
+import { LinkHandler } from "@opencode/plugin/gui"
+
+ctx.add(LinkHandler, {
+  priority: 10,
+  match: (link) => link.href.endsWith(".acme"),
+  open: (link) => openAcmeFile(link.href, link.session),
+  exists: (link) => acmeFileExists(link.href),
+})
+```
+
+- `href` to cel: ścieżka, URL lub link `file://`.
+- `origin` to plugin, który wytworzył powiązany element.
+- `exact` oznacza, że ścieżka jest znanym plikiem obszaru roboczego, a nie domysłem z tekstu.
+- Link `background` nie może przełączać widoku na wąskim ekranie.
+- `base` to katalog względny wobec obszaru roboczego, w którym zapisano link.
+- Bez `exists` `ctx.links.exists` odpowiada `false`, więc tekst nigdy nie wygląda jak link, którego procedura nie może
+  otworzyć.
+
+#### Referencja
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
+
+### Serwery
+
+`Server` wnosi listę połączeń serwerów, takich jak serwery uruchamiane przez plugin na innych maszynach.
+
+```ts
+import { Server } from "@opencode/plugin/gui"
+
+ctx.add(
+  Server,
+  (): Server => ({
+    ready: loaded(),
+    entries: machines().map((machine) => ({
+      id: machine.id,
+      name: machine.name,
+      label: "Acme",
+      state: machine.url ? "ready" : "starting",
+      http: machine.url ? { url: machine.url } : undefined,
+    })),
+  }),
+)
+```
+
+- Start czeka, aż każde źródło będzie `ready`. Wpisy gotowego źródła to jego kompletny spis.
+- `order` sortuje źródła rosnąco.
+- Klucz każdego wpisu to `<plugin id>:<id>`. `label` to krótka odznaka obok jego `name`.
+- `auth` oznacza, że serwer czeka na zalogowanie użytkownika, a `incompatible`, że działa na wersji nieobsługiwanej
+  przez aplikację.
+- `listed: false` pozostawia wpis poza listą serwerów aplikacji. Settings nadal go pokazuje.
+- `http` to endpoint, gdy serwer jest `ready`.
+- `reconnect` ponownie rozwiązuje utracony endpoint, `connect` przygotowuje serwer, który nie jest gotowy, a `remove`
+  działa przed usunięciem wpisu.
+- `row` renderuje wiersz ustawień serwera, a `cover` zasłania trasowaną sesję, gdy serwer nie jest gotowy.
+- `row` otrzymuje wskaźnik stanu hosta `Indicator`, ostatni wynik `health()` i pozycje menu `server.row` jako `Items`. Jego
+  `remove()` uruchamia `remove` wpisu, a następnie zamyka karty serwera.
+
+#### Referencja
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
+
+### Style
+
+`Style` wstrzykuje ciąg CSS do dokumentu, dopóki wkład jest aktywny.
+
+```ts
+import { Style } from "@opencode/plugin/gui"
+import css from "./panel.css?inline"
+
+ctx.add(Style, css)
+```
+
+### Motywy
+
+`Theme` dodaje motyw kolorów do Settings › Appearance › Theme. Przyjmuje ten sam format co pliki motywów aplikacji, więc
+plik motywu importuje się bez zmian.
+
+```ts
+import { Theme } from "@opencode/plugin/gui"
+import midnight from "./midnight.json"
+
+ctx.add(Theme, midnight)
+```
+
+Plik motywu nazywa siebie i podaje wariant jasny i ciemny. Każdy wariant zaczyna się od `palette` lub od `seeds`, nigdy
+od obu, i może przypinać pojedyncze tokeny przez `overrides`.
+
+```json
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Midnight",
+  "id": "midnight",
+  "light": {
+    "palette": {
+      "neutral": "#eceff4",
+      "ink": "#2e3440",
+      "primary": "#5e81ac",
+      "success": "#8fbcbb",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1f27",
+      "ink": "#e5e9f0",
+      "primary": "#88c0d0",
+      "success": "#a3be8c",
+      "warning": "#d08770",
+      "error": "#bf616a",
+      "info": "#81a1c1"
+    },
+    "overrides": { "syntax-keyword": "#88c0d0" }
+  }
+}
+```
+
+- Wybór wymienia motywy pluginów wśród motywów aplikacji, alfabetycznie według `name`.
+- Host kluczuje każdy motyw jako `<plugin id>:<theme id>`, więc nigdy nie zastępuje motywu aplikacji ani innego pluginu.
+- Wycofanie motywu lub wyłączenie pluginu usuwa go z wyboru. Użytkownik, który go wybrał, zachowuje wybór: okno pokazuje
+  motyw domyślny, dopóki motyw nie wróci.
+- Przy starcie okno pokazuje kolory zapisane w cache z ostatniego uruchomienia, dopóki plugin nie wniesie motywu
+  ponownie.
+
+## API hosta
+
+API hosta to właściwości `ctx`. Żadne nie zgłasza błędu przed zamontowaniem interfejsu aplikacji: odczyty zwracają swoje
+udokumentowane wartości domyślne, a wczesne zapisy, takie jak `ctx.layout.open`, `ctx.dialogs.open` i aktualizacje
+magazynu, czekają i stosują się w kolejności wywołań po wyrenderowaniu pierwszej trasy.
+
+```ts
+ctx.add(Command, () => ({
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+}))
+```
+
+Poniższe sekcje opisują każde API. `ctx.options`, `ctx.client` i `ctx.app` to [wspólny kontekst](#shared-context),
+`ctx.provide`, `ctx.use` i `ctx.main` współpracują z [kontraktami i tokenami](#contracts-and-tokens), `ctx.stores`
+przechowuje magazyny [zadeklarowane](#define-the-gui-plugin) przez plugin, a `ctx.icons` nazwy [ikon](#icons), które
+deklaruje.
+
+#### Referencja
+
+```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
+}
+
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  use<T>(token: Contract<T>): () => Live<T>
+  use<S extends IpcSpec>(token: Ipc<S>): () => Live<IpcClient<S>>
+  main<S extends IpcSpec>(token: Ipc<S>): IpcClient<S>
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  toast: Toasts
+  attention: Attention
+  tabs: Tabs
+  keybinds: Keybinds
+  commands: Commands
+  links: Links
+  embeds: Embeds
+  ui: Ui
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
+
+### Układ
+
+`ctx.layout.open(key, session, options?)` otwiera kartę panelu po jej kluczu `<plugin id>:<tab id>`. Działa dla sesji,
+które nie są zamontowane.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
+```
+
+- `tab: "open"`, domyślne, wybiera kartę w slocie podglądu. `"preview"` czyni ją nowym podglądem, `"append"` dodaje ją
+  bez wybierania, a `"select"` dodaje i wybiera, zachowując podgląd.
+- `background: true` zachowuje bieżący widok na wąskich ekranach i otwiera boczny obszar, dla akcji, której użytkownik
+  nie rozpoczął z panelu.
+- `close(key, session)` usuwa kartę i wywołuje `close` jej panelu. `toggle(key, session)` zamyka widoczną kartę albo ją
+  otwiera.
+- `hide(key, session)` ukrywa panel pokazujący widoczną kartę bez zamykania karty: boczny obszar lub dolny panel dla
+  karty przeniesionej tam przez użytkownika. Ponowne otwarcie karty pokazuje jej panel.
+- `state(key, session)` to `"closed"`, gdy karty nie ma na pasku, `"open"`, gdy jest, ale jej panel pokazuje inną kartę,
+  `"active"`, gdy jej panel ją pokazuje, ale panel jest ukryty (boczny obszar zamknięty lub dolny panel ukryty), oraz
+  `"visible"`, gdy jest na ekranie.
+- `stored(session)` to ID kart tego pluginu zapisane w bocznym pasku sesji.
+- `ready()` ma wartość `true` po wczytaniu zapisanego układu, a `narrow()` — gdy widok ma mniej niż 768px.
+- `side.opened(session)` ma wartość `true`, gdy boczny obszar jest otwarty, a `side.toggle(session)` otwiera lub zamyka
+  go.
+- `side.menu()` wymienia [pozycje menu](#menu-items) `session.panel` wszystkich pluginów w `order`, dla własnego
+  launchera.
+- `side.width(panel)` i `side.resize(panel, width)` odczytują i zapisują szerokość bocznego obszaru jednego z Twoich
+  paneli; zobacz [Szerokość panelu](#panel-width).
+- `sidebar.opened()` to preferencja wewnętrznego paska bocznego wspólna dla wszystkich paneli bocznych.
+- `scroll` przechowuje przesunięcia przewijania według sesji i klucza.
+- `settings(page?)` otwiera Settings. `project(server, title)` otwiera wybór katalogu projektu i nową wersję roboczą.
+- `draft({ server, directory, prompt })` otwiera nową sesję roboczą we własnej karcie, z promptem wypełnionym do
+  przejrzenia i wysłania przez użytkownika.
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
+
+#### Referencja
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
+    width(panel: string): number | undefined
+    resize(panel: string, width: number): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+}
+
+type PanelState = "closed" | "open" | "active" | "visible"
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
+
+### Sesje i ekran sesji
+
+`ctx.sessions.current()` to trasowana sesja, a `ctx.screen.current()` jej ekran. Oba są `undefined` na Home i w wersji
+roboczej. Odczytuj je w miejscu działania, nigdy raz w `setup`.
+
+```ts
+const session = ctx.sessions.current()
+const file = ctx.screen.current()?.file
+
+if (session && file) void file.sync("README.md")
+```
+
+- `key` to `<server id>\n<session id>`, unikalne między serwerami. Kluczuj nim stan poszczególnych sesji.
+- `tab` to klucz karty powłoki, do której należy sesja. `pending` ma wartość `true`, dopóki serwer ją tworzy.
+- `directory` to katalog obszaru roboczego sesji, a `local` ma wartość `true`, gdy jest to katalog główny projektu.
+- `listedProject` to projekt paska bocznego, do którego należy sesja.
+- `visit` to nowy obiekt przy każdym trasowaniu sesji.
+- `background` wymienia działające subagenty i polecenia powłoki sesji.
+- `ctx.sessions.list()` zwraca sesje otwartych kart powłoki.
+- `file` ekranu odczytuje pliki obszaru roboczego, a `comment` przechowuje komentarze liniowe następnego promptu.
+  `composer` to następny prompt: jego tekst, dołączone części i model; zobacz
+  [Dołączanie do kompozytora](#attach-to-the-composer).
+- `file.sync(path)` wczytuje plik i prosi serwer o obserwowanie zmian. Wywołaj `file.unwatch(path)`, gdy karta pliku się
+  zamknie.
+
+#### Referencja
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
+
+### Dołączanie do kompozytora
+
+Użyj `ctx.screen.current()?.composer` w procedurze obsługi zdarzenia lub poleceniu, aby dołączyć plik, notatkę lub cytat
+do następnego promptu użytkownika.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: "globe",
+  subject: 'element <button id="submit">Save</button>',
+  comment: "Make this button primary and disable it while saving.",
+  href: "http://localhost:3000/settings",
+})
+```
+
+- `attach` pozostawia fokus klawiatury w miejscu. Wywołaj `focus()`, aby przenieść go do promptu.
+- `update(commentID, { comment?, preview? })` zmienia dołączoną część; notatka lub cytat przyjmuje tylko nowy `comment`.
+- `detach(commentID)` usuwa dołączoną część.
+- Pole `live` zastępuje `subject` i `href` notatki, dopóki pozostaje ona w tym procesie aplikacji. Użyj go do referencji,
+  które można odczytać tylko w tym procesie, na przykład do elementu strony. Pole nie jest zachowywane w zapisanej
+  wersji roboczej ani w wysłanej wiadomości przywróconej w wyniku cofnięcia lub utworzenia forka.
+
+Cytat to tekst zacytowany przez użytkownika z czegoś, co pokazuje Twój plugin, na przykład danych wyjściowych logu,
+z opcjonalnym komentarzem. Renderuje się jak cytat z osi czasu sesji, pod ikoną i etykietą źródła. Najpierw sprawdź
+`quotable()`: ma wartość `false` w sesji subagenta, która nie ma kompozytora, oraz gdy kompozytor uruchamia polecenia
+powłoki.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject` nazywa źródło dla modelu, na przykład `the terminal`. Nie jest tłumaczone.
+- Pomiń `comment`, aby użytkownik mógł dodać go z chipa.
+- `focus(commentID)` otwiera edytor komentarza dołączonego cytatu. Gdy kompozytor nie jest pokazany, na przykład na
+  wąskim ekranie pokazującym panel, edytor otwiera się po pokazaniu kompozytora.
+- Model odczytuje `The user quoted the following from <subject>:`, potem tekst z każdą linią poprzedzoną `> `, a potem
+  komentarz, jeśli jest.
+
+#### Referencja
+
+```ts
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
+}
+```
+
+### Odczyt i zapis promptu
+
+Odczytaj, co wpisał użytkownik, przez `text()`, a czy pisze, przez `focused()`:
+
+```ts
+const composer = ctx.screen.current()?.composer
+const empty = !composer?.text().trim()
+```
+
+- `text()` to prompt jako zwykły tekst: wzmianka czyta się jako jej tekst `@`, a załączniki i dołączone części są
+  pomijane. W trybie powłoki to polecenie powłoki. Ma wartość `""`, dopóki wersja robocza sesji się nie wczyta, oraz
+  w sesji subagenta, która nie ma kompozytora. Jest reaktywne.
+- `focused()` ma wartość `true`, gdy fokus klawiatury jest w prompcie. Nie jest reaktywne, więc odczytuj je w miejscu
+  działania, na przykład w `run` polecenia.
+
+`insert(text)` wpisuje tekst do promptu do przejrzenia i wysłania przez użytkownika. Nic w kompozytorze nie wysyła
+promptu.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+composer?.insert(`Explain ${path}`)
+composer?.focus()
+```
+
+- `insert` dodaje tekst w miejscu kursora ostatnio pozostawionego przez użytkownika w prompcie, a w przeciwnym razie na
+  końcu, i przenosi kursor za niego. Nie zastępuje zaznaczonego tekstu.
+- Tekst nie jest parsowany: `@path` pozostaje tekstem, a nie wzmianką.
+- `setText(text)` zastępuje tekst promptu, wraz ze wzmiankami. Załączniki i dołączone części pozostają. `setText("")`
+  czyści tekst.
+- Oba pozostawiają fokus klawiatury w miejscu. Wywołaj `focus()`, aby przenieść go do promptu.
+- Zapis wykonany przed wczytaniem zapisanej wersji roboczej sesji (`insert`, `setText`, `attach`, `update` lub `detach`)
+  czeka na nią. Potem stosuje się do sesji, do której prowadził routing w chwili wywołania, w kolejności wywołań. Nigdy
+  nie zastępuje zapisanej wersji roboczej.
+- W sesji subagenta, która nie ma kompozytora, zapisy nic nie robią.
+
+### Wybór modelu
+
+`model()` to model, z którym zostanie wysłany następny prompt, a `setModel` wybiera go jak wybór modeli:
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer && !composer.setModel({ providerID: "anthropic", modelID: "claude-sonnet-4-5", variant: "high" })) {
+  ctx.toast.show({ variant: "error", title: ctx.t("model.unavailable") })
+}
+```
+
+- `model()` to wybór użytkownika dla trasowanej sesji, inaczej domyślny agenta, inaczej domyślny aplikacji. Jest
+  `undefined`, gdy katalog modeli się wczytuje, gdy żaden podłączony dostawca nie oferuje modelu i w sesji subagenta.
+  Jest reaktywny.
+- `setModel` wybiera model dla sesji i umieszcza go na początku listy ostatnio używanych modeli. Bez `variant` model
+  zachowuje wariant, który pokazałaby lista wyboru modeli.
+- `setVariant(variant)` wybiera wariant bieżącego modelu. `undefined` wybiera wariant domyślny modelu.
+- `setModel` zwraca `false` i nic nie zmienia, gdy katalog się wczytuje, gdy żaden podłączony dostawca nie oferuje
+  modelu lub gdy model nie ma takiego wariantu.
+- `setVariant` zwraca `false` i nic nie zmienia, gdy nie ma bieżącego modelu lub model nie ma takiego wariantu.
+- Oba zwracają `false` w sesji subagenta.
+
+#### Referencja
+
+```ts
+interface Composer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  model(): ComposerModel | undefined
+  setModel(model: ComposerModel): boolean
+  setVariant(variant: string | undefined): boolean
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+  focused(): boolean
+}
+
+interface ComposerModel {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+```
+
+### Serwery i zdarzenia serwera
+
+`ctx.servers.get(id)` zwraca żywy `ServerRef`. Serwer własny aplikacji desktopowej, który uruchamia plugin, ma ID
+`"sidecar"`. Reaguj na jego zdarzenia przez `data.on`:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) => onCleanup(data.on("session.created", (event) => console.log(event))),
+)
+```
+
+- `id` to klucz hosta: `"sidecar"`, adres URL http lub `<plugin id>:<id>` dla
+  [wniesionego serwera](#servers).
+- `data` to zsynchronizowane dane serwera, takie jak sesje i projekty, a `on(type, handler)` jego zdarzenia. Jest
+  reaktywne.
+- `builtin` ma wartość `true` dla serwera własnego aplikacji.
+- `compatible` ma wartość `true`, gdy wersja serwera współpracuje z aplikacją, a `connected` — gdy jego połączenie
+  zdarzeń działa.
+- `password` to skonfigurowane przez użytkownika hasło HTTP basic, jeśli istnieje.
+- Odczytuj `client`, `data` i `url` z żywego `ServerRef` za każdym razem: zrestartowany serwer dostaje nowego klienta
+  pod tym samym ID.
+- `ctx.servers.list()` zwraca ID serwerów wymienianych przez aplikację.
+
+#### Referencja
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
+
+### Okna dialogowe
+
+`ctx.dialogs.open(render, { replace? })` otwiera okno dialogowe nad już otwartymi i zwraca uchwyt z metodą `close()`.
+Okno zamyka się też, gdy kończy się zakres, w którym je otwarto.
+
+```tsx
+const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
+```
+
+- `replace: true` najpierw zamyka każde otwarte okno, w tym okna hosta i innych pluginów.
+- `ctx.dialogs.active()` ma wartość `true`, gdy otwarte jest jakiekolwiek okno.
+- Renderuj treść w `ctx.ui.Dialog` dla ramki okna aplikacji; zobacz [Komponenty aplikacji](#app-components).
+
+### Pytanie użytkownika
+
+`confirm`, `alert`, `prompt` i `select` korzystają z okien dialogowych aplikacji, więc nie musisz tworzyć osobnego
+interfejsu. Każda z tych funkcji zwraca odpowiedź w Promise.
+
+```ts
+const ok = await ctx.dialogs.confirm({ title: ctx.t("end.title"), confirm: ctx.t("end"), danger: true })
+```
+
+- `confirm` zwraca w Promise wartość `true` tylko po potwierdzeniu. `danger` nadaje przyciskowi potwierdzenia wygląd
+  właściwy dla operacji destrukcyjnych i początkowo ustawia fokus na Cancel.
+- Każde okno otwiera się tak jak przez `open` i zamyka się wraz z końcem zakresu, który je otworzył, a jeśli nie ma
+  takiego zakresu — wraz z zatrzymaniem pluginu.
+- Po anulowaniu, naciśnięciu Escape, kliknięciu poza oknem, zastąpieniu okna innym lub zakończeniu zakresu wynik to
+  `false` dla `confirm` i `undefined` dla `prompt` oraz `select`.
+
+`alert` wyświetla komunikat do potwierdzenia jednym przyciskiem. Promise kończy się po zamknięciu okna, niezależnie
+od sposobu jego zamknięcia:
+
+```ts
+await ctx.dialogs.alert({ title: ctx.t("export.done"), description: path })
+```
+
+`prompt` prosi o jeden wiersz tekstu. Początkowe `value` jest zaznaczone, więc wpisany tekst je zastępuje. Funkcja nie
+zwraca pustego ciągu: dopóki pole jest puste, jego zatwierdzenie nie ma skutku. `secret: true` ukrywa wpisywany tekst,
+na przykład hasło lub token:
+
+```ts
+const token = await ctx.dialogs.prompt({ title: ctx.t("token.title"), placeholder: "ghp_…", secret: true })
+```
+
+`select` wyświetla listę opcji z wyszukiwaniem, podobnie jak paleta poleceń. Zwraca w Promise `value` wybranej opcji:
+
+```ts
+const url = await ctx.dialogs.select({
+  title: ctx.t("links.title"),
+  options: links.map((link) => ({ title: link.title, description: link.url, value: link.url, group: link.host })),
+})
+
+if (url) ctx.system.openExternal(url)
+```
+
+- Wyszukiwanie dopasowuje `title` i `description` każdej opcji.
+- Opcje z tą samą `group` są wymieniane razem pod tym nagłówkiem.
+- `current` to wartość opcji wyróżnianej jako pierwsza.
+
+#### Referencja
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  confirm(options: ConfirmOptions): Promise<boolean>
+  alert(options: AlertOptions): Promise<void>
+  prompt(options: PromptOptions): Promise<string | undefined>
+  select<T>(options: SelectOptions<T>): Promise<T | undefined>
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+
+interface ConfirmOptions {
+  title: string
+  description?: string
+  confirm?: string
+  cancel?: string
+  danger?: boolean
+}
+
+interface AlertOptions {
+  title: string
+  description?: string
+  ok?: string
+}
+
+interface PromptOptions {
+  title: string
+  description?: string
+  placeholder?: string
+  value?: string
+  secret?: boolean
+  submit?: string
+}
+
+interface SelectOptions<T> {
+  title: string
+  placeholder?: string
+  options: { title: string; value: T; description?: string; group?: string }[]
+  current?: T
+}
+```
+
+### Komponenty aplikacji
+
+Pakiet pluginu nie może importować `@opencode/ui`, więc `ctx.ui` udostępnia mu komponenty aplikacji. Renderują się
+w motywie, fontach i języku użytkownika, więc interfejs pluginu wygląda i działa jak interfejs aplikacji.
+
+```tsx
+import { Show } from "solid-js"
+import { createLatest, Panel } from "@opencode/plugin/gui"
+
+const ui = ctx.ui
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+
+ctx.add(Panel, {
+  id: "summary",
+  region: "side",
+  list: () => [summaryTab],
+  render: () => (
+    <div>
+      <ui.Tooltip value={ctx.t("copy")}>
+        <ui.IconButton icon="copy" label={ctx.t("copy")} onClick={() => void ctx.system.copy(summary.latest ?? "")} />
+      </ui.Tooltip>
+      <Show when={summary.latest} fallback={<ui.Loader size="large" />}>
+        {(text) => <ui.Markdown text={text()} />}
+      </Show>
+    </div>
+  ),
+})
+```
+
+- `Icon`, `Button` i `IconButton` przyjmują dowolne `IconName`, jak każde pole `icon` SDK: jedną z ikon aplikacji lub
+  jedną z [własnych](#icons) z `ctx.icons`. W przycisku `IconButton` pole `label` to nazwa dla technologii wspomagających; opakuj przycisk
+  w `Tooltip`, aby pokazywać ją po najechaniu.
+- `busy` na przycisku zastępuje jego ikonę wskaźnikiem ładowania i wyłącza go, dopóki nie będzie znów `false`.
+- Używaj `Loader` dla każdego stanu ładowania, który nie jest pracą AI, takiego jak panel, wyszukiwanie lub ładowane
+  połączenie.
+- `Menu` otwiera listę `items`: akcje, `{ type: "separator" }` i `{ type: "group", label, items }`.
+- `Switch` i `TextInput` nie przechowują stanu: przekazuj wartość z `onChange` lub `onInput` z powrotem do `checked`
+  lub `value`.
+- `Keybind` pokazuje klawisze jako chipy, takie jak `ctx.keybinds.keybind(command)`.
+- `Markdown` renderuje jak oś czasu wiadomość, a `Code` pokazuje podświetlony blok kodu tylko do odczytu. Oba wypełniają
+  się krótko po zamontowaniu.
+
+`Dialog` to ramka okna aplikacji: tytuł, treść i przyciski. Renderuj ją z `ctx.dialogs.open`; gdzie indziej nie
+renderuje nic użytecznego.
+
+```tsx
+const ui = ctx.ui
+
+ctx.dialogs.open((dialog) => (
+  <ui.Dialog
+    title={ctx.t("rename.title")}
+    footer={
+      <ui.Button variant="contrast" onClick={dialog.close}>
+        {ctx.t("done")}
+      </ui.Button>
+    }
+  >
+    <ui.TextInput label={ctx.t("rename.label")} value={name()} onInput={setName} onSubmit={dialog.close} autofocus />
+  </ui.Dialog>
+))
+```
+
+- `size` domyślnie ma wartość `"fit"`: 480px szerokości i tyle wysokości, ile treści. `"normal"`, `"large"`
+  i `"x-large"` to stałe rozmiary.
+- Escape i kliknięcie poza zamykają okno. `closable: false` ukrywa przycisk zamykania w nagłówku.
+
+#### Wiersze menu
+
+`MenuItem`, `MenuSub`, `MenuGroup` i `MenuSeparator` to wiersze menu renderowanego przez hosta, takie jak slot
+`session.location.menu`. Nawigują klawiaturą, pokazują przygaszone ikony i chipy skrótów hosta i zamykają menu po
+wybraniu.
+
+```tsx
+import { For } from "solid-js"
+
+const ui = ctx.ui
+
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => (
+    <>
+      <ui.MenuItem
+        label={ctx.t("usage")}
+        icon="status"
+        keys={["Ctrl", "U"]}
+        onSelect={() => openUsage(input.session)}
+      />
+      <ui.MenuSub label={ctx.t("openIn")} icon="outline-share">
+        <For each={apps()}>{(app) => <ui.MenuItem label={app.name} onSelect={() => launch(app, input.session)} />}</For>
+      </ui.MenuSub>
+    </>
+  ),
+})
+```
+
+- `MenuItem` przyjmuje te same pola co element menu `Menu` z listy `items`.
+- `MenuSub` otwiera swoje dzieci w podmenu obok wiersza. `onOpenChange` mówi kiedy, więc możesz wczytywać jego wiersze
+  tylko gdy jest otwarte.
+- `MenuGroup` umieszcza wiersze pod nagłówkiem, a `MenuSeparator` rysuje linię między wierszami.
+- `MenuItem`, `MenuSub` i `MenuGroup` zgłaszają błąd poza menu: host zapisuje błąd i nie renderuje nic z tego wkładu.
+
+#### Listy wyboru
+
+`Select` wybiera jedną z listy opcji, jak wiersze ustawień aplikacji wybierają język. Jego wartość to ciąg; typ `options`
+ją zawęża.
+
+```tsx
+const [period, setPeriod] = createSignal<"day" | "month">("day")
+
+<ui.Select
+  label={ctx.t("period")}
+  options={[
+    { value: "day", label: ctx.t("period.day") },
+    { value: "month", label: ctx.t("period.month") },
+  ]}
+  value={period()}
+  onChange={setPeriod}
+/>
+```
+
+- `label` to nazwa dostępna listy; `label` wybranej opcji jest tym, co pokazuje.
+- `value`, którego nie ma żadna opcja, pokazuje `placeholder`. Ponowne wybranie wybranej opcji nie wywołuje `onChange`.
+
+#### Komponenty ustawień
+
+`SettingsLayout`, `SettingsSection` i `SettingsRow` renderują [stronę ustawień](#settings-pages) tak, jak robi to
+aplikacja: nagłówek strony, sekcje z nagłówkami nad obramowanymi listami i wiersze z tytułem, opisem i kontrolką na
+końcu.
+
+```tsx
+<ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")} actions={<HelpButton />}>
+  <ui.SettingsSection title={ctx.t("section.display")} footer={<Show when={error()}>{ctx.t("error")}</Show>}>
+    <ui.SettingsRow id="acme-period" title={ctx.t("period")} description={ctx.t("period.description")}>
+      <ui.Select label={ctx.t("period")} options={periods()} value={period()} onChange={setPeriod} />
+    </ui.SettingsRow>
+  </ui.SettingsSection>
+</ui.SettingsLayout>
+```
+
+- Używaj `SettingsLayout` dla własnej strony, `SettingsSection` dla sekcji na stronie hosta, a `SettingsRow` samo dla
+  wierszy w sekcji hosta. Wiersze wyrównują się z wierszami hosta w każdym przypadku.
+- `id` wiersza to `SettingEntry.id`, który go ujawnia. Wyszukiwanie ujawniające własne ID strony wyróżnia nagłówek.
+- `actions` znajduje się na końcu wiersza tytułu. `footer` sekcji znajduje się pod jej listą, poza obramowaniem.
+- Czerpią wygląd ze stylów ekranu Settings, więc renderuj je ze `SettingsPage`.
+
+#### Referencja
+
+```ts
+interface Ui {
+  Icon(props: UiIconProps): JSX.Element
+  Button(props: UiButtonProps): JSX.Element
+  IconButton(props: UiIconButtonProps): JSX.Element
+  Tooltip(props: UiTooltipProps): JSX.Element
+  Menu(props: UiMenuProps): JSX.Element
+  MenuItem(props: UiMenuItem): JSX.Element
+  MenuSeparator(): JSX.Element
+  MenuGroup(props: UiMenuGroupProps): JSX.Element
+  MenuSub(props: UiMenuSubProps): JSX.Element
+  Loader(props: UiLoaderProps): JSX.Element
+  Dialog(props: UiDialogProps): JSX.Element
+  Switch(props: UiSwitchProps): JSX.Element
+  TextInput(props: UiTextInputProps): JSX.Element
+  Select<T extends string>(props: UiSelectProps<T>): JSX.Element
+  Keybind(props: UiKeybindProps): JSX.Element
+  Markdown(props: UiMarkdownProps): JSX.Element
+  Code(props: UiCodeProps): JSX.Element
+  SettingsLayout(props: UiSettingsLayoutProps): JSX.Element
+  SettingsSection(props: UiSettingsSectionProps): JSX.Element
+  SettingsRow(props: UiSettingsRowProps): JSX.Element
+}
+
+interface UiIconProps {
+  name: IconName
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiButtonProps {
+  children: JSX.Element
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  size?: "small" | "normal" | "large"
+  icon?: IconName
+  disabled?: boolean
+  busy?: boolean
+  type?: "button" | "submit"
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiIconButtonProps {
+  icon: IconName
+  label: string
+  onClick?: (event: MouseEvent) => void
+  variant?: "neutral" | "ghost" | "ghost-muted"
+  size?: "small" | "normal" | "large"
+  disabled?: boolean
+  pressed?: boolean
+  busy?: boolean
+  class?: string
+}
+
+interface UiTooltipProps {
+  value: JSX.Element
+  keys?: string[]
+  placement?: "top" | "bottom" | "left" | "right"
+  children: JSX.Element
+}
+
+interface UiMenuProps {
+  label: string
+  items: UiMenuEntry[]
+  trigger?: "icon" | "button"
+  icon?: IconName
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  disabled?: boolean
+}
+
+type UiMenuEntry = UiMenuItem | UiMenuSeparator | UiMenuGroup
+
+interface UiMenuItem {
+  type?: "item"
+  label: string
+  icon?: IconName
+  keys?: string[]
+  disabled?: boolean
+  onSelect(): void
+}
+
+interface UiMenuSeparator {
+  type: "separator"
+}
+
+interface UiMenuGroup {
+  type: "group"
+  label: string
+  items: UiMenuItem[]
+}
+
+interface UiMenuGroupProps {
+  label: string
+  children: JSX.Element
+}
+
+interface UiMenuSubProps {
+  label: string
+  icon?: IconName
+  disabled?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: JSX.Element
+}
+
+interface UiLoaderProps {
+  size?: "small" | "normal" | "large"
+  class?: string
+}
+
+interface UiDialogProps {
+  title: string
+  description?: string
+  children?: JSX.Element
+  footer?: JSX.Element
+  size?: "fit" | "normal" | "large" | "x-large"
+  closable?: boolean
+}
+
+interface UiSwitchProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  hideLabel?: boolean
+  description?: string
+  disabled?: boolean
+}
+
+interface UiTextInputProps {
+  value: string
+  onInput: (value: string) => void
+  label: string
+  placeholder?: string
+  onSubmit?: (value: string) => void
+  type?: "text" | "password" | "search" | "url"
+  size?: "normal" | "large"
+  disabled?: boolean
+  invalid?: boolean
+  autofocus?: boolean
+  class?: string
+}
+
+interface UiKeybindProps {
+  keys: string[]
+  class?: string
+}
+
+interface UiMarkdownProps {
+  text: string
+  class?: string
+}
+
+interface UiCodeProps {
+  content: string
+  language?: string
+  class?: string
+}
+
+interface UiSelectProps<T extends string> {
+  options: UiSelectOption<T>[]
+  value: T | undefined
+  onChange: (value: T) => void
+  label: string
+  placeholder?: string
+  disabled?: boolean
+  invalid?: boolean
+  placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"
+  class?: string
+}
+
+interface UiSelectOption<T extends string> {
+  value: T
+  label: string
+}
+
+interface UiSettingsLayoutProps {
+  title: string
+  description?: string
+  actions?: JSX.Element
+  children: JSX.Element
+}
+
+interface UiSettingsSectionProps {
+  title?: string
+  children: JSX.Element
+  footer?: JSX.Element
+}
+
+interface UiSettingsRowProps {
+  title: JSX.Element
+  description?: JSX.Element
+  id?: string
+  children?: JSX.Element
+}
+```
+
+### Powiadomienia
+
+`ctx.toast.show` pokazuje krótką wiadomość w rogu okna i zwraca uchwyt, którego `dismiss()` ją zamyka.
+
+```ts
+ctx.toast.show({ variant: "success", title: ctx.t("invite.copied") })
+```
+
+- `variant` to `"default"`, `"success"`, `"error"` lub `"loading"`. Powiadomienie `success` pokazuje ikonę zaznaczenia,
+  chyba że ustawisz `icon`.
+- `duration` to czas pokazywania powiadomienia w milisekundach. Domyślnie 5 sekund.
+- `persistent: true` utrzymuje powiadomienie do zamknięcia przez użytkownika lub `dismiss()` i ignoruje `duration`.
+- Powiadomienie równe temu, które wciąż jest widoczne, zastępuje je zamiast dodawać kopię.
+- Powiadomienia pluginu zamykają się, gdy plugin się zatrzyma, więc żaden przycisk nie przeżyje kodu, który uruchamia.
+  Powiadomienie nie zamyka się wraz z komponentem ani uruchomieniem `createKeyed`, które je pokazało.
+
+Pokaż powiadomienie `loading` podczas pracy i zamknij je po jej zakończeniu:
+
+```ts
+const saving = ctx.toast.show({ variant: "loading", title: ctx.t("saving"), persistent: true })
+await save()
+saving.dismiss()
+```
+
+`actions` dodaje przyciski. Kliknięcie uruchamia akcję i zamyka powiadomienie:
+
+```ts
+ctx.toast.show({
+  variant: "error",
+  title: ctx.t("sync.failed"),
+  actions: [{ label: ctx.t("retry"), run: () => void sync() }],
+})
+```
+
+#### Referencja
+
+```ts
+interface Toasts {
+  show(options: ToastOptions): ToastHandle
+}
+
+interface ToastHandle {
+  dismiss(): void
+}
+
+interface ToastOptions {
+  title: string
+  description?: string
+  variant?: "default" | "success" | "error" | "loading"
+  icon?: IconName
+  duration?: number
+  persistent?: boolean
+  actions?: ToastAction[]
+}
+
+interface ToastAction {
+  label: string
+  run(): void
+}
+```
+
+### Powiadomienia systemowe
+
+`ctx.attention.notify` przyciąga uwagę użytkownika, gdy patrzy gdzie indziej: powiadomienie systemowe i dźwięk, na tych
+samych zasadach co powiadomienia aplikacji.
+
+```ts
+const session = ctx.sessions.current()
+
+if (session) {
+  void ctx.attention.notify({
+    title: ctx.t("tests.done"),
+    message: ctx.t("tests.summary", { failed: 0 }),
+    session: { server: session.server.id, id: session.id },
+    id: run.id,
+  })
+}
+```
+
+- Powiadomienie systemowe pokazuje się tylko wtedy, gdy żadne okno aplikacji nie ma fokusu. Dźwięk odtwarza się tak czy
+  inaczej.
+- Oba podlegają **Settings > Notifications**. `variant: "default"` podlega wierszom **Agent**, a `variant: "error"`
+  wierszom **Errors**. Powiadomienia systemowe dla obu są domyślnie wyłączone; ich dźwięki są włączone.
+- `sound: false` nigdy nie odtwarza dźwięku.
+- Kliknięcie powiadomienia wysuwa aplikację na wierzch i otwiera `session`, gdy je podasz.
+- Każde okno aplikacji uruchamia własną kopię pluginu. Podaj `id` zdarzenia, takie jak ID uruchomienia, aby tylko
+  pierwsze okno, które je wyśle, powiadomiło i odtworzyło dźwięk. Bez `id` każde wywołanie powiadamia.
+- Przed zamontowaniem interfejsu aplikacji `notify` na niego czeka.
+
+Promise zwracany przez `notify` nigdy nie jest odrzucany. Wynik opisuje, co się stało: `notification` ma wartość `true`,
+gdy aplikacja poprosiła system o pokazanie powiadomienia, a `sound` ma wartość `true`, gdy rozpoczęło się odtwarzanie dźwięku.
+
+```ts
+const result = await ctx.attention.notify({ title: ctx.t("deploy.failed"), variant: "error" })
+
+if (!result.notification) ctx.toast.show({ variant: "error", title: ctx.t("deploy.failed") })
+```
+
+- `notification` ma wartość `false`, gdy użytkownik je wyłączył, okno aplikacji ma fokus lub inne okno już wysłało `id`.
+  System nadal może ukryć powiadomienie, o które aplikacja poprosiła, na przykład gdy użytkownik odmówił uprawnienia
+  przeglądarce.
+
+#### Referencja
+
+```ts
+interface Attention {
+  notify(options: NotifyOptions): Promise<NotifyResult>
+}
+
+interface NotifyOptions {
+  title: string
+  message?: string
+  variant?: "default" | "error"
+  session?: { server: string; id: string }
+  sound?: boolean
+  id?: string
+}
+
+interface NotifyResult {
+  notification: boolean
+  sound: boolean
+}
+```
+
+### Dane użycia
+
+Liczby tokenów, kosztów i planu sesji znajdują się w danych jej serwera, w tym samym reaktywnym magazynie, z którego
+aplikacja czyta „28k · $0.28” w nagłówku. Odczytuj je tam, a nie z bazy danych opencode.
+
+```ts
+import { lastAssistantWithUsage } from "@opencode/client/solid"
+
+const data = session.server.data
+const info = () => data.session.get(session.id)
+
+const tokens = () => info()?.tokens // this session's tokens by kind
+const cost = () => data.session.cost(session.id) // USD, with subagent sessions
+const step = () => lastAssistantWithUsage(data.session.message.list(session.id), info()?.revert?.messageID)
+const limits = () => (session.location ? data.location.usage.limits(session.location) : undefined)
+```
+
+- `step()` to krok asystenta, którego tokeny wypełniają teraz okno kontekstu, jak w pierścieniu kontekstu aplikacji.
+  Porównaj jego `tokens` z `limit.context` modelu z `data.location.model.list`.
+- `limits()` zawiera budżety OpenCode Console i limit planu Go po wczytaniu ich przez
+  `data.location.usage.sync(location)`. Ma wartość `null`, gdy serwer nie raportuje żadnych.
+
+### Karty
+
+`ctx.tabs` odczytuje i zmienia pasek kart powłoki: sesje i wersje robocze otwarte jako karty. To przenosi kartę sesji na
+przód po zakończeniu jej uruchomienia:
+
+```ts
+import { onCleanup } from "solid-js"
+import { createKeyed } from "@opencode/plugin/gui"
+
+createKeyed(
+  () => ctx.servers.get("sidecar")?.data,
+  (data) =>
+    onCleanup(
+      data.on("session.execution.succeeded", (event) => {
+        const tab = ctx.tabs.list().find((item) => item.session?.id === event.data.sessionID)
+
+        if (tab) ctx.tabs.move(tab.key, 0)
+      }),
+    ),
+)
+```
+
+- `list()` zwraca otwarte karty w kolejności paska. Jest reaktywne. `session` karty ma wartość `undefined` dla wersji
+  roboczej, a `active` ma wartość `true` dla karty na ekranie.
+- `open({ server, id }, { focus? })` otwiera sesję jako kartę na końcu paska, w tle, chyba że `focus` ma wartość
+  `true`. Już otwarta sesja zachowuje kartę, podobnie jak subagent pokazywany przez kartę rodzica.
+- `focus(key)` pokazuje kartę, `move(key, index)` ją przenosi, a `close(key)` zamyka ją jak użytkownik.
+- Klucz, którego nie ma żadna otwarta karta, nic nie robi. Zapisy wykonane przed zamontowaniem interfejsu aplikacji
+  czekają na nie.
+
+#### Referencja
+
+```ts
+interface Tabs {
+  list(): ShellTab[]
+  open(session: { server: string; id: string }, options?: { focus?: boolean }): void
+  focus(key: string): void
+  move(key: string, index: number): void
+  close(key: string): void
+}
+
+interface ShellTab {
+  key: string
+  session: SessionRef | undefined
+  active: boolean
+}
+```
+
+### Skróty klawiszowe
+
+`ctx.keybinds` odczytuje skrót użytkownika dla opublikowanego ID polecenia.
+
+```ts
+const label = ctx.keybinds.keybind(`${ctx.id}.open`)
+const chord = ctx.keybinds.keys("mod+k")
+const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
+```
+
+- `keybind(command)` zwraca części wyświetlania efektywnego skrótu polecenia, na przykład `["Ctrl", "K"]`. Są puste,
+  gdy polecenie nie ma skrótu.
+- `keys(bind)` zwraca części wyświetlania kombinacji, której aplikacja nie posiada, takiej jak obsługiwana przez samą
+  stronę.
+- `matches(command, event)` ma wartość `true`, gdy zdarzenie pasuje do efektywnego skrótu polecenia.
+
+#### Referencja
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### Uruchamianie poleceń
+
+`ctx.commands.run(id)` uruchamia polecenie tak, jak wybór w palecie poleceń. Zwraca `false`, gdy polecenie nie może
+działać:
+
+```ts
+if (!ctx.commands.run("terminal.toggle")) ctx.toast.show({ title: ctx.t("terminal.unavailable") })
+```
+
+- `id` to opublikowane polecenie pluginu, `<plugin id>.<command id>`, dowolnego pluginu, lub jedno z poleceń aplikacji,
+  takie jak `command.palette`.
+- ID poleceń aplikacji nie są stabilnym API i mogą się zmieniać między wydaniami.
+- `run` zwraca `false`, gdy żadne włączone polecenie nie ma tego ID. Wymienione, ale wyłączone polecenie nie działa.
+- Przed zamontowaniem interfejsu aplikacji nie ma zarejestrowanych poleceń, więc `run` zwraca `false`.
+- `run` nie czeka na asynchroniczną pracę polecenia.
+
+#### Referencja
+
+```ts
+interface Commands {
+  run(id: string): boolean
+}
+```
+
+### System i środowisko
+
+`ctx.system` działa na każdej platformie. `ctx.desktop` dodaje funkcje dostępne tylko w aplikacji Desktop, a w aplikacji
+webowej ma wartość `undefined`.
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save` otwiera okno zapisu w aplikacji Desktop, a w aplikacji webowej pobiera plik. Zwraca `false`, gdy
+  użytkownik anuluje zapis.
+- `system.openExternal` otwiera URL w przeglądarce systemowej. Dla linków w aplikacji używaj `ctx.links.open`, które
+  kieruje `Link` do jego [procedury obsługi](#link-handlers).
+- `desktop.launch(path, app?)` otwiera ścieżkę aplikacją lub aplikacją domyślną. `desktop.reveal(path)` pokazuje ją
+  w menedżerze plików.
+- `ctx.embeds` renderuje widok web procesu głównego w oknie; zobacz [Osadzone widoki web](#embedded-web-views).
+- `ctx.locale` odczytuje język interfejsu i jego kierunek pisma. `ctx.appearance.font("mono")` to rodzina CSS fontu
+  terminala użytkownika.
+- `ctx.router` odczytuje bieżącą ścieżkę trasy i to, czy trwa przejście trasy.
+- `ctx.workspaces.on("remove", handler)` działa, gdy użytkownik usuwa katalog obszaru roboczego z serwera, aby można
+  było posprzątać magazyny ograniczone do niego.
+
+`desktop.pick(options)` otwiera systemowe okno wyboru plików lub folderów i zwraca ich bezwzględne ścieżki w Promise:
+
+```ts
+const [folder] = (await ctx.desktop?.pick({ directory: true, title: ctx.t("pick.folder") })) ?? []
+
+if (folder) await ctx.client.rpc(Acme).index({ directory: folder })
+```
+
+- `directory: true` wybiera foldery zamiast plików, a `multiple: true` pozwala wybrać więcej niż jeden.
+- `extensions` ogranicza oferowane pliki, bez kropki, na przykład `["json"]`. Foldery je ignorują.
+- `title` to tytuł okna. Nie każdy system go pokazuje.
+- Ścieżki są puste, gdy użytkownik anuluje. `pick` jest odrzucane, gdy okno nie może się otworzyć.
+- `pick` działa tylko na desktopie: przeglądarka nigdy nie mówi stronie, gdzie znajduje się wybrany plik.
+
+`ctx.appearance.mode()` to schemat kolorów pokazywany przez interfejs, `"light"` lub `"dark"`. Jest reaktywny:
+
+```ts
+const background = () => (ctx.appearance.mode() === "dark" ? "#000" : "#fff")
+```
+
+- Podąża za wyborem użytkownika w **Settings > Appearance**, a **System** jest rozwiązywany do bieżącego schematu
+  systemu.
+- Przed zamontowaniem interfejsu aplikacji jest to schemat systemu.
+
+#### Referencja
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  pick(options?: PickOptions): Promise<string[]>
+}
+
+interface PickOptions {
+  directory?: boolean
+  multiple?: boolean
+  title?: string
+  extensions?: string[]
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+  mode(): "light" | "dark"
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
+## Zapisany stan
+
+Okna desktopowe wczytują zapisany stan przez IPC, a sieć od razu czyta `localStorage`. Deklaruj magazyny
+w `Plugin.define({ stores })`, aby host wczytał je za Ciebie.
+
+- **`Store.global`** przechowuje jedną wartość dla aplikacji. Wczytuje się przed `setup`, więc
+  `ctx.stores.name.value` nigdy nie jest `undefined`.
+- **`Store.session`** przechowuje jedną wartość na sesję. Wczytuje się po zamontowaniu sesji;
+  `ctx.stores.name(session).value` jest `undefined` do tego czasu.
+
+Zadeklarowane magazyny dotyczą okien. `main` otwiera swój stan przez `ctx.storage.store`, który czyta synchronicznie;
+zobacz [Kontekst główny](#main-context).
+
+Mutuj wartość w miejscu przez `update(draft => …)`, które nie może nic zwracać, albo zastąp ją przez `set(next)`:
+
+```ts
+const enabled = ctx.stores.prefs.value.enabled
+
+ctx.stores.prefs.update((draft) => {
+  draft.enabled = !draft.enabled
+})
+```
+
+- `ready()` ma wartość `true` po wczytaniu wartości. Zapisy wykonane wcześniej czekają i stosują się w kolejności
+  wywołań.
+- `from` wskazuje inne zapisane klucze, z których wartość jest importowana raz, gdy magazyn nie ma żadnej, takie jak
+  klucz zmienionego magazynu: `"plugin.acme.settings"`. Podaj listę, aby spróbować kilku kluczy, od najnowszego.
+  Drugi klucz zachowuje swoją kopię do usunięcia magazynu.
+
+```ts
+stores: {
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
+}
+```
+
+#### Referencja
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: string | string[]): StoreDeclaration
+}
+
+interface Persisted<T, V = T | undefined> {
+  value: V
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
+
+### Magazyny w czasie działania
+
+`ctx.storage.store(key, options)` otwiera magazyn dla klucza znanego tylko w czasie działania. `scope` przechowuje jedną
+wartość na serwer, katalog lub sesję.
+
+```tsx
+import { Schema } from "effect"
+import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+function DraftView(props: { readonly session: MountedSession }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const draft = ctx.storage.store("draft", {
+    schema: Schema.Struct({ text: Schema.String }),
+    initial: { text: "" },
+    scope: { server: props.session.server.id, directory: props.session.directory },
+  })
+
+  return <p>{draft.value?.text}</p>
+}
+```
+
+- `scope: "global"`, domyślne, przechowuje jedną wartość dla aplikacji.
+- `scope: { server, directory? }` przechowuje jedną wartość na serwer lub na katalog obszaru roboczego na nim.
+- `scope: { session }` przechowuje jedną wartość na sesję, otwieraną ponownie, gdy sesja przenosi się do nowego
+  katalogu.
+- `value` magazynu w czasie działania ma wartość `undefined`, dopóki się nie wczyta.
+- `ctx.storage.memory(key, { initial })` przechowuje stan lokalny okna, który przetrwa przeładowania pluginu, ale nie
+  przeładowania okna.
+- `ctx.storage.remove(key, { scope, from })` usuwa wartość, więc klucz znów czyta się jako `initial`.
+
+#### Referencja
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: string | string[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: string | string[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
+
+## Prymitywy reaktywne
+
+Preferuj te pomocniki zamiast surowych `createEffect`, `createRenderEffect` i `createComputed`. Podążają za czasem życia
+pluginu i restartami jego zależności, które ręcznie pisane efekty często obsługują źle.
+
+### createKeyed
+
+`createKeyed(source, fn, { otherwise?, equals? })` uruchamia `fn` w świeżym właścicielu dla każdego klucza: każdej
+aktywnej generacji akcesora `ctx.use` lub każdej wartości zwykłego akcesora. Wszystko zarejestrowane w `fn` kończy się
+z tym uruchomieniem.
+
+```tsx
+import { onCleanup } from "solid-js"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
+```
+
+- `otherwise` działa, gdy źródło nie ma klucza: akcesor `Live`, który nie jest aktywny, lub zwykły akcesor, którego
+  wartość to `undefined`, `null` albo `false`.
+- `equals` decyduje, czy nowa wartość zwykłego akcesora jest tym samym kluczem, więc `fn` nie uruchamia się ponownie.
+  Używaj go, gdy źródło buduje nowy obiekt za każdym razem. Akcesor `Live` zawsze kluczuje według generacji.
+
+#### Referencja
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
+### createLatest
+
+`createLatest(source, (value, signal) => promise)` pobiera dane przy każdej zmianie `source`, przerywa nieaktualne
+żądania i nigdy nie zawiesza.
+
+```ts
+const summary = createLatest(
+  () => ctx.sessions.current()?.directory,
+  (directory, signal) => fetchSummary(directory, signal),
+)
+const text = () => summary.latest ?? ""
+```
+
+- `latest` to ostatni wynik, zachowywany, gdy trwa nowsze żądanie. Ma wartość `undefined` przed pierwszym.
+- `loading` ma wartość `true`, gdy trwa żądanie dla bieżącej wartości.
+- `error` to odrzucenie bieżącego żądania, jeśli wystąpiło.
+
+#### Referencja
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
+
+### createVisitState
+
+`createVisitState(initial)` tworzy sygnał `[value, setValue]`, który resetuje się, gdy użytkownik opuszcza sesję i do
+niej wraca.
+
+```ts
+const [expanded, setExpanded] = createVisitState(false)
+```
+
+#### Referencja
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
+### usePanel i useDrawer
+
+`usePanel()` zwraca ramkę otaczającą panel, a poza renderowaniem panelu zgłasza błąd. `useDrawer()` zwraca wysuwany
+panel, w którym wyświetlany jest element na wąskim ekranie, albo `undefined` poza takim panelem.
+
+```ts
+const panel = usePanel()
+const drawer = useDrawer()
+const compact = () => panel.placement() === "mobile"
+const close = () => drawer?.close()
+```
+
+- `placement()` to `"side"` w bocznym obszarze i `"mobile"` w widoku na wąskim ekranie.
+- `visible()` ma wartość `true`, gdy obszar jest otwarty i ta karta jest wybrana. `present()` pozostaje `true`, gdy
+  obszar animuje zamknięcie.
+- `reserve()` prosi o pozostawienie miejsca na końcu nagłówka dla przełącznika obszaru hosta.
+- `sidebar` to preferencja wewnętrznego paska bocznego wspólna dla wszystkich paneli bocznych. Panel z paskiem bocznym
+  renderuje własny przełącznik.
+- `drawer.open(view)` zastępuje widok wysuwanego panelu przekazaną treścią i dodaje możliwość powrotu.
+
+#### Referencja
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
+}
+```
+
+## Kontrakty aplikacji
+
+Aplikacja udostępnia te kontrakty każdemu pluginowi. Korzystaj z jednego przez `ctx.use(token)` i obsługuj go, gdy nie
+jest `active`, jak w przypadku kontraktu każdego innego pluginu. Na przykład `Browser` jest `inactive` w sieci.
+
+### Pliki
+
+`@opencode/plugin/gui/file` eksportuje drzewo plików i przycisk **Open in** aplikacji oraz rejestr `FileViewer`.
+
+```tsx
+import { bindPlugin } from "@opencode/plugin/gui"
+import { FileViewer, type FileViewerProps } from "@opencode/plugin/gui/file"
+
+// A viewer for a kind of file the file view does not render itself.
+ctx.add(FileViewer, {
+  kinds: ["document"],
+  View: bindPlugin((props: FileViewerProps) => <AcmeDoc bytes={props.bytes} onError={props.onError} />),
+})
+```
+
+- **`FileTree`** to kontrakt. `Tree` i `List` renderują wirtualizowane drzewo lub listę plików obszaru roboczego
+  ze znacznikami zmian. Odczytuj go przez `ctx.use(FileTree)`. `labels` drzewa dodaje tekst po nazwie folderu, taki jak
+  liczba jego wpisów.
+- **`OpenInApp`** to kontrakt. `Button` to desktopowy przycisk **Open in** dla obszaru roboczego sesji.
+- **`FileViewer`** to rejestr. Przeglądarka wymienia `kinds`, które renderuje, może odrzucić bajty przez `problem`
+  i renderuje `View`, które raportuje `onDetails` i `onError`.
+
+#### Referencja
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<FileViewerProps>
+}
+
+interface FileViewerProps {
+  bytes: Uint8Array
+  onDetails(details: string[]): void
+  onError(reason?: string): void
+}
+```
+
+### Przegląd zmian
+
+`@opencode/plugin/gui/review` eksportuje `Changes`, widok zmian sesji w aplikacji, oraz `ChangeKind` (`"add"`, `"del"`
+lub `"mix"`).
+
+```ts
+import { Changes } from "@opencode/plugin/gui/review"
+
+const changes = ctx.use(Changes)
+
+const count = () => {
+  const live = changes()
+  const session = ctx.sessions.current()
+
+  return live.status === "active" && session ? live.value.diffs(session).length : 0
+}
+```
+
+- `diffs(session)` zwraca zmiany dla bieżącego trybu przeglądu, a `ready(session)` ma wartość `true` po ich wczytaniu.
+  Obie funkcje są reaktywne. Zmiany są dostępne tylko dla sesji wskazywanej przez bieżącą trasę; dla pozostałych wynik jest pusty.
+- `kinds(session)` przypisuje każdemu zmienionemu plikowi i katalogowi jego `ChangeKind`.
+- `active(session)` to plik pokazywany przez panel przeglądu.
+- `details(session)` zwraca zmiany w katalogu sesji, które nie trafiły jeszcze do commita, niezależnie od trybu przeglądu.
+- `focus(session, path)` pokazuje plik w panelu przeglądu, a `open(session)` pokazuje wszystkie zmiany.
+- `watch(screen, source)` utrzymuje wczytane zmiany widoku, dopóki je pokazuje, przez przełączenia sesji widoku. Przekaż
+  ekran właściciela z wejścia panelu lub slotu. Zwraca funkcję zatrzymującą obserwację; zobacz
+  [createKeyed](#createkeyed).
+- Obserwacja typu `tree` utrzymuje listę zmian, odświeżaną przy otwarciu obszaru bocznego. Obserwacja typu `details`
+  wczytuje `details(session)`.
+
+#### Referencja
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
+
+### Przeglądarka
+
+`@opencode/plugin/gui/browser` eksportuje `Browser`, panel przeglądarki sesji na desktopie.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const session = ctx.sessions.current()
+const live = ctx.use(Browser)()
+const url = "http://localhost:3000"
+
+if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
+```
+
+- `attached(session)` ma wartość `true`, gdy sesja ma panel przeglądarki.
+- `canOpen(session, path?)` ma wartość `true`, gdy plik obszaru roboczego lub URL http(s) może otworzyć się w panelu.
+- `open(session, url)` otwiera URL jako kartę przeglądarki w bocznym panelu sesji.
+- `openFile(session, path)` otwiera plik obszaru roboczego jako kartę `file://`.
+
+#### Referencja
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
+
+## Proces główny
+
+W OpenCode Desktop konfiguracja `main` pluginu działa raz w głównym procesie Electron jako singleton całej aplikacji.
+Ma pełny dostęp do wbudowanych modułów Node.js, `electron` i głównych API hosta. Przekaż ją do `Plugin.define`
+w [pliku `./gui-experimental`](#define-the-gui-plugin) pluginu, obok konfiguracji okna `setup` lub samodzielnie.
+
+```tsx title="src/gui.tsx"
+import { Schema } from "effect"
+import { powerSaveBlocker } from "electron"
+import { Plugin } from "@opencode/plugin/gui"
+import { KeepAwake } from "./gui/contract"
+
+export default Plugin.define({
+  main(ctx) {
+    const stored = ctx.storage.store("keepScreenActive", { schema: Schema.Boolean, initial: false })
+    let blockerId: number | undefined
+
+    const release = () => {
+      if (blockerId === undefined) return
+      powerSaveBlocker.stop(blockerId)
+      blockerId = undefined
+    }
+
+    const setActive = (enabled: boolean) => {
+      if (enabled && blockerId === undefined) blockerId = powerSaveBlocker.start("prevent-display-sleep")
+      if (!enabled) release()
+      stored.set(enabled)
+    }
+
+    if (stored.value) setActive(true)
+
+    ctx.provide(KeepAwake, {
+      screenActive: () => blockerId !== undefined && powerSaveBlocker.isStarted(blockerId),
+      setScreenActive: (enabled) => setActive(enabled),
+    })
+
+    return release
+  },
+})
+```
+
+W oknie `electron` jest obojętnym symbolem zastępczym, więc import jest bezpieczny we wspólnym pliku
+`./gui-experimental`. Zobacz [Jeden plik, dwa procesy](#one-file-two-processes).
+
+## Kontekst główny
+
+`main` otrzymuje `MainContext`. W przeciwieństwie do `setup` okna funkcja `main` może być `async`. Może zwrócić funkcję
+sprzątającą bezpośrednio albo jako wartość Promise.
+
+```ts
+main(ctx) {
+  ctx.log.write("info", "acme started", { version: ctx.app.version })
+}
+```
+
+- `ctx.options`, `ctx.client` i `ctx.app` to [wspólny kontekst](#shared-context). W `main` `ctx.app.platform` ma zawsze
+  wartość `"desktop"`.
+- `ctx.storage.store(key, { schema, initial })` otwiera magazyn synchronicznie w przestrzeni nazw pluginu. Jego `value`
+  jest zawsze zdefiniowane, a każde `set` lub `update` trafia do bazy danych przed powrotem. `ctx.storage.remove(key)`
+  usuwa wartość.
+- `ctx.signal` jest przerywany, gdy plugin zostaje wyłączony, przeładowany lub usunięty albo aplikacja się zamyka.
+  `ctx.onCleanup(fn)` uruchamia wtedy `fn`; zobacz [Czasy życia i sprzątanie](#lifetimes-and-cleanup).
+- `ctx.provide` implementuje `Ipc` pod ID pluginu; zobacz
+  [Definiowanie i udostępnianie Ipc](#define-and-provide-an-ipc).
+- `ctx.add` wnosi wkład do rejestrów procesu głównego, takich jak [`MenubarItem`](#native-app-menu).
+- `ctx.windows` wymienia okna aplikacji i raportuje otwarcie lub zamknięcie okna.
+- `ctx.embeds` umieszcza `WebContentsView` w układzie okna; zobacz [Osadzone widoki web](#embedded-web-views).
+- `ctx.serverEndpoints.get(id)` zwraca URL i poświadczenia serwera. Serwer własny aplikacji desktopowej to `"sidecar"`.
+- `ctx.cli` opisuje CLI OpenCode uruchamiane przez aplikację desktopową.
+- `ctx.log.write` zapisuje do pliku logu desktopu.
+
+#### Referencja
+
+`@opencode/plugin/gui/main` eksportuje poniższe `MainStorage` i `MainEmbeds` jako `Storage` i `Embeds`.
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient
+  app: App
+  signal: AbortSignal
+  onCleanup(fn: Cleanup): void
+  storage: MainStorage
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
+  add<T>(registry: Registry<T>, item: T): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T }): Persisted<T, T>
+  remove(key: string): void
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  sameMachine: boolean
+  password?: string
+}
+```
+
+## Definiowanie i udostępnianie Ipc
+
+Specyfikacja `Ipc` może deklarować `state` dla okna, wywoływalne `methods` i wypychane `events`. Effect `Schema`
+waliduje i koduje każdą wartość przechodzącą przez most.
+
+```ts title="src/gui/contract.ts"
+import { Schema } from "effect"
+import { Ipc } from "@opencode/plugin/gui"
+
+export const Counter = Ipc.define({
+  id: "acme.counter",
+  state: Schema.Struct({ count: Schema.Number }),
+  methods: {
+    increment: {
+      input: Schema.Number,
+      output: Schema.Number,
+    },
+    reset: {},
+  },
+  events: {
+    overflow: Schema.Struct({ limit: Schema.Number }),
+  },
+})
+```
+
+- ID to ID Twojego pluginu lub zaczyna się od niego, jak `acme.counter`. `ctx.provide` w `main` i `ctx.main` w oknie
+  zgłaszają błąd dla każdego innego ID.
+- Pomiń `input` dla metody bez argumentu, a `output` dla metody, która nic nie zwraca.
+
+#### Referencja
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
+### Implementacja dostawcy w main
+
+Każda metoda otrzymuje zdekodowane dane wejściowe i `Caller` (`{ window, signal }`). Wywołaj
+`provider.changed(window?)`, gdy zmieni się `state`, aby wypchnąć nową migawkę do zasubskrybowanych okien, albo
+`provider.emit(name, payload, window?)`, aby wysłać zdarzenie.
+
+```ts title="src/gui/main.ts"
+import type { Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const counts = new Map<number, number>()
+
+  const provider = ctx.provide(Counter, {
+    state: (window: number) => ({ count: counts.get(window) ?? 0 }),
+    increment: (step, caller) => {
+      const next = (counts.get(caller.window) ?? 0) + step
+      counts.set(caller.window, next)
+      provider.changed(caller.window)
+
+      if (next > 100) provider.emit("overflow", { limit: 100 }, caller.window)
+
+      return next
+    },
+    reset: (_input, caller) => {
+      counts.set(caller.window, 0)
+      provider.changed(caller.window)
+    },
+  })
+}
+```
+
+- Specyfikacja ze `state` wymaga też `state(window)` w implementacji. Main odczytuje je, gdy okno subskrybuje, i przy
+  każdym `changed`.
+- Metoda, która zgłasza błąd, odrzuca wywołanie okna.
+- `changed` i `emit` docierają do każdego okna, gdy pominiesz `window`.
+- `dispose()` wycofuje `Ipc` wcześniej. Okna widzą go jako `pending`, a wywołania `ctx.main` czekają, dopóki plugin
+  nie udostępni go ponownie lub się nie zatrzyma. Host wycofuje go też, gdy plugin się zatrzyma.
+
+#### Referencja
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
+}
+```
+
+### Użycie Ipc w oknie
+
+W oknie `ctx.main(Counter)` zwraca klienta `Ipc` udostępnianego przez Twoje `main`. Metoda bez schematu `input`
+przyjmuje tylko opcjonalne opcje wywołania `{ signal }`. Nie przekazuj `undefined` jako pierwszego argumentu.
+
+```tsx title="src/gui/window.tsx"
+import { Command, type Plugin } from "@opencode/plugin/gui"
+import { Counter } from "./contract"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  const counter = ctx.main(Counter)
+
+  // Follows main across restarts; removed when the plugin stops.
+  counter.on("overflow", (data) => console.log(`Counter exceeded ${data.limit}`))
+
+  ctx.add(Command, () => ({
+    id: "increment",
+    title: ctx.t("command.increment"),
+    enabled: ctx.app.platform === "desktop",
+    run: async () => {
+      await counter.increment(1, { signal: ctx.signal })
+      await counter.reset({ signal: ctx.signal })
+    },
+  }))
+}
+```
+
+- Wywołanie czeka, gdy `main` startuje. Jest odrzucane, gdy `main` nie może odpowiedzieć: w sieci, gdy `main` pluginu
+  jest wyłączone lub nie powiodło się, albo gdy metoda zgłasza błąd. Przechwyć odrzucenie tam, gdzie użytkownik
+  potrzebuje informacji.
+- `state()` i `on()` podążają za `main` przez restarty. Nasłuch kończy się z bieżącym właścicielem, a w przeciwnym razie
+  z pluginem.
+- `ctx.main` zwraca tego samego klienta dla każdego wywołania z tokenem.
+
+Odczytaj `state` tego okna przez `client.state()`. Ma wartość `undefined` do nadejścia pierwszej migawki i aktualizuje
+się za każdym razem, gdy `main` wywołuje `changed`.
+
+```tsx
+const count = () => ctx.main(Counter).state()?.count ?? 0
+```
+
+#### Referencja
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
+}
+```
+
+Zdefiniuj plugin z oboma konfiguracjami w `src/gui.tsx`: `Plugin.define({ ...definition, setup, main })`.
+
+### Inne pluginy
+
+Inny plugin korzysta z Twojego `Ipc` przez `ctx.use(Counter)`, jak z kontraktu. Gdy jest `active`, jego wartością jest
+ten sam `IpcClient`.
+
+```ts
+const counter = ctx.use(Counter)
+
+const count = () => {
+  const live = counter()
+
+  return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+- Każde `Ipc` jest `inactive` w sieci, gdzie nie działa proces główny.
+
+## Natywne menu aplikacji
+
+`main` dodaje pozycje do natywnych menu (menu aplikacji macOS, File, Edit, View, Go, Window i Help) oraz do menu
+w aplikacji w Windows i Linuksie przez `MenubarItem` z `@opencode/plugin/gui/main`:
+
+```ts
+import { MenubarItem } from "@opencode/plugin/gui/main"
+
+ctx.add(
+  MenubarItem,
+  (): MenubarItem => ({
+    menu: "help",
+    id: "diagnostics",
+    after: "logs.export",
+    label: ctx.t("menu.diagnostics"),
+    enabled: () => true,
+    run: (focusedWindow) => {
+      focusedWindow?.webContents.focus()
+    },
+  }),
+)
+```
+
+- `after` wskazuje pozycję, po której następuje: jedną z pozycji tego pluginu po ID, wbudowaną po poleceniu, inaczej po
+  akcji, inaczej po roli, na przykład `logs.export`, `edit.copy` lub `about`. Gdy nic nie pasuje, pozycja trafia na
+  koniec menu.
+- Pozycje `app` pojawiają się tylko w macOS.
+- `run` otrzymuje okno z fokusem, jeśli istnieje.
+- Main odczytuje funkcję przy każdym budowaniu menu, więc etykieta podąża za językiem.
+
+#### Referencja
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
+
+## Osadzone widoki web
+
+Aby osadzić izolowany `WebContentsView` w panelu, utwórz go w `main` i renderuj jego pole z okna.
+
+```ts title="src/gui/main.ts"
+import { type BrowserWindow, WebContentsView } from "electron"
+import type { Plugin } from "@opencode/plugin/gui"
+
+export const main: Plugin.MainSetup = (ctx) => {
+  const attach = (window: BrowserWindow) => {
+    const view = new WebContentsView()
+    const embed = ctx.embeds.create(view, window)
+    void view.webContents.loadURL("https://acme.example")
+    embed.show(true)
+    // Send embed.id to the window over your Ipc.
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
+}
+```
+
+```tsx title="src/gui/pane.tsx"
+<ctx.embeds.View id={embedId} visible radius={8} />
+```
+
+- `"open"` uruchamia się tylko dla okien otwieranych później, więc najpierw podłącz się do `ctx.windows.list()`.
+- Okno przekazuje `id` osadzenia do `ctx.embeds.View` i `ctx.embeds.capture`.
+- `show(visible)` to sterowanie widocznością po stronie osadzonej strony: widok pokazuje się tylko wtedy, gdy okno go układa i utrzymuje
+  się `show(true)`.
+- `on("visible", handler)` działa, gdy widok wchodzi na ekran lub z niego schodzi, także gdy okno maluje w jego miejscu
+  nieruchomy obraz.
+- `capture()` zwraca nieruchomy obraz strony lub `undefined`, gdy jest ukryta.
+- `dispose()` usuwa widok z okna, ale nie zamyka jego strony; wywołaj `view.webContents.close()`, gdy z nią skończysz.
+  Host również usuwa osadzenie, gdy plugin znika.
+- W oknie `View` wypełnia swoje pole osadzeniem. Host utrzymuje granice, zoom, zaokrąglone narożniki i zasłanianie
+  oknami dialogowymi w zgodzie z widokiem i ukrywa go, gdy okno jest ukryte lub otwarte jest okno dialogowe.
+- `frozen` maluje nieruchomy obraz w miejscu żywego widoku, aby treść DOM mogła unosić się nad nim. `radius` zaokrągla
+  dolne narożniki, a `background` to kolor pokazywany w narożnikach.
+- `page` to, co pokazuje osadzenie, takie jak jego URL. Gdy panel się porusza, host maluje w jego miejscu nieruchomy
+  obraz osadzenia i odrzuca obraz zrobiony, gdy `page` miało inną wartość.
+- `capture(id)` w oknie zwraca nieruchomy obraz JPEG. Zwraca `undefined`, gdy osadzony widok jest ukryty, a w aplikacji
+  webowej — zawsze.
+
+#### Referencja
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  page?: string
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```
+
+## Zależności Live i obsługa błędów
+
+`ctx.use(token)` zwraca akcesor reaktywnego `Live<T>`: stan pluginu, który udostępnia token. Twój plugin działa dalej,
+gdy dostawca jest wyłączony, więc obsługuj stany inne niż `active`. Żadna kontrolka nie może być martwa, a spinner nie
+może działać wiecznie.
+
+```ts
+import { Browser } from "@opencode/plugin/gui/browser"
+
+const browser = ctx.use(Browser)
+
+ctx.add(Command, () => {
+  const live = browser()
+  const session = ctx.sessions.current()
+
+  return {
+    id: "preview",
+    title: ctx.t("command.preview"),
+    enabled: live.status === "active" && !!session,
+    run: () => {
+      if (live.status === "active" && session) live.value.open(session, "http://localhost:3000")
+    },
+  }
+})
+```
+
+- **`pending`:** dostawca jeszcze nie wystartował, na przykład gdy jego plugin się wczytuje lub restartuje. Pokaż stan
+  ładowania albo ukryj opcjonalne kontrolki.
+- **`active`:** dostawca działa, a `value` to jego kontrakt lub klient `Ipc`. `generation` liczy aktywacje, więc
+  restartujący się dostawca wraca z nową.
+- **`inactive`, `disabled`:** dostawca jest wyłączony, nieobecny lub niedostępny na tej platformie, jak każde `Ipc`
+  w sieci. Pokaż stan niedostępności albo pomiń kontrolkę.
+- **`inactive`, `failed`:** konfiguracja dostawcy zgłosiła błąd. Pokaż stan niedostępności.
+- Twoje własne `main` nie ma stanu `Live`. Wywołania przez [`ctx.main`](#use-the-ipc-in-a-window) czekają, gdy startuje,
+  i są odrzucane, gdy nie może odpowiedzieć.
+
+#### Referencja
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" }
+```
+
+## Czasy życia i sprzątanie
+
+Wszystko zarejestrowane przez `ctx` (`ctx.add`, `ctx.provide`, `ctx.dialogs.open`, `ctx.embeds.create` i nasłuchy
+zdarzeń `Ipc`) jest wycofywane, gdy kończy się jego zakres właściciela:
+
+- W komponencie lub wywołaniu zwrotnym `createKeyed` rejestracje kończą się, gdy komponent lub uruchomienie
+  `createKeyed` zostanie zwolnione.
+- Na najwyższym poziomie `setup` rejestracje kończą się, gdy plugin zostaje wyłączony, przeładowany lub usunięty albo
+  jego okno się zamyka.
+- W `main` rejestracje kończą się, gdy plugin zostaje wyłączony, przeładowany lub usunięty albo aplikacja się zamyka.
+  Osadzenie kończy się też, gdy jego okno się zamyka.
+
+Dla innych zasobów, takich jak timery i gniazda, zwróć funkcję sprzątającą z konfiguracji. Działa w tym samym czasie.
+
+- **`setup` okna** nie może być `async`, ponieważ działa pod właścicielem Solid. Zwróć funkcję sprzątającą albo użyj
+  `onCleanup` lub `ctx.signal`.
+- **`main`** może być `async`. Zwróć lub rozwiąż się na funkcję sprzątającą albo użyj `ctx.onCleanup(fn)`.
+
+### Konfiguracja okna
+
+`setup` okna musi być synchroniczne. Rozpoczynaj pracę asynchroniczną w `createKeyed` lub `createLatest`.
+
+```tsx title="src/gui.tsx"
+import { Command, createKeyed, Plugin } from "@opencode/plugin/gui"
+import { Changes } from "@opencode/plugin/gui/review"
+
+export default Plugin.define({
+  i18n: { en: { changes: "Show changes" } },
+  setup(ctx) {
+    // Runs once per active generation of Changes; the command is withdrawn with it.
+    createKeyed(ctx.use(Changes), (changes) => {
+      ctx.add(Command, () => ({
+        id: "changes",
+        title: ctx.t("changes"),
+        run: () => {
+          const session = ctx.sessions.current()
+
+          if (session) changes.open(session)
+        },
+      }))
+    })
+
+    const timer = setInterval(() => console.log("still here"), 60_000)
+
+    return () => clearInterval(timer)
+  },
+})
+```
+
+### Konfiguracja główna
+
+`main` może być `async`. Zwróć funkcję zwalniającą otwierane zasoby bezpośrednio lub jako wartość Promise albo zarejestruj ją przez
+`ctx.onCleanup(fn)`.
+
+```ts
+async main(ctx) {
+  const socket = await connect(ctx.options)
+
+  ctx.onCleanup(() => socket.close())
+}
+```
+
+- `ctx.onCleanup` uruchamia swoje funkcje, gdy plugin zostaje wyłączony, przeładowany lub usunięty albo aplikacja się
+  zamyka, od ostatnio zarejestrowanej. Uruchamia funkcję od razu, gdy plugin już zniknął.
+- Po `await` wróć, jeśli `ctx.signal` został przerwany, zanim cokolwiek zarejestrujesz lub zmienisz.
+- Sprzątanie `async` opóźnia zamknięcie aplikacji do swojego zakończenia, maksymalnie o 3 sekundy.

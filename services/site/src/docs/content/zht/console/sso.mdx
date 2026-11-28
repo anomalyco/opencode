@@ -1,0 +1,91 @@
+---
+title: "SSO"
+description: "透過 OIDC 或 SAML，以你的身分識別提供者登入 OpenCode 控制台工作區。"
+---
+
+單一登入（SSO）會在成員登入時，將其導向你公司的身分識別提供者。擁有者
+在 **Settings › Security** 中設定，且每個工作區都包含此功能。
+
+| 協定 | 提供者 |
+| --- | --- |
+| OpenID Connect | Google Workspace、Microsoft Entra ID、Okta、Auth0、Ping Identity 或任何 OIDC 提供者 |
+| SAML 2.0 | Google Workspace、Microsoft Entra ID、Okta 或任何 SAML 提供者 |
+
+每個工作區有一個 SSO 連線。
+
+## 設定 OIDC
+
+1. 開啟 **Settings › Security**、點選 **Configure SSO**，然後選擇 **OpenID Connect** 與你的提供者。
+2. 依照顯示的步驟在提供者中建立應用程式，並使用 `openid`、`email` 與 `profile` 範圍。
+3. 輸入 **Issuer URL**，或你的租用戶或網域，以及 **Client ID**、**Client Secret** 與
+   **Display Name**，然後點選 **Save**。
+4. 將連線的 **Callback URL** 複製到提供者允許的重新導向 URI。
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+控制台會在儲存時檢查簽發者是否可連線。連線儲存後，SSO 會立即生效。
+
+## 設定 SAML
+
+1. 開啟 **Settings › Security**、點選 **Configure SSO**，然後選擇 **SAML 2.0** 與你的提供者。
+2. 將 **ACS URL** 與 **SP Entity ID** 複製到你的提供者。自訂提供者可以改用 **SP Metadata URL**，或
+   下載 XML。
+3. 透過 URL、XML 上傳或貼上，新增提供者的中繼資料。你也可以手動輸入 **IdP Entity ID**、**IdP SSO
+   URL** 與 **IdP Certificate**。
+4. 檢查詳細資料並點選 **Activate SSO**。
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+身分識別提供者必須簽署回應或 SAML 斷言，並透過 `email` 屬性或 NameID 傳送使用者的電子郵件地址。
+
+## 驗證電子郵件網域
+
+使用驗證網域電子郵件登入[控制台](https://opencode.ai/console)的人員，會被導向你的
+身分識別提供者。SSO 生效後，請在 **Email domains** 下點選 **Add domain**、輸入你的網域，並發布
+顯示的 TXT 記錄。
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+記錄發布後，點選 **Verify Domain**。DNS 變更可能需要一段時間才能傳播。每個網域只能
+屬於一個工作區。
+
+## SSO 強制執行
+
+工作區啟用 SSO 後，管理員與成員必須透過 SSO 登入才能開啟工作區，控制台會自動
+重新導向他們。使用 `/connect` 連接 OpenCode 也遵循相同規則。
+
+擁有者也可以不透過 SSO 登入，因此即使身分識別提供者設定有誤，仍能存取工作區設定。
+
+## 自動成員資格
+
+電子郵件地址屬於已驗證網域的使用者，首次透過 SSO 登入時會以 **Member** 身分加入工作區。下列情況不會自動
+加入：
+
+- 他們有待處理的邀請。此時會改用該邀請。
+- 工作區使用[目錄同步](/console/scim)，由它決定成員資格。
+- 工作區具有 [Go](/console/go) 訂閱。
+
+當受邀者開啟啟用了 SSO 的工作區邀請連結時，系統會將他們導向你的身分識別提供者。
+
+## 既有帳號
+
+若某人已有相同電子郵件的控制台帳號，他們會在 SSO 流程中再次登入，並以
+**Link account** 確認。邀請不會略過此確認。在已驗證的工作區網域上由 SCIM 佈建的帳號
+仍可自動連結。
+
+## 編輯或刪除
+
+點選連線上的 **Edit** 即可變更其詳細資料。將密鑰或憑證留空可保留目前的
+值。若要在 OIDC 與 SAML 之間切換，請刪除連線並建立新的連線。
+
+從 **⋯ › Delete...** 刪除連線。成員會回到其他登入方式，目錄同步會停止
+並撤銷其權杖。電子郵件網域會保留。

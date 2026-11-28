@@ -1,5 +1,6 @@
 ---
 title: "Agents"
+description: "Define reusable agents in Markdown or config, each with its own system prompt, model, permissions, and mode."
 ---
 
 Create a Markdown file to add a reusable agent. This example adds a read-only reviewer that the main agent can launch for code reviews:
@@ -38,7 +39,7 @@ Save Markdown agents globally for all projects or inside a project:
 .opencode/agents/<name>.md
 ```
 
-OpenCode discovers project `.opencode` directories from the current directory up to the project root. A nested path becomes part of the agent ID:
+OpenCode discovers project `.opencode` directories from the current directory to the filesystem root. A nested path becomes part of the agent ID:
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer

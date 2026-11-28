@@ -60,7 +60,9 @@
     Runtime ....................... Bun 1.4
     Hosting .......... Cloudflare via SST 4
     Text face ....................... Inter
-    Code face ................ OpenTUI Mono
+    Code face .................... OpenMono
+    Built on ....... Iosevka, Belleve Invis
+    Font license .............. SIL OFL 1.1
     opencode.try() ................ Text.js
     Data ............... GitHub, models.dev
 
@@ -74,7 +76,7 @@
 
             opencode.ai/contribute
 
-         last updated 4 November 2026
+         last updated 18 November 2026
 
 
                       ###

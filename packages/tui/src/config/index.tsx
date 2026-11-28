@@ -6,6 +6,7 @@ import { Schema } from "effect"
 import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
+import { existsSync, lstatSync, realpathSync } from "node:fs"
 import path from "path"
 import { TuiKeybind } from "./keybind"
 
@@ -293,6 +294,7 @@ export function resolve(
   options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
   const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
+  const environment = options.environment ?? process.env
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -331,7 +333,9 @@ export function resolve(
     tabs: {
       ...input.tabs,
       mode: tabsMode,
-      enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
+      // herdr sets HERDR_ENV; Herdr.app (herdr-core) panes set HC_TERMINAL_ID instead.
+      enabled:
+        tabsMode === "on" || (tabsMode === "auto" && environment.HERDR_ENV !== "1" && !environment.HC_TERMINAL_ID),
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
@@ -354,25 +358,43 @@ export function ConfigProvider(props: {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
   const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
-  const update = async (update: (draft: any) => void) => {
+  let pending: Promise<unknown> = Promise.resolve()
+  const update: Interface["update"] = async (update) => {
     if (!host) throw new Error("Config updates are not available")
-    const info = await host.update(update)
-    apply(info)
-    return info
+    const save = pending.then(async () => {
+      const info = await host.update(update)
+      apply(info)
+      return info
+    })
+    pending = save.catch(() => {})
+    return save
   }
-  let reload = Promise.resolve()
-  const watcher = host?.path
-    ? safeWatch(path.dirname(host.path), () => {
-        reload = reload
+  const watchers = host?.path
+    ? watchFile(host.path, () => {
+        pending = pending
           .then(() => host.get())
           .then(apply)
           .catch(() => {})
       })
-    : undefined
-  onCleanup(() => watcher?.close())
+    : []
+  onCleanup(() => watchers.forEach((watcher) => watcher?.close()))
   return (
     <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
   )
+}
+
+// Editing a symlinked file's target changes nothing in the link's directory, so also watch the target's directory.
+function watchFile(file: string, reload: () => void) {
+  const watcher = safeWatch(path.dirname(file), reload)
+  if (!lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink() || !existsSync(file)) return [watcher]
+  const target = realpathSync(file)
+  if (path.dirname(target) === realpathSync(path.dirname(file))) return [watcher]
+  return [
+    watcher,
+    safeWatch(path.dirname(target), (_event, filename) => {
+      if (filename === null || filename === path.basename(target)) reload()
+    }),
+  ]
 }
 
 export function useConfig() {
@@ -390,10 +412,16 @@ export function useCursorStyle() {
   return createMemo(() => ({ style: config.data.cursor.style, blinking: config.data.cursor.blinking }))
 }
 
-/** Reactive accessor for the temporary "new-designs" experiment. */
+/** Reactive accessor for the temporary "new-designs" experiment. On unless the config turns it off. */
 export function useNewDesigns() {
   const config = useConfig()
-  return () => config.data.experimental?.["new-designs"] === true
+  return () => config.data.experimental?.["new-designs"] !== false
+}
+
+/** Reactive accessor for the temporary "session-find" experiment. */
+export function useSessionFindExperiment() {
+  const config = useConfig()
+  return () => config.data.experimental?.["session-find"] === true
 }
 
 /** Reactive accessor for the temporary "client-mcp" experiment. */

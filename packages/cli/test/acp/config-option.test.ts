@@ -22,6 +22,8 @@ const catalog: Catalog = {
   modes: [{ id: Agent.ID.make("build"), name: "Build" }],
   defaultModeID: Agent.ID.make("build"),
   commands: [],
+  skills: [],
+  providerNames: new Map([[Provider.ID.anthropic, "Anthropic"]]),
 }
 
 const effortOption = (providerID: string, id: string) =>
@@ -49,6 +51,17 @@ describe("acp config options", () => {
       ],
     })
     expect(effortOption("openai", "gpt-5")?.currentValue).toBe("minimal")
+  })
+
+  test("labels models with their provider's display name, or its ID when the provider is not listed (#64785)", () => {
+    expect(configOptions(catalog, {}).find((option) => option.id === "model")).toMatchObject({
+      options: [
+        { value: "anthropic/claude-haiku", name: "Anthropic / Claude Haiku" },
+        { value: "anthropic/claude/sonnet-4", name: "Anthropic / Claude Sonnet 4" },
+        { value: "openai/gpt-5", name: "openai / GPT-5" },
+        { value: "test/effort", name: "test / Effort" },
+      ],
+    })
   })
 
   test.each([

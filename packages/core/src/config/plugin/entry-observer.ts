@@ -5,18 +5,22 @@ import type { Entry } from "@opencode/schema/config"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, PubSub, Stream } from "effect"
 import path from "path"
+import { isDeepStrictEqual } from "node:util"
 import { Config } from "../../config.js"
 
 export const observe = Effect.fnUntraced(function* (
   config: Config.Interface,
   event: EventDomain,
   reload: Effect.Effect<void>,
+  select?: (entries: readonly Entry[]) => unknown,
 ) {
   const loaded = { entries: yield* config.entries() }
-  const refresh = config.entries().pipe(
-    Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-    Effect.andThen(reload),
-  )
+  const refresh = Effect.gen(function* () {
+    const entries = yield* config.entries()
+    const changed = !select || !isDeepStrictEqual(select(loaded.entries), select(entries))
+    loaded.entries = entries
+    if (changed) yield* reload
+  })
   yield* event.subscribe({ types: ["config.updated"] }).pipe(
     Stream.runForEach(() => refresh),
     Effect.forkScoped({ startImmediately: true }),

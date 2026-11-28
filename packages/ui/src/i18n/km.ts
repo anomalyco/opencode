@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "អត្ថាធិប្បាយលើ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "បន្ថែមមតិ",
+  "ui.lineComment.add": "បន្ថែមមតិ",
+  "ui.lineComment.actions": "សកម្មភាពជ្រើសរើស",
   "ui.lineComment.contextPlaceholder": "បន្ថែមបរិបទសម្រាប់ការផ្លាស់ប្តូរនេះ។",
   "ui.lineComment.submit": "មតិយោបល់",
   "ui.lineComment.cancel": "បោះបង់",

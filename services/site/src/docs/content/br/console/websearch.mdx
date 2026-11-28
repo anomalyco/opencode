@@ -1,0 +1,44 @@
+---
+title: "Pesquisa na web do Console"
+description: "Pesquisa na web hospedada para o OpenCode pelo Console."
+---
+
+O Console oferece pesquisa na web hospedada aos usuários do OpenCode conectados. Basta um proprietário ou admin ativar o recurso uma vez no espaço de trabalho. Os membros não precisam de uma chave separada do provedor de pesquisa.
+
+Cada pesquisa bem-sucedida custa **$0.01**. O valor é debitado do saldo do espaço de trabalho e conta para os limites de gastos dos membros.
+
+## Ativar
+
+1. Entre no [Console](https://opencode.ai/console) como proprietário ou admin do espaço de trabalho.
+2. Abra **Integrations** e clique em **Set up** em **Hosted Web Search**.
+3. Clique em **Enable**.
+
+Cada membro então conecta o OpenCode ao espaço de trabalho com `/connect`.
+
+```text
+/connect
+```
+
+A configuração do espaço de trabalho seleciona **OpenCode Web Search** como provedor padrão. Os membros não precisam definir `websearch.provider` nem adicionar uma chave de API de provedor. Um membro que define o próprio `websearch.provider` mantém essa escolha.
+
+## Pesquisar
+
+Peça informações atuais ao OpenCode em um prompt. As pesquisas rodam pelo OpenCode, não por uma página interativa no Console.
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+O provedor hospedado pesquisa a web pública e retorna até oito resultados. O OpenCode usa os resultados para responder ao prompt e citar as fontes.
+
+Consulte o [guia de pesquisa na web](/websearch) para configurar permissões ou desativar a ferramenta.
+
+## Cobrança
+
+O Console cobra **$0.01** quando a pesquisa retorna resultados válidos. Pesquisas que falham ou são bloqueadas pelo limite de requisições não geram cobrança.
+
+A pesquisa na web aparece separada do uso de modelos em **Activity › Usage**, **Activity › Overview**, na atividade do membro, nas faturas e nas exportações CSV. As políticas de orçamento de todos os gastos aplicáveis incluem os gastos com pesquisa na web.
+
+## Privacidade
+
+A pesquisa na web hospedada tem retenção zero de dados. O Console e seu provedor de pesquisa hospedado processam cada consulta e seus resultados sem armazenar o conteúdo.

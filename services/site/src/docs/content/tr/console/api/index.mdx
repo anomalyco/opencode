@@ -1,0 +1,155 @@
+---
+title: "API'ye genel bakış"
+description: "Kişisel API anahtarları veya hizmet hesabı anahtarlarıyla OpenCode Console API'sinde kimlik doğrulayın ve her anahtarın neler yapabileceğini belirleyin."
+---
+
+Console API, betiklerinizin ve entegrasyonlarınızın modelleri çağırmasına ve kullanımı dışa aktarmasına olanak tanır. Her
+istek bir API anahtarıyla kimlik doğrular.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                       | Endpoint'ler                                      |
+| ----------------------------------------- | ------------------------------------------------- |
+| [Modeller](/console/api/models)           | `https://opencode.ai/console/api/v1/models`       |
+| [Inference](/console/api/inference)       | `https://opencode.ai/inference/...`               |
+| [Sağlayıcılar](/console/api/providers)    | `https://opencode.ai/inference/custom/...`        |
+| [Kullanım dışa aktarma](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## API anahtarları
+
+Hem çalışma alanı üyelerinin hem de hizmet hesaplarının API anahtarları olabilir. Anahtarı bearer token olarak gönderin.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                  | Kişisel API anahtarı                                   | Hizmet hesabı anahtarı                                                   |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Oluşturan        | Kendisi için herhangi bir üye                          | Sahipler ve yöneticiler                                                  |
+| Oluşturulduğu yer | **Account › Personal API keys**                       | **Settings › Service accounts**                                          |
+| Kimlik olarak    | Onu oluşturan üye                                      | Hizmet hesabı                                                            |
+| Kullanımın sayıldığı | Üyenin [bütçesi](/console/budgets#member-budgets)   | Hizmet hesabının [bütçesi](/console/budgets#service-account-budgets)     |
+| En uygun olduğu  | Kendi betikleriniz ve [harness'leriniz](/console/harnesses) | CI, paylaşılan makineler ve entegrasyonlar                       |
+
+- Her anahtar, oluşturulduğunda seçilen tek bir çalışma alanında çalışır. Çalışma alanı başlığı gerekmez.
+- Tam anahtar yalnızca oluşturduktan hemen sonra bir kez gösterilir. Sonrasında Console yalnızca önekini gösterir.
+- **Expiration** isteğe bağlıdır: **Never**, **1 day**, **7 days**, **30 days** veya **Custom** (1 ile 365 gün arası).
+  Süresi dolmuş bir anahtar yenilenemez; bu nedenle yeni bir tane oluşturun.
+
+## Kişisel API anahtarları
+
+Kişisel anahtarla yapılan istekler sizin adınıza yürütülür. Rolünüz, [bütçeleriniz](/console/budgets#member-budgets) ve model kurallarınız bu istekler için de geçerlidir.
+
+1. Hesap menüsünden **Account** bölümünü açın ve **Personal API keys** bölümünü bulun.
+2. **Add API key** düğmesine tıklayın.
+3. **Workspace**, bir **Key name** ve isteğe bağlı bir **Expiration** seçin. Sahipler ve yöneticiler ayrıca
+   **Permissions** seçer.
+4. **Create** düğmesine tıklayın ve anahtarı kopyalayın.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Anahtar, çalışma alanındaki güncel erişim izinlerinize tabidir. Rolünüz değişirse anahtarın yetkileri de değişir. Çalışma alanında [SSO](/console/sso#sso-enforcement) zorunluysa anahtarınız yalnızca etkin bir SSO oturumunuz varken çalışır. Çalışma alanı sahipleri bu koşuldan muaftır.
+
+## Hizmet hesapları
+
+Hizmet hesabı, çalışma alanının kendi API anahtarları, kullanımı ve [bütçesi](/console/budgets#service-account-budgets)
+olan insan olmayan bir üyesidir. Kullanımın bir kişiye bağlı kalmaması için otomasyon için bir tane kullanın. Sahipler ve
+yöneticiler bunları yönetir.
+
+1. **Settings › Service accounts** bölümünü açın ve **Add Service Account** düğmesine tıklayın, ardından ona bir ad verin,
+   örneğin `CI Pipeline`.
+2. Hizmet hesabını açın ve **Add API Key** düğmesine tıklayın.
+3. Bir **Key name**, isteğe bağlı bir **Expiration** ve **Permissions** seçin, ardından **Create** düğmesine tıklayın.
+4. Anahtarı kopyalayın.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Sahipler ve yöneticiler daha sonra anahtarın eylem menüsündeki **Edit…** ile bir hizmet hesabı anahtarını yeniden
+adlandırabilir veya izinlerini değiştirebilir.
+
+## İzinler
+
+Her anahtarın, oluştururken **Permissions** altında seçilen bir izin düzeyi vardır.
+
+| İzinler        | İzin verdikleri                                                                       |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | Üye veya hizmet hesabının yapabildiği her şey, **This account's API keys** hariç.     |
+| **Restricted** | Yalnızca seçtiğiniz kaynaklar.                                                        |
+| **Read only**  | Her kaynağa okuma erişimi. Anahtar modelleri listeleyebilir ama çağıramaz.            |
+
+Bir anahtar asla adına hareket ettiği kişiden fazlasını yapmaz. Kişisel anahtar üyenin mevcut rolüyle,
+hizmet hesabı anahtarı ise [hizmet hesaplarının yapabildikleriyle](#limitations) sınırlıdır.
+
+### Kısıtlı anahtarlar
+
+Her kaynağı **None**, **Read** veya **Write** yapın. **Write**, **Read** içerir.
+
+| Kaynak                      | Düzeyler              |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**, **Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**, **Write**   |
+| **Members**                 | **Read**, **Write**   |
+| **Providers**               | **Read**, **Write**   |
+| **Billing**                 | **Read**, **Write**   |
+| **Workspace settings**      | **Read**, **Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
+
+**Models › Read** modelleri listeler ve **Models › Request** ayrıca onları [Inference](/console/api/inference) ve
+[Providers](/console/api/providers) API'leri üzerinden çağırır. Örneğin yalnızca modelleri çağıran bir anahtar şunlara
+ihtiyaç duyar:
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+Kapsamlı izinlerden önce **Inference only** olarak oluşturulmuş anahtarlar, **Models** değeri **Request** olarak
+ayarlanmış **Restricted** görünür.
+
+### Kim neyi verebilir
+
+- **Members** yalnızca modelleri listeleyen ve çağıran kişisel anahtarlar oluşturabilir. Console izin seçenekleri yerine
+  "This key can list and call models as you." gösterir.
+- **Sahipler ve yöneticiler**, kendi rollerinin izin verdiği ölçüde kişisel anahtarlarına **All**, **Restricted** veya **Read only** yetkisi verebilir. Varsayılan ayar **Restricted** seçeneğidir ve **Models** izni **Request** olarak ayarlanır. Daha sonra daha az yetkili bir role geçerlerse anahtarlarının izinleri de buna göre kısıtlanır.
+- **Hizmet hesabı anahtarları** varsayılan olarak **All** olur. Sahipler ve yöneticiler izinlerini seçer.
+
+### Sınırlamalar
+
+Bazı eylemler her zaman Console'da oturum açmış bir kişi gerektirir ve anahtarla anahtar oluşturmak sıkı biçimde
+sınırlıdır.
+
+- Hiçbir API anahtarı SSO ayarlarını değiştiremez veya çalışma alanını silemez.
+- Hizmet hesabı anahtarları **All** olsa bile üye davet edemez, rol değiştiremez, üye kaldıramaz, faturalandırmayı
+  yönetemez, çalışma alanı ayarlarını değiştiremez, modelleri yönetemez ya da hizmet hesabı oluşturamaz veya kaldıramaz.
+- **This account's API keys** yalnızca hizmet hesabı anahtarlarında kullanılabilir ve **All** bunu içermez. Buna sahip bir
+  anahtar yalnızca kendi hizmet hesabı için anahtar oluşturabilir ve iptal edebilir. Yeni anahtarlar **Restricted**
+  olmalı, oluşturan anahtarın izinleri içinde kalmalı ve **This account's API keys** içeremez.
+- Kişisel anahtarlar asla **This account's API keys** alamaz ve hiçbir API anahtarı kişisel API anahtarı oluşturamaz
+  veya iptal edemez.
+
+Bir anahtarın izinleri dışındaki istekler HTTP `403` döndürür.
+
+## İptal
+
+| Anahtar             | Kim iptal edebilir     | Nerede                                                                            |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| Kişisel API anahtarı | Ona sahip üye         | **Account › Personal API keys**, ardından **Revoke**                              |
+| Kişisel API anahtarı | Sahipler ve yöneticiler | **Settings › Members** bölümündeki üye sayfasında, **API Keys** altında           |
+| Hizmet hesabı anahtarı | Sahipler ve yöneticiler | **Settings › Service accounts** bölümündeki hizmet hesabı sayfasında, **API Keys** altında |
+
+Anahtarlar otomatik olarak da iptal edilir:
+
+- Bir üye çalışma alanından ayrıldığında, çıkarıldığında veya [SCIM](/console/scim) üzerinden erişimi kaldırıldığında, orada oluşturduğu tüm anahtarlar iptal edilir. Hizmet hesabı için oluşturduğu anahtarlar da buna dahildir. Aynı hizmet hesabındaki diğer anahtarlar çalışmaya devam eder.
+- Bir hizmet hesabını kaldırmak tüm anahtarlarını iptal eder.
+
+İptal edilmiş ve süresi dolmuş anahtarlar hemen çalışmayı durdurur ve HTTP `401` döndürür.

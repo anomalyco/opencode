@@ -1,0 +1,100 @@
+---
+title: "Cloudflare"
+description: "@opencode/sdk/workerd로 Cloudflare Durable Object 안에서 OpenCode를 실행하세요. 객체의 SQLite 저장소를 사용합니다."
+---
+
+Cloudflare Durable Object 안에서 `@opencode/sdk/workerd`를 사용하세요. 이 프로필은 객체의 SQLite 저장소를 사용하고, 인스턴스가 메모리에서 퇴거된 뒤 복구할 수 있도록 영속 이벤트를 저장하며, 환경에서 사용할 수 없는 로컬 파일 시스템 및 프로세스 서비스를 대체합니다.
+
+```sh
+bun add @opencode/sdk
+```
+
+요청마다 호스트를 만들지 말고 Durable Object 인스턴스 수명 동안 호스트 하나를 유지하세요.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile`은 호스트가 준비될 때까지 모든 Durable Object 이벤트를 막고 초기화가 실패하면 객체를 재설정합니다. 유지된 Promise를 사용하면 요청 핸들러가 시작 후 같은 호스트에 직접 접근할 수 있습니다.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler는 `workerd` 패키지 조건에 따라 OpenCode의 Workerd 호환 구현을 선택합니다. Cloudflare는 정리 작업 없이 Durable Object 인스턴스를 메모리에서 퇴거시킬 수 있으므로, `close()`를 호출하지 않아도 올바르게 동작하도록 설계되었습니다.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## 아웃바운드 요청 라우팅
+
+`fetch`를 전달하면 OpenCode의 아웃바운드 HTTP 요청(OpenCode Console 구성, 모델 요청, 웹 가져오기와 검색,
+well-known 구성, 원격 MCP 서버)을 Service Binding 같은 사용자 지정 핸들러로 라우팅합니다. Code Mode의 에이전트
+코드는 계속 `globalThis.fetch`를 사용합니다.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## 커스터마이즈
+
+Worker에 번들된 플러그인을 등록해 OpenCode 인스턴스를 커스터마이즈하세요. `OpenCodeWorkerd.create()`에
+플러그인을 전달하면 에이전트, 모델, 도구 및 기타 동작을 커스터마이즈합니다.
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+플러그인 훅, 변환, 도구, 전체 플러그인 컨텍스트는 [플러그인 전체 문서](/build/plugins/server)를
+참고하세요.

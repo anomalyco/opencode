@@ -210,5 +210,8 @@ function land(
 export const selectPanelPresent = (state: PanelMotionState) =>
   state.status === "flying" || (state.status === "rest" && state.open)
 
+/** The panel is open and no flight is moving it. */
+export const selectPanelOpenAtRest = (state: PanelMotionState) => state.status === "rest" && state.open
+
 /** The panel's contents stay mounted from its first open until disposal; true whenever it is present. */
 export const selectPanelMounted = (state: PanelMotionState) => state.status !== "disposed" && state.opened

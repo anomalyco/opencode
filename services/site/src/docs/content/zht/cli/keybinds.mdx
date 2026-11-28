@@ -1,0 +1,414 @@
+---
+title: "快捷鍵"
+description: "在 cli.json 中自訂 OpenCode CLI 的快捷鍵，並查詢各指令的 ID 與預設快捷鍵。"
+---
+
+在 `cli.json` 中自訂繫結：
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+單一按鍵請使用字串：
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+以逗號分隔替代按鍵：
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+使用 `"none"` 或 `false` 停用繫結：
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+事件行為請使用物件：
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` 預設為 `ctrl+x`。其他繫結中的 `<leader>` 會引用該按鍵。
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+未知的指令 ID 會被忽略。
+
+## 應用程式
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `leader` | `ctrl+x` | 組合快捷鍵的 Leader 鍵 |
+| `app.exit` | `ctrl+c,ctrl+d,<leader>q` | 結束應用程式 |
+| `app.debug` | `none` | 切換偵錯面板 |
+| `app.console` | `none` | 切換主控台 |
+| `app.scrap` | `none` | 開啟暫存畫面 |
+| `app.toggle.animations` | `none` | 切換動畫 |
+| `app.toggle.file_context` | `none` | 切換檔案上下文 |
+| `app.toggle.diffwrap` | `none` | 切換 Diff 換行 |
+| `app.toggle.paste_summary` | `none` | 切換貼上摘要 |
+| `command.palette.show` | `ctrl+p` | 列出可用指令 |
+| `help.show` | `none` | 開啟說明對話框 |
+| `docs.open` | `none` | 開啟文件 |
+| `opencode.settings` | `none` | 開啟設定 |
+| `server.pair` | `none` | 配對裝置 |
+| `service.restart` | `none` | 重新啟動服務 |
+| `location.reload` | `none` | 重新載入設定 |
+
+## Mini
+
+`app.clear` 指令只適用於 [`opencode mini`](/cli)。按 `ctrl+l` 清除可見畫面並重新繪製提示詞。終端機會保留捲動歷史。
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `app.clear` | `ctrl+l` | 清除畫面 |
+
+## Diff 檢視器
+
+按 `d`（`diff.switch_source`）選擇 **All**、**Committed**、**Uncommitted** 或 **Last turn**（在工作階段內），或選擇 **Base** 變更比較分支。選擇會保留到 TUI 結束。初始範圍請以 [`cli.json` 中的 `diffs.source`](/cli/config#diffs) 設定。
+
+捲動、翻頁與跳到開頭或結尾的快捷鍵一律作用於 Diff。無法用鍵盤切換焦點；點選檔案可開啟，點選資料夾可展開或收合，滑動滾輪則可捲動檔案樹。
+
+使用 `n` / `p` 或 `alt+down` / `alt+up`（macOS 上為 Option）切換檔案。在 Diff 檢視器內，Alt 快捷鍵切換的是檔案，不是工作階段分頁。
+
+按 `m` 將檔案標記為已審查並收合其修補內容。在全部檔案檢視中，再按一次 `m` 可取消標記並重新開啟修補。單一檔案檢視在標記為已審查時會自動前進到下一個檔案，但會停留在最後一個檔案，不會繞回。取消標記檔案永遠不會前進。
+
+在側邊欄或 Diff 標題上按右鍵，可選擇 **Mark complete**（或 **Mark incomplete**）。這會變更與 `m` 相同的已審查狀態。從選單完成另一個檔案不會選取它，也不會前進目前正在閱讀的檔案。
+
+帶 Shift 的 `diff.help` 替代按鍵支援在你按 `?` 時回報 Shift 修飾鍵的終端機。
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `diff.open` | `none` | 開啟 Diff 檢視器 |
+| `diff.close` | `escape,q` | 關閉 Diff 檢視器 |
+| `diff.down` | `j,down` | 向下捲動 Diff |
+| `diff.up` | `k,up` | 向上捲動 Diff |
+| `diff.page.down` | `pagedown,ctrl+f` | 將 Diff 檢視器向下翻頁 |
+| `diff.page.up` | `pageup,ctrl+b` | 將 Diff 檢視器向上翻頁 |
+| `diff.half_page.down` | `ctrl+d` | 將 Diff 檢視器向下捲動半頁 |
+| `diff.half_page.up` | `ctrl+u` | 將 Diff 檢視器向上捲動半頁 |
+| `diff.first` | `gg,home` | 跳到 Diff 的開頭 |
+| `diff.last` | `shift+g,end` | 跳到 Diff 的結尾 |
+| `diff.next_hunk` | `]` | 跳到下一個 Diff 區塊 |
+| `diff.previous_hunk` | `[` | 跳到上一個 Diff 區塊 |
+| `diff.next_file` | `n,alt+down` | 跳到下一個 Diff 檔案 |
+| `diff.previous_file` | `p,alt+up` | 跳到上一個 Diff 檔案 |
+| `diff.toggle_file_tree` | `b` | 切換 Diff 檢視器檔案樹 |
+| `diff.single_patch` | `s` | 切換單一修補檢視 |
+| `diff.switch_source` | `d` | 選擇 Diff 審查範圍 |
+| `diff.toggle_view` | `v` | 切換 Diff 檢視器的分割或統一檢視 |
+| `diff.toggle_fullscreen` | `f` | 切換 Diff 檢視器全螢幕 |
+| `diff.mark_reviewed` | `m` | 切換所選 Diff 檔案的已審查狀態 |
+| `diff.help` | `?,shift+?,shift+/` | 顯示更多 Diff 檢視器快捷鍵 |
+
+仍接受已淘汰的 `diff.toggle`、`diff.expand`、`diff.expand_all`、`diff.collapse` 與 `diff.switch_focus` 設定，但不再註冊對應的快捷鍵。
+
+## 外觀與導覽
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `prompt.editor` | `<leader>e` | 開啟外部編輯器 |
+| `theme.switch` | `none` | 列出可用主題 |
+| `theme.switch_mode` | `none` | 在淺色與深色主題模式之間切換 |
+| `theme.mode.lock` | `none` | 鎖定或解除鎖定主題模式 |
+| `session.sidebar.toggle` | `<leader>b` | 切換側邊欄 |
+| `pane.focus.left` | `<leader>left` | 將焦點移至工作階段窗格 |
+| `pane.focus.right` | `<leader>right` | 將焦點移至右側窗格 |
+| `terminal.select` | `<leader>down` | 選取終端機 |
+| `terminal.toggle` | `<leader>t` | 切換終端機窗格 |
+| `terminal.close` | `<leader>up` | 關閉終端機窗格 |
+| `session.toggle.scrollbar` | `none` | 切換工作階段捲軸 |
+| `opencode.status` | `<leader>s` | 檢視狀態 |
+| `opencode.debug` | `none` | 檢視偵錯資訊 |
+
+## 工作階段
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `session.export` | `<leader>x` | 將工作階段匯出到編輯器 |
+| `session.copy` | `none` | 複製工作階段對話記錄 |
+| `session.copy.id` | `none` | 複製工作階段 ID |
+| `session.move` | `none` | 移動工作階段 |
+| `session.new` | `<leader>n` | 建立新的工作階段 |
+| `session.list` | `<leader>l` | 列出所有工作階段 |
+| `open.menu` | `ctrl+o` | 開啟最近的工作階段與專案 |
+| `session.tab.next` | `ctrl+tab,alt+down` | 切換到下一個開啟的工作階段分頁 |
+| `session.tab.previous` | `ctrl+shift+tab,alt+up` | 切換到上一個開啟的工作階段分頁 |
+| `session.tab.history.back` | `none` | 在工作階段分頁記錄中返回 |
+| `session.tab.history.forward` | `ctrl+i` | 在工作階段分頁記錄中前進 |
+| `session.tab.next_unread` | `alt+shift+down` | 切換到下一個未讀的工作階段分頁 |
+| `session.tab.previous_unread` | `alt+shift+up` | 切換到上一個未讀的工作階段分頁 |
+| `session.tab.close` | `<leader>w` | 關閉目前的工作階段分頁 |
+| `session.tab.reopen` | `ctrl+shift+t` | 重新開啟最後關閉的工作階段分頁 |
+| `session.timeline` | `<leader>g` | 顯示工作階段時間軸 |
+| `session.find` | `<leader>f,super+f` | 在工作階段中搜尋 |
+| `session.fork` | `none` | 從指定訊息建立工作階段分支 |
+| `session.rename` | `ctrl+r` | 重新命名工作階段 |
+| `session.delete` | `ctrl+d` | 刪除工作階段 |
+| `session.interrupt` | `escape` | 中斷目前的工作階段 |
+| `session.background` | `ctrl+b` | 將阻擋中的工作階段工具移到背景 |
+| `session.compact` | `<leader>c` | 壓縮工作階段 |
+| `session.aside` | `none` | 提出附帶問題 |
+| `session.cd` | `none` | 變更工作目錄 |
+| `session.queued_prompts` | `<leader>q` | 管理排隊中的提示詞 |
+| `queued_prompt.undo` | `ctrl+u` | 復原排隊中的提示詞 |
+| `queued_prompt.delete` | `ctrl+d` | 刪除排隊中的提示詞 |
+| `session.toggle.exploration_grouping` | `none` | 切換相關工具呼叫的分組 |
+| `session.verbosity.cycle` | `none` | 循環切換對話記錄詳細程度 |
+| `session.child.first` | `down` | 切換 subagent 選取器 |
+| `session.child.next` | `right` | 前往下一個子工作階段 |
+| `session.child.previous` | `left` | 前往上一個子工作階段 |
+| `session.parent` | `up` | 前往父工作階段 |
+| `session.pin.toggle` | `ctrl+f` | 在工作階段清單中釘選或取消釘選工作階段 |
+| `session.quick_switch.1` | `<leader>1` | 切換到快速槽 1 中的工作階段 |
+| `session.quick_switch.2` | `<leader>2` | 切換到快速槽 2 中的工作階段 |
+| `session.quick_switch.3` | `<leader>3` | 切換到快速槽 3 中的工作階段 |
+| `session.quick_switch.4` | `<leader>4` | 切換到快速槽 4 中的工作階段 |
+| `session.quick_switch.5` | `<leader>5` | 切換到快速槽 5 中的工作階段 |
+| `session.quick_switch.6` | `<leader>6` | 切換到快速槽 6 中的工作階段 |
+| `session.quick_switch.7` | `<leader>7` | 切換到快速槽 7 中的工作階段 |
+| `session.quick_switch.8` | `<leader>8` | 切換到快速槽 8 中的工作階段 |
+| `session.quick_switch.9` | `<leader>9` | 切換到快速槽 9 中的工作階段 |
+| `session.tab.select.1` | `<leader>1,ctrl+1` | 切換到工作階段分頁 1 |
+| `session.tab.select.2` | `<leader>2,ctrl+2` | 切換到工作階段分頁 2 |
+| `session.tab.select.3` | `<leader>3,ctrl+3` | 切換到工作階段分頁 3 |
+| `session.tab.select.4` | `<leader>4,ctrl+4` | 切換到工作階段分頁 4 |
+| `session.tab.select.5` | `<leader>5,ctrl+5` | 切換到工作階段分頁 5 |
+| `session.tab.select.6` | `<leader>6,ctrl+6` | 切換到工作階段分頁 6 |
+| `session.tab.select.7` | `<leader>7,ctrl+7` | 切換到工作階段分頁 7 |
+| `session.tab.select.8` | `<leader>8,ctrl+8` | 切換到工作階段分頁 8 |
+| `session.tab.select.9` | `<leader>9,ctrl+9` | 切換到工作階段分頁 9 |
+| `session.tab.select.10` | `<leader>0,ctrl+0` | 切換到工作階段分頁 10 |
+
+## 模型與 agent
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `stash.delete` | `ctrl+d` | 刪除暫存項目 |
+| `model.dialog.provider` | `ctrl+a` | 從模型對話框開啟供應商清單 |
+| `model.dialog.favorite` | `ctrl+f` | 切換模型的最愛狀態 |
+| `model.dialog.usage` | `ctrl+u` | 從模型對話框開啟用量上限 |
+| `model.list` | `<leader>m` | 列出可用模型 |
+| `model.cycle_recent` | `f2` | 下一個最近使用的模型 |
+| `model.cycle_recent_reverse` | `shift+f2` | 上一個最近使用的模型 |
+| `model.cycle_favorite` | `none` | 下一個最愛模型 |
+| `model.cycle_favorite_reverse` | `none` | 上一個最愛模型 |
+| `mcp.list` | `none` | 列出 MCP 伺服器 |
+| `usage.show` | `none` | 檢視用量上限 |
+| `provider.connect` | `none` | 連接整合 |
+| `agent.list` | `<leader>a` | 列出 agent |
+| `agent.cycle` | `shift+tab` | 下一個 agent |
+| `agent.cycle.reverse` | `none` | 上一個 agent |
+| `variant.cycle` | `ctrl+t` | 循環切換模型變體 |
+| `variant.list` | `none` | 列出模型變體 |
+| `speed.cycle` | `none` | 循環切換模型速度 |
+| `speed.list` | `none` | 列出模型速度 |
+
+## 工作階段導覽
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `session.page.up` | `pageup,ctrl+alt+b` | 將訊息向上捲動一頁 |
+| `session.page.down` | `pagedown,ctrl+alt+f` | 將訊息向下捲動一頁 |
+| `session.line.up` | `ctrl+alt+y` | 將訊息向上捲動一行 |
+| `session.line.down` | `ctrl+alt+e` | 將訊息向下捲動一行 |
+| `session.half.page.up` | `ctrl+alt+u` | 將訊息向上捲動半頁 |
+| `session.half.page.down` | `ctrl+alt+d` | 將訊息向下捲動半頁 |
+| `session.first` | `ctrl+g,home,alt+home` | 瀏覽到第一則訊息 |
+| `session.last` | `ctrl+alt+g,end` | 瀏覽到最後一則訊息 |
+| `session.message.next` | `none` | 瀏覽到下一則訊息 |
+| `session.message.previous` | `none` | 瀏覽到上一則訊息 |
+| `session.message.user.next` | `none` | 瀏覽到下一則使用者訊息 |
+| `session.message.user.previous` | `none` | 瀏覽到上一則使用者訊息 |
+| `session.messages_last_user` | `alt+end` | 瀏覽到最後一則使用者訊息 |
+| `messages.copy` | `<leader>y` | 複製訊息 |
+| `session.undo` | `<leader>u` | 復原訊息 |
+| `session.redo` | `<leader>r` | 重做訊息 |
+| `session.toggle.thinking` | `none` | 切換思考區塊的可見性 |
+
+## 提示詞指令
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `prompt.submit` | `none` | 提交提示詞 |
+| `prompt.queue` | `<leader>return` | 將提示詞排入佇列 |
+| `prompt.editor_context.clear` | `none` | 清除編輯器上下文 |
+| `prompt.images.view` | `<leader>i` | 檢視圖片附件 |
+| `prompt.skills` | `none` | 開啟技能選取器 |
+| `prompt.stash` | `none` | 暫存提示詞 |
+| `prompt.stash.pop` | `none` | 取出暫存的提示詞 |
+| `prompt.stash.list` | `none` | 列出暫存的提示詞 |
+
+## 輸入編輯
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `prompt.clear` | `ctrl+c` | 清除輸入欄位 |
+| `prompt.paste` | `{"key":"ctrl+v","preventDefault":false}`（`ctrl+v`；`preventDefault: false`） | 從剪貼簿貼上 |
+| `input.submit` | `return` | 提交輸入 |
+| `input.newline` | `shift+return,ctrl+return,alt+return,ctrl+j` | 在輸入中插入換行 |
+| `input.move.left` | `left,ctrl+b` | 在輸入中將游標向左移動 |
+| `input.move.right` | `right,ctrl+f` | 在輸入中將游標向右移動 |
+| `input.move.up` | `up` | 在輸入中將游標向上移動 |
+| `input.move.down` | `down` | 在輸入中將游標向下移動 |
+| `input.select.left` | `shift+left` | 在輸入中向左選取 |
+| `input.select.right` | `shift+right` | 在輸入中向右選取 |
+| `input.select.up` | `shift+up` | 在輸入中向上選取 |
+| `input.select.down` | `shift+down` | 在輸入中向下選取 |
+| `input.line.home` | `ctrl+a` | 在輸入中移到行首 |
+| `input.line.end` | `ctrl+e` | 在輸入中移到行尾 |
+| `input.select.line.home` | `ctrl+shift+a` | 在輸入中選取到行首 |
+| `input.select.line.end` | `ctrl+shift+e` | 在輸入中選取到行尾 |
+| `input.visual.line.home` | `alt+a` | 在輸入中移到視覺行首 |
+| `input.visual.line.end` | `alt+e` | 在輸入中移到視覺行尾 |
+| `input.select.visual.line.home` | `alt+shift+a` | 在輸入中選取到視覺行首 |
+| `input.select.visual.line.end` | `alt+shift+e` | 在輸入中選取到視覺行尾 |
+| `input.buffer.home` | `none` | 在輸入中移到緩衝區開頭 |
+| `input.buffer.end` | `none` | 在輸入中移到緩衝區結尾 |
+| `input.select.buffer.home` | `shift+home` | 在輸入中選取到緩衝區開頭 |
+| `input.select.buffer.end` | `shift+end` | 在輸入中選取到緩衝區結尾 |
+| `input.delete.line` | `ctrl+shift+d` | 在輸入中刪除行 |
+| `input.delete.to.line.end` | `ctrl+k` | 在輸入中刪除到行尾 |
+| `input.delete.to.line.start` | `ctrl+u` | 在輸入中刪除到行首 |
+| `input.backspace` | `backspace,shift+backspace` | 在輸入中退格 |
+| `input.delete` | `ctrl+d,delete,shift+delete` | 在輸入中刪除字元 |
+| `input.undo` | `ctrl+-,super+z` | 在輸入中復原 |
+| `input.redo` | `ctrl+.,super+shift+z` | 在輸入中重做 |
+| `input.word.forward` | `alt+f,alt+right,ctrl+right` | 在輸入中將游標向前移動一個詞 |
+| `input.word.backward` | `alt+b,alt+left,ctrl+left` | 在輸入中將游標向後移動一個詞 |
+| `input.select.word.forward` | `alt+shift+f,alt+shift+right` | 在輸入中向前選取一個詞 |
+| `input.select.word.backward` | `alt+shift+b,alt+shift+left` | 在輸入中向後選取一個詞 |
+| `input.delete.word.forward` | `alt+d,alt+delete,ctrl+delete` | 在輸入中向前刪除一個詞 |
+| `input.delete.word.backward` | `ctrl+w,ctrl+backspace,alt+backspace` | 在輸入中向後刪除一個詞 |
+| `input.select.all` | `super+a` | 在輸入中全選 |
+| `prompt.history.previous` | `up` | 上一個記錄項目 |
+| `prompt.history.next` | `down` | 下一個記錄項目 |
+
+## 輸入框
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `composer.subagent.up` | `up` | 上一個 subagent |
+| `composer.subagent.down` | `down` | 下一個 subagent |
+| `composer.subagent.select` | `return` | 瀏覽到 subagent |
+| `composer.subagent.interrupt` | `ctrl+d` | 中斷 subagent |
+| `composer.shell.up` | `up` | 上一個 shell |
+| `composer.shell.down` | `down` | 下一個 shell |
+| `composer.shell.select` | `return` | 檢視 shell 輸出 |
+| `composer.shell.kill` | `ctrl+d` | 終止 shell 指令 |
+| `composer.terminal.up` | `up,k` | 上一個終端機 |
+| `composer.terminal.down` | `down,j` | 下一個終端機 |
+| `composer.terminal.select` | `return` | 選取終端機 |
+
+在 **Shell** 分頁中選取執行中的指令並按 **Enter**，或點選它，即可檢視擷取的 stdout 與 stderr。
+使用 **↑/↓**、**Page Up/Down** 或 **Home** 捲動，**End** 跟隨新輸出，**Esc** 返回而不停止指令。
+檢視器會顯示最近的輸出，並在結束後保持開啟；重新導向到檔案的輸出不會包含在內。
+
+## 對話框與自動完成
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `dialog.select.prev` | `up,ctrl+p` | 移到上一個對話框項目 |
+| `dialog.select.next` | `down,ctrl+n` | 移到下一個對話框項目 |
+| `dialog.select.page_up` | `pageup` | 在對話框中向上移動一頁 |
+| `dialog.select.page_down` | `pagedown` | 在對話框中向下移動一頁 |
+| `dialog.select.home` | `home` | 移到第一個對話框項目 |
+| `dialog.select.end` | `end` | 移到最後一個對話框項目 |
+| `dialog.select.submit` | `return` | 提交所選的對話框項目 |
+| `dialog.prompt.submit` | `return` | 提交對話框提示 |
+| `dialog.integration.rename` | `ctrl+r` | 重新命名整合帳號 |
+| `dialog.integration.delete` | `ctrl+d` | 刪除整合帳號 |
+| `dialog.integration.copy` | `tab` | 複製授權連結 |
+| `dialog.worktree.generate` | `tab` | 產生 worktree 名稱 |
+| `dialog.move_session.new` | `ctrl+a` | 新增 worktree |
+| `dialog.move_session.move` | `ctrl+m` | 將工作階段移到 worktree |
+| `dialog.move_session.delete` | `ctrl+d` | 刪除 worktree |
+| `dialog.move_session.refresh` | `ctrl+r` | 重新整理 worktree |
+| `prompt.autocomplete.prev` | `up,ctrl+p` | 移到上一個自動完成項目 |
+| `prompt.autocomplete.next` | `down,ctrl+n` | 移到下一個自動完成項目 |
+| `prompt.autocomplete.hide` | `escape` | 隱藏自動完成 |
+| `prompt.autocomplete.select` | `return` | 選取自動完成項目 |
+| `prompt.autocomplete.complete` | `tab` | 完成自動完成項目 |
+| `permission.prompt.fullscreen` | `ctrl+f` | 切換權限提示全螢幕 |
+| `plugins.toggle` | `return` | 切換外掛 |
+| `dialog.mcp.toggle` | `space` | 切換 MCP 伺服器 |
+| `dialog.plugins.error` | `space` | 檢視外掛錯誤 |
+| `dialog.plugins.update` | `ctrl+u` | 從外掛對話框更新外掛 |
+| `dialog.plugins.check` | `ctrl+r` | 檢查外掛更新 |
+
+## 終端機與外掛
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `terminal.suspend` | `ctrl+z` | 暫停終端機 |
+| `terminal.title.toggle` | `none` | 切換終端機標題 |
+| `plugins.list` | `none` | 開啟外掛管理員對話框 |
+
+## Which-Key
+
+| ID | 預設 | 說明 |
+| --- | --- | --- |
+| `which-key.toggle` | `ctrl+alt+k` | 切換 which-key 面板 |
+| `which-key.layout.toggle` | `ctrl+alt+shift+k` | 切換 which-key 版面 |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p` | 切換 which-key 待處理預覽 |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[` | 上一個 which-key 群組 |
+| `which-key.group.next` | `ctrl+alt+right,ctrl+alt+]` | 下一個 which-key 群組 |
+| `which-key.scroll.up` | `ctrl+alt+up,ctrl+alt+p` | 將 which-key 向上捲動 |
+| `which-key.scroll.down` | `ctrl+alt+down,ctrl+alt+n` | 將 which-key 向下捲動 |
+| `which-key.page.up` | `ctrl+alt+pageup` | 將 which-key 向上翻頁 |
+| `which-key.page.down` | `ctrl+alt+pagedown` | 將 which-key 向下翻頁 |
+| `which-key.home` | `ctrl+alt+home` | 跳到第一個 which-key 繫結 |
+| `which-key.end` | `ctrl+alt+end` | 跳到最後一個 which-key 繫結 |

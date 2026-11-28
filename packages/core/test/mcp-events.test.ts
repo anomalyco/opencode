@@ -8,26 +8,41 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(hostEnvironmentLayer)
 
-/** An MCP server speaking raw JSON-RPC that offers two pages of event types and records the streams opened on it. */
-const eventServer = Effect.fnUntraced(function* (input: { offers?: boolean; declares?: boolean } = {}) {
+/** A 2026-07-28 MCP server speaking raw JSON-RPC that offers two pages of event types and records the streams opened on it. */
+const eventServer = Effect.fnUntraced(function* (
+  input: { offers?: boolean; declares?: boolean; protocol?: "legacy" } = {},
+) {
   const [client, server] = InMemoryTransport.createLinkedPair()
   const state = {
     capabilities: undefined as unknown,
     lists: [] as unknown[],
     streams: [] as Array<{ id: string | number; params: unknown }>,
+    listens: [] as Array<{ id: string | number; params: unknown }>,
     cancelled: [] as unknown[],
   }
-  const reply = (id: string | number, result: Record<string, unknown>) => server.send({ jsonrpc: "2.0", id, result })
+  const reply = (id: string | number, result: Record<string, unknown>) =>
+    server.send({ jsonrpc: "2.0", id, result: { resultType: "complete", ...result } })
+  const capabilities =
+    input.offers === false ? {} : { extensions: { "io.modelcontextprotocol/events": { listChanged: true } } }
   server.onmessage = (message: JSONRPCMessage) => {
     if (!("method" in message)) return
-    const params = message.params ?? {}
+    // Every 2026-07-28 request carries the protocol envelope in `_meta`; the tests check the rest.
+    const { _meta: meta, ...params } = message.params ?? {}
     if (message.method === "notifications/cancelled") state.cancelled.push(params.requestId)
     if (!("id" in message)) return
+    if (message.method === "server/discover") {
+      state.capabilities = meta?.["io.modelcontextprotocol/clientCapabilities"]
+      void reply(message.id, {
+        _meta: { "io.modelcontextprotocol/serverInfo": { name: "jobs", version: "1.0.0" } },
+        supportedVersions: ["2026-07-28"],
+        capabilities,
+      })
+    }
     if (message.method === "initialize") {
       state.capabilities = params.capabilities
       void reply(message.id, {
         protocolVersion: params.protocolVersion,
-        capabilities: input.offers === false ? {} : { extensions: { "io.modelcontextprotocol/events": {} } },
+        capabilities,
         serverInfo: { name: "jobs", version: "1.0.0" },
       })
     }
@@ -36,11 +51,39 @@ const eventServer = Effect.fnUntraced(function* (input: { offers?: boolean; decl
       void reply(
         message.id,
         params.cursor === "page-2"
-          ? { events: [{ name: "job.failed", delivery: ["push"] }] }
-          : { events: [{ name: "job.finished", description: "A job ended", inputSchema: {} }], nextCursor: "page-2" },
+          ? {
+              events: [
+                { name: "job.failed", delivery: ["push", "future"], inputSchema: {}, payloadSchema: {} },
+                // Malformed: no payloadSchema. Skipped without hiding the others.
+                { name: "job.broken", delivery: ["push"], inputSchema: {} },
+              ],
+            }
+          : {
+              events: [
+                {
+                  name: "job.finished",
+                  description: "A job ended",
+                  delivery: ["push", "poll"],
+                  inputSchema: { type: "object" },
+                  payloadSchema: { type: "object" },
+                },
+              ],
+              nextCursor: "page-2",
+            },
       )
     }
     if (message.method === "events/stream") state.streams.push({ id: message.id, params })
+    if (message.method === "subscriptions/listen") {
+      state.listens.push({ id: message.id, params })
+      void server.send({
+        jsonrpc: "2.0",
+        method: "notifications/subscriptions/acknowledged",
+        params: {
+          notifications: params.notifications,
+          _meta: { "io.modelcontextprotocol/subscriptionId": message.id },
+        },
+      })
+    }
   }
   yield* Effect.promise(() => server.start())
   const notify = (type: string, id: string | number, params: Record<string, unknown> = {}) =>
@@ -53,7 +96,7 @@ const eventServer = Effect.fnUntraced(function* (input: { offers?: boolean; decl
     )
   const connection = yield* McpClient.connect({
     server: "jobs",
-    config: { type: "attached", transport: client },
+    target: { type: "attached", transport: client, protocol: input.protocol ?? "2026-07-28" },
     directory: import.meta.dir,
     events: input.declares ?? true,
   })
@@ -93,10 +136,24 @@ describe("MCP events", () => {
       const server = yield* eventServer()
       expect(server.state.capabilities).toMatchObject({ extensions: { "io.modelcontextprotocol/events": {} } })
       expect(yield* required(server.events).list()).toEqual([
-        { name: "job.finished", description: "A job ended", inputSchema: {} },
-        { name: "job.failed", delivery: ["push"] },
+        {
+          name: "job.finished",
+          description: "A job ended",
+          delivery: ["push", "poll"],
+          inputSchema: { type: "object" },
+          payloadSchema: { type: "object" },
+        },
+        { name: "job.failed", delivery: ["push", "future"], inputSchema: {}, payloadSchema: {} },
       ])
-      expect(server.state.lists).toEqual([{}, { cursor: "page-2" }])
+      expect(server.state.lists.slice(0, 2)).toEqual([{}, { cursor: "page-2" }])
+      // It listens for event list changes and relists once the listen opens, again on a change, and again after a
+      // listen the server ended is reopened. Each relist reads both pages.
+      yield* until(() => server.state.listens.length === 1 && server.state.lists.length === 4)
+      expect(server.state.listens[0].params).toEqual({ notifications: { eventsListChanged: true } })
+      yield* server.notify("list_changed", server.state.listens[0].id)
+      yield* until(() => server.state.lists.length === 6)
+      yield* server.close(server.state.listens[0].id)
+      yield* until(() => server.state.listens.length === 2 && server.state.lists.length === 8)
     }),
   )
 
@@ -108,8 +165,14 @@ describe("MCP events", () => {
       ).pipe(Effect.forkChild({ startImmediately: true }))
       yield* until(() => server.state.streams.length === 1)
       const stream = server.state.streams[0]
-      expect(stream.params).toEqual({ name: "job.finished", arguments: { job: "j1" }, cursor: "c0" })
-      yield* server.notify("active", stream.id, { cursor: "c0", truncated: true })
+      // Resuming from a cursor replays at most an hour.
+      expect(stream.params).toEqual({
+        name: "job.finished",
+        arguments: { job: "j1" },
+        cursor: "c0",
+        maxAgeMs: 3_600_000,
+      })
+      yield* server.notify("active", stream.id, { cursor: "c0", truncated: true, heartbeatMs: 30_000 })
       yield* server.event(stream.id, "e1", "c1")
       yield* server.notify("heartbeat", stream.id, { cursor: "c2" })
       yield* server.notify("error", stream.id, { error: { code: -32603, message: "UpstreamError" } })
@@ -190,13 +253,13 @@ describe("MCP events", () => {
       )
       yield* until(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
-      yield* server.notify("active", id, { cursor: null, truncated: false })
+      yield* server.notify("active", id, { cursor: null, truncated: false, heartbeatMs: 30_000 })
       expect(yield* Fiber.join(head)).toMatchObject({ value: { type: "active", cursor: null } })
       yield* until(() => server.state.cancelled.includes(id))
     }),
   )
 
-  it.effect("fails a stream that sends nothing for a minute", () =>
+  it.effect("fails a stream that misses three granted heartbeats", () =>
     Effect.gen(function* () {
       const server = yield* eventServer()
       const received: string[] = []
@@ -209,25 +272,25 @@ describe("MCP events", () => {
         )
       yield* until(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
-      yield* TestClock.adjust("59 seconds")
-      yield* server.notify("heartbeat", id, { cursor: "c1" })
-      // The heartbeat restarts the idle timer only once the stream has taken it.
-      yield* until(() => received.includes("heartbeat"))
-      yield* TestClock.adjust("59 seconds")
+      // A 10 second grant allows 30 seconds of silence from the last message.
+      yield* server.notify("active", id, { cursor: null, heartbeatMs: 10_000 })
+      yield* until(() => received.includes("active"))
+      yield* TestClock.adjust("29 seconds")
       yield* Effect.yieldNow
       expect(collected.pollUnsafe()).toBeUndefined()
       yield* TestClock.adjust("2 seconds")
       const exit = yield* Fiber.await(collected)
       expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(
-        new Error("MCP server jobs sent nothing on the event stream for 60 seconds"),
+        new Error("MCP server jobs stopped sending event stream heartbeats"),
       )
       yield* until(() => server.state.cancelled.includes(id))
     }),
   )
 
-  it.live("offers no events when the server does not, or when the connection does not declare them", () =>
+  it.live("offers no events when the server does not, on the legacy handshake, or when undeclared", () =>
     Effect.gen(function* () {
       expect((yield* eventServer({ offers: false })).events).toBeUndefined()
+      expect((yield* eventServer({ protocol: "legacy" })).events).toBeUndefined()
       const undeclared = yield* eventServer({ declares: false })
       expect(undeclared.events).toBeUndefined()
       expect(undeclared.state.capabilities).not.toHaveProperty("extensions")

@@ -1,0 +1,170 @@
+---
+title: "Effect plugin RPC"
+description: "เปิดเมธอดและอีเวนต์ของปลั๊กอิน Effect เป็น Effect และ Stream ที่มีชนิด"
+---
+
+ปลั๊กอิน Effect เปิดเมธอดและอีเวนต์ที่คืน Effect และ
+Stream ที่มีชนิดได้
+
+## การกำหนด
+
+ใช้ `Rpc.define` กับ Effect Schema เพื่อกำหนด RPC
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### การตรวจสอบความถูกต้อง
+
+Effect Schema ตรวจสอบค่าและอนุมานชนิดของค่าเหล่านั้นใน TypeScript
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+รองรับ JSON Schema และ Standard Schema ด้วย
+
+### อินพุตและเอาต์พุต
+
+ใช้ `input` สำหรับอาร์กิวเมนต์ของเมธอด และ `output` สำหรับค่าที่คืน ต้องระบุทั้งสองฟิลด์
+หากเมธอดไม่รับค่าหรือไม่คืนค่า ให้ใช้ `Schema.Struct({})` เรียกเมธอดด้วย `{}` และคืนค่า `{}`
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### ข้อผิดพลาด
+
+เพิ่มความล้มเหลวที่คาดไว้ใน `errors` แต่ละคีย์กลายเป็น `type` ของข้อผิดพลาด
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### อีเวนต์
+
+เพิ่มอีเวนต์ในแมป `events` ระดับบนสุด ข้อมูลอีเวนต์ต้องเป็นออบเจกต์
+คุณต้องระบุแมปนี้เสมอ หาก RPC ไม่มีอีเวนต์ ให้ใช้ `events: {}`
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## การใช้งาน
+
+ลงทะเบียนการใช้งานจาก Effect ของปลั๊กอิน
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+แมปข้อผิดพลาดกลายเป็นชนิดข้อผิดพลาดของ Effect ของแต่ละเมธอด ใช้
+`context.error(...)` เพื่อสร้างข้อผิดพลาดที่ประกาศไว้
+
+## การเรียก
+
+เมื่อลงทะเบียน RPC แล้ว เรียกผ่าน HTTP หรือจากปลั๊กอินอื่นได้
+
+### HTTP
+
+สร้างไคลเอนต์ Effect แล้วสร้างไคลเอนต์ย่อย RPC
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### ปลั๊กอิน
+
+ปลั๊กอิน Effect อื่นสร้างไคลเอนต์ย่อยในเครื่องจากบริบทของมันได้
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### การสมัครรับ
+
+อีเวนต์ RPC มาในรูปแบบ Stream ให้สมัครรับตามชื่ออีเวนต์แล้วรัน Stream ใน Fiber ที่ผูกกับขอบเขต
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)
+```
+
+การสมัครรับจะได้รับเฉพาะอีเวนต์ใหม่ และสิ้นสุดลงเมื่อหยุดอ่าน Stream

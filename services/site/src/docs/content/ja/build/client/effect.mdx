@@ -1,0 +1,138 @@
+---
+title: "Effect クライアント"
+description: "@opencode/client/effect で Effect から OpenCode HTTP API を呼び出します。型付きの Effect と Stream を返します。"
+---
+
+`@opencode/client/effect` は OpenCode HTTP API 用の Effect ネイティブのクライアントです。型付きの Effect と Stream を返し、レスポンスを OpenCode のスキーマ値にデコードします。
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## クライアントを作成する
+
+サーバーの URL でクライアントを作成し、API リソースごとにグループ化されたメソッドを呼び出します。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## ヘッダーとリクエスト
+
+デフォルトのヘッダーは、渡した `HttpClient` で設定します。ネイティブの操作はキャンセルに通常の Effect の中断を使用します。RPC のメソッドはさらに、呼び出しごとの location、ヘッダー、signal のオプションを受け付けます。
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## イベントのストリーミング
+
+`event.subscribe()` や `experimental.session.log()` などのストリーミング操作は Effect の Stream を返します。
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+ネイティブイベントと RPC イベントの Stream は、クライアントごとに 1 つの接続を共有します。Stream を作成しただけでは接続せず、読み取りを開始した時点で接続します。1 つの読み取りを止めても、他の読み取りは続きます。すべての読み取りが終わると、イベントソースが閉じます。ソースが EOF に達したり障害が発生したりすると、購読は終了します。自動で再試行したり、過去のイベントを再配信したりはしません。後からネイティブイベントを購読すると、新着イベントの前に現在の接続マーカーを受け取ります。
+
+## プラグイン RPC
+
+Promise クライアントとサーバープラグインと同じ共有コントラクトを使用します。
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+メソッドの引数と結果はコントラクトから推論されます。2 番目の任意の引数には `location`、`signal`、`headers` を指定し、location を省略した場合は通常のリクエストのデフォルトを使用します。呼び出しは、それを消費する Effect とともに中断されます。メソッドのエラーマップは Effect のエラーチャネルで推論されます。宣言されたエラーは、そのデータスキーマを通じてデコードされます。型付きのサブクライアントは汎用的な HTTP RPC のエラーラッパーを取り除き、予約された `rpc.*` の型がフレームワークの障害を識別します。
+
+RPC のイベントはコールバック形式の `on` リスナーではなく、型付きの Stream です。すべての location からその RPC のイベントを受け取り、各イベントには必須の `location` と、`rpc.acme.updated` のような通常のプレフィックス付きの型が付きます。これは、自身の location に固定されるサーバープラグインのハンドルとは異なります。定義、スキーマ、登録、ライブ購読のセマンティクスについては [Effect プラグイン RPC](/build/plugins/effect/rpc)を参照してください。
+
+## ローカルのバックグラウンドサービス
+
+Node 専用の `@opencode/client/effect/service` エントリポイントは、ローカルのバックグラウンドサービスの検出、起動、認証、停止を Effect として行います。
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+確保したサービスに接続する、認証済みのクライアントを作成します。
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+起動せずに検出するか、登録されたサービスそのものを停止します。
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

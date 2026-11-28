@@ -1,0 +1,135 @@
+---
+title: "Talimatlar"
+description: "AGENTS.md dosyalarıyla OpenCode'a kalıcı proje rehberliği verin; nerede geçerli olduklarını, hangi sırayla yüklendiklerini ve CLAUDE.md yedek davranışını görün."
+---
+
+OpenCode'a kalıcı proje rehberliği vermek için bir `AGENTS.md` dosyası ekleyin. Derleme komutları, mimari notları, kod kuralları ve doğrulama gereksinimleri için kullanın.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Proje talimat dosyalarını depoya commit edin. Böylece depoda çalışan herkes aynı talimatları kullanır.
+
+## Kapsam
+
+`AGENTS.md` dosyasını rehberliğin geçerli olması gereken dizine koyun. OpenCode önce genel dosyayı, ardından geçerli çalışma alanı dizininden ana dizine doğru her `AGENTS.md` dosyasını yükler. Ana dizin dışındaki çalışma alanlarında proje kökünde durur.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+Bu örnekte dört dosyanın tamamı yüklenir. Şu sırayla birleştirilirler:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Her yerde geçerli rehberliği genel dosyada tutun. Depo genelindeki rehberliği proje köküne, daha özel rehberliği kapsadığı koda daha yakın bir yere koyun. OpenCode dosyaları birleştirir ve aralarındaki çakışmaları çözmez.
+
+Çalışma alanı proje kökünün dışındaysa yalnızca genel dosya yüklenir. Genel dosyayı kapatmadan proje `AGENTS.md` keşfini atlamak için `OPENCODE_DISABLE_PROJECT_CONFIG=1` ayarlayın.
+
+### CLAUDE.md yedek davranışı
+
+`AGENTS.md` bulunmayan her dizinde OpenCode bunun yerine `CLAUDE.md` okur. Genel bir `~/.config/opencode/AGENTS.md` yoksa `~/.claude/CLAUDE.md` okur. Bir dizinin `AGENTS.md` dosyası her zaman o dizinin `CLAUDE.md` dosyasının önüne geçer; bu nedenle ikisi arasındaki bir sembolik bağ bir kez yüklenir.
+
+Her `CLAUDE.md` dosyasını atlamak için `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1`, `.claude` skill'lerini de atlamak için `OPENCODE_DISABLE_CLAUDE_CODE=1` ayarlayın. Sunucu ikisini de başlarken okur. Arka plan hizmeti için bunları `opencode service set env` ile kalıcı hale getirin ve `opencode service restart` çalıştırın.
+
+## Keşif
+
+Çalışma alanının altındaki talimat dosyaları, agent projeyi keşfettikçe bulunur. Bir dosyayı okumak veya bir dizini listelemek, o hedef ile çalışma alanı arasındaki tüm `AGENTS.md` dosyalarını yükler.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+İç içe dosyalar en yakından başlayarak yüklenir ve talimat girdileri modelin gördüğü geçmişte kaldığı sürece yinelenenler ayıklanır. Aynı alanı yeniden okumak normalde onları yeniden eklemez. Sıkıştırma veya bir geri alma bu girdiyi kaldırırsa sonraki bir okuma dosyayı yeniden yükleyebilir.
+
+İç içe bir dosyadaki düzenlemeler, dosya yüklendikten sonra otomatik olarak algılanmaz. Güncellenen metnin hemen geçerli olması gerekiyorsa yeni bir oturum başlatın.
+
+## Sıralama
+
+Önce seçilen agent veya sağlayıcının sistem promptu gönderilir. Ardından OpenCode başlangıç talimatlarını şu sırayla bir araya getirir:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+Bu kaynaklar birbirinin yerine geçmez, birleştirilir. Sonradan keşfedilen iç içe `AGENTS.md` dosyaları keşif sırasıyla oturum geçmişine eklenir.
+
+## Güncellemeler
+
+Oturum çalışırken genel veya yukarı doğru keşfedilen bir `AGENTS.md` dosyasını düzenleyerek rehberliğini güncelleyin.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Sonraki model isteğinden önce OpenCode değişikliği algılar ve bekleyen girdiyi iletmeden önce bir talimat güncellemesi ekler:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Ortamdaki tüm `AGENTS.md` dosyalarını kaldırmak, oturuma önceki ortam talimatlarının artık geçerli olmadığını bildirir.
+- Geçici bir okuma hatası, son bilinen talimatları silinmiş saymak yerine korur.
+- Bir oturumu taşımak talimat durumunu korur; bu nedenle hedefteki rehberlik bir güncelleme olarak tanıtılır.
+- Bir oturum geri almasını işlemek talimat durumunu temizler ve sonraki prompttan önce talimatları yeniden yükler.
+
+Talimat değerleri ayrıcalıklı kalır. İstemciler hangi kaynakların değiştiğini görebilir ama içeriklerini göremez.
+
+## Yapılandırma
+
+Keşfedilen `AGENTS.md` dosyalarının yanına dosya, glob deseni veya HTTP(S) URL'si eklemek için `instructions` dizisini kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Yapılandırılmış talimatlar `AGENTS.md` dosyalarından sonra, listelendikleri sırayla yüklenir. Her yapılandırma belgesindeki girdiler birleştirilir.
+
+| Girdi                   | Çözümleme                                                           |
+| ----------------------- | -------------------------------------------------------------------- |
+| Göreli yol veya glob    | Çalışma alanından proje köküne kadar her dizinde aranır                |
+| `~/` yolu               | Ana dizininizden çözümlenir                                          |
+| Mutlak yol              | Olduğu gibi kullanılır; dosya adı bir glob olabilir                   |
+| `http://` veya `https://` | Yapılandırma yüklenirken beş saniyelik zaman aşımıyla alınır        |
+
+- Yerel dosyalar değiştiklerinde `AGENTS.md` gibi güncellenir. Bir glob ile eşleşen yeni dosyalar sonraki yapılandırma değişikliğinde yüklenir.
+- Eksik dosyalar atlanır. Alınamayan bir URL atlanır veya son alınan içeriğini korur.
+- `OPENCODE_DISABLE_PROJECT_CONFIG=1` ile veya çalışma alanı projenin dışındayken göreli girdiler genel yapılandırma dizinine göre çözümlenir.
+
+Bağlı bir [OpenCode Console](/console) çalışma alanı da talimat paylaşabilir.
+
+Yapılandırma konumları ve öncelik sırası için [Yapılandırma](/config) sayfasına bakın.

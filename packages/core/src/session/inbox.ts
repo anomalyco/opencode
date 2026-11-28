@@ -1,7 +1,7 @@
 export * as SessionInbox from "./inbox.js"
 
 import { and, asc, eq, or } from "drizzle-orm"
-import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Array, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
   Compaction,
@@ -56,6 +56,13 @@ export {
  */
 export type Promotable = "input" | "steer"
 
+/**
+ * How far past steers a boundary may reach into the queue: "steer" takes steers only, "control"
+ * also takes a control at the queue head while queued prompts stay parked, and "input" also takes
+ * a queued prompt there.
+ */
+export type Reach = Promotable | "control"
+
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
 const decodeMediaUser = Schema.decodeUnknownSync(MediaUserPayload)
 const decodeStoredUser = Schema.decodeUnknownSync(SessionStored.UserPayload)
@@ -66,11 +73,7 @@ const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
 const encodeCompaction = Schema.encodeSync(CompactionPayload)
 const decodeMove = Schema.decodeUnknownSync(MovePayload)
 const encodeMove = Schema.encodeSync(MovePayload)
-const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
-
-export const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
-  inboxLocks.withLock(sessionID)(effect)
 
 export class LifecycleConflict extends Schema.TaggedError<LifecycleConflict>()("SessionInbox.LifecycleConflict", {
   id: SessionMessage.ID,
@@ -172,6 +175,17 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   const database = yield* Database.Service
   const db = database.db
   const bus = yield* Bus.Service
+  const locks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+
+  const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
+    locks.withLock(sessionID)(effect)
+
+  const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
+    serialized(input.sessionID, effect).pipe(
+      Effect.asVoid,
+      // Bus projectors abort their transaction through the defect channel.
+      Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
+    )
 
   /** First admission wins for matching Session and type, without preparing a new payload. */
   const reconcile = Effect.fn("SessionInbox.reconcile")(function* <Type extends Item["type"]>(request: {
@@ -281,8 +295,20 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
+  /**
+   * Promotes pending input into visible messages and returns the promoted count,
+   * or undefined when the runner must first handle a pending control.
+   * Steered compaction takes priority over pending prompts, without crossing a move.
+   * Only the "input" scope may fall through to one queued input.
+   */
+  const promote = Effect.fn("SessionInbox.promote")((sessionID: SessionSchema.ID, scope: Promotable) =>
+    serialized(sessionID, promoteUnlocked(db, bus, sessionID, scope)),
+  )
+
   return {
     list: (sessionID: SessionSchema.ID) => list(db, sessionID),
+    serialized,
+    promote,
     reconcile,
     admit,
     admitCompaction,
@@ -467,21 +493,16 @@ export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: Database
     .pipe(Effect.orDie)
 })
 
-export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  promotable: Promotable,
-) {
-  const steer = (yield* pendingSteers(db, sessionID))[0]
-  if (steer) return promotion(steer)
-  if (promotable !== "input") return undefined
-  const queued = yield* firstQueued(db, sessionID)
-  return queued ? promotion(queued) : undefined
-})
+/** A pending prompt, promoted by id. */
+export type Prompt = {
+  readonly id: SessionMessage.ID
+  readonly type: "user" | "synthetic"
+  readonly delivery: Delivery
+}
 
-/** What a boundary decides on: prompts are promoted by id, so only a move's payload is read. */
-export type Promotion =
-  | { readonly id: SessionMessage.ID; readonly type: "user" | "synthetic" | "compaction"; readonly delivery: Delivery }
+/** A pending control the runner handles itself; only a move's payload is read. */
+export type Control =
+  | { readonly id: SessionMessage.ID; readonly type: "compaction"; readonly delivery: Delivery }
   | {
       readonly id: SessionMessage.ID
       readonly type: "move"
@@ -489,10 +510,52 @@ export type Promotion =
       readonly payload: MovePayload
     }
 
-const promotion = (row: typeof SessionInboxTable.$inferSelect): Promotion =>
-  row.type === "move"
-    ? { id: row.id, type: "move", delivery: row.delivery, payload: decodeMove(row.payload) }
-    : { id: row.id, type: row.type, delivery: row.delivery }
+/** What a boundary decides on. */
+export type Promotion = Prompt | Control
+
+/**
+ * What one boundary does with the pending inbox: handle a control first, promote prompts, or
+ * nothing, either because every pending item is parked in the queue or because none is pending.
+ */
+export type Boundary =
+  | { readonly _tag: "Control"; readonly item: Control }
+  | { readonly _tag: "Promote"; readonly items: Array.NonEmptyReadonlyArray<Prompt> }
+  | { readonly _tag: "Parked" }
+  | { readonly _tag: "Empty" }
+
+/**
+ * Plans one boundary over the pending items in admission order. Steers go first: a steered
+ * compaction ahead of every steered prompt before the first steered move, otherwise the steered
+ * prompts up to the first steered control. With no steers, the queue head goes alone, if the
+ * reach allows its kind.
+ */
+export function plan(pending: ReadonlyArray<Promotion>, reach: Reach): Boundary {
+  const steers = pending.filter((item) => item.delivery === "steer")
+  const prompts = Array.takeWhile(steers, isPrompt)
+  const control = steers.find(isControl)
+  // A move changes the context's Location: never pull compaction across it. Within that boundary,
+  // compact before promoting even earlier steers so their text stays verbatim after the checkpoint,
+  // not inside its summary.
+  if (control && (prompts.length === 0 || control.type === "compaction")) return { _tag: "Control", item: control }
+  if (Array.isReadonlyArrayNonEmpty(prompts)) return { _tag: "Promote", items: prompts }
+  const queued = pending.find((item) => item.delivery === "queue")
+  if (!queued) return { _tag: "Empty" }
+  if (isPrompt(queued)) return reach === "input" ? { _tag: "Promote", items: [queued] } : { _tag: "Parked" }
+  return reach === "steer" ? { _tag: "Parked" } : { _tag: "Control", item: queued }
+}
+
+const isPrompt = (item: Promotion): item is Prompt => item.type === "user" || item.type === "synthetic"
+
+const isControl = (item: Promotion): item is Control => item.type === "compaction" || item.type === "move"
+
+/** Reads the pending inbox and plans its next boundary. */
+export const boundary = Effect.fn("SessionInbox.boundary")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  reach: Reach,
+) {
+  return plan(yield* pending(db, sessionID), reach)
+})
 
 /** Which pending rows count: "input" means any item in either delivery mode. */
 export type Scope = "input" | Delivery
@@ -519,44 +582,47 @@ export const has = Effect.fn("SessionInbox.has")(function* (
   return row !== undefined
 })
 
-const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
-  serialized(input.sessionID, effect).pipe(
-    Effect.asVoid,
-    // Bus projectors abort their transaction through the defect channel.
-    Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
-  )
-
 const publish = Effect.fn("SessionInbox.publish")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
   sessionID: SessionSchema.ID,
-  rows: ReadonlyArray<typeof SessionInboxTable.$inferSelect>,
+  items: ReadonlyArray<Prompt>,
 ) {
   yield* Effect.forEach(
-    rows,
-    (row) => {
-      if (row.type !== "move" && row.type !== "user" && row.type !== "synthetic")
-        return Effect.die(new LifecycleConflict({ id: row.id }))
-      return bus
+    items,
+    (item) =>
+      bus
         .publish(SessionEvent.InboxDelivered, {
           sessionID,
-          inboxID: row.id,
+          inboxID: item.id,
         })
         .pipe(
           Effect.catchDefect((defect) =>
             defect instanceof LifecycleConflict
-              ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
+              ? promotedFromMessage(db, sessionID, item.id, item.delivery).pipe(
                   Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
                   Effect.orDie,
                 )
               : Effect.die(defect),
           ),
-        )
-    },
+        ),
     { discard: true },
   )
-  return rows.length
+  return items.length
 })
+
+const promoteUnlocked = (db: DatabaseService, bus: Bus.Interface, sessionID: SessionSchema.ID, scope: Promotable) =>
+  Effect.gen(function* () {
+    const next = plan(yield* pending(db, sessionID), scope)
+    if (next._tag === "Control") return undefined
+    if (next._tag !== "Promote") return 0
+    const promoted = yield* publish(db, bus, sessionID, next.items)
+    if (next.items[0].delivery === "steer") return promoted
+    // Admission does not take the inbox lock: steers admitted while the queued prompt was
+    // published join it at this boundary.
+    const joined = plan(yield* pending(db, sessionID), "steer")
+    return promoted + (joined._tag === "Promote" ? yield* publish(db, bus, sessionID, joined.items) : 0)
+  })
 
 /**
  * Promotes pending input into visible messages and returns the promoted count,
@@ -570,56 +636,28 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
   sessionID: SessionSchema.ID,
   scope: Promotable,
 ) {
-  return yield* serialized(
-    sessionID,
-    Effect.gen(function* () {
-      const steers = yield* pendingSteers(db, sessionID)
-      if (steers.length > 0 || scope === "steer") {
-        if (steers.length > 0 && isControl(steers[0])) return undefined
-        return yield* publish(db, bus, sessionID, beforeControl(steers))
-      }
-
-      const queued = yield* firstQueued(db, sessionID)
-      if (!queued) return 0
-      if (isControl(queued)) return undefined
-      const promoted = yield* publish(db, bus, sessionID, [queued])
-      return promoted + (yield* publish(db, bus, sessionID, beforeControl(yield* pendingSteers(db, sessionID))))
-    }),
-  )
+  const inbox = yield* Service
+  return yield* inbox.serialized(sessionID, promoteUnlocked(db, bus, sessionID, scope))
 })
 
-const isControl = (row: typeof SessionInboxTable.$inferSelect) => row.type === "compaction" || row.type === "move"
-
-const beforeControl = (rows: Array<typeof SessionInboxTable.$inferSelect>) => {
-  const control = rows.findIndex(isControl)
-  return control === -1 ? rows : rows.slice(0, control)
-}
-
-const firstQueued = (db: DatabaseService, sessionID: SessionSchema.ID) =>
+const pending = (db: DatabaseService, sessionID: SessionSchema.ID) =>
   db
-    .select()
+    .select({
+      id: SessionInboxTable.id,
+      type: SessionInboxTable.type,
+      delivery: SessionInboxTable.delivery,
+      payload: SessionInboxTable.payload,
+    })
     .from(SessionInboxTable)
-    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "queue")))
-    .orderBy(asc(SessionInboxTable.enqueued_seq))
-    .limit(1)
-    .get()
-    .pipe(Effect.orDie)
-
-const pendingSteers = (db: DatabaseService, sessionID: SessionSchema.ID) =>
-  db
-    .select()
-    .from(SessionInboxTable)
-    .where(and(eq(SessionInboxTable.session_id, sessionID), eq(SessionInboxTable.delivery, "steer")))
+    .where(eq(SessionInboxTable.session_id, sessionID))
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
-    .pipe(
-      Effect.orDie,
-      Effect.map((rows) => {
-        // A move changes the context's Location: never pull compaction across it.
-        // Within that boundary, compact before promoting even earlier steers so
-        // their text stays verbatim after the checkpoint, not inside its summary.
-        const control = rows.findIndex(isControl)
-        if (control > 0 && rows[control].type === "compaction") rows.unshift(...rows.splice(control, 1))
-        return rows
-      }),
-    )
+    .pipe(Effect.orDie, Effect.map(Array.map(promotion)))
+
+const promotion = (
+  row: Pick<typeof SessionInboxTable.$inferSelect, "id" | "type" | "delivery" | "payload">,
+): Promotion => {
+  if (row.type === "move") return { id: row.id, type: "move", delivery: row.delivery, payload: decodeMove(row.payload) }
+  if (row.type === "compaction") return { id: row.id, type: "compaction", delivery: row.delivery }
+  return { id: row.id, type: row.type, delivery: row.delivery }
+}

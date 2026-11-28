@@ -1,0 +1,154 @@
+---
+title: "Nettverk"
+description: "Konfigurer proxyer, egendefinerte sertifikatmyndigheter og klientsertifikater."
+---
+
+Angi de vanlige proxyvariablene. OpenCode bruker lokale HTTP-tilkoblinger mellom CLI-en og bakgrunnstjenesten.
+CLI-en sørger automatisk for at trafikk til loopback-adresser går utenom proxyen.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+
+opencode
+```
+
+Bruk `HTTP_PROXY` for HTTP og `HTTPS_PROXY` for HTTPS. Selve proxy-URL-en kan bruke `http://` i begge variablene.
+Ved oppstart legger CLI-en `127.0.0.1`, `localhost` og `::1` til i både `NO_PROXY` og `no_proxy`. Bruk `NO_PROXY`
+til å angi en kommaseparert liste over andre verter du må koble til direkte.
+
+## Tjeneste
+
+Miljøvariabler du eksporterer i et shell, påvirker bakgrunnstjenesten bare når tjenesten startes derfra.
+Lagre variablene i den administrerte tjenestekonfigurasjonen, så brukes de samme nettverksinnstillingene neste gang tjenesten starter.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY llm.company.example
+opencode service start
+```
+
+Hvis du endrer en administrert miljøvariabel, stopper tjenesten. Kjør `service start` for å starte den igjen med det
+nye miljøet. Shell-miljøet til CLI-en trenger egne proxyvariabler. Variablene du angir for tjenesten, gjelder
+serverprosessen, ikke CLI-prosessen. Både klienten og serveren unntar loopback-adresser automatisk.
+
+Fjern en lagret variabel med `service unset env`:
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## Autentisering
+
+Hvis proxyen godtar tilgangsopplysninger i URL-en, oppgir du brukernavn og passord i hver proxy-URL som krever autentisering.
+Prosentkod tegn som `@`, `:` og `/` i både brukernavnet og passordet.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+Lagre hele URL-en i konfigurasjonen for bakgrunnstjenesten. `opencode service get env` viser verdien fra den private
+tjenestekonfigurasjonen, så ikke del utdataene fra kommandoen.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## Sertifikater
+
+Angi `NODE_EXTRA_CA_CERTS` til en PEM-fil når proxyen eller destinasjonen bruker et sertifikat signert av en privat sertifikatmyndighet.
+De ekstra myndighetene legges til i kjøretidens tillitslager når prosessen starter.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+Lagre filstien i konfigurasjonen for bakgrunnstjenesten, og start tjenesten på nytt:
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## Antivirus og HTTPS-inspeksjon
+
+Antivirusets «HTTPS-skanning» eller «skanning av krypterte tilkoblinger» (Kaspersky, Avast, ESET og andre) og bedriftsproxyer
+for SSL-inspeksjon erstatter serverens sertifikat med sitt eget. OpenCode avviser det, og forespørsler mislykkes med
+feil som:
+
+```text
+self signed certificate in certificate chain
+SELF_SIGNED_CERT_IN_CHAIN
+CERT_NOT_YET_VALID
+CERT_SIGNATURE_FAILURE
+```
+
+Løs det på én av to måter:
+
+- Utelat `opencode.ai` og `*.opencode.ai` fra HTTPS-skanning i antivirusinnstillingene. Legg også til leverandørens API-vert,
+  for eksempel `api.anthropic.com`, hvis du kobler direkte til en leverandør.
+- Eksporter sertifikatet fra sertifikatmyndigheten som brukes til inspeksjon, som en PEM-fil. Bruk `NODE_EXTRA_CA_CERTS` for å angi at OpenCode skal stole på sertifikatet, som vist i
+  [Sertifikater](#certificates).
+
+## Klientsertifikater
+
+Angi `settings.tls` på en leverandør hvis gateway krever gjensidig TLS. Modellforespørslene presenterer sertifikatet, og
+TLS-håndtrykket sender det bare til servere som ber om det.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` og `key` er PEM-tekst. Bruk `{file:...}` for å lese dem fra filer. En fil som ikke kan leses, lar `tls` stå uangitt.
+- `passphrase` trengs bare for en kryptert nøkkel.
+- Virker på Bun- og Node-byggene. En server på Cloudflare Workers kan ikke presentere et klientsertifikat gjennom `fetch`.
+- Forespørsler med et klientsertifikat følger ikke omdirigeringer, slik at sertifikatet ikke presenteres for en annen vert.
+
+Hver modellforespørsel til den leverandøren presenterer sertifikatet: chat-, komprimerings-, bilde- og decision-modeller. En leverandør
+med `tls` bruker HTTP i stedet for WebSockets. Verktøy som webfetch, eksterne MCP-servere og plugin-installasjoner presenterer
+det ikke.
+
+## Forgrunn
+
+`--standalone` og `serve` bruker miljøet i sin egen prosess. `opencode service set env` konfigurerer ikke disse
+prosessene.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode --standalone
+```
+
+Bruk samme mønster for en forgrunnsserver:
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+opencode serve
+```
+
+## Verifiser
+
+Sjekk at CLI-en kan nå bakgrunnstjenesten etter at innstillingene er brukt:
+
+```bash
+opencode api get /api/info
+```
+
+Hvis helsesjekken lykkes, virker den lokale tilkoblingen mellom klienten og tjenesten. Send en vanlig forespørsel til leverandøren
+for å sjekke at tjenestens utgående proxy og sertifikatsti fungerer.

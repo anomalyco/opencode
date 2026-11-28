@@ -72,10 +72,14 @@ type TimelineOptions = {
   vcsDiff?: unknown[]
   /** Edits listed one per file and collapsed, each file opening on its own (by default they start open). */
   collapsedEdits?: boolean
+  /** The app's default timeline detail (Compact), which folds a turn's calls into one group. */
+  compact?: boolean
   /** The last assistant turn's tool parts, in place of its one small edit. */
   tools?: SessionMessageAssistant["content"]
   /** Events arrive from a real SSE endpoint (`source`); otherwise the mock's own stream stays idle. */
   stream?: boolean
+  /** Called each time a prompt request reaches the server. */
+  onPrompt?: () => void
 }
 
 /**
@@ -130,6 +134,7 @@ export async function mockTimelineSession(page: Page, options: TimelineOptions) 
     vcsDiff: options.vcsDiff,
     sessionStatus: options.busy ? { [sessionID]: { type: "busy" } } : undefined,
     pageMessages: () => ({ items: messages }),
+    onPrompt: options.onPrompt,
   })
   await page.addInitScript((general) => localStorage.setItem("settings.v3", JSON.stringify({ general })), {
     editToolPartsExpanded: true,
@@ -137,7 +142,9 @@ export async function mockTimelineSession(page: Page, options: TimelineOptions) 
     showReasoningSummaries: true,
     timelineDetail: options.collapsedEdits
       ? { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } }
-      : undefined,
+      : options.compact
+        ? timelinePresets[2].value
+        : undefined,
   })
 
   return { path: `/server/${base64Encode(options.server)}/session/${sessionID}`, source }

@@ -1,0 +1,94 @@
+---
+title: "Codex"
+description: "Console ve Go modellerini Codex'ten kullanın."
+---
+
+Codex, OpenAI Responses API'sini kullanır. Codex'i Console'a yönlendirerek Claude, Gemini ve açık modeller dahil olmak üzere herhangi bir ücretli modeli veya Go modelini kullanabilirsiniz. Console, Responses biçimini desteklemeyen modeller için isteği uygun biçime dönüştürür.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) Codex'i tek komutla, çalışma alanının politikaları, MCP sunucuları,
+  skill'leri ve talimatları dahil kurar. `npx @opencode/console setup codex` çalıştırın. Aşağıdaki adımlar elle kurulum
+  içindir.
+</Callout>
+
+## Yapılandırma
+
+`~/.codex/config.toml` içinde Console'u bir model sağlayıcısı olarak ekleyin ve onu varsayılan yapın.
+
+```toml title="~/.codex/config.toml"
+model = "gpt-6.1-sol"
+model_provider = "opencode"
+
+[model_providers.opencode]
+name = "OpenCode Console"
+base_url = "https://opencode.ai/inference/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+Codex, base URL'nin sonuna `/responses` ekler ve anahtarı `env_key` ile belirtilen değişkenden okur. [Kişisel API anahtarı](/console/harnesses#get-an-api-key) oluşturup ortam değişkeni olarak dışa aktarın.
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+codex
+```
+
+<Callout>
+  Codex model sağlayıcılarını yalnızca `~/.codex/config.toml` içinden okur. Bir projenin `.codex/config.toml` dosyası
+  bunları ayarlayamaz.
+</Callout>
+
+## Go
+
+Go base URL'sini ve [Go](/console/go) aboneliği olan bir çalışma alanından alınan anahtarı kullanın.
+
+```toml title="~/.codex/config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+
+[model_providers.opencode-go]
+name = "OpenCode Go"
+base_url = "https://opencode.ai/inference/go/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+## Modeller
+
+`model` değerini [Console](/console/models#endpoints) veya [Go](/console/go#endpoints) tablosundaki herhangi bir model
+kimliğine ayarlayın. Tek bir çalıştırma için `--model` ile geçersiz kılın.
+
+```bash
+codex --model claude-sonnet-5-5
+```
+
+Codex kendi kataloğu dışındaki modellerin bağlam penceresini veya akıl yürütme ayarlarını bilmez. Onlar için genel
+varsayılanları kullanır ve yok sayabileceğiniz bir uyarı yazdırır.
+
+## Profiller
+
+Kullandıkça öde ve Go'yu bir profille yan yana tutun. İki sağlayıcıyı da `~/.codex/config.toml` içinde tanımlayın,
+ardından Go'ya geçen bir profil dosyası ekleyin.
+
+```toml title="~/.codex/go.config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+```
+
+```bash
+codex --profile go
+```
+
+## Console MCP
+
+[Console MCP](/console/harnesses#console-mcp) sunucusunu ekleyin ve tarayıcıdan oturum açın.
+
+```bash
+codex mcp add opencode-console --url https://opencode.ai/console/mcp
+```
+
+Oturum açma otomatik başlamazsa kendiniz çalıştırın.
+
+```bash
+codex mcp login opencode-console
+```

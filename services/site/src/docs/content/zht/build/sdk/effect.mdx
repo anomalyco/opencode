@@ -1,0 +1,99 @@
+---
+title: "Effect SDK"
+description: "使用 @opencode/sdk/effect（Effect 原生內嵌 SDK）在 Effect 程式中託管 OpenCode。"
+---
+
+`@opencode/sdk/effect` 是 Effect 原生的內嵌 SDK。操作會回傳具型別的 Effect 與 Stream。關閉
+主機所屬的 Scope 時，會釋放路由器、Location 服務、fiber 與外掛註冊。
+
+```sh
+bun add @opencode/sdk effect@4.0.1
+```
+
+## 建立主機
+
+在 `Effect.scoped` 內建立主機，然後使用其產生的 API 群組或 `sessions` 別名。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+內嵌主機會使用與 `@opencode/client/effect` 相同的 schema 值、宣告錯誤、請求選項與 Stream。
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## 串流事件
+
+串流端點會回傳 Effect `Stream` 值。若要在背景取用串流，請在主機的 Scope 中以 fork 啟動取用工作。
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## 自訂
+
+透過註冊 Effect 外掛自訂你的 OpenCode 執行個體。使用內嵌
+主機自訂 agent、模型、工具與其他行為：
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+外掛掛鉤、轉換、工具與完整外掛上下文的說明請參閱[完整 Effect 外掛文件](/build/plugins/effect)。
+
+## Layer
+
+當內嵌主機應作為應用程式服務時，請使用 `OpenCode.layer()`。
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

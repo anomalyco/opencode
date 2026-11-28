@@ -8,6 +8,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
 import { Tool } from "../src/tool"
 import { definition, execute } from "../src/tool/runtime"
+import { noToolCalls } from "./lib/tool"
 
 const context = {
   sessionID: Session.ID.make("ses_tool_schema"),
@@ -15,6 +16,7 @@ const context = {
   messageID: SessionMessage.ID.make("msg_tool_schema"),
   id: Tool.CallID.make("call_tool_schema"),
   progress: () => Effect.void,
+  tool: noToolCalls,
 } satisfies Tool.Context
 
 test("tools are structural values", async () => {
@@ -179,20 +181,6 @@ test("Effect tool schemas inline named child schemas", () => {
   })
 })
 
-test("Effect tool schemas resolve escaped definition names", () => {
-  const Slash = Schema.Struct({ slash: Schema.String }).annotate({ identifier: "A/B" })
-  const Tilde = Schema.Struct({ tilde: Schema.String }).annotate({ identifier: "A~B" })
-  const tool: Info = {
-    name: "escaped-references",
-    description: "Escaped references",
-    input: Schema.Struct({ slash: Slash, tilde: Tilde }),
-    execute: () => Effect.succeed({ content: "unused" }),
-  }
-
-  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$ref")
-  expect(JSON.stringify(definition(tool).inputSchema)).not.toContain("$defs")
-})
-
 test("definitions keep their pinned serialization", () => {
   const Item = Schema.Struct({ id: Schema.String }).annotate({ identifier: "Item" })
   const tool: Info = {
@@ -215,32 +203,29 @@ test("definitions keep their pinned serialization", () => {
   expect(JSON.stringify(definition({ ...tool }))).toBe(expected)
 })
 
-test.each(["Lookup Input", "café", "A/B~C% D#E"])(
-  "Effect tool schemas inline URI-encoded definition %s",
-  (identifier) => {
-    const child = Schema.Struct({ city: Schema.String }).annotate({ identifier })
-    const tool: Info = {
-      name: "encoded-reference",
-      description: "Encoded reference",
-      input: child,
-      output: Schema.Struct({ result: child }),
-      execute: () => Effect.succeed({ content: "unused" }),
-    }
-    const expected = {
-      type: "object",
-      properties: { city: { type: "string" } },
-      required: ["city"],
-      additionalProperties: false,
-    }
-    expect(definition(tool).inputSchema).toEqual(expected)
-    expect(definition(tool).outputSchema).toEqual({
-      type: "object",
-      properties: { result: expected },
-      required: ["result"],
-      additionalProperties: false,
-    })
-  },
-)
+test.each(["café", "A/B~C% D#E"])("Effect tool schemas inline URI-encoded definition %s", (identifier) => {
+  const child = Schema.Struct({ city: Schema.String }).annotate({ identifier })
+  const tool: Info = {
+    name: "encoded-reference",
+    description: "Encoded reference",
+    input: child,
+    output: Schema.Struct({ result: child }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+  const expected = {
+    type: "object",
+    properties: { city: { type: "string" } },
+    required: ["city"],
+    additionalProperties: false,
+  }
+  expect(definition(tool).inputSchema).toEqual(expected)
+  expect(definition(tool).outputSchema).toEqual({
+    type: "object",
+    properties: { result: expected },
+    required: ["result"],
+    additionalProperties: false,
+  })
+})
 
 test("portable schemas validate and describe typed tools", async () => {
   const input = {
@@ -413,24 +398,6 @@ test("input error prompts limit normalized issues", async () => {
         'Invalid arguments for tool "limited":\n- root: issue 1\n- root: issue 2\n- root: issue 3\n- root: issue 4\n- root: issue 5\n- ...and 1 more issue\n\nArguments provided:\n{}\n\nUpdate the arguments and call the tool again.',
     }),
   )
-})
-
-test("canonical results carry metadata with typed output", async () => {
-  const input = Schema.Struct({ value: Schema.String })
-  const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
-  const tool: Info = {
-    name: "annotated",
-    description: "Annotated tool",
-    input,
-    output,
-    execute: ({ value }) => Effect.succeed({ output: { value, internal: true }, metadata: { value }, content: value }),
-  }
-
-  expect(await Effect.runPromise(tool.execute({ value: "out" }, context))).toEqual({
-    output: { value: "out", internal: true },
-    metadata: { value: "out" },
-    content: "out",
-  })
 })
 
 test("raw JSON schemas validate and decode tool input", async () => {

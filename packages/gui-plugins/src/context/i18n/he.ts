@@ -5,7 +5,6 @@ export default {
   "usage.usage": "שימוש",
   "usage.cost": "עלות",
   "usage.view": "הצג שימוש בהקשר",
-  "systemPrompt.title": "פרומפט מערכת",
   "rawMessages.title": "הודעות גולמיות",
   "export.session": "ייצוא הפעלה",
   "stats.session": "הפעלה",

@@ -1,0 +1,211 @@
+---
+title: "Console-leverandører"
+description: "Koble dine egne modellleverandørkontoer til et OpenCode Console-arbeidsområde og velg hvilke modeller medlemmene kan bruke."
+---
+
+Koble til leverandørkontoer du allerede betaler for, som Anthropic, OpenAI eller AWS Bedrock, og del modellene deres
+med alle i arbeidsområdet. Console lagrer tilgangsopplysningene og gir tilgang til hver leverandør via sin egen gateway, slik at medlemmene
+bruker modellene uten å se leverandørnøkkelen. Den samme gatewayen er tilgjengelig for dine egne verktøy gjennom
+[API-et for leverandører](/console/api/providers).
+
+Eiere og administratorer administrerer leverandører fra fanen **Providers**. Medlemmene får de aktiverte modellene i OpenCode etter
+å ha kjørt `/connect`.
+
+## Koble til en leverandør
+
+1. Åpne **Providers** og klikk **Connect Provider**.
+2. Velg en leverandør fra katalogen og angi API-nøkkelen.
+3. Klikk eventuelt **Test connection**, og deretter **Save**.
+
+Katalogen inneholder blant annet Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq og OpenRouter. Modellene for
+leverandørene i katalogen er allerede konfigurert.
+
+### Skyleverandører
+
+Skyleverandører trenger noen ekstra opplysninger.
+
+| Leverandør            | Detaljer                              |
+| --------------------- | ------------------------------------- |
+| Azure                 | Ressursnavn og API-nøkkel             |
+| AWS Bedrock           | Region og API-nøkkel                  |
+| Google Vertex AI      | Region og tjenestekonto-JSON          |
+| Cloudflare AI Gateway | Konto-ID, gateway-ID og API-token     |
+| Databricks            | Arbeidsområde-URL og token            |
+
+### Egendefinerte leverandører
+
+Klikk **Add Custom Provider** for å koble til et annet endepunkt, og legg til modellene med **Add Model**.
+
+| Felt       | Beskrivelse                                                                     |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Der Console videresender forespørsler, for eksempel `https://api.deepseek.com/v1`. |
+| Format     | Chat Completions, Responses API, Anthropic Compatible eller Google Generative AI. |
+| Auth mode  | Bearer, API key header eller Custom header.                                     |
+| Credential | Nøkkelen Console sender til leverandøren.                                       |
+
+## Velg modeller
+
+Åpne en leverandør for å se modellene. Bare aktiverte modeller er tilgjengelige for medlemmer.
+
+- Bruk bryteren **Enabled** for å slå en modell på eller av.
+- Slå på **New models** for å aktivere modeller leverandøren legger til senere.
+
+## Rediger modeller
+
+Klikk på en modell for å redigere den. Endringene lagres når du lukker panelet.
+
+| Seksjon       | Hva du kan endre                                                |
+| ------------- | --------------------------------------------------------------- |
+| General       | Visningsnavn, API-ID, støtte for verktøy, inndata- og utdatatyper |
+| Variants      | Varianter med egne headere eller body                           |
+| Configuration | Standardvariant, forespørselsheadere og body, tokengrenser      |
+| Cost Tiers    | Priser for inndata, utdata, bufret lesing og bufret skriving per 1M tokens |
+
+### Egendefinerte priser
+
+Katalogmodeller starter med leverandørens listepris. Hvis du har forhandlet frem priser, for eksempel en rabatt på
+OpenAI-kontrakten din, overstyrer du prisene under **Cost Tiers**, slik at bruksrapporter og [budsjetter](/console/budgets) stemmer med det
+du faktisk betaler.
+
+| Felt             | Listepris  | Din pris   |
+| ---------------- | ---------- | ---------- |
+| Inndatapris      | $2.50      | $2.00      |
+| Utdatapris       | $15.00     | $12.00     |
+| Pris for bufret lesing | $0.25 | $0.20     |
+
+Priser du endrer, utheves på leverandørsiden. Bruk **Restore default value** på et felt, eller **⋯ › Restore...**
+på modellen, for å gå tilbake til listeprisen.
+
+Legg til et **Context**-nivå når en modell koster mer over en viss kontekststørrelse, for eksempel for prompter over 200K tokens.
+
+### Egendefinerte modeller
+
+Klikk **Add Model** for å legge til en modell katalogen ikke inneholder, med **Display name** og **Model ID**. Bruk
+**⋯ › Duplicate...** på en eksisterende modell for å starte fra innstillingene dens.
+
+## OpenCode-modeller
+
+Fanen **Models** administrerer [modellene](/console/models) Console tilbyr, som betales fra arbeidsområdets kreditter. Den
+fungerer som en leverandørside:
+
+- Slå enkeltmodeller på eller av.
+- Slå av **Free models** for å blokkere gratis modeller for arbeidsområdet.
+- Slå på **New models** for å aktivere nye Console-modeller automatisk.
+
+Slå av hele leverandøren fra **⋯ › Disable** for å bruke bare dine egne leverandører.
+
+## Bruk i OpenCode
+
+Medlemmene kjører `/connect` og velger arbeidsområdet. Hver aktiverte leverandør vises som arbeidsområdenavnet etterfulgt av
+leverandørnavnet, og `/models` lister opp de aktiverte modellene.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Slå på **Managed providers only** i **Settings › General** for å begrense OpenCode til arbeidsområdets leverandører for
+alle.
+
+## Send identitet
+
+Hvis leverandøren er en gateway du drifter selv, slår du på **Send identity** på leverandørsiden. Console legger da til headeren `x-opencode-actor`
+i hver modellforespørsel den sender dit. Headeren identifiserer medlemmet eller tjenestekontoen bak forespørselen, slik at
+gatewayen din kan logge eller begrense forespørsler etter avsender.
+
+```text
+x-opencode-actor: eyJhbGciOiJFUzI1NiIsInR5cCI6Im9wZW5jb2RlLWFjdG9yK2p3dCIsImtpZCI6Ii4uLiJ9...
+```
+
+- Den er av som standard, og endring av basis-URLen slår den av.
+- En leverandør som fortsatt bruker leverandørens eget API, for eksempel `https://api.openai.com/v1`, viser ikke innstillingen, siden
+  leverandøren ignorerer headeren.
+- Console fjerner alle `x-opencode-*`-headere en klient sender, så den eneste `x-opencode-actor` gatewayen din mottar, er den
+  Console signerte.
+- Ved tilkoblingstest med **Test connection** og henting av modellisten sendes `GET <base URL>/models` med bare tilgangsopplysningene.
+  Ikke krev headeren på den ruten.
+
+### Token
+
+Headeren er et JWT som Console signerer for hver forespørsel.
+
+| Felt         | Verdi                                            |
+| ------------ | ------------------------------------------------ |
+| `alg`        | `ES256`                                          |
+| `typ`        | `opencode-actor+jwt`                             |
+| `iss`        | `https://opencode.ai/inference`                  |
+| `aud`        | Leverandørens basis-URL uten etterfølgende skråstreker |
+| `iat`, `exp` | `exp` er 120 sekunder etter `iat`                |
+
+| Claim                | Verdi                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `sub`                | `user_id` for et medlem, ellers `service_account_id`                   |
+| `workspace_id`       | Arbeidsområdet forespørselen ble kjørt i                                |
+| `user_id`, `email`   | Medlemmet, når et medlem sendte forespørselen                          |
+| `service_account_id` | Tjenestekontoen, når en tjenestekonto sendte den (agenter inkludert)   |
+| `session_id`         | Klientens økt-ID, når den sendte en                                    |
+| `request_id`         | ID-en klienten får tilbake i `x-opencode-log-id`-svareheaderen          |
+
+En forespørsel fra et medlem har en payload som denne:
+
+```json
+{
+  "iss": "https://opencode.ai/inference",
+  "aud": "https://llm.example.com/v1",
+  "sub": "user_...",
+  "workspace_id": "org_...",
+  "user_id": "user_...",
+  "email": "ada@example.com",
+  "session_id": "ses_...",
+  "request_id": "019a6e8f-24a0-7b12-9c3d-4e5f6a7b8c9d",
+  "iat": 1794500000,
+  "exp": 1794500120
+}
+```
+
+### Verifiser tokenet
+
+Console publiserer de offentlige nøklene sine på `https://opencode.ai/inference/.well-known/jwks.json`, servert med
+`Cache-Control: public, max-age=300`. Sjekk signaturen, utstederen, målgruppen, typen og alderen, og deretter arbeidsområdet. Dette
+eksempelet bruker [jose](https://github.com/panva/jose).
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose"
+
+const keys = createRemoteJWKSet(new URL("https://opencode.ai/inference/.well-known/jwks.json"))
+
+export async function sender(request: Request) {
+  const token = request.headers.get("x-opencode-actor")
+  if (!token) throw new Error("Missing x-opencode-actor")
+  const { payload } = await jwtVerify(token, keys, {
+    issuer: "https://opencode.ai/inference",
+    audience: "https://llm.example.com/v1",
+    algorithms: ["ES256"],
+    typ: "opencode-actor+jwt",
+    maxTokenAge: "120s",
+    clockTolerance: "5s",
+  })
+  if (payload.workspace_id !== "org_...") throw new Error("Another workspace")
+  return payload
+}
+```
+
+Angi `audience` til leverandørens basis-URL slik den er lagret i Console, uten etterfølgende skråstreker, og erstatt `org_...` med
+arbeidsområde-ID-en fra Console-URL-en din. Console publiserer nye signeringsnøkler før de tas i bruk. Hvis du slår opp nøklene etter
+`kid`, slik `createRemoteJWKSet` gjør, fungerer verifiseringen også når nøkkelen byttes.
+
+## Slå av eller fjern
+
+Åpne **⋯**-menyen til leverandøren:
+
+- **Disable** skjuler leverandøren og modellene fra medlemmene, men beholder innstillingene.
+- **Remove...** sletter leverandøren og modellene. Dialogen viser hvem som brukte den nylig, og tilbyr
+  **Disable instead**.
+
+Hvis du vil bytte nøkkel, klikker du på tilgangsopplysningene på leverandørsiden og angir den nye nøkkelen.
+
+## Fakturering
+
+Leverandøren fakturerer deg for tokens; Console trekker ikke kreditter for dem. Console registrerer fortsatt hver forespørsel og
+kostnaden ved hjelp av modellens priser, så bruksrapporter og [budsjetter](/console/budgets) inkluderer den.
+
+Bruk [API-et for leverandører](/console/api/providers) hvis du vil kalle leverandøren fra egne verktøy i stedet for OpenCode.

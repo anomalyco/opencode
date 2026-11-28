@@ -1,5 +1,6 @@
 ---
 title: "Compaction"
+description: "Compaction summarizes older conversation, automatically or on request, so an OpenCode session can keep going past the model's context limit."
 ---
 
 Compaction makes room in a long session by replacing older conversation with a
@@ -102,6 +103,29 @@ Add `compaction` to any [OpenCode configuration file](/config):
 - Accepts `"1%"` to `"99%"`, including decimals such as `"12.5%"`.
 - A token count such as `20000` also works. The same count is a large share of a small window and a small share of a large one.
 - A token count at least as large as the model's window is ignored and the default applies.
+
+### Window
+
+The window is the model's input limit (`limit.input`), capped at its context limit (`limit.context`). A model with
+only one of the two uses that one. A model with neither has no automatic compaction; OpenCode compacts once when the
+provider rejects a request as too long.
+
+Limit overrides in config replace one field at a time. When the catalog sets both limits, raising only
+`limit.context` leaves the window at the catalog's input limit, so set `limit.input` as well:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
 
 ## Model
 

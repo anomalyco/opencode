@@ -54,6 +54,7 @@ function useMarkdownContext(data: MarkdownData) {
   return (): MarkdownContext => ({
     t: i18n.t,
     route: language.route,
+    consoleRoute: language.consoleRoute,
     changelog: data.changelog?.(),
     releases: data.releases?.(),
   })

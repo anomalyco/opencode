@@ -1,4 +1,4 @@
-import type { Locale } from "~/lib/language"
+import { consoleRoute, type Locale } from "~/lib/language"
 import { desktopAssets, updateApi } from "~/lib/download"
 
 // LEGACY REDIRECTS, every one to be removed later. Old URLs that outside links, bookmarks, scripts
@@ -32,7 +32,7 @@ export function legacyRedirect(request: Legacy): Response | undefined {
   // links (`/go` about 75k requests a day, `/zen` 46k). Exact paths only: /zen/v1/* and /zen/go/v1/*
   // are the inference API, which a prefix match here would break.
   const moved = (request.locale ? localizedMoves : moves).get(request.path.replace(/(.)\/$/, "$1"))
-  if (moved && read) return redirect(302, `${moved}${request.search}`, "no-store")
+  if (moved && read) return redirect(301, `${request.locale ? consoleRoute(request.locale, moved) : moved}${request.search}`)
 
   // The legacy dashboard and its sign-in, now the Console. The V1 CLI's "create a key at /auth" and
   // V1's usage-limit link /workspace/<id>/go (about 50k requests a day).
@@ -83,7 +83,8 @@ const moves = new Map([
   ["/enterprise", "/console/enterprise"],
 ])
 
-// The old site rendered these three pages in every language; their localized URLs follow them.
+// The old site rendered these three pages in every language; their localized URLs follow them, and a
+// non-English URL keeps its language in the Console page it redirects to.
 const localizedMoves = new Map([
   ["/go", "/console/go"],
   ["/zen", "/console/models"],

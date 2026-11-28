@@ -1,0 +1,113 @@
+---
+title: "網路搜尋"
+description: "讓 OpenCode 使用 Exa、Firecrawl、Parallel、Tavily、TinyFish 或你的 Claude 方案搜尋網路，並選擇供應商與搜尋權限。"
+---
+
+向 OpenCode 詢問最新資訊，它就能搜尋網路、讀取結果，並在回應中包含來源連結。
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+第一次搜尋時，系統會要求你允許網路搜尋並選擇供應商。OpenCode 會記住你的選擇，供之後的工作階段使用。
+
+## 供應商
+
+OpenCode 內建五個搜尋供應商：
+
+| 供應商 | ID | 環境變數 |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY`（選用） |
+
+從 TUI 使用 `/connect` 連接帳號，或在啟動 OpenCode 前設定供應商的環境變數。
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+連接 [Claude Agent](/claude-agent) 後，它也會提供 ID 為 `claude-agent` 的搜尋供應商。它會執行 Claude Code 的 WebSearch，因此搜尋會計入你的 Claude 方案，且不需要搜尋 API 金鑰。每個模型都能使用它，不只是 Claude。
+
+Claude Agent 絕不會自動被選取。請在 `opencode.jsonc` 中選取它：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch 會以加密形式回傳頁面內容，因此必須由 Claude 模型執行每次搜尋。Haiku 會執行它，其結果的簡短摘要會先出現，接著才是連結。搜尋會使用 Claude Agent 供應商的連線設定，以及你上次聊天使用的帳號。
+
+## 選擇
+
+在 `opencode.jsonc` 中設定供應商，即可略過選擇提示。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+使用 `"random"` 自動選擇可用的供應商。每個工作階段會持續使用其選取的供應商，直到該供應商受到速率限制。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## 限制
+
+當供應商回傳 HTTP 429 時，隨機選擇會改用另一個可用供應商重試搜尋。受速率限制的供應商會等待其 `Retry-After` 期間；若回應未包含有效期間，則等待 60 秒。
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+若所有供應商都在冷卻，搜尋會立即失敗。移動工作階段或重新啟動其伺服器會清除記住的供應商；同一工作區中的工作階段會共用冷卻狀態。
+
+## 權限
+
+網路搜尋使用 `websearch` 權限動作，並以搜尋查詢為資源。若未明確允許某項搜尋，請設定為先詢問再執行。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+規則順序與比對請參閱[權限](/permissions)。
+
+## 停用
+
+將 `websearch` 設為 `false`，即可從模型請求中移除網路搜尋工具。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

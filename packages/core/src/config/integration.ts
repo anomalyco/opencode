@@ -49,6 +49,20 @@ export class Document extends Config.Document.extend<Document>("Config.Integrati
   organization: Schema.optional(Schema.String),
 }) {}
 
+export type IntegrationResult =
+  | { readonly _tag: "Applied"; readonly document: Document }
+  | { readonly _tag: "Withheld"; readonly document: Document }
+  | { readonly _tag: "Cleared" }
+
+/** Returns the policy decision alongside the effective document, even when withholding changes no fields. */
+export function result(document: Document, allowed: boolean): Exclude<IntegrationResult, { _tag: "Cleared" }> {
+  if (allowed) return { _tag: "Applied", document }
+  return {
+    _tag: "Withheld",
+    document: new Document({ ...document, info: new Config.Info({ policies: document.info.policies }) }),
+  }
+}
+
 /**
  * A config document a well-known origin delivers. `integrationID` is the origin, so `integration.use` decides the
  * providers it defines by the origin rather than by provider ID.

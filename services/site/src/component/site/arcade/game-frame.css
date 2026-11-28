@@ -6,8 +6,7 @@
   position: absolute;
   inset: 0;
   container-type: size;
-  font-family:
-    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier", ui-monospace, monospace;
+  font-family: "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace, monospace;
 
   iframe {
     position: absolute;
