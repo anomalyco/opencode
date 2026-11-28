@@ -103,4 +103,26 @@ describe("Claude Agent web search", () => {
       claude.check()
     }),
   )
+
+  it.live("searches in the active account's folder when no configDir is set", () =>
+    Effect.gen(function* () {
+      const work = path.resolve("/accounts/work")
+      const claude = FakeClaude.make([FakeClaude.expectTurn({ recording: "websearch" })], { probes: true })
+      yield* addPlugin(FakeIO.make({ claude }))
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID,
+        value: Credential.External.make({
+          type: "external",
+          methodID: Integration.MethodID.make(ClaudeIntegration.METHOD_ID),
+          metadata: { [ClaudeProvider.CONFIG_DIR_KEY]: work },
+        }),
+      })
+      yield* eventually(offered, (offered) => offered)
+      yield* query
+      const search = claude.runs.find((run) => run.args.includes("--tools=WebSearch"))
+      expect(search?.env.CLAUDE_CONFIG_DIR).toBe(work)
+      claude.check()
+    }),
+  )
 })

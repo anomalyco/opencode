@@ -396,6 +396,21 @@ describe("ClaudeAgentPlugin idle subagents", () => {
 })
 
 describe("ClaudeAgentPlugin connection", () => {
+  it.live("connecting stores the folder an account is signed in to", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([], { probes: true }) }))
+      const integrations = yield* Integration.Service
+      yield* integrations.connection.external({
+        integrationID,
+        methodID: Integration.MethodID.make(ClaudeIntegration.METHOD_ID),
+        answer: { [ClaudeProvider.CONFIG_DIR_KEY]: "~/.claude-work" },
+      })
+      const credentials = yield* Credential.Service
+      const [saved] = yield* credentials.list(integrationID)
+      expect(saved?.value).toMatchObject({ metadata: { [ClaudeProvider.CONFIG_DIR_KEY]: "~/.claude-work" } })
+    }),
+  )
+
   it.live("connecting without claude installed asks the user to install it", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([])
@@ -580,6 +595,23 @@ describe("ClaudeAgentPlugin session hooks", () => {
       expect(event.decision).toEqual({ retry: false })
     }),
   )
+
+  it.live("keeps a retry another plugin asked for after a subscription limit", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      const hooks = yield* PluginHooks.Service
+      const session = yield* newSession
+      const event = yield* hooks.trigger("session", "retry", {
+        sessionID: session.id,
+        agent: Agent.ID.make("build"),
+        model: haiku,
+        error: { type: "provider.quota", message: "You've hit your weekly limit" },
+        attempt: 1,
+        decision: { retry: true, delay: 0 },
+      })
+      expect(event.decision).toEqual({ retry: true, delay: 0 })
+    }),
+  )
 })
 
 describe("ClaudeAgentPlugin provider config", () => {
@@ -641,6 +673,60 @@ describe("ClaudeAgentPlugin provider config", () => {
       expect(chat.ANTHROPIC_AUTH_TOKEN).toBe("config-token")
       expect(chat.ANTHROPIC_CUSTOM_HEADERS).toBe("X-Team: core\nX-Model: haiku")
       expect(chat.CLAUDE_CODE_EXTRA_BODY).toBe(JSON.stringify({ metadata: { user_id: "dan" } }))
+      yield* registry.close()
+      claude.check()
+    }),
+  )
+
+  it.live("runs the login check and chats in the active account's folder, and follows an account switch", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make(
+        [
+          FakeClaude.expectStartup(),
+          FakeClaude.expectTurn(),
+          FakeClaude.expectInterrupt(),
+          FakeClaude.expectStartup(),
+          FakeClaude.expectTurn(),
+          FakeClaude.expectInterrupt(),
+        ],
+        { probes: true },
+      )
+      const registry = yield* addPlugin(FakeIO.make({ claude }))
+      const credentials = yield* Credential.Service
+      const account = (configDir: string) =>
+        credentials.create({
+          integrationID,
+          value: Credential.External.make({
+            type: "external",
+            methodID: Integration.MethodID.make(ClaudeIntegration.METHOD_ID),
+            metadata: { [ClaudeProvider.CONFIG_DIR_KEY]: configDir },
+          }),
+        })
+      const personal = yield* account("~/.claude-personal")
+      // The newest account is the active one
+      yield* account("/claude-work")
+      yield* eventually(claudeModels, (models) => models.some((model) => model.id === "haiku"))
+      expect(claude.runs.at(-1)!.env.CLAUDE_CONFIG_DIR).toBe("/claude-work")
+
+      const models = yield* Model.Service
+      const aisdk = yield* AISDK.Service
+      const model = yield* models.get(ClaudeProvider.ID, haiku.id)
+      if (!model) throw new Error("Expected the haiku model")
+      const language = yield* aisdk.language(model)
+      const chat = Effect.gen(function* () {
+        const result = yield* Effect.promise(() =>
+          language.doStream({
+            prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
+            headers: { [RequestKind.SESSION_HEADER]: "session-a", [RequestKind.HEADER]: "primary" },
+          }),
+        )
+        yield* Effect.promise(() => TestSessions.collect(result.stream))
+        return claude.runs.findLast((run) => run.args.includes("--include-partial-messages"))!.env.CLAUDE_CONFIG_DIR
+      })
+      expect(yield* chat).toBe("/claude-work")
+      // The same model object answers the next request, as it does for the retry after an automatic switch
+      yield* credentials.activate(personal.id)
+      expect(yield* chat).toBe(path.join(os.homedir(), ".claude-personal"))
       yield* registry.close()
       claude.check()
     }),

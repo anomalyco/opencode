@@ -16,6 +16,7 @@ The provider is called "Claude Agent", with the ID `claude-agent`. The SDK's [br
 
 - opencode runs the user's own `claude`, found on `PATH` or set with `OPENCODE_CLAUDE_PATH`. It only uses the public SDK. It never sits between Claude Code and Anthropic or changes Claude Code's requests.
 - opencode never reads Claude Code's saved login. Users sign in with `claude` in their terminal. `/connect` only records that they chose this login method.
+- `/connect` can also record the folder an account is signed in to (`CLAUDE_CONFIG_DIR`), kept as credential metadata. opencode holds no token for Claude, so this folder is the only thing that tells two saved accounts apart. The active account's folder applies to the login check, the model list and chats unless `settings.configDir` is set. It is read on each request rather than cached, so the request that follows an account switch already runs on the new account.
 - Any existing login works: a subscription, an API key or a cloud account.
 
 ## What Claude Sees
@@ -130,6 +131,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 ### Errors and Usage
 
 - Claude Code retries failed requests itself, so opencode does not retry for this provider, apart from moving to the next folder in a `configDir` list. Errors such as reaching a plan limit show once.
+- A plan limit is reported as a quota error (`provider.quota`) with the time until it resets, not as an unclassified failure. That is how a `session.retry` hook can tell a limit apart, for example to switch accounts. For a quota error the provider's own hook leaves the retry decision alone, because hooks run in load order and it would otherwise undo a retry another plugin asked for after switching.
 - Cost depends on the login Claude reports. A subscription shows $0 because it covers usage. An API key or a cloud account shows the models.dev price of the model Claude resolves, such as `claude-opus-5-5` for `opus`:
   - API key, Claude Platform on AWS or Google Cloud, and Bedrock's Mantle endpoint: Anthropic's prices.
   - Bedrock: Bedrock's prices, which are 10% higher for regional models like `us.anthropic.claude-opus-5-5`.
