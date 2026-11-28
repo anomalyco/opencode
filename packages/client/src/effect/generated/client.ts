@@ -712,9 +712,10 @@ const EndpointSessionGenerate = (raw: RawClient["server.session"]) => (input: Se
 
 const EndpointSessionInterrupt = (raw: RawClient["server.session"]) => (input: SessionInterruptInput) =>
   preserveEffect<SessionInterruptOutput>()(
-    raw["session.interrupt"]({ params: { sessionID: input["sessionID"] }, query: { resume: input["resume"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["session.interrupt"]({
+      params: { sessionID: input["sessionID"] },
+      query: { resume: input["resume"], reason: input["reason"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointSessionBackground = (raw: RawClient["server.session"]) => (input: SessionBackgroundInput) =>

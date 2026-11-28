@@ -337,7 +337,11 @@ export type SessionGenerateOperation<E = never> = (
   input: SessionGenerateInput,
 ) => Effect.Effect<SessionGenerateOutput, E>
 
-export type SessionInterruptInput = { readonly sessionID: Session.ID; readonly resume?: boolean | undefined }
+export type SessionInterruptInput = {
+  readonly sessionID: Session.ID
+  readonly resume?: boolean | undefined
+  readonly reason?: "user" | "superseded" | "inactivity" | undefined
+}
 export type SessionInterruptOutput = { readonly interrupted: boolean }
 export type SessionInterruptOperation<E = never> = (
   input: SessionInterruptInput,

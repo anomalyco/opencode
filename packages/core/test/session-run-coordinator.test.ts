@@ -314,6 +314,25 @@ describe("SessionRunCoordinator", () => {
     }),
   )
 
+  it.effect("interrupts with every reason the event schema allows", () =>
+    Effect.gen(function* () {
+      for (const reason of ["user", "shutdown", "superseded", "inactivity"] as const) {
+        const started = yield* Deferred.make<void>()
+        const reasons: Array<string | undefined> = []
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          settled: (_key, _exit, settledReason) => Effect.sync(() => void reasons.push(settledReason)),
+        })
+        const run = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.await(started)
+        expect(yield* coordinator.interrupt("session", reason)).toBeTrue()
+        yield* Fiber.await(run)
+        expect(reasons).toEqual([reason])
+        expect(coordinator.interruption("session")).toBeUndefined()
+      }
+    }),
+  )
+
   it.effect("tells why an execution is being stopped while it cleans up", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()

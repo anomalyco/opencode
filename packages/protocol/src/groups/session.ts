@@ -757,6 +757,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             description:
               "Set to true to resume pending steering input and next-in-line control items after interrupting.",
           }),
+          // "shutdown" is deliberately absent: it is only ever published when the process
+          // owner interrupts the execution fiber on teardown, never supplied by a caller
+          // (see SessionExecution.terminal). The reason lives in the query string next to
+          // resume: no body is decoded, so a body-less POST needs no middleware.
+          reason: Schema.Literals(["user", "superseded", "inactivity"]).pipe(Schema.optional).annotate({
+            description:
+              'Why the execution is being interrupted. Defaults to "user" when omitted. Only "user" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once.',
+          }),
         },
         success: Schema.Struct({
           interrupted: Schema.Boolean.annotate({

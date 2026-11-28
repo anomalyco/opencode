@@ -3,6 +3,7 @@ export * as SessionRunner from "./index.js"
 import type { FileSystem } from "../../filesystem.js"
 import type { AIError } from "@opencode/ai/effect"
 import { Context, Data, Effect } from "effect"
+import { SessionEvent } from "../event.js"
 import { SessionSchema } from "../schema.js"
 import type { Promotable, Reach } from "../inbox.js"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
@@ -53,8 +54,8 @@ export interface Interface {
     readonly at?: Position
     /** "steer" settles the active intent without promoting queued next-turn work. */
     readonly promotable?: Promotable
-    /** Why the execution is being interrupted, once it is: `"user"` when someone stopped it. */
-    readonly interruption?: () => "user" | "shutdown" | undefined
+    /** Why the execution is being interrupted, once it is: the reason supplied with the interrupt, or undefined for a teardown. */
+    readonly interruption?: () => SessionEvent.Execution.Interrupted["data"]["reason"] | undefined
   }) => Effect.Effect<DrainResult, RunError>
 }
 

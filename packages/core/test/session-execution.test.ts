@@ -64,6 +64,15 @@ describe("SessionExecution lifecycle", () => {
     const interrupted = Effect.runSyncExit(Effect.interrupt)
     expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "shutdown" })
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
+    expect(SessionExecution.terminal(interrupted, "shutdown")).toEqual({ type: "interrupted", reason: "shutdown" })
+    expect(SessionExecution.terminal(interrupted, "superseded")).toEqual({
+      type: "interrupted",
+      reason: "superseded",
+    })
+    expect(SessionExecution.terminal(interrupted, "inactivity")).toEqual({
+      type: "interrupted",
+      reason: "inactivity",
+    })
   })
 
   it.effect("resumes a directly driven child after execution teardown", () =>
@@ -210,11 +219,84 @@ describe("SessionExecution lifecycle", () => {
       const execution = Context.get(context, SessionExecution.Service)
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       const reason = yield* Deferred.await(draining)
-      // Teardown interrupts without a reason, so only a user's stop reads as one.
+      // Teardown interrupts without a reason, so the drain reads undefined until an interrupt supplies one.
       expect(reason?.()).toBeUndefined()
       yield* execution.interrupt(sessionID)
       expect(reason?.()).toBe("user")
       yield* execution.awaitIdle(sessionID)
+    }),
+  )
+
+  it.effect("publishes a caller-supplied interrupt reason and releases the claim", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      for (const reason of ["inactivity", "superseded"] as const) {
+        const sessionID = Session.ID.make(`ses_reason_${reason}`)
+        yield* seedSessions(database, [sessionID])
+        const draining = yield* Deferred.make<(() => string | undefined) | undefined>()
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(scope, (input) =>
+          Deferred.succeed(draining, input.interruption).pipe(Effect.andThen(Effect.never)),
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+        const interrupted = yield* bus
+          .subscribe(SessionEvent.Execution.Interrupted)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+        yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+        const reading = yield* Deferred.await(draining)
+        expect((yield* claims(database))[sessionID]).toBe(true)
+
+        expect(yield* execution.interrupt(sessionID, { reason })).toBeTrue()
+        expect(reading?.()).toBe(reason)
+        yield* execution.awaitIdle(sessionID)
+        expect((yield* claims(database))[sessionID]).toBe(false)
+        const events = yield* Fiber.join(interrupted)
+        expect([...events].map((event) => event.data.reason)).toEqual([reason])
+      }
+    }),
+  )
+
+  it.effect("publishes the supplied reason when an interrupt resumes steering input", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_continue_reason")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, ["steer", "queue"])
+
+      const draining = yield* Deferred.make<void>()
+      const drains: Array<{ force: boolean; promotable?: SessionInbox.Promotable }> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.suspend(() => {
+          drains.push({
+            force: input.at !== undefined && input.at._tag === "Fresh" ? input.at.forced : false,
+            promotable: input.promotable,
+          })
+          if (drains.length > 1) return Effect.void
+          return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const interrupted = yield* bus
+        .subscribe(SessionEvent.Execution.Interrupted)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+
+      yield* execution.interrupt(sessionID, { reason: "inactivity", resume: true })
+      yield* execution.awaitIdle(sessionID)
+
+      // The successor drain is steer-scoped: queued next-turn work stays parked.
+      expect(drains).toEqual([
+        { force: true, promotable: "input" },
+        { force: false, promotable: "steer" },
+      ])
+      const events = yield* Fiber.join(interrupted)
+      expect([...events].map((event) => event.data.reason)).toEqual(["inactivity"])
     }),
   )
 
