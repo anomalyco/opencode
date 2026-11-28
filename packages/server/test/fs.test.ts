@@ -365,6 +365,25 @@ it.live("serves file reads as downloads with explicit content headers", () =>
     expect(named.headers.get("content-disposition")).toBe(
       `attachment; filename="na_ve 100_ (1).txt"; filename*=UTF-8''na%C3%AFve%20100%25%20%281%29.txt`,
     )
+
+    const preview = (file: string) =>
+      Effect.promise(() => {
+        const url = new URL(`/api/experimental/fs/preview/${encodeURIComponent(file)}`, server.base)
+        url.searchParams.set("location[directory]", tmp.path)
+        return fetch(url, { headers: server.headers })
+      })
+    const page = yield* preview("page.html")
+    expect(page.status).toBe(200)
+    expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8")
+    expect(page.headers.get("content-security-policy")).toBe(
+      "sandbox allow-scripts allow-popups allow-forms allow-modals",
+    )
+    expect(page.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(page.headers.get("content-disposition")).toBeNull()
+    expect(yield* Effect.promise(() => page.text())).toBe("<!doctype html><script>document.title = 'x'</script>")
+    const svg = yield* preview("logo.svg")
+    expect(svg.headers.get("content-type")).toBe("text/plain; charset=utf-8")
+    expectDownload(svg, "logo.svg")
   }),
 )
 
