@@ -20,6 +20,11 @@
   letter-spacing: 0.05px;
   color: var(--v2-text-text-muted);
   font-variant-numeric: tabular-nums;
+
+  /* A badge is an atomic label: it never wraps its text or shrinks in a flex row, so a squeezed row truncates the
+     text beside it instead of folding the badge onto a second line inside its fixed height. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 [data-component="tag"][data-high-contrast] {
