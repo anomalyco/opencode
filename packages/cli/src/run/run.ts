@@ -68,11 +68,13 @@ async function run(input: RunCommandInput, signal: AbortSignal) {
   const piped = process.stdin.isTTY
     ? undefined
     : argument
-      ? await readStdinIfReady(PIPED_INPUT_GRACE_MS)
-      : await readStdin()
+      ? await readStdinIfReady(PIPED_INPUT_GRACE_MS, signal)
+      : await readStdin(signal)
+  if (signal.aborted) return
   const message = mergeInput(argument, piped)
   if (!message?.trim()) fail("You must provide a message")
   const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
+  if (signal.aborted) return
   return execute(input, { directory, message, files }, input.server.endpoint, signal)
 }
 
