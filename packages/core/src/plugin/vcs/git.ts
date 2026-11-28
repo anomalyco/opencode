@@ -178,6 +178,10 @@ const cfg = [
   "core.longpaths=true",
   "-c",
   "core.quotepath=false",
+  "-c",
+  "color.ui=false",
+  "-c",
+  "color.diff=false",
 ] as const
 
 const kind = (code: string): Kind => {
@@ -427,6 +431,9 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
       [
         "diff",
         ...(mode.noIndex ? ["--no-index"] : []),
+        "--no-color",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
         "--patch",
         "--no-ext-diff",
         "--no-renames",
@@ -465,10 +472,13 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
 
   const statUntracked = Effect.fn("VcsGit.statUntracked")(function* (cwd: string, file: string) {
     if (file.endsWith("/")) return
-    const result = yield* run(["diff", "--no-index", "--numstat", "--", "/dev/null", file], {
-      cwd,
-      maxOutputBytes: 4096,
-    })
+    const result = yield* run(
+      ["diff", "--no-index", "--no-color", "--no-ext-diff", "--numstat", "--", "/dev/null", file],
+      {
+        cwd,
+        maxOutputBytes: 4096,
+      },
+    )
     if (result.truncated) return
 
     const parts = result.text().split("\t")

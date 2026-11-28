@@ -390,6 +390,10 @@ const layer = Layer.effect(
     })
 
     const repositoryArgs = (repository: Repository, args: string[]) => [
+      "-c",
+      "color.ui=false",
+      "-c",
+      "color.diff=false",
       "--git-dir",
       repository.gitDirectory,
       "--work-tree",
@@ -973,6 +977,7 @@ const layer = Layer.effect(
       return nuls(
         (yield* repositoryOperation("list_files", input.repository, [
           "diff",
+          "--no-ext-diff",
           "--name-only",
           "--no-renames",
           "-z",
@@ -1012,11 +1017,19 @@ const layer = Layer.effect(
           repositoryOperation("diff", input.repository, [
             "--literal-pathspecs",
             "diff",
+            "--no-ext-diff",
             "--name-status",
             "-z",
             ...args,
           ]),
-          repositoryOperation("diff", input.repository, ["--literal-pathspecs", "diff", "--numstat", "-z", ...args]),
+          repositoryOperation("diff", input.repository, [
+            "--literal-pathspecs",
+            "diff",
+            "--no-ext-diff",
+            "--numstat",
+            "-z",
+            ...args,
+          ]),
           patchBudget > 0
             ? repositoryOperation(
                 "diff",
@@ -1026,6 +1039,9 @@ const layer = Layer.effect(
                   "-c",
                   "core.quotepath=false",
                   "diff",
+                  "--no-color",
+                  "--src-prefix=a/",
+                  "--dst-prefix=b/",
                   "--no-ext-diff",
                   `--unified=${input.context ?? 3}`,
                   ...args,
@@ -1389,7 +1405,13 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make(gitExecutable(), args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .run(
+          ChildProcess.make(gitExecutable(), ["-c", "color.ui=false", ...args], {
+            cwd,
+            extendEnv: true,
+            stdin: "ignore",
+          }),
+        )
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -1510,7 +1532,7 @@ function run(cwd: string, proc: AppProcess.Interface, args: string[]) {
 function execute(cwd: string, proc: AppProcess.Interface, args: string[]) {
   return proc
     .run(
-      ChildProcess.make(gitExecutable(), args, {
+      ChildProcess.make(gitExecutable(), ["-c", "color.ui=false", ...args], {
         cwd,
         extendEnv: true,
         stdin: "ignore",

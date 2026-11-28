@@ -366,6 +366,44 @@ describe("Git trees", () => {
       expect(yield* read(path.join(root.path, "outside.txt"))).toBe("changed outside\n")
     }),
   )
+
+  it.live("omits ANSI color codes and normalizes prefixes in tree diffs", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await fs.appendFile(
+          path.join(root.path, ".git", "config"),
+          "[color]\n\tui = always\n\tdiff = always\n[diff]\n\tmnemonicPrefix = true\n\tnoprefix = true\n",
+        )
+        await fs.mkdir(path.join(root.path, "a"), { recursive: true })
+        await Bun.write(path.join(root.path, "example.txt"), "one\n")
+        await Bun.write(path.join(root.path, "a", "nested.txt"), "before\n")
+      })
+      const git = yield* Git.Service
+      const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!repository) throw new Error("Repository not found")
+      const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(root.path, "example.txt"), "one\ntwo\n")
+        await Bun.write(path.join(root.path, "a", "nested.txt"), "after\n")
+      })
+      const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+
+      const diffs = yield* git.tree.diff({ repository, from: before, to: after })
+      expect(diffs.map((item) => [item.file, item.status, item.additions, item.deletions])).toEqual([
+        ["a/nested.txt", "modified", 1, 1],
+        ["example.txt", "modified", 1, 0],
+      ])
+      for (const item of diffs) {
+        expect(item.patch).not.toContain("\u001b")
+        expect(item.patch).toMatch(/^@@ /m)
+        expect(item.patch).toContain(`diff --git a/${item.file} b/${item.file}`)
+      }
+      expect(diffs[0]?.patch).toContain("-before\n+after\n")
+      expect(diffs[1]?.patch).toContain("+two\n")
+    }),
+  )
 })
 
 describe("Git objects", () => {

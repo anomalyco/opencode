@@ -863,6 +863,44 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("omits ANSI color codes and normalizes prefixes when Git color and prefix options are configured", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.appendFile(
+            path.join(directory, ".git", "config"),
+            "[color]\n\tui = always\n\tdiff = always\n[diff]\n\tmnemonicPrefix = true\n\tnoprefix = true\n",
+          )
+          await fs.mkdir(path.join(directory, "a"), { recursive: true })
+          await fs.writeFile(path.join(directory, "example.txt"), "one\n")
+          await fs.writeFile(path.join(directory, "a", "nested.txt"), "before\n")
+          await commitAll(directory, "initial")
+          await fs.writeFile(path.join(directory, "example.txt"), "one\ntwo\n")
+          await fs.writeFile(path.join(directory, "a", "nested.txt"), "after\n")
+          await fs.writeFile(path.join(directory, "untracked-1.txt"), "first\n")
+          await fs.writeFile(path.join(directory, "untracked-2.txt"), "second\n")
+        })
+        const vcs = yield* Vcs.Service
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((item) => [item.file, item.status, item.additions, item.deletions])).toEqual([
+          ["a/nested.txt", "modified", 1, 1],
+          ["example.txt", "modified", 1, 0],
+          ["untracked-1.txt", "added", 1, 0],
+          ["untracked-2.txt", "added", 1, 0],
+        ])
+        for (const item of diff) {
+          expect(item.patch).not.toContain("\u001b")
+          expect(item.patch).toMatch(/^@@ /m)
+          expect(item.patch).toContain(`diff --git a/${item.file} b/${item.file}`)
+        }
+        expect(diff.find((item) => item.file === "example.txt")?.patch).toContain("+two\n")
+        expect(diff.find((item) => item.file === "a/nested.txt")?.patch).toContain("-before\n+after\n")
+        expect(diff.find((item) => item.file === "untracked-1.txt")?.patch).toContain("+first\n")
+        expect(diff.find((item) => item.file === "untracked-2.txt")?.patch).toContain("+second\n")
+      }),
+    ),
+  )
+
   it.live("respects the repository's line-ending conversion", () =>
     withGit((directory) =>
       Effect.gen(function* () {
