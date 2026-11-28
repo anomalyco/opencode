@@ -272,7 +272,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
     event: {
       // The bus only delivers the requested types, which TypeScript cannot follow through the generic signature.
       subscribe: ((input?: { readonly types?: ReadonlyArray<string> }) => {
-        if (!input?.types?.length) return bus.subscribe().pipe(Stream.filter(isPublicEvent))
+        const scoped = <A>(stream: Stream.Stream<A>) => stream.pipe(Stream.provideService(Location.Service, location))
+        if (!input?.types?.length) return scoped(bus.subscribe().pipe(Stream.filter(isPublicEvent)))
         const unknown = new Array<string>()
         const [first, ...rest] = input.types.flatMap((type) => {
           if (isRpcType(type)) return [Rpc.eventDefinition(type)]
@@ -281,9 +282,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           return definition ? [definition] : []
         })
         const events = first ? bus.subscribe([first, ...rest]) : Stream.never
-        if (unknown.length === 0) return events
-        return Stream.unwrap(
-          Effect.logWarning("ignoring unknown event types", { pluginID, types: unknown }).pipe(Effect.as(events)),
+        if (unknown.length === 0) return scoped(events)
+        return scoped(
+          Stream.unwrap(
+            Effect.logWarning("ignoring unknown event types", { pluginID, types: unknown }).pipe(Effect.as(events)),
+          ),
         )
       }) as Plugin.Context["event"]["subscribe"],
     },
