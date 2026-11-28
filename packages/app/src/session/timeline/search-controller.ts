@@ -2,6 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
+import { scrollPort } from "@opencode/ui/scroll-port"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import {
   createTimelineSearchState,
@@ -302,10 +303,9 @@ export function createTranscriptSearch(
       return { type: "seek.folded", attempt: effect.attempt, foldID: fold.id }
     }
 
-    const rootRect = root.getBoundingClientRect()
-    const sticky = root.querySelector("[data-session-title]")
-    const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
-    const top = rect.top - rootRect.top + root.scrollTop - inset - (rootRect.height - rect.height) / 2
+    // Centred between the header and the composer region, not in the viewport that runs on under both.
+    const port = scrollPort(root)
+    const top = root.scrollTop + rect.top - port.top - (port.bottom - port.top - rect.height) / 2
 
     return { type: "seek.ready", attempt: effect.attempt, top: Math.max(0, top) }
   }

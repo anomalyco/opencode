@@ -851,6 +851,61 @@ async function scrollsBehindComposerRegion(
   await expect.poll(geometry).toEqual(expected)
 }
 
+test("shows the match Find moves to between the session header and a tall draft", async ({ page }) => {
+  // A short window and a tall draft: the composer region covers the middle of the viewport, which runs on under it.
+  await setupTimeline(page, {
+    viewport: { width: 1200, height: 460 },
+    sessionMessages: validateTimelineMessages([
+      ...historyMessages(12),
+      userMessage(),
+      assistantMessage([textPart("prt_find_tail", "The newest answer.")]),
+    ]),
+  })
+  await expect(page.getByText("The newest answer.", { exact: true })).toBeVisible()
+
+  const covered = () =>
+    page.evaluate(() => {
+      const viewport = document.querySelector('[data-slot="session-timeline-scroll"] > *')!.getBoundingClientRect()
+      const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+      return dock.top < (viewport.top + viewport.bottom) / 2
+    })
+
+  await page.locator('[data-component="composer"]').getByRole("textbox").click()
+  await page.keyboard.insertText(Array.from({ length: 20 }, (_, index) => `Draft line ${index}`).join("\n"))
+  await expect.poll(covered).toBe(true)
+
+  await page.keyboard.press("ControlOrMeta+f")
+  const search = page.locator('[data-component="timeline-search-bar"] input')
+  await expect(search).toBeFocused()
+  const active = () => page.evaluate(() => CSS.highlights.get("timeline-search-hit-active")?.size ?? 0)
+
+  // The first search brings the match's row in from history, where its text renders late. Searching again, with the
+  // row rendered, is what scrolls to the match itself.
+  await search.fill("Historical response 3.")
+  await expect.poll(active).toBe(1)
+  await search.fill("Historical response 3")
+  await expect.poll(active).toBe(1)
+  // The row is brought in before the match is scrolled to, so only where the match stays counts.
+  await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID("prt_00003_history_text")}"]`], 6)
+
+  // The active match against the header's lower edge and the composer region's top.
+  expect(
+    await page.evaluate(() => {
+      const match = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
+      if (!(match instanceof Range)) return "no match"
+      const rect = match.getBoundingClientRect()
+      const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+      const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+      if (rect.top < header.bottom) return "under the header"
+
+      return rect.bottom > dock.top ? "behind the composer" : "shown"
+    }),
+  ).toBe("shown")
+})
+
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
   page,
 }) => {

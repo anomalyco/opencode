@@ -1,3 +1,5 @@
+import { scrollPort } from "@opencode/ui/scroll-port"
+
 /** A heading's anchor as GitHub writes it: lowercased, punctuation dropped, spaces as hyphens. */
 export function headingSlug(text: string) {
   return text
@@ -46,9 +48,8 @@ export function setupFragmentLinks(root: HTMLElement) {
 
     // `scrollIntoView` would also scroll clipped ancestors and shift the surrounding layout.
     if (!scroller) return target.scrollIntoView({ block: "start" })
-    scroller.scrollTo({
-      top: scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top,
-    })
+    // Below what the scroller keeps over its top edge, such as the session header.
+    scroller.scrollTo({ top: scroller.scrollTop + target.getBoundingClientRect().top - scrollPort(scroller).top })
   }
 
   root.addEventListener("click", click)

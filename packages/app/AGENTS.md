@@ -137,6 +137,15 @@ This section is the single source for what may move or restyle the session timel
 - Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
 
+### The part the reader sees
+
+- The timeline's viewport runs on under the session header at its top and under the composer region at its bottom. The reader sees only what is between them, and that is where a page, a search hit, a link or a jump must land.
+- The viewport declares the two as scroll padding (`src/index.css`): the header and its 16px fade at the top, the composer region at the bottom. The browser uses it when focus or the router scrolls an element into view. Code reads it with `scrollPort` and `scrollPage` (`@opencode/ui/scroll-port`).
+- Never compute a page, a centre or a landing position from the viewport's `clientHeight` or its box, and never look for the header inside the viewport: it renders beside it. PageUp skipped 125px that never showed, Find put its match behind a tall draft, and a message link put the prompt 48px under the header.
+- The virtualizer holds the same numbers for TanStack: `scrollPaddingStart` and the height it reports. A row that ends above `scrollPaddingStart` is out of sight, so its resize moves the scroll offset instead of the rows below it (`isAboveFold`).
+- Writers that scroll to the same target must agree to the pixel. A prompt is landed by the virtualizer's reveal, by the cursor and by the router's `scrollIntoView`. TanStack keeps a reveal alive until the offset matches its own target, for up to 5 seconds, and writes that target again when a row above it changes size.
+- Keepers: "pages the timeline from the composer and the transcript by what shows between them and the header" and "a message hash and message navigation land the prompt below the session header" in `e2e/regression/timeline-history.spec.ts`, "shows the match Find moves to between the session header and a tall draft" in `e2e/regression/timeline-geometry.spec.ts`, and "scrolls fragment links to their heading inside the document's scroller" in `packages/session-ui/component-tests/markdown.spec.ts`.
+
 ### Scroll writes
 
 - A native scroll write (`scrollTo`, `scrollTop =`) forces a layout when anything is dirty. TanStack corrects the scroll position once for each row it resizes above the view, so a batch of measured rows forced one layout for each row.
