@@ -4,7 +4,6 @@ import { createMemo } from "solid-js"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
 import { same } from "@/runtime/persistence/equality"
-import { containsDirectory } from "@opencode/util/path"
 import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { projectForSession } from "@/shell/layout/helpers"
 import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
@@ -123,13 +122,12 @@ export function useSessionModel() {
 export type SessionModel = ReturnType<typeof useSessionModel>
 
 /**
- * A session's project from raw server metadata: its project id's, else the project whose root contains `directory`.
+ * A session's project from raw server metadata: its project id's, else the one the server resolved for `directory`.
  * Global sync's enriched project replaces it once listed.
  */
 export function sessionProject(data: ServerCtx["data"], info: SessionInfo | undefined, directory: string) {
-  const value = info?.projectID
-    ? data.project.get(info.projectID)
-    : data.project.list().find((item) => containsDirectory(item.canonical, directory))
+  const projectID = info?.projectID ?? data.location.info({ directory })?.project.id
+  const value = projectID ? data.project.get(projectID) : undefined
 
   if (!value) return
 
