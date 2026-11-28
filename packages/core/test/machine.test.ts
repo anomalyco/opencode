@@ -757,7 +757,8 @@ describe("machine wire", () => {
       const decode = Schema.decodeUnknownSync(Machine.Hello)
       for (const home of ["C:\\Users\\worker", "C:/Users/worker", "\\\\server\\share\\worker"])
         expect(decode({ ...hello(), os: "win32", home, shell: "pwsh" })).toMatchObject({ home, shell: "pwsh" })
-      for (const home of ["Users\\worker", "C:Users", "~/worker", ""])
+      // A UNC home names its share: `\\\\server` alone is no directory.
+      for (const home of ["Users\\worker", "C:Users", "~/worker", "", "\\\\", "\\\\server", "\\\\server\\"])
         expect(() => decode({ ...hello(), home })).toThrow()
 
       const windows = Machine.rules(decode({ ...hello(), os: "win32", home: "C:\\Users\\worker", shell: "pwsh" }))

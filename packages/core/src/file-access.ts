@@ -86,9 +86,10 @@ export interface ReadOptions {
 
 export interface Interface {
   /**
-   * Where a typed path points, from its text: no disk is touched and no machine is called. Only a path that starts at
-   * a machine's home consults anything: the home in that machine's live hello, held in memory. It fails when the
-   * machine is unknown or offline.
+   * Where a typed path points, from its text: no disk is touched and no machine is called. A path on a machine follows
+   * the path rules of that machine's live hello, held in memory, and one that starts at its home takes the home from
+   * it. It fails when the machine is offline, when the path is not absolute by those rules, and for a home path on an
+   * unknown machine.
    */
   readonly locate: (path: string, base?: Environment.Place) => Effect.Effect<Environment.Place, Environment.Failed>
   /** Resolve a lexical path and its permission resources, without requesting approval. */
@@ -162,6 +163,15 @@ const layer = Layer.effect(
       const parsed =
         !base && crossEnvironment
           ? yield* EnvironmentPath.typed(text, environments.has).pipe(
+              Effect.catchTag("Machine.NotAbsolute", (cause) =>
+                Effect.flatMap(environments.get(cause.machine), (known) =>
+                  Effect.fail(
+                    known.path === path.win32
+                      ? new EnvironmentPath.NotAbsolute({ machine: cause.machine, windows: true })
+                      : cause,
+                  ),
+                ),
+              ),
               Effect.mapError((cause) => new Environment.Failed({ path: text, cause })),
             )
           : undefined
@@ -198,9 +208,12 @@ const layer = Layer.effect(
           : undefined
       const rooted = home !== undefined ? rules.join(home, written.slice(1)) : written
       // A prefixed path must be absolute by its machine's own rules, or it would resolve against this server's working
-      // directory (`gpu:C:/x` on a POSIX machine) or the worker's current drive (`win:/x` on Windows).
-      const absolute = windows ? /^(?:[A-Za-z]:[\\/]|\\\\)/.test(rooted) : rules.isAbsolute(rooted)
-      if (rooted.startsWith("~") || (parsed && target && !absolute))
+      // directory (`gpu:C:/x` on a POSIX machine, `ghost:C:/x` on an unknown one) or the worker's current drive
+      // (`win:/x`). On Windows only a drive with its root (`C:\`) or a whole UNC share is: a bare drive (`C:sub`)
+      // is relative to that drive's own directory, wherever it is written.
+      const winRoot = windows ? rules.parse(rooted).root.length : 0
+      const absolute = windows ? winRoot > 2 : rules.isAbsolute(rooted)
+      if (rooted.startsWith("~") || (parsed && !absolute) || winRoot === 2)
         return yield* new Environment.Failed({
           path: text,
           cause: new EnvironmentPath.NotAbsolute({ machine: id, ...(windows ? { windows } : {}) }),

@@ -880,13 +880,21 @@ on.effect("refuses a machine path that is not absolute by that machine's rules, 
         expect(refused).toBeInstanceOf(EnvironmentPath.NotAbsolute)
         expect(String(refused)).toContain("write gpu:/… or gpu:~/…")
       }
-      // A path without a drive on Windows would land on whatever drive the worker is on.
-      for (const text of ["win:/foo", "win:\\foo"]) {
+      // A path without a drive on Windows would land on whatever drive the worker is on, and a UNC path needs its share.
+      for (const text of ["win:/foo", "win:\\foo", "win:\\\\server", "win:\\\\", "win:foo", "win:C:app"]) {
         const refused = (yield* access.resolve({ path: text, kind: "file" }).pipe(Effect.flip)).cause
         expect(refused).toBeInstanceOf(EnvironmentPath.NotAbsolute)
         expect(String(refused)).toContain("write win:C:\\… or win:~/…")
       }
       expect(yield* access.locate("win:\\\\server\\share\\x")).toMatchObject({ absolute: "\\\\server\\share\\x" })
+      // An unknown machine's drive path is no path at all, rather than one under this server's working directory.
+      expect((yield* access.locate("ghost:C:/x").pipe(Effect.flip)).cause).toBeInstanceOf(EnvironmentPath.NotAbsolute)
+
+      // From a directory on the machine, a bare drive is relative to that drive's own directory, which is unknown here.
+      const base = { absolute: AbsolutePath.make("D:\\work"), environment: { id: win.id } }
+      expect((yield* access.locate("C:sub", base).pipe(Effect.flip)).cause).toBeInstanceOf(EnvironmentPath.NotAbsolute)
+      expect(`${(yield* access.locate("sub", base)).absolute}`).toBe("D:\\work\\sub")
+      expect(`${(yield* access.locate("\\x", base)).absolute}`).toBe("D:\\x")
 
       const read = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:C:/x" }))
       expect(read.status).toBe("error")
@@ -895,6 +903,30 @@ on.effect("refuses a machine path that is not absolute by that machine's rules, 
       )
       expect(tools.assertions).toEqual([])
       expect([...gpu.worker.received, ...win.worker.received].filter((message) => message.type === "fs")).toEqual([])
+    }).pipe(Effect.provide(graph(tools)))
+  }),
+)
+
+on.effect("looks for a missing file on a Windows machine in its own folders", () =>
+  withTempDir((tmp) => {
+    const tools = fixture(tmp.path)
+    return Effect.gen(function* () {
+      const machines = yield* Machines.Service
+      const { id, worker } = yield* connected(machines, "win", windows)
+      const machine = yield* machines.get(id)
+      yield* machine.files.mkdir("C:\\work")
+      const registry = yield* Tool.Service
+      const lists = () =>
+        worker.received.flatMap((message) => (message.type === "fs" && message.call === "list" ? [message.path] : []))
+
+      const file = yield* executeTool(registry, call("read", { path: "win:C:\\work\\note.txt" }))
+      expect(file.error?.message).toBe("File not found: win:C:\\work\\note.txt")
+      expect(lists()).toEqual(["C:\\work", "C:\\work"])
+
+      worker.received.length = 0
+      const folder = yield* executeTool(registry, call("read", { path: "win:C:\\gone\\a.txt" }, "call-folder"))
+      expect(folder.error?.message).toBe("File not found: win:C:\\gone\\a.txt")
+      expect(lists()).toEqual(["C:\\gone", "C:\\gone", "C:\\"])
     }).pipe(Effect.provide(graph(tools)))
   }),
 )

@@ -43,7 +43,7 @@ export const Hello = Schema.Struct({
    * The worker's home directory, where `~` in a path on this machine starts: an absolute POSIX path, or on Windows a
    * drive (`C:\Users\kit`, `C:/Users/kit`) or UNC (`\\server\share`) path.
    */
-  home: Schema.String.check(Schema.isPattern(/^(?:\/|[A-Za-z]:[\\/]|\\\\)/)),
+  home: Schema.String.check(Schema.isPattern(/^(?:\/|[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/]+[^\\/]+)/)),
   /** The shell every command on this machine runs under, such as `pwsh`. A worker that names none runs `sh`. */
   shell: Schema.optionalKey(Schema.String),
   /** Made once per worker process start: a new value means every process the worker held is gone. */
