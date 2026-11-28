@@ -27,7 +27,7 @@ const secondaryDescriptions: Record<string, string> = {
   "/press": "press kit and facts",
   "/brand": "logos, colors and usage",
   "/legal": "privacy policy and terms",
-  "https://status.opencode.ai": "live system status",
+  "https://opencode.ai/status": "live system status",
 }
 
 /**

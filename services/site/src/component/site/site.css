@@ -3973,7 +3973,7 @@ html:has([data-site][data-light-bg="fefefe"]) {
     translate: 0 -2px;
   }
 
-  /* The status link opens status.opencode.ai in a new tab: the same arrow after its label. */
+  /* The status link opens opencode.ai/status in a new tab: the same arrow after its label. */
   &[data-component="status"]:focus-visible [data-slot="external"] {
     opacity: 1;
     translate: 0 -2px;

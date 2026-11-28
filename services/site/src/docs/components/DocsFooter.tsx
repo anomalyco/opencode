@@ -60,7 +60,7 @@ export function DocsFooter(props: {
             </Show>
             <li>
               <a
-                href="https://status.opencode.ai"
+                href="https://opencode.ai/status"
                 target="_blank"
                 rel="noopener"
                 data-component="status"
