@@ -7,6 +7,7 @@ import {
   Alibaba,
   AmazonBedrock,
   AnthropicCompatible,
+  Azure,
   CloudflareAIGateway,
   DigitalOcean,
   GoogleVertexMessages,
@@ -221,6 +222,10 @@ describe("applyCachePolicy", () => {
   const messagesModels = [
     ["alibaba-messages", Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
     [
+      "azure-anthropic-messages",
+      Azure.configure({ resourceName: "test", apiKey: "test" }).messages("claude-sonnet-4-6"),
+    ],
+    [
       "cloudflare-ai-gateway-messages",
       CloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" }).model(
         "anthropic/claude-sonnet-4-6",
@@ -244,6 +249,50 @@ describe("applyCachePolicy", () => {
         })
       }),
     ),
+  )
+
+  it.effect("custom routes built on anthropic-messages emit inline cache markers regardless of route ID", () =>
+    Effect.gen(function* () {
+      const model = AnthropicMessages.route
+        .with({
+          id: "custom-messages",
+          provider: "custom",
+          endpoint: { baseURL: "https://messages.example.test/v1" },
+          auth: Auth.header("x-api-key", "test"),
+        })
+        .model({ id: "claude-sonnet-4-6" })
+
+      const autoPrepared = yield* compileRequest(
+        ai.request({
+          model,
+          system: "Sys",
+          tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(autoPrepared.route).toBe("custom-messages")
+      expect(autoPrepared.body).toMatchObject({
+        tools: [{ name: "t1", cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
+      })
+
+      const scopedPrepared = yield* compileRequest(
+        ai.request({
+          model,
+          system: "Sys",
+          tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+          cache: { tools: true, ttl: "1h" },
+        }),
+      )
+
+      expect(scopedPrepared.body).toMatchObject({
+        tools: [{ name: "t1", cache_control: { type: "ephemeral", ttl: "1h" } }],
+        system: [{ type: "text", text: "Sys", cache_control: undefined }],
+      })
+    }),
   )
 
   it.effect("'auto' is a no-op on OpenAI (implicit caching protocol)", () =>

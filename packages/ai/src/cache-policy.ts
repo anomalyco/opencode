@@ -64,18 +64,12 @@ const RESPECTS_INLINE_HINTS = new Set([
   "alibaba-chat",
   "alibaba-messages",
   "anthropic-messages",
-  "anthropic-compatible-messages",
-  "bedrock-mantle-messages",
-  "cloudflare-ai-gateway-messages",
-  "google-vertex-messages",
-  "meta-messages",
-  "minimax-messages",
-  "moonshot-messages",
-  "vercel-ai-gateway-messages",
-  "zai-coding-messages",
   "bedrock-converse",
-  "openrouter",
-  "digitalocean",
+  "digitalocean-chat",
+  "meta-messages",
+  "openrouter-chat",
+  "vercel-ai-gateway-messages",
+  "zai-messages",
 ])
 
 // OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without breakpoints.
@@ -234,16 +228,17 @@ export const placesMarkers = (request: LLMRequest) => {
   return Boolean(policy.tools || policy.system || policy.messages)
 }
 
-// A declared cache format overrides the route allowlist and its model-ID heuristics.
+// A declared cache format overrides the protocol allowlist and its model-ID heuristics.
 const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   const format = request.model.compatibility?.cacheFormat
-  const route = request.model.route.id
+  const protocol = request.model.route.protocol
   const auto = isAuto(request.cache)
   if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
   if (format === "anthropic") return resolve(request.cache)
-  if (!RESPECTS_INLINE_HINTS.has(route)) return NONE
+  if (!RESPECTS_INLINE_HINTS.has(protocol)) return NONE
   if (!auto) return resolve(request.cache)
-  if (route === "openrouter" || route === "vercel-ai-gateway-messages") return gatewayPolicy(request.model.id)
-  if (route === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
+  if (protocol === "openrouter-chat" || protocol === "vercel-ai-gateway-messages")
+    return gatewayPolicy(request.model.id)
+  if (protocol === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
   return AUTO
 }
