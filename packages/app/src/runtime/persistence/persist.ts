@@ -1,5 +1,5 @@
 import type { AsyncStorage, PersistenceSyncAPI, SyncStorage } from "@solid-primitives/storage"
-import { batch, createMemo, createSignal, getOwner, onCleanup, untrack } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import {
   createPersistStoreState,
@@ -32,8 +32,9 @@ if (typeof document !== "undefined") {
 
 // A store whose serialized form is written to storage on a schedule instead of on every setter
 // call. The setter only marks the store dirty; serialization happens once per save window, once
-// per owner cleanup, and when the page hides. Mirrors VS Code's Memento. The lifecycle is the
-// pure machine in persist-machine.ts; this driver owns the timer, storage calls and broadcasts.
+// after the transition that staged the edit commits, once per owner cleanup, and when the page
+// hides. Mirrors VS Code's Memento. The lifecycle is the pure machine in persist-machine.ts;
+// this driver owns the timer, storage calls and broadcasts.
 export function persistStore<T extends object>(input: {
   store: Store<T>
   setStore: SetStoreFunction<T>
@@ -105,6 +106,16 @@ export function persistStore<T extends object>(input: {
 
     if (!needsPersistFlush(untrack(persistState))) return
     dispatch({ type: "flushed", serialized: untrack(() => input.serialize(input.store)) })
+  }
+
+  // A transition stages edits in its signals until it commits. A save timer scheduled by the edit
+  // can run first and find the committed state clean, so re-arm the save once that state catches up.
+  if (getOwner()) {
+    createEffect(() => {
+      if (!needsPersistFlush(persistState())) return
+      pending.add(flush)
+      timer ??= setTimeout(flush, delay)
+    })
   }
 
   // SAFETY: Solid's setter overloads are too deep to spread generically; the wrapper only forwards its arguments.
