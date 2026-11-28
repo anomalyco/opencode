@@ -1939,6 +1939,7 @@ test.each([8, 12])("production footer grows for wrapped instructions in %i rows"
         splash: "show",
         work_spinner: "block-soft-slide",
         mono: false,
+        shell: "",
       },
     },
     onPermissionReply: () => {},
@@ -2007,6 +2008,7 @@ test.each(["ctrl+i", "none"])("takeovers preserve configured shortcuts with hidd
       splash: "show",
       work_spinner: "block-soft-slide",
       mono: false,
+      shell: "",
     },
   })
   try {
@@ -2341,6 +2343,7 @@ test("direct footer hides routine activity and shows explicit notices", async ()
       splash: "show",
       work_spinner: "block-soft-slide",
       mono: true,
+      shell: "",
     },
     mono: true,
     onStatus: (value) => (status = value),
