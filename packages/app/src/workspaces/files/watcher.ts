@@ -20,12 +20,17 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
 
   if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 
-  if (ops.hasFile(path) || ops.isOpen?.(path)) {
-    ops.loadFile(path)
+  // Stored keys and watcher events use either separator on Windows, so match both forms.
+  const candidates = Array.from(new Set([path, path.replaceAll("\\", "/"), path.replaceAll("/", "\\")]))
+
+  for (const candidate of candidates) {
+    if (ops.hasFile(candidate) || ops.isOpen?.(candidate)) {
+      ops.loadFile(candidate)
+    }
   }
 
   if (event.data.event === "change") {
-    if (ops.node(path)?.type !== "directory") return
+    if (!candidates.some((candidate) => ops.node(candidate)?.type === "directory")) return
 
     if (!ops.isDirLoaded(path)) return
     ops.refreshDir(path)
