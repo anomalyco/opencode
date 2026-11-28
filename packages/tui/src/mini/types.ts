@@ -122,6 +122,8 @@ export type RunInput = {
 
 export type MiniHost = {
   version: string
+  /** The build channel, such as `local`, `dev` or `latest`; feature flags default on in local and dev builds. */
+  channel: string
   terminal: {
     stdin: NodeJS.ReadStream
   }
@@ -408,7 +410,7 @@ export type FormCancel = {
 
 export type RunTuiConfig = Pick<
   Config.Resolved,
-  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations"
+  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations" | "experimental"
 >
 
 export type MiniSettings = {
@@ -446,6 +448,7 @@ export type StreamCommit = {
   kind: EntryKind
   text: string
   image?: string
+  video?: true
   phase: StreamPhase
   source: StreamSource
   compaction?: true

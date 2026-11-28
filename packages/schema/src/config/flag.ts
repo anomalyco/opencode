@@ -4,6 +4,22 @@ export * as ConfigFlag from "./flag.js"
 export const wildcard = "all"
 
 /**
+ * `OPENCODE_FLAGS`, a comma-separated list such as `schedules,-media_blob`, as the setting of each key it names; a
+ * leading `-` turns a key off, and a later entry for the same key wins.
+ */
+export const overrides = (list: string | undefined) =>
+  new Map(
+    (list ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item): [string, boolean] => (item.startsWith("-") ? [item.slice(1), false] : [item, true])),
+  )
+
+/** Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident. */
+export const onByDefault = (channel: string) => channel === "local" || channel === "dev"
+
+/**
  * Flags default to on in local and dev builds and off in releases, except for `optInOnly` flags, which must be
  * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
  */
@@ -32,6 +48,8 @@ export const registry = {
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
   browser_stream_tunnel:
     "Stream remote desktop browser TCP traffic over one prewarmed, ticket-authenticated binary WebSocket per live browser attachment instead of per-chunk RPC.",
+  rich_media:
+    "Send attached videos to models that accept video input. In the TUI, also show videos inline, in a fullscreen viewer and in picture-in-picture.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

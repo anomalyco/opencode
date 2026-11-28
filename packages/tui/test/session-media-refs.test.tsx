@@ -1,3 +1,4 @@
+import { TextareaRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
@@ -7,6 +8,7 @@ import { copyPlugin } from "./fixture/fixture"
 import { waitForHighlightedFrame } from "./fixture/frame"
 
 const hash = "e".repeat(64)
+const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
@@ -17,6 +19,8 @@ const session = {
   title: "Media refs",
   projectID: "proj_test",
   location: { directory },
+  agent: "build",
+  model: { providerID: "fixture", id: "fixture" },
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: { created: 0, updated: 0 },
@@ -68,16 +72,22 @@ const REVERT = `POST /api/session/${session.id}/revert/stage`
 const CANCEL = `DELETE /api/session/${session.id}/inbox/msg_queued`
 const FORK = `POST /api/session/${session.id}/fork`
 const FORKED_REVERT = `POST /api/session/${forked.id}/revert/stage`
+const PROMPT = `POST /api/session/${session.id}/prompt`
 
-type Respond = () => Response | Promise<Response>
-const image: Respond = () => new Response(png, { headers: { "content-type": "image/png" } })
+type Respond = (request: Request) => Response | Promise<Response>
+const image = () => new Response(png, { headers: { "content-type": "image/png" } })
 // What the server answers once a blob is swept, and a failure where the blob may still exist.
 const gone: Respond = () =>
   json({ _tag: "FileNotFoundError", path: `/api/experimental/media/${hash}`, message: "gone" }, { status: 404 })
 const unavailable: Respond = () => new Response("unavailable", { status: 503 })
 
 /** Opens the session against a fake server. `calls` logs media reads and rewinds as `<request> <status>`. */
-async function openSession(server: { inbox?: unknown[]; plugins?: string[]; respond?: Record<string, Respond> }) {
+async function openSession(server: {
+  inbox?: unknown[]
+  messages?: unknown[]
+  plugins?: string[]
+  respond?: Record<string, Respond>
+}) {
   // Drafts are stashed per tab for the whole process, so an earlier test or test file would prefill a composer. A home
   // draft would also turn the slash command typed there by `leaveAndReturn` into more text.
   for (const id of [undefined, session.id, forked.id]) takeDraft(id)
@@ -102,9 +112,18 @@ async function openSession(server: { inbox?: unknown[]; plugins?: string[]; resp
       const info = [session, forked].find((item) => item.id === id)
       if (rest === "/message") {
         capabilities.set(url.pathname, request.headers.get("x-opencode-capabilities"))
-        return json({ data: id === session.id ? messages : id === forked.id ? forkedMessages : [], cursor: {} })
+        return json({
+          data: id === session.id ? (server.messages ?? messages) : id === forked.id ? forkedMessages : [],
+          cursor: {},
+        })
       }
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      // Sending a prompt needs an agent and a model.
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "fixture", name: "Fixture" }] })
+      if (url.pathname === "/api/model")
+        return json({ location, data: [{ id: "fixture", providerID: "fixture", name: "Fixture", variants: [] }] })
       if (info && (rest === "" || rest === "/interrupt")) return json({ data: info })
       if (info && rest === "/inbox") return json({ data: id === session.id ? (server.inbox ?? []) : [] })
       if (info && rest === "/permission") return json({ data: [] })
@@ -113,7 +132,7 @@ async function openSession(server: { inbox?: unknown[]; plugins?: string[]; resp
       if (!respond) return undefined
       // Logged on arrival, so a test can act while a read is still waiting; the status is added once it answers.
       calls.push(key)
-      const response = await respond()
+      const response = await respond(request)
       calls[calls.lastIndexOf(key)] = `${key} ${response.status}`
       return response
     },
@@ -169,6 +188,50 @@ test("reads transcripts with media refs and loads a ref's bytes before /undo rew
   await app.waitForFrame((frame) => shown(frame) === 2)
   expect(app.calls).toEqual([`${MEDIA} 200`, `${REVERT} 200`])
 }, 20000)
+
+// A pasted image, a directory, and a line range the server read from its own disk, for it to read again.
+test("/undo against a remote server sends the files the server read from its own disk as their sources", async () => {
+  const source = (uri: string) => ({ uri: `media:${hash}`, source: { type: "uri", uri } })
+  const files = [
+    {
+      ...source("file:///home/devbox/screenshot.png"),
+      mime: "image/png",
+      name: "shot.png",
+      mention: { start: 11, end: 20, text: "[Image 1]" },
+    },
+    { ...source("file:///home/devbox/src"), mime: "application/x-directory", name: "src" },
+    { ...source("file:///home/devbox/src/a.ts?start=2&end=4"), mime: "text/plain", name: "a.ts" },
+  ]
+  const sent = [0, 1].map(() => Promise.withResolvers<{ files?: { uri: string }[] }>())
+  let prompts = 0
+  await using app = await openSession({
+    messages: [messages[0], { ...messages[1], files }],
+    respond: {
+      [PROMPT]: async (request) => {
+        const body = await request.json()
+        sent[prompts++]?.resolve(body)
+        return json({ data: { id: body.id, sessionID: session.id, type: "user", time: { created: 5 }, payload: body } })
+      },
+    },
+  })
+  await undoLast(app)
+  await app.waitForFrame((frame) => shown(frame) === 2)
+  app.mockInput.pressEnter()
+
+  expect((await sent[0]!.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
+  expect(app.calls.filter((call) => call.startsWith(MEDIA))).toEqual([])
+
+  // History keeps them as this server's files, so sending the prompt again from history sends them again.
+  const composer = () =>
+    app.renderer.currentFocusedRenderable instanceof TextareaRenderable
+      ? app.renderer.currentFocusedRenderable.plainText
+      : undefined
+  await app.waitForFrame(() => composer() === "")
+  app.mockInput.pressArrow("up")
+  await app.waitForFrame(() => composer() === "What is in [Image 1]")
+  app.mockInput.pressEnter()
+  expect((await sent[1]!.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
+})
 
 // Starts an undo, leaves the session while its media read waits, then lets the read finish.
 async function undoAfterLeaving(input: { inbox: unknown[]; undo: (app: App) => Promise<void> }) {

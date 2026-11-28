@@ -2,14 +2,17 @@
 import { expect, test } from "bun:test"
 import { ImageRenderable, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
+import path from "node:path"
 import { createSignal, Show, type JSX } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Keymap } from "../../../src/context/keymap"
+import { TuiTerminalEnvironmentProvider } from "../../../src/context/runtime"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
-import { DiffViewerImage, isDiffImageFile } from "../../../src/feature-plugins/system/diff-viewer-image"
+import { DiffViewerImage, diffMediaKind, isDiffImageFile } from "../../../src/feature-plugins/system/diff-viewer-image"
 import { diffImageFixture } from "../../fixture/diff-image"
+import { renderMedia, videoFixture } from "../../fixture/media"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -21,6 +24,60 @@ test("recognizes only supported image file extensions", () => {
   for (const file of ["assets/preview.svg", "preview.avif", "image.png.ts", "png", "image.png/file"]) {
     expect(isDiffImageFile(file)).toBe(false)
   }
+  for (const [file, richMedia, kind] of [
+    ["clip.mp4", true, "video"],
+    ["clip.MOV", true, "video"],
+    ["clip.m4v", true, "video"],
+    ["clip.mp4", false, undefined],
+    ["preview.png", false, "image"],
+    ["preview.png", true, "image"],
+    ["clip.webm", true, undefined],
+  ] as const)
+    expect(diffMediaKind(file, richMedia)).toBe(kind)
+})
+
+// `reads` in both records the files the card loads itself, which a video leaves to the viewer.
+test("a local server's working-tree video plays in place as a silent tile that opens the viewer", async () => {
+  const directory = path.dirname(path.dirname(videoFixture))
+  const reads: string[] = []
+  await using setup = await renderVideo({ file: "media/video-only.mp4", directory, localServer: true, reads })
+  await setup.until(() => setup.videos().length === 1)
+  const video = setup.videos()[0]!
+  expect(video.source).toBe(videoFixture)
+  expect(video.audio).toBe(false)
+
+  await setup.app.mockMouse.click(video.x + 2, video.y + 1)
+  expect(setup.media().viewer()?.items).toMatchObject([
+    { kind: "video", mime: "video/mp4", uri: `file://${videoFixture}`, location: { directory } },
+  ])
+  expect(reads).toEqual([])
+})
+
+test("a remote Windows server's working-tree video shows a placeholder and is read only by the viewer", async () => {
+  const reads: string[] = []
+  const directory = "C:\\repo"
+  await using setup = await renderVideo({ file: "assets/my clip#1.mp4", directory, localServer: false, reads })
+  await setup.app.renderOnce()
+  expect(setup.frame()).toContain("video · my clip#1.mp4")
+  expect(setup.videos()).toEqual([])
+
+  const lines = setup.frame().split("\n")
+  const y = lines.findIndex((line) => line.includes("Click to load"))
+  await setup.app.mockMouse.click(lines[y]!.indexOf("Click to load") + 1, y)
+  expect(setup.media().viewer()?.items).toMatchObject([
+    { uri: "file:///C:/repo/assets/my%20clip%231.mp4", name: "my clip#1.mp4", location: { directory } },
+  ])
+  expect(reads).toEqual([])
+})
+
+test("a remote server's working-tree video under a UNC directory is never read", async () => {
+  const reads: string[] = []
+  const directory = "\\\\wsl.localhost\\Ubuntu\\repo"
+  await using setup = await renderVideo({ file: "clip.mp4", directory, localServer: false, reads })
+  await setup.app.renderOnce()
+  expect(setup.frame()).toContain("Could not load video")
+  expect(setup.frame()).not.toContain("Click to load")
+  expect(reads).toEqual([])
 })
 
 test.each([
@@ -143,6 +200,24 @@ test.each(["fetch", "decode"])("recovers from a %s error when the file changes",
     app.renderer.destroy()
   }
 })
+
+function renderVideo(input: { file: string; directory: string; localServer: boolean; reads: string[] }) {
+  return renderMedia(
+    () => (
+      <TuiTerminalEnvironmentProvider value={{ platform: "linux", localServer: input.localServer }}>
+        <DiffViewerImage
+          file={input.file}
+          location={{ directory: input.directory }}
+          load={async (file) => {
+            input.reads.push(file)
+            return diffImageFixture
+          }}
+        />
+      </TuiTerminalEnvironmentProvider>
+    ),
+    true,
+  )
+}
 
 function renderImage(
   component: () => JSX.Element,

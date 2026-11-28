@@ -5,7 +5,7 @@ import { createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
-import { useConfig } from "../config"
+import { useTranscriptMedia } from "../config"
 
 export { locationKey } from "@opencode/client/solid"
 export type { FormWithLocation } from "@opencode/client/solid"
@@ -14,23 +14,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: { directory: string }) => {
     const client = useClient()
-    const config = useConfig()
+    const transcriptMedia = useTranscriptMedia()
     const data = createData({
       // Only the transcript store reads stored media as `media:<hash>` refs; plugins and other callers keep inline bytes.
       api: () => withMediaRefs(client.api),
       event: client.event,
       connection: client.connection,
       directory: props.directory,
-      // Live tool events carry screenshots as inline base64, which open tabs would otherwise hold for the whole run.
-      // Read per event, so toggling previews applies to new results without a restart.
-      omitToolFileData: () => !config.data.session?.image_preview,
+      // Live tool events carry screenshots as inline base64, which open tabs would otherwise hold for the whole run, so
+      // they are kept only while the transcript shows them. Read per event, so a change applies without a restart.
+      omitToolFileData: () => !transcriptMedia(),
     })
-    // Turning previews on brings back the screenshots dropped while they were off.
+    // Showing them again brings back the files dropped while they were hidden.
     createEffect(
       on(
-        () => config.data.session?.image_preview === true,
-        (preview) => {
-          if (preview) void data.session.message.restoreFiles()
+        transcriptMedia,
+        (shown) => {
+          if (shown) void data.session.message.restoreFiles()
         },
         { defer: true },
       ),

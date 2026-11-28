@@ -89,7 +89,11 @@ import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
-import { useConfig, useNewDesigns, useSessionFindExperiment } from "../../config"
+import { useConfig, useNewDesigns, useRichMedia, useSessionFindExperiment } from "../../config"
+import { useMedia } from "../../context/media"
+import { serverFileExists } from "../../component/media/file"
+import { viewerMedia } from "../../component/media/model"
+import { useMediaSources } from "../../component/media/source"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -125,9 +129,17 @@ import { isRecord } from "../../util/record"
 import { parseTodos } from "../../util/todo"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import {
+  INLINE_TOOL_ICON_WIDTH,
+  InlineToolRow,
+  ReasoningPart,
+  SessionMedia,
+  TextPart,
+  toolDisplay,
+} from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
-import { SessionGroupView } from "./group-view"
+import { SessionGroupView, type ToolRef } from "./group-view"
+import { createSessionGallery } from "./gallery"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
@@ -193,6 +205,8 @@ export function Session(props: {
   }
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
+  const richMedia = useRichMedia()
+  const media = useMedia()
 
   createEffect(() => currentLocation.set(location()))
 
@@ -233,6 +247,21 @@ export function Session(props: {
     ),
   )
   const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
+  // The transcript's media without the reverted and queued messages it hides.
+  const visible = createMemo(() => {
+    if (!richMedia()) return []
+    const boundary = session()?.revert?.messageID
+    const queued = new Set(queuedPrompts().map((item) => item.id))
+    return messages().filter((message) => !queued.has(message.id) && (!boundary || message.id < boundary))
+  })
+  const mediaSources = useMediaSources()
+  const client = useClient()
+  const gallery = createSessionGallery(visible, () => session()?.location, {
+    localServer: mediaSources.localServer,
+    home: mediaSources.localServer ? paths.home : undefined,
+    exists: (file, location) => serverFileExists(file, location, mediaSources),
+    connected: () => client.connection.status() === "connected",
+  })
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -273,7 +302,6 @@ export function Session(props: {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
   const restorePrompt = usePromptRestore()
-  const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
     if (local.permission.mode !== "autoaccept") return
@@ -1541,6 +1569,17 @@ export function Session(props: {
       },
     },
     {
+      title: "View media",
+      id: "session.media.view",
+      group: "Session",
+      enabled: gallery().length > 0,
+      run: () => {
+        dialog.clear()
+        const view = viewerMedia(gallery())
+        media.openViewer(view.items, view.index)
+      },
+    },
+    {
       title: "View queued prompts",
       id: "session.queued_prompts",
       group: "Prompt",
@@ -1661,6 +1700,7 @@ export function Session(props: {
             if (seek && sameFindMatch(seek, match)) afterLayout(() => locateFind(seek))
           },
         },
+        media: gallery,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1855,7 +1895,7 @@ function SessionRowView(props: SessionRowViewProps) {
               row={row()}
               message={props.message}
               entry={(entry, images) => <SessionEntryView row={entry} message={props.message} images={images} />}
-              images={(parts) => <ToolImages parts={parts} />}
+              images={(tools) => <ToolImages tools={tools()} />}
             />
           )}
         </Match>
@@ -2118,6 +2158,7 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
         <Show when={props.message.type === "skill"} fallback={<SessionNoticeMessageV2 message={props.message} />}>
           <SessionSkillMessage message={props.message as Extract<SessionMessageInfo, { type: "skill" }>} />
         </Show>
+        <SessionMedia match={(item) => item.id === `${props.message.id}:generated`} />
       </Match>
       <Match when={props.message.type === "compaction"}>
         <CompactionMessage message={props.message as Extract<SessionMessageInfo, { type: "compaction" }>} />
@@ -2169,7 +2210,11 @@ function SessionPartView(props: {
             />
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
+            <ToolPart
+              part={item() as SessionMessageAssistantTool}
+              messageID={props.partRef.messageID}
+              images={props.images}
+            />
           </Match>
         </Switch>
       )}
@@ -2534,6 +2579,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
 function UserMessage(props: { message: SessionMessageUser }) {
   const ctx = use()
   const newDesigns = useNewDesigns()
+  const richMedia = useRichMedia()
   const data = useData()
   const local = useLocal()
   // Opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type omits.
@@ -2567,7 +2613,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
         customBorderChars={SplitBorder.customBorderChars}
         backgroundColor={theme.background.raised.base}
       >
-        <SessionImages images={images()} paddingLeft={2} />
+        <Show when={richMedia()} fallback={<SessionImages images={images()} paddingLeft={2} />}>
+          <SessionMedia match={(item) => item.id.startsWith(`${props.message.id}:file:`)} paddingLeft={2} />
+        </Show>
         <box
           onMouseOver={() => {
             setHover(true)
@@ -2753,7 +2801,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+function ToolPart(props: { part: SessionMessageAssistantTool; messageID: string; images?: boolean }) {
   const display = createMemo(() => toolDisplay(props.part.name))
 
   const toolprops = {
@@ -2829,14 +2877,21 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
   return [
     content,
     <Show when={props.images !== false}>
-      <ToolImages parts={[props.part]} />
+      <ToolImages tools={[{ messageID: props.messageID, part: props.part }]} />
     </Show>,
   ]
 }
 
-function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
-  const images = createMemo(() => props.parts.flatMap(inlineToolImages))
-  return <SessionImages images={images()} />
+function ToolImages(props: { tools: readonly ToolRef[] }) {
+  const richMedia = useRichMedia()
+  const images = createMemo(() => props.tools.flatMap((tool) => inlineToolImages(tool.part)))
+  return (
+    <Show when={richMedia()} fallback={<SessionImages images={images()} />}>
+      <SessionMedia
+        match={(item) => props.tools.some((tool) => item.id.startsWith(`${tool.messageID}:tool:${tool.part.id}:`))}
+      />
+    </Show>
+  )
 }
 
 function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?: number }) {

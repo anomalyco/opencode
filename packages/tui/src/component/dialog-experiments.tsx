@@ -1,5 +1,8 @@
 import { createMemo, createSignal } from "solid-js"
+import type { ConfigFlag } from "@opencode/schema/config/flag"
 import { useConfig, useNewDesigns } from "../config"
+import { flagEnabled } from "../config/flag"
+import { useTuiApp } from "../context/runtime"
 import { DIALOG_LIST_INSET } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
@@ -11,6 +14,11 @@ type Experiment = {
   description: string
   /** Whether the experiment is on when the config does not set it. */
   default?: boolean
+  /**
+   * The feature flag the entry switches, whose id is its key in the TUI config. A flag is on by default in local and
+   * dev builds, so the entry shows its resolved value rather than only the config's.
+   */
+  flag?: ConfigFlag.Key
 }
 
 // In-flight features anyone can opt into. Each entry is temporary: an
@@ -33,10 +41,17 @@ export const experiments: Experiment[] = [
     title: "Find in session",
     description: "Search the open session's messages with /find or <leader>f",
   },
+  {
+    id: "rich_media",
+    title: "Rich media",
+    description: "Inline video, a fullscreen media viewer and picture-in-picture",
+    flag: "rich_media",
+  },
 ]
 
 export function DialogExperiments() {
   const config = useConfig()
+  const app = useTuiApp()
   const newDesigns = useNewDesigns()
   const theme = useTheme()
   const toast = useToast()
@@ -44,7 +59,14 @@ export function DialogExperiments() {
   const [saving, setSaving] = createSignal(false)
 
   const enabled = (experiment: Experiment) =>
-    (config.data.experimental?.[experiment.id] ?? experiment.default ?? false) === true
+    experiment.flag
+      ? flagEnabled({
+          key: experiment.flag,
+          experimental: config.data.experimental,
+          channel: app.channel,
+          overrides: process.env.OPENCODE_FLAGS,
+        })
+      : (config.data.experimental?.[experiment.id] ?? experiment.default ?? false) === true
 
   const options = createMemo(() =>
     experiments.map((experiment) => ({

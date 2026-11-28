@@ -6,7 +6,11 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
 } from "@opencode/client"
+import { viewerMedia, type MediaItem } from "../../component/media/model"
+import { MediaStrip } from "../../component/media/strip"
+import { useTranscriptMedia } from "../../config"
 import { Spinner } from "../../component/spinner"
+import { useMedia } from "../../context/media"
 import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
 import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
@@ -231,6 +235,36 @@ export function TextPart(props: {
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}
+        />
+      </box>
+      {/* The videos this text names; the gallery numbers them by its `text:<n>` part id. */}
+      <SessionMedia match={(item) => item.id.startsWith(`${props.message.id}:${props.partID}:`)} />
+    </Show>
+  )
+}
+
+// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item, while the
+// transcript shows media.
+export function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
+  const ctx = use()
+  const media = useMedia()
+  const gallery = () => ctx.media?.() ?? []
+  const transcriptMedia = useTranscriptMedia()
+  const items = createMemo(() => (transcriptMedia() ? gallery().filter(props.match) : []))
+  const paddingLeft = () => props.paddingLeft ?? 3
+
+  return (
+    <Show when={items().length > 0}>
+      <box flexShrink={0} paddingTop={1} paddingLeft={paddingLeft()} paddingRight={2} paddingBottom={1}>
+        <MediaStrip
+          items={items()}
+          // The left border of a user message takes one more cell.
+          width={ctx.width - paddingLeft() - 3}
+          height={Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4)))}
+          onOpen={(index) => {
+            const view = viewerMedia(gallery(), items()[index])
+            media.openViewer(view.items, view.index)
+          }}
         />
       </box>
     </Show>

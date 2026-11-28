@@ -177,6 +177,7 @@ const input = (tokens: number) => {
       agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
       initial: [],
       tools: { definitions: [], execute: () => Effect.die("unused") },
+      video: false,
     },
   }
 }

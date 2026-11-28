@@ -4,6 +4,7 @@ import type { ModelInfo } from "@opencode/client"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
+import type { MediaItem } from "../../component/media/model"
 import type { createTimelineAnchors } from "./anchors"
 import type { FindMatch, FindPart } from "./find"
 import type { GroupKind } from "./grouping/session"
@@ -45,6 +46,8 @@ export const context = createContext<{
     /** A part reports the screen row of the current match, so a pending seek can reach it. */
     located: (match: FindMatch, row: () => number | undefined) => void
   }
+  /** Every image and video in the loaded transcript, in order, while the `rich_media` flag is on. */
+  media?: () => readonly MediaItem[]
 }>()
 
 export function use() {

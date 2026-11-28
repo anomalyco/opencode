@@ -46,6 +46,8 @@ export interface Selection {
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly instructions: Instructions.List
   readonly tools: Tool.Snapshot
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: boolean
 }
 
 export interface Loaded {
@@ -55,6 +57,8 @@ export interface Loaded {
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly tools: Tool.Snapshot
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: boolean
 }
 
 /**
@@ -204,6 +208,7 @@ const layer = Layer.effect(
           mcp: mcpInstructions.load(tools),
           machines: machineInstructions.load(),
           entries: entries.load(sessionID),
+          video: flags.enabled("rich_media"),
         },
         { concurrency: "unbounded" },
       )
@@ -228,6 +233,7 @@ const layer = Layer.effect(
           AgentInstructions.make(agent.info),
         ]),
         tools,
+        video: loaded.video,
       }
     })
 
@@ -246,6 +252,7 @@ const layer = Layer.effect(
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
         tools: selection.tools,
+        video: selection.video,
       }
     })
 

@@ -19058,6 +19058,9 @@
               "browser_stream_tunnel": {
                 "type": "boolean"
               },
+              "rich_media": {
+                "type": "boolean"
+              },
               "video_generate": {
                 "anyOf": [
                   {

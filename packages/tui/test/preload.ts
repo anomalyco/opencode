@@ -1,5 +1,8 @@
 import { NativeError, NativeStatus, OptimizedBuffer } from "@opentui/core"
 
+// Tests set feature flags through the TUI config; a developer's OPENCODE_FLAGS, such as `all`, would override them.
+delete process.env.OPENCODE_FLAGS
+
 // Workaround: OpenTUI's test renderer can read a frame while the native writer is still flushing
 // output, which throws OutputBusy until the event loop runs. Frame reads poll, so fall back to the
 // last frame read from the buffer. Remove once captureCharFrame waits for output idle upstream.

@@ -5,9 +5,11 @@ import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { useTuiApp } from "../context/runtime"
 import { safeWatch } from "../util/watch"
 import { existsSync, lstatSync, realpathSync } from "node:fs"
 import path from "path"
+import { flagEnabled } from "./flag"
 import { TuiKeybind } from "./keybind"
 
 export interface Interface {
@@ -422,6 +424,30 @@ export function useNewDesigns() {
 export function useSessionFindExperiment() {
   const config = useConfig()
   return () => config.data.experimental?.["session-find"] === true
+}
+
+/** Reactive accessor for the `rich_media` feature flag. */
+export function useRichMedia() {
+  const config = useConfig()
+  const app = useTuiApp()
+  return () =>
+    flagEnabled({
+      key: "rich_media",
+      experimental: config.data.experimental,
+      channel: app.channel,
+      overrides: process.env.OPENCODE_FLAGS,
+    })
+}
+
+/**
+ * Whether the transcript shows the files tools return: with rich media unless `session.image_preview` is false, and
+ * otherwise only when it is true.
+ */
+export function useTranscriptMedia() {
+  const config = useConfig()
+  const richMedia = useRichMedia()
+  return () =>
+    richMedia() ? config.data.session?.image_preview !== false : config.data.session?.image_preview === true
 }
 
 /** Reactive accessor for the temporary "client-mcp" experiment. */
