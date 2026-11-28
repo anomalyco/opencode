@@ -1,6 +1,7 @@
 import { ClientError, OpenCode, type SessionStatsInfo } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { stringWidth, truncateWidth } from "@opencode/tui/util/locale"
 import { activityCalendar } from "@opencode/util/activity-calendar"
 import { Effect, Option } from "effect"
 import { EOL } from "node:os"
@@ -213,7 +214,7 @@ function renderModels(stats: SessionStatsInfo, limit: number, width: number) {
     return [
       "MODELS",
       ...models.flatMap((item) => [
-        truncate(
+        truncateWidth(
           `${item.model.providerID}/${item.model.id}${item.model.variant ? `#${item.model.variant}` : ""}`,
           width,
         ),
@@ -247,7 +248,7 @@ function renderTools(stats: SessionStatsInfo, limit: number, width: number) {
       ...tools.flatMap((tool) => {
         const terminal = tool.succeeded + tool.failed
         return [
-          truncate(tool.name, width),
+          truncateWidth(tool.name, width),
           `  ${formatNumber(tool.calls)} calls · ${terminal === 0 ? "-" : formatPercent((tool.failed / terminal) * 100)} error · ${tool.durationP50 === undefined ? "-" : formatDuration(tool.durationP50)} p50`,
         ]
       }),
@@ -282,11 +283,8 @@ function tableHeader(label: string, second: string, third: string, fourth: strin
 }
 
 function tableRow(label: string, second: string, third: string, fourth: string) {
-  return `${truncate(label, 34).padEnd(34)}${second.padStart(10)}${third.padStart(12)}${fourth.padStart(12)}`
-}
-
-function truncate(value: string, width: number) {
-  return value.length <= width ? value : value.slice(0, width - 1) + "…"
+  const fitted = truncateWidth(label, 34)
+  return `${fitted}${" ".repeat(34 - stringWidth(fitted))}${second.padStart(10)}${third.padStart(12)}${fourth.padStart(12)}`
 }
 
 function formatNumber(value: number) {

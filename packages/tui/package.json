@@ -22,6 +22,7 @@
     "./mini/tool": "./src/mini/tool.public.ts",
     "./model-preference": "./src/model-preference.ts",
     "./util/form": "./src/util/form.ts",
+    "./util/locale": "./src/util/locale.ts",
     "./logo": "./src/logo.ts",
     "./component/spinner": "./src/component/spinner.tsx",
     "./component/spinner-renderable": "./src/component/spinner-renderable.ts"
