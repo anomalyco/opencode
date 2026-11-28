@@ -53,7 +53,6 @@ test("minifies only builds, previews onboarding only in development, and ships s
   }
 
   const renderer = (await load("build")).config.renderer
-  // Sentry uploads the renderer source maps, then deletes them.
   expect(renderer?.build?.sourcemap).toBe(true)
 
   // Vite resolves publicDir from the renderer root, not from the config file.

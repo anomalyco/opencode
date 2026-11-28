@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Ndodhi një gabim gjatë nisjes së serverit lokal.",
   "error.page.details.label": "Detajet e gabimit",
   "error.page.action.restart": "Rinis",
-  "error.page.action.report": "Raportoni një gabim",
-  "error.page.action.reported": "Gabim i raportuar",
   "error.page.action.exportLogs": "Eksporto regjistrat",
   "error.page.action.checking": "Po kontrollon…",
   "error.page.action.checkUpdates": "Kontrolloni për përditësime",

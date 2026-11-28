@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Serli serweri işe girizeniňizde säwlik ýüze çykdy.",
   "error.page.details.label": "Roralňyşlyk maglumatlary",
   "error.page.action.restart": "Gaýtadan açyň",
-  "error.page.action.report": "Roralňyşlyk barada habar beriň",
-  "error.page.action.reported": "Roralňyşlyk habar berildi",
   "error.page.action.exportLogs": "Surnallary eksport ediň",
   "error.page.action.checking": "Barlamak …",
   "error.page.action.checkUpdates": "Täzelenmeleri barlaň",

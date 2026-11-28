@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Սխալ է տեղի ունեցել տեղական սերվերը գործարկելիս:",
   "error.page.details.label": "Սխալի մանրամասներ",
   "error.page.action.restart": "Վերագործարկեք",
-  "error.page.action.report": "Հաղորդել սխալ",
-  "error.page.action.reported": "Հաղորդվել է սխալ",
   "error.page.action.exportLogs": "Արտահանման մատյաններ",
   "error.page.action.checking": "Ստուգում…",
   "error.page.action.checkUpdates": "Ստուգեք թարմացումների համար",

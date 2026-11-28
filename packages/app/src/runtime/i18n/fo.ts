@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Ein feilur hendi meðan tú byrjaði lokala ambætaran.",
   "error.page.details.label": "Feilsmálutir",
   "error.page.action.restart": "Endurbyrja",
-  "error.page.action.report": "Melda feil",
-  "error.page.action.reported": "Feilur fráboðaður",
   "error.page.action.exportLogs": "Útflyt loggar",
   "error.page.action.checking": "Kanna…",
   "error.page.action.checkUpdates": "Kanna fyri dagføringum",

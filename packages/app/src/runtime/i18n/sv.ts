@@ -461,8 +461,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Ett fel uppstod vid start av den lokala servern.",
   "error.page.details.label": "Feldetaljer",
   "error.page.action.restart": "Starta om",
-  "error.page.action.report": "Rapportera fel",
-  "error.page.action.reported": "Fel rapporterat",
   "error.page.action.exportLogs": "Exportera loggar",
   "error.page.action.checking": "Kontrollerar…",
   "error.page.action.checkUpdates": "Sök efter uppdateringar",

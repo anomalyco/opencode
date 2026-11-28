@@ -302,8 +302,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Terjadi kesalahan saat memulai server lokal.",
   "error.page.details.label": "Detail Kesalahan",
   "error.page.action.restart": "Mulai Ulang",
-  "error.page.action.report": "Laporkan Kesalahan",
-  "error.page.action.reported": "Kesalahan Dilaporkan",
   "error.page.action.exportLogs": "Ekspor Log",
   "error.page.action.checking": "Memeriksa…",
   "error.page.action.checkUpdates": "Periksa pembaruan",

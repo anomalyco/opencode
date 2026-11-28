@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Při spouštění místního serveru došlo k chybě.",
   "error.page.details.label": "Podrobnosti o chybě",
   "error.page.action.restart": "Restartujte",
-  "error.page.action.report": "Nahlásit chybu",
-  "error.page.action.reported": "Nahlášena chyba",
   "error.page.action.exportLogs": "Exportovat protokoly",
   "error.page.action.checking": "Kontrola…",
   "error.page.action.checkUpdates": "Zkontrolujte aktualizace",
@@ -1392,8 +1390,7 @@ export const dict = {
     "Zobrazit podagenty samostatně. Ostatní aktivitu seskupit se sbalenými podrobnostmi.",
   "settings.timeline.description.quiet": "Zobrazit podagenty samostatně a seskupit úpravy. Ostatní aktivitu skrýt.",
   "settings.timeline.row.foldUserMessages.title": "Sbalit dlouhé zprávy",
-  "settings.timeline.row.foldUserMessages.description":
-    "Sbalit vaše zprávy delší než 12 řádků za tlačítko Číst dále",
+  "settings.timeline.row.foldUserMessages.description": "Sbalit vaše zprávy delší než 12 řádků za tlačítko Číst dále",
   "settings.timeline.row.turnDiffs.title": "Změněné soubory",
   "settings.timeline.row.turnDiffs.description": "Po dokončení kroku vypsat soubory, které změnil",
   "settings.timeline.category.commentary": "Komentář",

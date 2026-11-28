@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Radās kļūda, startējot lokālo serveri.",
   "error.page.details.label": "Kļūdas detaļas",
   "error.page.action.restart": "Restartēt",
-  "error.page.action.report": "Ziņot par kļūdu",
-  "error.page.action.reported": "Kļūda ziņota",
   "error.page.action.exportLogs": "Eksportēt žurnālus",
   "error.page.action.checking": "Pārbauda…",
   "error.page.action.checkUpdates": "Pārbaudīt atjauninājumus",

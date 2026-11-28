@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "მოხდა შეცდომა ლოკალური სერვერის გაშვებისას.",
   "error.page.details.label": "შეცდომის დეტალები",
   "error.page.action.restart": "გადატვირთვა",
-  "error.page.action.report": "შეცდომის შესახებ შეტყობინება",
-  "error.page.action.reported": "მოხსენებული შეცდომა",
   "error.page.action.exportLogs": "ჟურნალების ექსპორტი",
   "error.page.action.checking": "შემოწმება…",
   "error.page.action.checkUpdates": "შეამოწმეთ განახლებები",

@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "A apărut o eroare la pornirea serverului local.",
   "error.page.details.label": "Detalii eroare",
   "error.page.action.restart": "Repornește",
-  "error.page.action.report": "Raportează eroarea",
-  "error.page.action.reported": "Eroare raportată",
   "error.page.action.exportLogs": "Exportă jurnalele",
   "error.page.action.checking": "Se verifică…",
   "error.page.action.checkUpdates": "Caută actualizări",

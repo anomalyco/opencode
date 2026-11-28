@@ -260,8 +260,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Paleidžiant vietinį serverį įvyko klaida.",
   "error.page.details.label": "Išsami informacija apie klaidą",
   "error.page.action.restart": "Paleisti iš naujo",
-  "error.page.action.report": "Pranešti apie klaidą",
-  "error.page.action.reported": "Pranešta apie klaidą",
   "error.page.action.exportLogs": "Eksportuoti žurnalus",
   "error.page.action.checking": "Tikrinama…",
   "error.page.action.checkUpdates": "Patikrinkite, ar nėra atnaujinimų",

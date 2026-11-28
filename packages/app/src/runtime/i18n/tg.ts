@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Ҳангоми оғоз кардани сервери маҳаллӣ хатогӣ рӯй дод.",
   "error.page.details.label": "Тафсилоти хато",
   "error.page.action.restart": "Оғози дубора",
-  "error.page.action.report": "Гузориши хато",
-  "error.page.action.reported": "Хатогӣ гузориш дода шуд",
   "error.page.action.exportLogs": "Содироти гузоришҳо",
   "error.page.action.checking": "Санҷиш…",
   "error.page.action.checkUpdates": "Барои навсозиҳо санҷед",

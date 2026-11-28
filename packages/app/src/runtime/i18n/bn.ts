@@ -263,8 +263,6 @@ export const dict = {
   "error.page.description.localServerStartup": "স্থানীয় সার্ভার শুরু করার সময় একটি ত্রুটি ঘটেছে৷",
   "error.page.details.label": "ত্রুটি বিবরণ",
   "error.page.action.restart": "রিস্টার্ট করুন",
-  "error.page.action.report": "রিপোর্ট ত্রুটি",
-  "error.page.action.reported": "ত্রুটি রিপোর্ট করা হয়েছে",
   "error.page.action.exportLogs": "রপ্তানি লগ",
   "error.page.action.checking": "পরীক্ষা করা হচ্ছে…",
   "error.page.action.checkUpdates": "আপডেটের জন্য চেক করুন",

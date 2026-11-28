@@ -260,8 +260,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Villa kom upp þegar staðbundinn þjónn var ræstur.",
   "error.page.details.label": "Villuupplýsingar",
   "error.page.action.restart": "Endurræstu",
-  "error.page.action.report": "Tilkynna villu",
-  "error.page.action.reported": "Villa tilkynnt",
   "error.page.action.exportLogs": "Flytja út atvikaskrár",
   "error.page.action.checking": "Athugar…",
   "error.page.action.checkUpdates": "Leitaðu að uppfærslum",

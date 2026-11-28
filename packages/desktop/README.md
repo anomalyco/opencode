@@ -45,8 +45,8 @@ from `dev`. Install it from `https://opencode.ai/update/api/beta/desktop/opencod
 
 `perf/startup.bench.ts` times a launch with [strobe](https://github.com/anomalyco/strobe), from process spawn to what a
 person waits for, in pairs of launches of two builds with an interval per case. Every launch runs in a private home
-(its own `%APPDATA%`, XDG folders, database, config and service registration, the developer's `OPENCODE_*`, `OTEL_*`
-and `SENTRY_*` environment removed), so it never touches the developer's app, profile or live service.
+(its own `%APPDATA%`, XDG folders, database, config and service registration, the developer's `OPENCODE_*` and `OTEL_*`
+environment removed), so it never touches the developer's app, profile or live service.
 
 | Case                            | Launch                                                                              | Ends on      |
 | ------------------------------- | ----------------------------------------------------------------------------------- | ------------ |

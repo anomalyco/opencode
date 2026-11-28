@@ -263,8 +263,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Lokal serveri işə salarkən xəta baş verdi.",
   "error.page.details.label": "Xəta detalları",
   "error.page.action.restart": "Yenidən başlat",
-  "error.page.action.report": "Xəta bildirin",
-  "error.page.action.reported": "Xəta bildirildi",
   "error.page.action.exportLogs": "Qeydləri ixrac edin",
   "error.page.action.checking": "Yoxlanılır…",
   "error.page.action.checkUpdates": "Yeniləmələri yoxla",

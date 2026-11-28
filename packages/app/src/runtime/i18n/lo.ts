@@ -266,8 +266,6 @@ export const dict = {
   "error.page.description.localServerStartup": "ເກີດຄວາມຜິດພາດຂຶ້ນໃນຂະນະທີ່ເລີ່ມເຊີບເວີທ້ອງຖິ່ນ.",
   "error.page.details.label": "ລາຍລະອຽດຂໍ້ຜິດພາດ",
   "error.page.action.restart": "ຣີສະຕາດ",
-  "error.page.action.report": "ລາຍງານຄວາມຜິດພາດ",
-  "error.page.action.reported": "ລາຍງານຂໍ້ຜິດພາດ",
   "error.page.action.exportLogs": "ບັນທຶກການສົ່ງອອກ",
   "error.page.action.checking": "ກຳລັງກວດສອບ…",
   "error.page.action.checkUpdates": "ກວດສອບການອັບເດດ",
@@ -1332,8 +1330,7 @@ export const dict = {
   "settings.timeline.description.compact": "ສະແດງຕົວແທນຍ່ອຍແຍກຕ່າງຫາກ. ຈັດກຸ່ມການເຄື່ອນໄຫວອື່ນໂດຍຫຍໍ້ລາຍລະອຽດໄວ້.",
   "settings.timeline.description.quiet": "ສະແດງຕົວແທນຍ່ອຍແຍກຕ່າງຫາກ ແລະຈັດກຸ່ມການແກ້ໄຂ. ເຊື່ອງການເຄື່ອນໄຫວອື່ນ.",
   "settings.timeline.row.foldUserMessages.title": "ພັບຂໍ້ຄວາມຍາວ",
-  "settings.timeline.row.foldUserMessages.description":
-    "ພັບຂໍ້ຄວາມຂອງທ່ານທີ່ຍາວເກີນ 12 ແຖວໄວ້ຫຼັງປຸ່ມ ອ່ານເພີ່ມເຕີມ",
+  "settings.timeline.row.foldUserMessages.description": "ພັບຂໍ້ຄວາມຂອງທ່ານທີ່ຍາວເກີນ 12 ແຖວໄວ້ຫຼັງປຸ່ມ ອ່ານເພີ່ມເຕີມ",
   "settings.timeline.row.turnDiffs.title": "ໄຟລ໌ທີ່ປ່ຽນແປງ",
   "settings.timeline.row.turnDiffs.description": "ສະແດງລາຍການໄຟລ໌ທີ່ແຕ່ລະຮອບປ່ຽນແປງເມື່ອສຳເລັດ",
   "settings.timeline.category.commentary": "ຄຳອະທິບາຍ",

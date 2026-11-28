@@ -416,8 +416,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Si è verificato un errore durante l'avvio del server locale.",
   "error.page.details.label": "Dettagli errore",
   "error.page.action.restart": "Riavvia",
-  "error.page.action.report": "Segnala errore",
-  "error.page.action.reported": "Errore segnalato",
   "error.page.action.exportLogs": "Esporta log",
   "error.page.action.checking": "Controllo…",
   "error.page.action.checkUpdates": "Controlla gli aggiornamenti",

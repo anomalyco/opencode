@@ -266,8 +266,6 @@ export const dict = {
   "error.page.description.localServerStartup": "កំហុសបានកើតឡើងខណៈពេលចាប់ផ្តើមម៉ាស៊ីនមេមូលដ្ឋាន។",
   "error.page.details.label": "ព័ត៌មានលម្អិតអំពីកំហុស",
   "error.page.action.restart": "ចាប់ផ្ដើមឡើងវិញ",
-  "error.page.action.report": "រាយការណ៍កំហុស",
-  "error.page.action.reported": "កំហុសត្រូវបានរាយការណ៍",
   "error.page.action.exportLogs": "នាំចេញកំណត់ហេតុ",
   "error.page.action.checking": "កំពុងពិនិត្យ…",
   "error.page.action.checkUpdates": "ពិនិត្យមើលបច្ចុប្បន្នភាព",
@@ -1339,8 +1337,7 @@ export const dict = {
     "បង្ហាញភ្នាក់ងាររងដោយឡែក។ ដាក់សកម្មភាពផ្សេងទៀតជាក្រុមដោយបង្រួមព័ត៌មានលម្អិត។",
   "settings.timeline.description.quiet": "បង្ហាញភ្នាក់ងាររងដោយឡែក និងដាក់ការកែសម្រួលជាក្រុម។ លាក់សកម្មភាពផ្សេងទៀត។",
   "settings.timeline.row.foldUserMessages.title": "បត់សារវែងៗ",
-  "settings.timeline.row.foldUserMessages.description":
-    "បត់សាររបស់អ្នកដែលលើសពី 12 បន្ទាត់នៅពីក្រោយប៊ូតុង អានបន្ថែម",
+  "settings.timeline.row.foldUserMessages.description": "បត់សាររបស់អ្នកដែលលើសពី 12 បន្ទាត់នៅពីក្រោយប៊ូតុង អានបន្ថែម",
   "settings.timeline.row.turnDiffs.title": "ឯកសារដែលបានផ្លាស់ប្តូរ",
   "settings.timeline.row.turnDiffs.description": "រាយបញ្ជីឯកសារដែលវេននីមួយៗបានផ្លាស់ប្តូរនៅពេលវាបញ្ចប់",
   "settings.timeline.category.commentary": "ការអធិប្បាយ",

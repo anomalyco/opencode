@@ -395,8 +395,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Paikallista palvelinta käynnistettäessä tapahtui virhe.",
   "error.page.details.label": "Virheen tiedot",
   "error.page.action.restart": "Käynnistä uudelleen",
-  "error.page.action.report": "Ilmoita virheestä",
-  "error.page.action.reported": "Virhe raportoitu",
   "error.page.action.exportLogs": "Vie lokit",
   "error.page.action.checking": "Tarkistetaan…",
   "error.page.action.checkUpdates": "Tarkista päivitykset",

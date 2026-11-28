@@ -267,8 +267,6 @@ export const dict = {
   "error.page.description.localServerStartup": "ဒေသတွင်းဆာဗာကို စတင်စဉ်တွင် အမှားအယွင်းတစ်ခု ဖြစ်ပွားခဲ့သည်။",
   "error.page.details.label": "အမှားအသေးစိတ်",
   "error.page.action.restart": "ပြန်လည်စတင်ပါ။",
-  "error.page.action.report": "အမှားအယွင်းကို တိုင်ကြားပါ။",
-  "error.page.action.reported": "Error အစီရင်ခံခဲ့သည်။",
   "error.page.action.exportLogs": "မှတ်တမ်းများ ထုတ်ယူရန်",
   "error.page.action.checking": "စစ်ဆေးနေသည်…",
   "error.page.action.checkUpdates": "အပ်ဒိတ်များအတွက် စစ်ဆေးပါ။",

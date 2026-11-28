@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "የአገር ውስጥ አገልጋይ ሲጀመር ስህተት ተፈጥሯል።",
   "error.page.details.label": "የስህተት ዝርዝሮች",
   "error.page.action.restart": "ዳግም አስጀምር",
-  "error.page.action.report": "ስህተት ሪፖርት አድርግ",
-  "error.page.action.reported": "ስህተት ሪፖርት ተደርጓል",
   "error.page.action.exportLogs": "የመላክ ምዝግብ ማስታወሻዎች",
   "error.page.action.checking": "በማጣራት ላይ…",
   "error.page.action.checkUpdates": "ዝማኔዎችን ይመልከቱ",

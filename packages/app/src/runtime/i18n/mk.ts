@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Се појави грешка при стартување на локалниот сервер.",
   "error.page.details.label": "Детали за грешка",
   "error.page.action.restart": "Рестартирајте",
-  "error.page.action.report": "Пријавете грешка",
-  "error.page.action.reported": "Пријавена грешка",
   "error.page.action.exportLogs": "Извоз на дневници",
   "error.page.action.checking": "Се проверува…",
   "error.page.action.checkUpdates": "Проверете дали има ажурирања",

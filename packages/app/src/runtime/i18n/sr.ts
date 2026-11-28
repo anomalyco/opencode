@@ -272,8 +272,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Дошло је до грешке при покретању локалног сервера.",
   "error.page.details.label": "Детаљи о грешци",
   "error.page.action.restart": "Поново покрените",
-  "error.page.action.report": "Извештај о грешци",
-  "error.page.action.reported": "пријављена грешка",
   "error.page.action.exportLogs": "Извоз евиденције",
   "error.page.action.checking": "Проверавам…",
   "error.page.action.checkUpdates": "Проверите да ли постоје ажурирања",
@@ -1376,8 +1374,7 @@ export const dict = {
     "Прикажи подагенте одвојено. Групиши осталу активност са скупљеним детаљима.",
   "settings.timeline.description.quiet": "Прикажи подагенте одвојено и групиши измене. Сакриј осталу активност.",
   "settings.timeline.row.foldUserMessages.title": "Скупи дуге поруке",
-  "settings.timeline.row.foldUserMessages.description":
-    "Скупи ваше поруке дуже од 12 редова иза дугмета Прочитај више",
+  "settings.timeline.row.foldUserMessages.description": "Скупи ваше поруке дуже од 12 редова иза дугмета Прочитај више",
   "settings.timeline.row.turnDiffs.title": "Промењене датотеке",
   "settings.timeline.row.turnDiffs.description": "Наведи датотеке које је сваки корак променио када се заврши",
   "settings.timeline.category.commentary": "Коментари",

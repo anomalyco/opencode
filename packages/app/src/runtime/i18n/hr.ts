@@ -261,8 +261,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Došlo je do pogreške prilikom pokretanja lokalnog poslužitelja.",
   "error.page.details.label": "Pojedinosti o pogrešci",
   "error.page.action.restart": "Ponovno pokretanje",
-  "error.page.action.report": "Prijavi pogrešku",
-  "error.page.action.reported": "Prijavljena pogreška",
   "error.page.action.exportLogs": "Izvoz zapisnika",
   "error.page.action.checking": "Provjera…",
   "error.page.action.checkUpdates": "Provjerite ima li ažuriranja",

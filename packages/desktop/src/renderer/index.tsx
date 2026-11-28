@@ -8,7 +8,7 @@ import { DesktopApp } from "./desktop-app"
 import { startDesktopMenu } from "./platform/menu"
 import { startDeepLinks } from "./startup/deep-links"
 import { requireRendererRoot } from "./startup/root"
-import { desktopVersion, initializeSentry } from "./startup/sentry"
+import { desktopVersion } from "./startup/version"
 
 const root = requireRendererRoot()
 
@@ -19,5 +19,3 @@ startDesktopMenu(api)
 startDeepLinks(api)
 
 render(() => <DesktopApp api={api} version={version} />, root)
-
-void initializeSentry(version)

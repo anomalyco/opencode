@@ -275,8 +275,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Đã xảy ra lỗi khi khởi động máy chủ cục bộ.",
   "error.page.details.label": "Chi tiết lỗi",
   "error.page.action.restart": "Khởi động lại",
-  "error.page.action.report": "Báo cáo lỗi",
-  "error.page.action.reported": "Đã báo lỗi",
   "error.page.action.exportLogs": "Xuất nhật ký",
   "error.page.action.checking": "Đang kiểm tra…",
   "error.page.action.checkUpdates": "Kiểm tra các bản cập nhật",

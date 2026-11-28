@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "S'ha produït un error en iniciar el servidor local.",
   "error.page.details.label": "Detalls de l'error",
   "error.page.action.restart": "Reinicieu",
-  "error.page.action.report": "Informa d'un error",
-  "error.page.action.reported": "S'ha informat d'un error",
   "error.page.action.exportLogs": "Exporta registres",
   "error.page.action.checking": "S'està comprovant…",
   "error.page.action.checkUpdates": "Comproveu si hi ha actualitzacions",

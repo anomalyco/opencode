@@ -262,8 +262,6 @@ export const dict = {
   "error.page.description.localServerStartup": "දේශීය සේවාදායකය ආරම්භ කිරීමේදී දෝෂයක් ඇති විය.",
   "error.page.details.label": "දෝෂ විස්තර",
   "error.page.action.restart": "යළි අරඹන්න",
-  "error.page.action.report": "දෝෂය වාර්තා කරන්න",
-  "error.page.action.reported": "දෝෂය වාර්තා විය",
   "error.page.action.exportLogs": "ලොග් අපනයනය කරන්න",
   "error.page.action.checking": "පරීක්ෂා කරමින්…",
   "error.page.action.checkUpdates": "යාවත්කාලීන සඳහා පරීක්ෂා කරන්න",
@@ -1354,8 +1352,7 @@ export const dict = {
   "settings.timeline.description.quiet":
     "උප නියෝජිතයන් වෙන වෙනම පෙන්වා සංස්කරණ සමූහගත කරන්න. අනෙකුත් ක්‍රියාකාරකම් සඟවන්න.",
   "settings.timeline.row.foldUserMessages.title": "දිගු පණිවිඩ නවන්න",
-  "settings.timeline.row.foldUserMessages.description":
-    'පේළි 12 ඉක්මවන ඔබගේ පණිවිඩ "තව කියවන්න" බොත්තමක් පිටුපස නවන්න',
+  "settings.timeline.row.foldUserMessages.description": 'පේළි 12 ඉක්මවන ඔබගේ පණිවිඩ "තව කියවන්න" බොත්තමක් පිටුපස නවන්න',
   "settings.timeline.row.turnDiffs.title": "වෙනස් වූ ගොනු",
   "settings.timeline.row.turnDiffs.description": "සෑම වාරයක්ම අවසන් වූ විට එය වෙනස් කළ ගොනු ලැයිස්තුගත කරන්න",
   "settings.timeline.category.commentary": "විවරණය",

@@ -261,8 +261,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Hiba történt a helyi szerver indításakor.",
   "error.page.details.label": "Hiba részletei",
   "error.page.action.restart": "Indítsa újra",
-  "error.page.action.report": "Jelentés hiba",
-  "error.page.action.reported": "Hiba jelentve",
   "error.page.action.exportLogs": "Naplók exportálása",
   "error.page.action.checking": "Ellenőrzés…",
   "error.page.action.checkUpdates": "Ellenőrizze a frissítéseket",
@@ -1357,8 +1355,7 @@ export const dict = {
   "settings.timeline.description.quiet":
     "Az alügynökök külön megjelenítése és a szerkesztések csoportosítása. Az egyéb tevékenységek elrejtése.",
   "settings.timeline.row.foldUserMessages.title": "Hosszú üzenetek összecsukása",
-  "settings.timeline.row.foldUserMessages.description":
-    "A 12 sornál hosszabb üzenetei egy Tovább gomb mögé kerülnek",
+  "settings.timeline.row.foldUserMessages.description": "A 12 sornál hosszabb üzenetei egy Tovább gomb mögé kerülnek",
   "settings.timeline.row.turnDiffs.title": "Módosított fájlok",
   "settings.timeline.row.turnDiffs.description": "Az egyes körök által módosított fájlok listázása a kör végén",
   "settings.timeline.category.commentary": "Kommentár",
