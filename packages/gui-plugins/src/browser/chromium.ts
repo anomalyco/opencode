@@ -2685,15 +2685,33 @@ export function createBrowserPage(
       Space: 32,
     }
 
+    // A punctuation character's own ASCII code is also a navigation key's virtual code (46 is Delete,
+    // 39 is ArrowRight), so Chromium runs the named action and the character never reaches the page.
+    // Send the OEM code of the key the character sits on instead; the flag says Shift produces it.
+    const oem = new Map<string, readonly [number, boolean]>([
+      ["`", [192, false]], ["~", [192, true]], ["!", [49, true]], ["@", [50, true]],
+      ["#", [51, true]], ["$", [52, true]], ["%", [53, true]], ["^", [54, true]],
+      ["&", [55, true]], ["*", [56, true]], ["(", [57, true]], [")", [48, true]],
+      ["-", [189, false]], ["_", [189, true]], ["=", [187, false]], ["+", [187, true]],
+      ["[", [219, false]], ["{", [219, true]], ["]", [221, false]], ["}", [221, true]],
+      ["\\", [220, false]], ["|", [220, true]], [";", [186, false]], [":", [186, true]],
+      ["'", [222, false]], ['"', [222, true]], [",", [188, false]], ["<", [188, true]],
+      [".", [190, false]], [">", [190, true]], ["/", [191, false]], ["?", [191, true]],
+    ])
+
+    const character = oem.get(key)
+    const held = character?.[1] ? modifiers | 8 : modifiers
+
     const code =
       codes[key] ??
+      character?.[0] ??
       (key.length === 1
         ? key.toUpperCase().charCodeAt(0)
         : /^F([1-9]|1[0-2])$/.test(key)
           ? 111 + Number(key.slice(1))
           : undefined)
 
-    const refusal = agentKeyRefusal(key, modifiers, code)
+    const refusal = agentKeyRefusal(key, held, code)
 
     if (refusal) throw new Error(refusal)
 
@@ -2704,8 +2722,8 @@ export function createBrowserPage(
     // Named keys need their character data too: Enter submits forms and inserts newlines only with "\r".
     const text = key === "Enter" ? "\r" : key === "Space" ? " " : key.length === 1 ? key : undefined
 
-    const event = { key: key === "Space" ? " " : key, windowsVirtualKeyCode: code, modifiers }
-    const params = text !== undefined && !(modifiers & 6) ? { ...event, text } : event
+    const event = { key: key === "Space" ? " " : key, windowsVirtualKeyCode: code, modifiers: held }
+    const params = text !== undefined && !(held & 6) ? { ...event, text } : event
 
     await input("Input.dispatchKeyEvent", { type: "keyDown", ...params })
     await input("Input.dispatchKeyEvent", { type: "keyUp", ...params })
