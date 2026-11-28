@@ -508,7 +508,7 @@ const layer = Layer.unwrap(
       ),
       Layer.orDie,
     )
-    return AppNodeBuilder.build(
+    const built = AppNodeBuilder.build(
       LayerNode.group([
         Database.node,
         Bus.node,
@@ -544,6 +544,8 @@ const layer = Layer.unwrap(
         SessionExecution.node.replace(execution),
       ],
     )
+    // Merge by reference so Config.Test resolves to the memoized instance.
+    return Layer.mergeAll(built, config)
   }),
 ).pipe(Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)), Layer.provideMerge(testLLM))
 const it = testEffect(layer)
@@ -1340,6 +1342,27 @@ describe("SessionRunnerLLM", () => {
       { kind: "subagent", sessionID, childSessionID: childID, agent: "explore", description: "Find callers" },
       { kind: "shell", sessionID: childID, shellID: "shell-child", command: "bun test" },
     ])
+  })
+
+  scenario("a steer moves blocking work to the background only with auto_background", function* (s) {
+    const jobs = yield* Job.Service
+    const config = yield* Config.Test
+    const recovery = { kind: "shell", sessionID, shellID: "shell-blocking", command: "sleep 10" } as const
+    yield* jobs.start({ id: "shell-blocking", type: "shell", recovery, run: Effect.never })
+    yield* jobs.block({ id: "shell-blocking", sessionID }).pipe(Effect.forkChild)
+    yield* Effect.yieldNow
+
+    yield* s.admit("Without the option")
+    expect(yield* jobs.runningBackground).toEqual([])
+
+    yield* config.setEntries([new Document({ type: "document", info: new Info({ auto_background: true }) })])
+    yield* s.session.prompt({ sessionID, text: "Queued", delivery: "queue", resume: false })
+    expect(yield* jobs.runningBackground).toEqual([])
+
+    yield* s.admit("Steer")
+    expect(yield* jobs.runningBackground).toEqual([recovery])
+    // No notice joins the steer: the moved tool's own result says it is still running.
+    expect((yield* s.inbox).map((item) => item.type)).toEqual(["user", "user", "user"])
   })
 
   scenario("runs the idle hook again when a background notice wakes the session", function* (s) {

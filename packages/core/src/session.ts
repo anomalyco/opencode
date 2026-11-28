@@ -12,6 +12,7 @@ import type { FileSystem } from "./filesystem.js"
 import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
+import { Config } from "./config.js"
 import { Instance } from "./instance/service.js"
 import { Plugin } from "./plugin/service.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -508,7 +509,26 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
+      prompt: Effect.fn("Session.prompt")(function* (input, onAccepted) {
+        const admitted = yield* sessions.forSession(input.sessionID).prompt(input, onAccepted)
+        // With `auto_background`, a steer moves blocking work to the background so the agent reads it at its next step.
+        if ((input.delivery ?? "steer") !== "steer") return admitted
+        // The prompt is already admitted, so a failure here is logged rather than reported as a failed prompt.
+        yield* Effect.gen(function* () {
+          const session = yield* result.get(input.sessionID)
+          const enabled = yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            return Config.latest(yield* config.entries(), "auto_background") ?? false
+          }).pipe(instances.provide(session))
+          // No notice: each moved tool's own result already says it is still running, so the steer is read in one step.
+          if (enabled) yield* jobs.backgroundAll({ sessionID: input.sessionID })
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("auto background failed", { sessionID: input.sessionID, cause }),
+          ),
+        )
+        return admitted
+      }),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const { sessionID: _, ...rest } = input
