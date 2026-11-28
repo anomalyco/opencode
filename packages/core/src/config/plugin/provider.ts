@@ -7,6 +7,7 @@ import { Document, type Entry } from "@opencode/schema/config"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Money } from "@opencode/schema/money"
 import { Effect } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
@@ -50,7 +51,12 @@ export const Plugin = define({
         ConfigProvider.Info,
         {
           readonly providerID: string
-          readonly models: ReadonlyMap<string, { readonly inherit: boolean; readonly base?: Model.Info }>
+          readonly models: ReadonlyMap<
+            string,
+            { readonly inherit: boolean; readonly base?: Model.Info; readonly basePackage?: string }
+          >
+          readonly previousPackage?: string
+          readonly unlisted: ReadonlyMap<string, Model.Info["variants"]>
         }
       >(),
     }
@@ -58,14 +64,25 @@ export const Plugin = define({
       const next: typeof sources.models = new Map()
       for (const [id, item] of configuredProviders(loaded.entries)) {
         const providerID = id
-        const { current, source, changed } = overlayProvider(providers, providerID, item)
-        const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
+        const { current, source, changed, previousPackage, sourcePackage } = overlayProvider(
+          providers,
+          providerID,
+          item,
+        )
+        const definitions = new Map<
+          string,
+          { readonly inherit: boolean; readonly base?: Model.Info; readonly basePackage?: string }
+        >()
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
           const inherit = changed || !current?.models.has(id)
           // Bind the source at this point in the provider fold. Later source edits/removal
           // and its credential availability must not change an already-defined alias.
-          definitions.set(id, { inherit, base: base && structuredClone(base) })
+          definitions.set(id, {
+            inherit,
+            base: base && structuredClone(base),
+            basePackage: base && (base.package ?? sourcePackage),
+          })
           if (!inherit) continue
           providers.models.update(providerID, id, (model) => {
             if (base) Object.assign(model, structuredClone(base))
@@ -80,7 +97,13 @@ export const Plugin = define({
               providers.models.update(providerID, id, (model) => {
                 delete model.settings?.baseURL
               })
-        next.set(item, { providerID, models: definitions })
+        // A provider package change also moves the models config doesn't list, so their variants need respelling.
+        const unlisted = new Map<string, Model.Info["variants"]>()
+        if (current && previousPackage !== providers.get(providerID)?.provider.package)
+          for (const [id, model] of providers.get(providerID)?.models ?? [])
+            if (item.models?.[id] === undefined && model.package === undefined && model.variants.length > 0)
+              unlisted.set(id, structuredClone(model.variants))
+        next.set(item, { providerID, models: definitions, previousPackage, unlisted })
       }
       for (const [item, definition] of next) {
         for (const [id, config] of Object.entries(item.models ?? {})) {
@@ -99,42 +122,56 @@ export const Plugin = define({
     yield* ctx.model.transform((models) => {
       const configuredDefault = sources.defaultModel
       if (configuredDefault !== undefined) models.default.set(configuredDefault.providerID, configuredDefault.model)
+      // Variants each config document set on a model, replayed when a later document respells it.
+      const configured = new Map<string, ConfigVariants[]>()
       for (const [item, definition] of sources.models) {
         const providerID = definition.providerID
+        const providerPackage = models.provider.get(providerID)?.provider.package
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const source = definition.models.get(id)
           const existing = models.get(providerID, id)
           const hadVariants = (existing?.variants.length ?? 0) > 0
           const inherit = source?.inherit || !existing
+          const key = JSON.stringify([providerID, id])
+          // Starting again from the base or from configured reasoning drops the variants earlier documents set.
+          const earlier =
+            (inherit && source?.base) || config.capabilities?.reasoning !== undefined ? [] : (configured.get(key) ?? [])
+          configured.set(key, config.variants === undefined ? earlier : [...earlier, config.variants])
           overlay(
             models,
-            models.provider.get(providerID)?.provider.package,
+            providerPackage,
             item,
             providerID,
             id,
             config,
             inherit && source?.base ? { base: source.base } : undefined,
           )
-          // Inherited variants are spelled for the base model's package, so a package override needs fresh ones.
-          // A base without variants has no reasoning support to respell.
+          // Inherited variants are spelled for the package the base model ran with, so a package override needs
+          // fresh ones. A base without variants has no reasoning support to respell.
           const repackaged =
             source?.base !== undefined &&
             source.base.variants.length > 0 &&
-            models.get(providerID, id)?.package !== source.base.package
+            (models.get(providerID, id)?.package ?? providerPackage) !== source.basePackage
           if (
-            config.variants === undefined &&
             config.capabilities?.reasoning === undefined &&
             // Custom models start without variants, so non-empty variants here came from an earlier transform.
-            ((!source?.base && !hadVariants) || repackaged)
+            ((config.variants === undefined && !source?.base && !hadVariants) || repackaged)
           )
             models.update(providerID, id, (model) => {
-              model.variants = [
-                ...Variant.resolve({
-                  ...model,
-                  package: model.package ?? models.provider.get(providerID)?.provider.package,
-                }),
-              ]
+              const target = { ...model, package: model.package ?? providerPackage }
+              model.variants = source?.base ? respell(target, source.base.variants) : [...Variant.resolve(target)]
+              // Configured variants overlay the respelled defaults.
+              for (const variants of configured.get(key) ?? []) overlayVariants(model, variants)
             })
+        }
+        if (providerPackage === definition.previousPackage) continue
+        for (const [id, variants] of definition.unlisted) {
+          const model = models.get(providerID, id)
+          // Leave models whose variants or package an earlier model transform replaced.
+          if (!model || model.package !== undefined || !isDeepStrictEqual(model.variants, variants)) continue
+          models.update(providerID, id, (model) => {
+            model.variants = respell({ ...model, package: providerPackage }, variants)
+          })
         }
       }
     })
@@ -185,6 +222,9 @@ function overlayProvider(
   const current = providers.get(providerID)
   const source = providers.get(item.canonical ?? current?.provider.canonical ?? providerID)
   const changed = item.canonical !== undefined && item.canonical !== current?.provider.canonical
+  // Read before the update below, which edits the provider in place when it is its own source.
+  const previousPackage = current?.provider.package
+  const sourcePackage = source?.provider.package
   providers.update(providerID, (provider) => {
     if (changed && source && source.provider !== provider)
       Object.assign(provider, structuredClone(source.provider), {
@@ -201,7 +241,7 @@ function overlayProvider(
     if (item.headers !== undefined) provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
     if (item.body !== undefined) provider.body = Provider.mergeOverlay(provider.body, item.body)
   })
-  return { current, source, changed }
+  return { current, source, changed, previousPackage, sourcePackage }
 }
 
 /** Applies one configured model, first resetting it to `inherit.base` when it starts again from the catalog. */
@@ -244,20 +284,7 @@ function overlay(
           Variant.supports(config.capabilities.reasoning),
         ),
       ]
-    if (config.variants !== undefined) {
-      model.variants ??= []
-      for (const variant of config.variants) {
-        let existing = model.variants.find((item) => item.id === variant.id)
-        if (!existing) {
-          existing = { id: variant.id }
-          model.variants.push(existing)
-        }
-        if (variant.settings !== undefined)
-          existing.settings = Provider.mergeOverlay(existing.settings, variant.settings)
-        if (variant.headers !== undefined) existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
-        if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
-      }
-    }
+    if (config.variants !== undefined) overlayVariants(model, config.variants)
     if (config.cost !== undefined) {
       model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
         tier: cost.tier && { ...cost.tier },
@@ -271,4 +298,34 @@ function overlay(
     }
     if (config.disabled !== undefined) model.enabled = !config.disabled
   })
+}
+
+/**
+ * Spells the reasoning levels a model already offers for the package it now runs with. Models don't keep the
+ * catalog's reasoning support, so the current variant ids stand in for it; a level the package can't spell is dropped.
+ */
+function respell(model: Model.Info, previous: Model.Info["variants"]) {
+  const toggle = Variant.resolve(model, [{ type: "toggle" }])
+  const effort = Variant.resolve(model)
+  // A toggle model's `none` turns thinking off; an effort model's `none` is an effort level, if the package has one.
+  const spelled = previous.some((variant) => variant.id === "thinking")
+    ? [...toggle, ...effort]
+    : [...effort, ...toggle]
+  return previous.flatMap((variant) => spelled.find((item) => item.id === variant.id) ?? [])
+}
+
+type ConfigVariants = NonNullable<NonNullable<ConfigProvider.Info["models"]>[string]["variants"]>
+
+function overlayVariants(model: Model.MutableInfo, variants: ConfigVariants) {
+  model.variants ??= []
+  for (const variant of variants) {
+    let existing = model.variants.find((item) => item.id === variant.id)
+    if (!existing) {
+      existing = { id: variant.id }
+      model.variants.push(existing)
+    }
+    if (variant.settings !== undefined) existing.settings = Provider.mergeOverlay(existing.settings, variant.settings)
+    if (variant.headers !== undefined) existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
+    if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
+  }
 }
