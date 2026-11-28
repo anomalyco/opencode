@@ -1,5 +1,5 @@
 import type { MiniFrontendInput } from "@opencode/tui/mini"
-import { createModelPreferenceRepository } from "@opencode/tui/model-preference"
+import { createModelPreferenceRepository, modelPreferenceKey } from "@opencode/tui/model-preference"
 import fs from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -18,9 +18,12 @@ type MiniHost = MiniFrontendInput["host"]
 function preferences(statePath: string): MiniHost["preferences"] {
   const repository = createModelPreferenceRepository(path.join(statePath, "model.json"))
   return {
-    async resolveVariant(model) {
+    async recentModels() {
+      return (await repository.load()).recent
+    },
+    async variant(model) {
       if (!model) return
-      return repository.resolveVariant(model)
+      return (await repository.load()).variant[modelPreferenceKey(model)]
     },
     async saveVariant(model, variant) {
       if (!model) return
