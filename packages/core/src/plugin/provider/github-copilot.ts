@@ -362,7 +362,8 @@ export const GithubCopilotPlugin = define({
         }
       const models = Array.from(loaded.models.values())
       const fallback =
-        models.find((model) => model.is_chat_fallback) ?? models.find((model) => model.billing?.auto_discount)
+        models.find((model) => model.is_chat_fallback) ??
+        models.find((model) => model.auto || model.billing?.auto_discount)
       // Retry routing soon when the router fails or picks a model this client cannot serve.
       return fallback && { model: fallback.id, account: loaded.token, until: now + 5 * 60_000 }
     })

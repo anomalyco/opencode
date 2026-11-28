@@ -783,6 +783,57 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("offers Auto when Copilot flags the Auto model instead of an Auto discount", () =>
+    Effect.gen(function* () {
+      const state = { listed: false }
+      const remote = (id: string, extra: Record<string, unknown> = {}) => ({
+        model_picker_enabled: false,
+        id,
+        name: id,
+        version: id,
+        supported_endpoints: ["/responses"],
+        capabilities: {
+          family: id,
+          limits: { max_prompt_tokens: 128_000, max_output_tokens: 64_000 },
+          supports: { tool_calls: true },
+        },
+        ...extra,
+      })
+      const api = HttpClient.make((request) =>
+        Effect.sync(() => {
+          if (request.url.endsWith("/copilot_internal/user"))
+            return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (!request.url.endsWith("/models"))
+            return HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))
+          state.listed = true
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ data: [remote("free-auto", { auto: true }), remote("other")] }),
+          )
+        }),
+      )
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
+      const models = yield* Model.Service
+      yield* advance(() => state.listed)
+      yield* drain
+      expect(
+        (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),
+      ).toEqual([Model.ID.make("auto")])
+
+      const hooks = yield* PluginHooks.Service
+      const ids = yield* sessions()
+      const event = yield* hooks.trigger("session", "experimental.model.resolve", {
+        sessionID: ids.parent,
+        agent: Agent.ID.make("build"),
+        kind: "primary",
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("auto") }),
+      })
+      // The router is down, so the request falls back to the flagged Auto model.
+      expect(event.model.id).toBe(Model.ID.make("free-auto"))
+    }),
+  )
+
   it.effect("disables gpt-5-chat-latest before Copilot language selection", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
