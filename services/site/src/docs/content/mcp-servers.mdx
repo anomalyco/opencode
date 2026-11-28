@@ -385,6 +385,29 @@ One OpenCode server can have many directories open, and each one connects to eve
 - A shared connection has no roots. When a tool asks for input, the request appears in the directory that called it.
 - The connection closes as soon as the last directory using it closes or disconnects the server.
 
+## Process lifecycle
+
+Every loaded project location starts its own copy of each configured local MCP server, even when several locations are open. A location with no session activity unloads after [`experimental.location_idle_timeout`](/config#location-idle-timeout), which defaults to 60 minutes. When a location unloads, its local servers are closed with it.
+
+If you see more copies of a server than you expect, check how many locations are loaded before treating it as a leak. To share one connection between locations instead of starting one process per location, use a remote server or set `pool: true` on a server that supports the 2026-07-28 protocol, as described in [Shared connections](#shared-connections).
+
+For servers you keep configured, prefer a direct executable over a package-runner wrapper:
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "filesystem": {
+        "type": "local",
+        "command": ["node", "/opt/mcp/filesystem/dist/index.js"],
+      },
+    },
+  },
+}
+```
+
+`npx -y <package>` and `npm exec` add a package-manager wrapper and, on Windows, an extra shell process. That multiplies memory use per location and makes process cleanup less predictable when a server or OpenCode exits unexpectedly. Install the server once and point `command` at its binary or entry file instead. If a local server's process tree survives after you close a session, stop the OpenCode background service before removing the remaining processes; closing only the desktop window can leave the service running.
+
 ## Names
 
 OpenCode names a tool `<server>_<tool>`. It replaces characters other than letters, numbers, `_`, and `-` with `_`:
