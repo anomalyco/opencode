@@ -184,6 +184,12 @@ export function scan(
     if (scanned.kind === "opaque") return Effect.fail(new OpaqueError({ reason: scanned.reason }))
 
     const output: Result = { commands: [], directories: [] }
+    // Directory arguments of a directory-changing command are relative to the directory the shell
+    // is in when the command runs, not the invocation cwd. Track it through the command list so
+    // `cd a && cd ../b` resolves ../b against a, and emit absolute paths: the caller resolves
+    // every entry against the invocation cwd. Dynamic targets cannot move the tracker because
+    // their value is unknown until execution.
+    const tracker: CwdTracker = { current: cwd, stack: [] }
     for (const item of scanned.commands) {
       // Declarations are skipped as standalone permission resources, while nested substitutions remain.
       if (item.declaration) continue
@@ -232,8 +238,24 @@ export function scan(
           })
       const directoryCommand = unwrapDirectoryCommand(powershell ? words : item.rawWords, parts, powershell)
       if (directoryCommand) {
-        const resolved = directoryArgs(directoryCommand, powershell, cwd, shell, home)
-        output.directories.push(...resolved.directories)
+        const head = powershell ? directoryCommand[0]?.text.toLowerCase() : directoryCommand[0]?.text
+        const running = powershell ? cwd : tracker.current
+        const resolved = directoryArgs(directoryCommand, powershell, running, shell, home)
+        // Keep the output contract: directories are written relative to the invocation cwd and the
+        // caller resolves them there. For POSIX shells, when an earlier cd moved the shell, rebase
+        // the entry so it still names the directory the command actually touches; unchanged and
+        // absolute entries keep their original spelling. PowerShell chains are left to the caller
+        // as before: drive-qualified paths do not rebase safely under a POSIX host.
+        for (const directory of resolved.directories) {
+          const chained = path.resolve(running, directory)
+          const plain = path.resolve(cwd, directory)
+          output.directories.push(
+            powershell || path.isAbsolute(directory) || chained === plain
+              ? directory
+              : (path.relative(cwd, chained) || "."),
+          )
+        }
+        if (!powershell) advanceTracker(tracker, head ?? "", directoryCommand, resolved.directories)
         if (directoryCommand === parts && resolved.complete) continue
       }
       const selected = prefix(words.slice(0, PREFIX_LENGTH))
@@ -260,6 +282,32 @@ export function scan(
     }
     return Effect.succeed(output)
   })
+}
+
+type CwdTracker = { current: string; stack: string[] }
+
+// Move the tracker for one directory-changing command. A dynamic or discarded target (no resolved
+// directories) cannot move the tracker because its value is unknown until execution. `popd +N`
+// rotates the stack without leaving the shell in place, so only a bare `popd` pops; the resolver
+// emits no directories for popd, so the operand is detected on the command itself.
+const advanceTracker = (tracker: CwdTracker, name: string, command: Part[], directories: string[]) => {
+  if (name === "popd" || name === "pop-location") {
+    const rotates = command.slice(1).some((part) => part.text !== "" && !part.text.startsWith("-"))
+    if (!rotates) {
+      const previous = tracker.stack.pop()
+      if (previous !== undefined) tracker.current = previous
+    }
+    return
+  }
+  if (directories.length === 0) return
+  const target = path.resolve(tracker.current, directories[0])
+  if (name === "pushd" || name === "push-location") {
+    // `pushd -n` pushes the directory onto the stack without changing the working directory.
+    const noChdir = command.slice(1).some((part) => part.text === "-n")
+    tracker.stack.push(noChdir ? target : tracker.current)
+    if (noChdir) return
+  }
+  tracker.current = target
 }
 
 function unwrapDirectoryCommand(rawWords: string[], parts: Part[], powershell: boolean) {
