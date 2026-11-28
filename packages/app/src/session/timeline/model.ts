@@ -183,6 +183,7 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
     history: {
       loadMore: (id: string, signal: AbortSignal) => data.session.message.loadMore(id, { signal }),
       more,
+      hold: (id: string) => data.session.message.hold(id),
     },
     lastUserMessage: input.session.history.lastUserMessage,
     messages: input.session.history.messages,

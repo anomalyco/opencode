@@ -370,6 +370,24 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       },
     ),
   )
+  // A reader who left the end holds their place in the loaded history across a new read of the transcript.
+  createEffect(() => {
+    const id = session.identity.params.id
+
+    if (!id || follow.following()) return
+    onCleanup(timeline.history.hold(id))
+  })
+  // A read that could not keep that history left only the newest messages. The rows the reader was on are gone, so
+  // the view goes to the end, as it does when the session opens.
+  createEffect(
+    on([() => session.identity.params.id, oldestMessage], ([id, oldest], previous) => {
+      if (!oldest || !previous?.[1] || previous[0] !== id || untrack(follow.following)) return
+
+      if (untrack(timeline.messages).some((message) => message.id === previous[1])) return
+      follow.dispatch({ type: "follow" })
+      scrollToEnd()
+    }),
+  )
   createEffect(() => {
     const id = session.identity.params.id
 
