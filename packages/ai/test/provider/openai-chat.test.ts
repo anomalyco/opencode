@@ -1570,6 +1570,64 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  // Gateways that sign Claude's thinking stream the text as `reasoning_content` and then send the
+  // signed block as one `reasoning.text` detail. The detail stays in the message for replay, but its
+  // text must not be shown again, or the Thought block reads the same thought twice.
+  it.effect("does not repeat streamed reasoning when a later reasoning.text detail echoes it", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "Think hard.", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_content: "Think " } }] },
+              { choices: [{ delta: { reasoning_content: "hard." } }] },
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { content: "Done" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Think hard.")
+      expect(response.text).toBe("Done")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning_content", reasoningDetails: details },
+      })
+
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Done", reasoning_content: "Think hard.", reasoning_details: details },
+      ])
+    }),
+  )
+
+  // Hiding detail text when scalar reasoning streamed must not hide a details-only dialect.
+  it.effect("displays a reasoning.text detail when no scalar reasoning streams", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "Think hard.", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: details } }] },
+              { choices: [{ delta: { content: "Done" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Think hard.")
+      expect(response.text).toBe("Done")
+    }),
+  )
+
   it.effect("uses reasoning details as display fallback without inventing a scalar replay field", () =>
     Effect.gen(function* () {
       const details = [
