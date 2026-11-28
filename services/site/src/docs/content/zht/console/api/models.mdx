@@ -1,0 +1,202 @@
+---
+title: "模型清單 API"
+description: "列出工作區可使用的模型，包含其限制、價格、能力，以及透過控制台呼叫每個模型的 URL。"
+---
+
+模型清單有兩種。[控制台清單](#console-model-list)會回傳工作區可使用的所有內容，
+包括其連接的供應商。[推論清單](#inference-model-lists)會以 OpenAI 的清單形式回傳公開的 OpenCode Models 與
+Go 目錄。
+
+| 清單 | 回傳 | 金鑰 |
+| --- | --- | --- |
+| [`/console/api/v1/models`](#console-model-list) | 呼叫者可使用的每個供應商與模型，並套用工作區的編輯。 | 必填 |
+| [`/inference/v1/models`](#inference-model-lists) | OpenCode Models。沒有金鑰時為每個公開模型；有金鑰時為其工作區可使用的模型。 | 選用 |
+| [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go) 模型，形式相同。 | 選用 |
+
+當用戶端應提供與 OpenCode 相同的模型（包括已連接的供應商）時，請使用控制台清單。當你只需要 OpenCode Models 或 Go，
+或還沒有金鑰而想要公開目錄時，請使用推論清單。
+
+## 控制台模型清單
+
+`GET https://opencode.ai/console/api/v1/models` 會回傳呼叫者可使用的每個供應商，以及每個供應商下可呼叫的模型。
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+任何工作區成員都可以呼叫它：瀏覽器工作階段、OpenCode 登入、[個人 API 金鑰](/console/api#personal-api-keys)，
+或具有 **Models › Read** 的[服務帳號金鑰](/console/api#service-accounts)。這個 API 採用的規則和控制台為 OpenCode
+產生設定時使用的規則相同，因此清單會與 OpenCode 中 `/models` 顯示的內容一致。回應不會快取
+（`Cache-Control: private, no-store`）。
+
+### 供應商
+
+回應是以供應商 ID 為鍵的物件，該 ID 就是 OpenCode 使用的 ID。
+
+| 供應商 ID | 供應商 |
+| --- | --- |
+| `opencode` | [OpenCode Models](/console/models)，從工作區額度付費。 |
+| `opencode-go` | [Go](/console/go) 模型。只有在具有 Go 訂閱時出現。 |
+| `console-<connection slug>` | 工作區新增的[連線](/console/providers)，例如 `console-openai`、`console-anthropic` 或 `console-aws-bedrock`。 |
+
+每個供應商都有 `id`、`name` 與 `models`。`name` 是 OpenCode 顯示的名稱，通常是工作區名稱後接
+供應商名稱。`models` 是以模型 ID 為鍵的物件。
+
+### 範例
+
+精簡為一個供應商與一個模型：
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 欄位
+
+每個模型都是 [models.dev](https://models.dev) 的 v2 項目，並套用工作區的編輯，因此欄位就是
+[models.dev 發布的欄位](https://models.dev/experimental/v2.0/api.json)。已停用的模型，以及 models.dev 標示為
+已棄用的模型，會省略。
+
+| 欄位 | 意義 |
+| --- | --- |
+| `type` | 模型種類，例如 `chat`、`embedding`、`image` 或 `decision`。 |
+| `id` | 請求中要傳送的模型 ID。它也是 `models` 中的鍵。 |
+| `name` | 顯示名稱。 |
+| `limit` | `context` 是上下文視窗。模型有設定輸入上限時，`input` 會限制請求的輸入。`output` 會限制回應。 |
+| `cost` | 每 100 萬 token 的價格，以美元計：`text.input.price`、`text.input.cache.read`、`text.input.cache.write` 與 `text.output.price`。`0` 表示免費。沒有快取欄位表示模型沒有快取價格。部分模型會提供 `cost.multipliers`，並在指定時段調高價格。 |
+| `capabilities` | 模型能做的事，例如工具呼叫與推理強度。 |
+| `modalities` | 接受的輸入類型，例如 `text`、`image/png` 或 `application/pdf`，以及輸出類型。 |
+| `api` | 此模型要使用的控制台 URL 與 SDK。請參閱[模型 API](#model-api)。 |
+
+### 模型 API
+
+`api` 有一個項目，以模型使用的協定為鍵：OpenAI Chat Completions 為 `chat-completions`、OpenAI Responses 為 `responses`、
+Anthropic Messages 為 `messages`、Gemini 為 `generate-content`，以及
+[OpenAI Embeddings](/console/models#embedding-models) 為 `embeddings`。它是該協定的
+models.dev 項目，並將廠商 URL 替換為控制台的 URL，其他協定則省略。
+
+| 欄位 | 意義 |
+| --- | --- |
+| `base_url` | 此模型的請求傳送位置。OpenCode Models 使用 `https://opencode.ai/inference/...`，Go 使用 `https://opencode.ai/inference/go/...`，連線則使用其控制台 API URL，`https://opencode.ai/inference/custom/<connection_id>`。 |
+| `sdk.aisdk` | 該協定的 AI SDK 套件，與[模型端點](/console/models#endpoints)表中的相同。 |
+| `sdk.opencodeai` | OpenCode 載入的對應供應商模組。 |
+
+你新增之連線上的模型看起來像這樣。請依[供應商 API](/console/api/providers#endpoints)所述，附加協定的路徑，例如 `/chat/completions` 或
+`/responses`。
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## 推論模型清單
+
+`GET https://opencode.ai/inference/v1/models` 會列出 OpenCode Models，`GET https://opencode.ai/inference/go/v1/models`
+則列出 Go 模型。兩者都回傳 OpenAI 的清單形式。
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+精簡為一個模型及其常用欄位：
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+沒有金鑰時，清單包含每個公開模型。有金鑰時，只包含該金鑰工作區可使用的模型，因此
+服務帳號金鑰需要 **Models › Read**。請在 `Authorization: Bearer` 或 `x-api-key` 中傳送。私人或已棄用的模型
+會省略。
+
+每個項目會以 OpenAI 的 `id`、`object`、`created` 與 `owned_by` 開頭，接著是
+[控制台清單](#fields)使用的相同 models.dev 欄位：`name`、`type`、`limit`、`cost`、`capabilities`、`modalities`、`api`、`family`、
+`release_date` 與其他欄位。與控制台清單不同，推論清單不包含工作區的連線。若
+models.dev 資料暫時無法使用，項目仍會出現，但只含 OpenAI 的欄位，且 `name` 等於 ID。
+
+每個 Go 模型也有 `go`：其在每個方案上的每月用量上限（`monthly_usage`）、是否以請求進行訓練
+（`training`）、是否完全不保留你的資料（`zdr`），以及是否禁止從部分國家使用（`limited_regions`）。
+
+## 錯誤
+
+| 狀態 | 意義 |
+| --- | --- |
+| `401` | 沒有憑證，或金鑰已過期或撤銷。 |
+| `403` | 金鑰無法列出模型。服務帳號與受限金鑰需要 **Models › Read**。 |

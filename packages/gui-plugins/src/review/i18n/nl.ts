@@ -12,4 +12,12 @@ export default {
   noChanges: "Geen wijzigingen",
   "settings.wrapLines.title": "Regels laten teruglopen",
   "settings.wrapLines.description": "Lange regels in mobiele diffs laten teruglopen in plaats van horizontaal scrollen",
+  "menu.count.one": "{{count}} bestand gewijzigd",
+  "menu.count.other": "{{count}} bestanden gewijzigd",
+  "folder.more": "{{count}} · meer niet getoond",
+  "folder.failed": "Kan wijzigingen niet laden",
+  "command.open": "Beoordeling openen",
+  "load.failed": "Kan wijzigingen niet laden",
+  "load.timeout": "De server deed er te lang over om te antwoorden",
+  offline: "Kan deze server niet bereiken",
 }

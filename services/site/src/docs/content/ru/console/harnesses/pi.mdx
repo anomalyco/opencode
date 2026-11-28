@@ -1,0 +1,67 @@
+---
+title: "Pi"
+description: "Используйте модели Console и Go в Pi, агенте для программирования."
+---
+
+[Pi](https://pi.dev) включает провайдеров OpenCode для оплаты по факту и Go. Он выбирает подходящий API для каждой платной модели или модели Go. Чат-модели бесплатного уровня требуют OpenCode и возвращают HTTP `403` из Pi.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) настраивает Pi одной командой, включая политики, MCP-серверы, навыки и
+  инструкции рабочего пространства. Выполните `npx @opencode/console setup pi`. Ниже описана ручная настройка.
+</Callout>
+
+| Провайдер     | Тариф          |
+| ------------- | -------------- |
+| `opencode`    | Оплата по факту |
+| `opencode-go` | Go             |
+
+## Настройка
+
+Оба провайдера читают ключ из `OPENCODE_API_KEY`. Создайте [личный API-ключ](/console/harnesses#get-an-api-key).
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+Также можно запустить `/login` в Pi и выбрать провайдера. Pi хранит ключ в `~/.pi/agent/auth.json`.
+
+```text
+/login opencode
+```
+
+## Go
+
+Для провайдера `opencode-go` используйте ключ рабочего пространства с подпиской [Go](/console/go).
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## Модели
+
+Укажите модель в формате `<provider>/<model-id>`, используя ID из таблицы [Console](/console/models#endpoints) или [Go](/console/go#endpoints). Чтобы вывести список моделей, известных Pi, используйте `--list-models`.
+
+```bash
+pi --list-models opencode-go
+```
+
+Задайте модель по умолчанию в `~/.pi/agent/settings.json` или нажмите `Ctrl+S` в меню выбора модели `/model`.
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+Запустите `pi update --models`, если новая модель Console ещё не появилась.
+
+## MCP Console
+
+Pi v0.99.0 и новее поддерживают MCP. Добавьте сервер [MCP Console](/console/harnesses#console-mcp), затем войдите из браузера.
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```

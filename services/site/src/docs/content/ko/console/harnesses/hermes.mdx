@@ -1,0 +1,66 @@
+---
+title: "Hermes"
+description: "Hermes Agent에서 Console 및 Go 모델을 사용하세요."
+---
+
+[Hermes Agent](https://hermes-agent.nousresearch.com)에는 종량제와 Go용 OpenCode 제공자가 포함되어 있습니다. 유료
+모델이나 Go 모델을 선택하면 Hermes가 해당 모델에 맞는 API를 사용합니다. 무료 채팅 모델은 OpenCode에서만 쓸 수
+있으며, Hermes로 요청하면 HTTP `403`이 반환됩니다.
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli)를 쓰면 워크스페이스의 정책, MCP 서버, 스킬, 지침까지 포함해 명령
+  하나로 Hermes를 설정할 수 있습니다. `npx @opencode/console setup hermes`를 실행하세요. 아래 단계는 직접 설정하는
+  방법입니다.
+</Callout>
+
+| 제공자         | 요금제        | 키 변수                |
+| -------------- | ------------- | ---------------------- |
+| `opencode-zen` | 종량제        | `OPENCODE_ZEN_API_KEY` |
+| `opencode-go`  | Go            | `OPENCODE_GO_API_KEY`  |
+
+## 구성
+
+모델 설정을 실행하고 종량제에는 **OpenCode Zen**을, Go에는 **OpenCode Go**를 선택하세요.
+
+```bash
+hermes model
+```
+
+[개인 API 키](/console/harnesses#get-an-api-key)를 붙여 넣은 다음 모델을 고르세요. Hermes는
+키를 `~/.hermes/.env`에, 선택한 모델을 `~/.hermes/config.yaml`에 저장합니다.
+
+```yaml title="~/.hermes/config.yaml"
+model:
+  provider: opencode-go
+  default: kimi-k3
+```
+
+<Callout>Go는 모든 요청에 세션 ID를 요구합니다. Hermes v0.21.6 이상은 이를 자동으로 보냅니다.</Callout>
+
+## 모델
+
+접두사 없이 [Console](/console/models#endpoints) 또는 [Go](/console/go#endpoints) 표의 모델 ID를 사용하세요.
+세션에서는 `/model`로 모델을 바꾸고, 한 번 실행에만 쓸 모델을 고를 수도 있습니다.
+
+```bash
+hermes chat --provider opencode-zen --model claude-sonnet-5-5
+```
+
+## Console MCP
+
+OAuth로 [Console MCP](/console/harnesses#console-mcp) 서버를 추가한 뒤 브라우저에서 로그인하세요.
+
+```bash
+hermes mcp add opencode-console --url https://opencode.ai/console/mcp --auth oauth
+hermes mcp login opencode-console
+```
+
+또는 `~/.hermes/config.yaml`에 추가하고 세션에서 `/reload-mcp`를 실행하세요.
+
+
+```yaml title="~/.hermes/config.yaml"
+mcp_servers:
+  opencode-console:
+    url: https://opencode.ai/console/mcp
+    auth: oauth
+```

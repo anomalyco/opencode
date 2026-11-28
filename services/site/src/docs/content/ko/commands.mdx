@@ -1,0 +1,261 @@
+---
+title: "명령어"
+description: "Markdown이나 JSON에서 프롬프트를 재사용 가능한 슬래시 명령어로 정의하고 인수, 셸 출력, 첨부 파일을 함께 사용하세요."
+---
+
+`.opencode/commands/review.md`를 만들면 프롬프트가 `/review`가 됩니다.
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+TUI에서 대상을 지정해 실행합니다.
+
+```text
+/review src/auth.ts
+```
+
+OpenCode는 `Review src/auth.ts for bugs and missing tests.`를 사용자 프롬프트로 제출합니다.
+
+## Markdown
+
+전역 명령어는 `~/.config/opencode/commands/`에, 프로젝트 명령어는 `.opencode/commands/`에 두세요.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+`.md` 파일만 발견됩니다. 중첩 경로는 `/`로 구분된 명령어 이름이 됩니다.
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+중첩 명령어는 `/team/review src/auth.ts`로 실행합니다. 이전 단수 디렉터리 `command/`도 발견되지만 새 파일에는
+`commands/`를 사용하세요.
+
+명령어에 메타데이터가 필요하면 YAML 프런트매터를 추가하세요. 앞뒤 공백을 제거한 Markdown 본문이 항상 프롬프트 템플릿입니다.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+OpenCode JSON 또는 JSONC [구성 파일](/config)의 `commands` 아래에 명령어를 정의합니다. 각 명령어에는 `template`이
+필요합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## 필드
+
+Markdown 프런트매터와 JSON 항목은 같은 필드를 받습니다. 단, Markdown은 파일 본문에서 `template`을 가져옵니다.
+
+| 필드 | 필수 | 동작 |
+| --- | --- | --- |
+| `template` | JSON만 | 프롬프트 템플릿. |
+| `description` | 아니요 | 명령어 목록과 탐색에 표시되는 텍스트. |
+| `agent` | 아니요 | 명령어 실행 시 선택되는 에이전트. |
+| `model` | 아니요 | `provider/model` 또는 `provider/model#variant` 형식의 모델 재정의. |
+| `subagent` | 아니요 | `true`이면 백그라운드 하위 세션에서 실행하고, `false`이면 항상 현재 세션에서 실행합니다. |
+| `subtask` | 아니요 | `subagent`의 이전 별칭입니다. 사용을 권장하지 않습니다. |
+
+예를 들어 이 JSON 명령어는 현재의 모든 선택 필드를 설정합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Markdown 프런트매터에 `template`을 넣지 마세요. 본문이 이를 제공합니다.
+
+## 인수
+
+입력한 그대로의 전체 인수 문자열에는 `$ARGUMENTS`를 사용하세요.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+`/component Account Settings`에서는 플레이스홀더가 `Account Settings`가 됩니다.
+
+## 위치
+
+파싱된 위치 인수에는 `$1`, `$2` 이상의 숫자를 사용하세요. 작은따옴표나 큰따옴표는 단어를 묶고 제거됩니다.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+`/check src/auth.ts "error handling"`에서 `$1`은 `src/auth.ts`, `$2`는 `error handling`이 됩니다.
+
+번호가 가장 큰 플레이스홀더에는 해당 위치의 인수부터 나머지 인수까지 모두 들어갑니다. 해당 위치에 인수가 없으면 빈 문자열이 들어갑니다.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+`/compare api stable branch`에서 OpenCode는 `Compare api with stable branch.`를 제출합니다.
+
+## 대체
+
+템플릿에 `$ARGUMENTS`나 위치 플레이스홀더가 없으면 OpenCode는 빈 줄 뒤에 비어 있지 않은 인수를 덧붙입니다.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+`/explain src/cache.ts`에서는 프롬프트가 다음과 같아집니다.
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## 셸
+
+`!` 뒤에 셸 명령어를 백틱으로 감싸 쓰면 프롬프트를 제출하기 전에 그 출력이 삽입됩니다.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode는 활성 프로젝트 위치에서 구성된 셸로 각 블록을 실행하고 그 결합된 출력을 삽입합니다. 인수
+플레이스홀더가 먼저 확장됩니다.
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+`/history 5`에서는 셸이 `git log --oneline -5`를 받습니다. 신뢰할 수 없는 인수를 셸 블록 안에 넣지 마세요.
+
+<Callout type="warning">
+  셸 블록은 에이전트의 도구 권한 흐름 밖에서, OpenCode가 명령어를 평가할 때 실행됩니다. 신뢰하는 출처의
+  명령어만 사용하세요.
+</Callout>
+
+## 첨부 파일
+
+저장된 템플릿은 `@path`를 확장하지 않으며, 일반 프롬프트 텍스트로 남습니다.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+파일을 첨부하려면 명령어를 호출할 때 입력창에서 추가하세요. OpenCode는 확장된 프롬프트를 제출할 때 그 첨부
+파일을 유지합니다.
+
+## 실행
+
+OpenCode는 먼저 명령어의 인수와 셸 블록을 확장한 다음, 결과를 세션에 저장되는 사용자 프롬프트로 제출합니다. 기본적으로 현재 세션에서
+실행됩니다.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+`/plan migration`을 실행하면 프롬프트를 제출하기 전에 현재 세션이 `plan`으로 전환됩니다.
+
+모델 선택은 다음 규칙을 따릅니다.
+
+1. 명령어의 `model`이 다른 모든 모델을 재정의합니다.
+2. 그렇지 않으면 선택한 명령어 에이전트에 구성된 모델이 호출 시점의 활성 모델을 재정의합니다.
+3. 그렇지 않으면 현재 세션 모델이 활성 상태로 유지됩니다.
+
+예를 들어 이 명령어는 에이전트와 명시적 모델을 모두 선택합니다.
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## 백그라운드
+
+`subagent: true`를 설정하면 명령어가 백그라운드 하위 세션에서 실행됩니다.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+상위 세션은 계속 사용할 수 있고 에이전트와 모델을 유지합니다. 하위 세션이 끝나면 OpenCode가 결과나 실패를
+상위로 보냅니다.
+
+| 값 | 동작 |
+| --- | --- |
+| `true` | 선택한 에이전트가 `mode: primary`여도 항상 하위 세션 사용 |
+| `false` | 선택한 에이전트가 `mode: subagent`여도 항상 현재 세션 사용 |
+| 생략 | 선택한 에이전트가 `mode: subagent`일 때만 하위 세션 사용 |
+
+하위 세션은 명령어 모델, 선택한 에이전트의 모델, 상위 모델 순서로 사용합니다. 이전 `subtask`도 계속
+받아들이며, 두 필드가 모두 있으면 `subagent`가 우선합니다.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+이 예제는 `subagent`가 우선하므로 현재 세션에서 실행됩니다.
+
+## 로드
+
+Markdown과 JSON 명령어는 하나의 레지스트리를 공유합니다. 나중 소스가 같은 이름의 이전 명령어를 대체합니다.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+프로젝트 소스는 전역 소스보다, 더 가까운 프로젝트 소스는 상위 소스보다 우선합니다. 커스텀 정의가 이전 내장
+명령어를 대체할 수도 있습니다. OpenCode는 명령어 파일과 구성 변경을 자동으로 다시 로드합니다.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+이 파일을 저장하면 OpenCode를 다시 시작하지 않고 `/review`가 업데이트됩니다.
+

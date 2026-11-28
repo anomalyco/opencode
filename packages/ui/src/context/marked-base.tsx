@@ -56,12 +56,12 @@ export function parseSmallMarkdown(text: string) {
   }
 
   const tokens = parser.lexer(text)
-  let code = false
+  let worker = false
   parser.walkTokens(tokens, (token) => {
-    if (token.type === "code") code = true
+    if (token.type === "code" || token.type === "checkbox") worker = true
   })
 
-  if (code) return
+  if (worker) return
 
   return parser.parser(tokens)
 }

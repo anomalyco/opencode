@@ -1,0 +1,370 @@
+---
+title: "ACP"
+description: "Agent Client Protocol 클라이언트에서 OpenCode를 사용하세요."
+---
+
+`opencode acp`는 OpenCode를 [Agent Client Protocol](https://agentclientprotocol.com) 에이전트로 실행하므로 Zed 같은 ACP 클라이언트에서 사용할 수 있습니다. 다음 예제는 Zed에 OpenCode를 추가합니다.
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+다른 ACP 클라이언트도 같은 명령과 `acp` 인수를 사용하지만 구성 파일과 필드 이름은 다를 수 있습니다. 그래픽 클라이언트가 `opencode`를 찾지 못하면 `command`를 `which opencode`가 출력하는 절대 경로로 설정하세요.
+
+## 인증
+
+OpenCode는 이미 가진 제공자 자격 증명을 사용합니다. ACP 클라이언트를 시작하기 전에 터미널에서 로그인하세요.
+
+```bash
+opencode auth login
+```
+
+OpenCode는 인증 방법을 하나 제공합니다. `opencode-login`입니다. 기본적으로 에이전트 인증 방법이며, `authenticate` 요청은 그 방법만 받고 자격 증명을 수집하지 않습니다. 제공자가 인증을 요구해 프롬프트가 실패하면 OpenCode는 ACP의 `auth_required` 오류를 반환합니다.
+
+클라이언트가 `clientCapabilities.auth.terminal`을 `true`로 설정하면 인증 방법은 터미널 인증 방법이 됩니다.
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+클라이언트는 이 방법을 `authenticate`에 보내면 안 됩니다. 대신 OpenCode를 시작하는 명령에 `--login`을 추가해(예:
+`opencode acp --login`) 터미널에서 실행합니다. OpenCode는 `opencode auth login` 흐름을 실행하고 종료합니다. 종료
+상태 0은 로그인 성공을 뜻합니다. 그러면 클라이언트가 다시 연결해 `initialize`를 다시 보냅니다.
+
+클라이언트가 `clientCapabilities._meta["terminal-auth"]`를 `true`로 설정하면 인증 방법에 로그인 명령이 포함됩니다.
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## 문제 해결
+
+`opencode acp`는 stdin에서 ACP 메시지를 기다리므로 터미널에서 직접 실행하면 멈춘 것처럼 보입니다. 대신 ACP
+클라이언트에서 시작하세요.
+
+프로세스가 종료되었거나 잘못된 프로토콜 출력을 썼다고 클라이언트가 보고하면 클라이언트 인수에서 `--print-logs`를
+`acp` 앞에 추가하세요. 그러면 OpenCode가 ACP 및 비공개 서버 로그를 stderr에 씁니다. stdout에는 ACP
+메시지만 전달됩니다.
+
+```bash
+opencode --print-logs acp
+```
+
+## 프로토콜 참조
+
+이 섹션은 ACP 클라이언트 작성자를 위한 것입니다. OpenCode가 지원하는 ACP 부분과 OpenCode가 추가하는 `_meta` 키를
+나열합니다. 이 키를 모르는 클라이언트는 무시해도 됩니다. 메시지 정의는
+[ACP 문서](https://agentclientprotocol.com)에 있습니다.
+
+### 전송
+
+클라이언트는 `opencode acp`를 하위 프로세스로 시작합니다. 클라이언트와 OpenCode는 ACP 프로토콜 버전 1을 사용합니다. stdin과 stdout을 통해 JSON-RPC 메시지를 한 줄씩 주고받습니다.
+
+`opencode acp`는 자체 사용을 위해 비공개 OpenCode 서버를 시작합니다. 공유 백그라운드 서비스에 연결하지 않고
+ACP용 네트워크 포트를 열지 않습니다. 한 프로세스가 여러 ACP 세션을 처리할 수 있으며, 클라이언트가 stdin을 닫으면
+종료됩니다.
+
+### 기능
+
+OpenCode의 `initialize` 응답에는 다음 에이전트 기능이 포함됩니다.
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode는 다음 클라이언트 기능을 읽습니다.
+
+| 기능                                   | 효과                                                         |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `auth.terminal`이 `true`               | 인증 방법이 [터미널 인증 방법](#authentication)입니다.  |
+| `elicitation.form`                     | OpenCode가 [질문](#questions)을 양식에 표시합니다.                |
+| `session.compaction`                   | OpenCode가 ACP 업데이트로 [압축](#compaction)을 보고합니다. |
+| `_meta["terminal-auth"]`가 `true`      | 인증 방법에 [로그인 명령](#authentication)이 포함됩니다. |
+
+### 세션
+
+클라이언트는 세션을 만들 때 작업 디렉터리를 설정합니다. OpenCode는 해당 디렉터리의 구성(모델, 에이전트, 명령어, 스킬, 지침, 플러그인, MCP 서버 포함)을 사용합니다.
+
+- `cwd`는 절대 경로여야 합니다. OpenCode는 상대 `cwd`를 잘못된 매개변수 오류로 거부합니다.
+- `session/load`는 저장된 메시지를 재생합니다. `session/resume`과 `session/fork`는 재생하지 않습니다.
+- 세션을 로드, 재개, 포크하려면 클라이언트가 해당 세션의 디렉터리를 `cwd`로 전달하거나 같은 프로젝트의 다른
+  디렉터리(예: 워크트리로 옮겨 간 세션의 메인 체크아웃)를 전달해야 합니다. 다른 `cwd`는 `data.directory`가 세션
+  디렉터리인 잘못된 매개변수 오류로 거부됩니다.
+- `session/list`는 페이지당 최대 100개 세션을 반환합니다. `cwd` 필터와 `cursor`를 받습니다. 각 서브에이전트
+  세션은 `_meta["opencode/child-session"]`을 가지며 그 안에 `id`, `parentID`, `title`이 있습니다.
+- OpenCode가 세션 이름을 바꾸면(예: 제목 생성 후) `session_info_update`를 보내며 새 `title`을 담습니다.
+- `session/close`는 진행 중인 작업을 중단하고 ACP 프로세스에서 세션을 분리합니다. 저장된 세션은 유지됩니다.
+- `session/delete`는 `session/cancel`처럼 활성 프롬프트를 끝낸 뒤 세션을 제거합니다. 없는 세션을 삭제해도
+  성공합니다.
+- 세션은 한 번에 하나의 프롬프트를 실행합니다. 첫 프롬프트가 활성인 동안 두 번째 `session/prompt`에는 오류를
+  반환합니다.
+- 프롬프트가 실패하면 오류의 `data`에 실패의 `errorName`이 있습니다. 제공자가 보냈으면 `status`와
+  `retryAfterMs`도 있습니다.
+
+### 취소
+
+`session/cancel`은 `stopReason: "cancelled"`로 활성 프롬프트를 끝냅니다. 프롬프트 요청에 대한 `$/cancel_request`도
+같습니다. OpenCode는 대기 중인 권한 요청을 거부합니다. 취소 후 끝나지 않은 도구 호출은 `failed`로 보고합니다.
+
+### 추가 디렉터리
+
+클라이언트는 `additionalDirectories`를 `session/new`, `session/load`, `session/resume`, `session/fork`에서 전달할 수 있습니다.
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- 각 항목은 `*`나 `?`가 없는 절대 경로여야 합니다.
+- OpenCode는 각 루트 안의 외부 디렉터리 접근을 허용합니다. 읽기, 편집, 셸 권한 규칙은 계속 적용됩니다.
+- 각 요청의 목록은 [추가 디렉터리 RFD](https://agentclientprotocol.com/rfds/additional-directories)에 명시된 대로
+  세션의 이전 목록을 대체합니다.
+- OpenCode는 권한을 세션에 저장하므로 다른 OpenCode 클라이언트가 그 세션을 사용할 때도 적용됩니다. 하위 세션은
+  OpenCode가 만들 때 권한을 복사합니다.
+
+`session/list`는 각 세션에 저장된 목록을 `additionalDirectories`로 반환합니다.
+
+### 구성 옵션
+
+새 세션은 디렉터리의 기본 모델과 기본 에이전트를 사용합니다. `session/new`, `session/load`, `session/resume`,
+`session/fork` 응답에는 다음 구성 옵션이 포함됩니다.
+
+| ID       | 카테고리        | 값                                                                        |
+| -------- | --------------- | ----------------------------------------------------------------------------- |
+| `model`  | `model`         | 활성화된 모델을 `provider/model`로. `/variant` 접미사는 추론 강도도 설정합니다. |
+| `effort` | `thought_level` | 모델의 변형과 `default`. 변형이 있는 모델에만 표시됩니다.    |
+| `mode`   | `mode`          | 표시되는 기본 에이전트.                                                       |
+
+각 `model` 옵션 이름은 제공자의 표시 이름과 모델 이름을 따릅니다. 예를 들어
+`Anthropic / Claude Sonnet 5.5`입니다. `session/set_config_option`은 문자열 값을 받습니다.
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-5-5" }
+```
+
+`session/set_mode`도 에이전트를 설정합니다. OpenCode는 사용 가능한 모델이나 에이전트가 바뀌면 `config_option_update`를 보냅니다. 다른 클라이언트가 세션의 모델이나 에이전트를 바꿔도 하나를 보냅니다.
+
+### 프롬프트 내용
+
+프롬프트에는 텍스트, 이미지, 내장 리소스, 리소스 링크가 들어갈 수 있습니다. OpenCode는 오디오 블록을 무시합니다. 다른 블록은 다음과 같이 처리합니다.
+
+| 블록                                                 | OpenCode가 하는 일                                                                     |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `text`                                                | 모델에 보냅니다.                                                                 |
+| `text`(대상이 `assistant`만)                 | 사용자 메시지 밖의 별도 컨텍스트로 모델에 보냅니다.                 |
+| `text`(대상이 `user`만)                      | 모델 입력에서 제외합니다.                                                    |
+| `image`(`data` 포함)                                   | 프롬프트에 첨부합니다.                                                             |
+| `image`(`uri`만)                               | 리소스 링크로 처리합니다.                                                         |
+| `resource`(`text` 포함)                                | 리소스의 경로나 URI 뒤에 텍스트를 인라인으로 넣습니다.                                     |
+| `resource`(`blob` 포함)                                | 첨부합니다. `mimeType`이 없으면 URI의 파일 이름에서 추론합니다.                 |
+| `resource_link`(`file:` URI)                      | 파일을 첨부합니다. 파일이 없거나 읽을 수 없으면 대신 Markdown 링크를 보냅니다. |
+| `resource_link`(`zed://` URI의 `path` 쿼리) | `path`의 파일을 첨부합니다.                                                           |
+| `resource_link`(다른 URI)                        | `[spec](https://example.com/spec.md)` 같은 Markdown 링크를 보냅니다.                   |
+
+대상은 블록의 `annotations`에서 가져옵니다. OpenCode는 `image` 블록에 `data`도 `uri`도 없으면 거부합니다.
+다음 블록은 모델만을 위한 컨텍스트입니다.
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### 명령어
+
+`session/new`, `session/load`, `session/resume`, `session/fork` 후에 OpenCode는 `available_commands_update`를 보내며 디렉터리의 명령어, 내장 `compact` 명령어, 디렉터리의 스킬을 담습니다. 명령어나 스킬이 바뀌면 다시 보냅니다.
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+프롬프트가 `/`와 사용 가능한 명령어 이름으로 시작하면 OpenCode는 나머지 텍스트를 인수로 그 명령어를 실행합니다.
+`/`와 스킬 ID로 시작하면 해당 스킬을 붙여 프롬프트를 보냅니다. `/`로 시작하는 다른 텍스트는 일반 프롬프트로
+보냅니다. `/compact`는 [압축](/compaction)을 실행합니다. ID가 명령어와 일치하는 스킬은 나열하지 않습니다.
+
+명령어가 실패하면 프롬프트는 명령어 자체의 메시지(예: 사용법)와 `data.service`가 `command`로 설정된 오류로 실패합니다.
+
+### MCP 서버
+
+클라이언트는 `session/new`, `session/load`, `session/resume`, `session/fork`에서 stdio 및 HTTP MCP 서버를 전달할 수 있습니다. OpenCode는 `opencode acp` 프로세스가 살아 있는 동안 세션 디렉터리에 이를 추가하므로 그 디렉터리의 다른 세션도 사용할 수 있습니다. OpenCode가 유휴 디렉터리를 내리면 세션의 다음 프롬프트 전에 다시 추가합니다. HTTP 헤더는 그대로 전달하며 이 서버들에는 OAuth를 사용하지 않습니다. SSE를 통한 MCP는 알리지 않고 ACP를 통한 MCP는 지원하지 않습니다.
+
+| 경우                             | 동작                                                           |
+| -------------------------------- | ------------------------------------------------------------------ |
+| 구성된 서버와 같은 이름 | 클라이언트의 서버가 해당 디렉터리에서 구성된 서버를 대체합니다. |
+| [정책](/policies)            | `integration.use` 규칙은 계속 적용됩니다.                               |
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### 권한
+
+권한 요청은 세 가지 선택지를 제공합니다.
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+요청이 파일을 변경하면 OpenCode는 변경 미리보기를 만들 수 있을 때 `diff` 내용을 포함합니다.
+
+### 질문
+
+클라이언트가 `elicitation.form`을 알리면 OpenCode는 양식 모드의 `elicitation/create`로 질문합니다. 요청에는 `toolCallId`가 포함됩니다. OpenCode가 그 도구 호출을 이 세션의 `session/update`로 보냈을 때입니다.
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode는 비밀을 수집할 수 있는 양식을 절대 보내지 않습니다. "Which API token should I use?"처럼 비밀을 묻는
+  듯한 선택지도 입력된 답변 없이 전송됩니다.
+- 필드가 옵션 옆에 직접 입력 답변을 받으면 스키마에 선택적 `<key>_custom` 문자열 속성이 추가됩니다. 단일
+  선택에서는 비어 있지 않은 사용자 답변이 선택된 옵션을 대체합니다. 다중 선택에서는 선택된 옵션에 추가됩니다.
+- 사용자가 양식을 거부하거나 취소하면 질문이 취소됩니다.
+
+OpenCode가 질문을 표시할 수 없으면 질문을 취소하고 모델에 답변 없이 계속하라고 알립니다.
+
+### 압축
+
+클라이언트가 `session.compaction`을 알리면 OpenCode는 미리보기 단계인 ACP의 [세션
+압축](https://agentclientprotocol.com/rfds/session-compaction) RFD에 있는 `compaction_update`와
+`compaction_summary_chunk` 업데이트로 압축을 보고합니다. 클라이언트가 세션을 로드하면 완료되었거나 실패한 각
+압축을 하나의 업데이트로 재생합니다.
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+다른 클라이언트는 대신 [압축 마커](#compaction-marker)를 받습니다. 하위 세션 압축도 마찬가지입니다.
+
+### 사용량
+
+프롬프트 응답에는 초안인 [턴 종료 사용량](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD의 `usage`가 포함됩니다. `usage`는 이 세션에서 프롬프트를 처리하는 데 사용한 모델 호출의 사용량을 합산합니다. 하위 세션의 사용량은 포함하지 않습니다.
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+응답 전에 OpenCode는 [세션 사용량](https://agentclientprotocol.com/rfds/session-usage) RFD의 `usage_update`를
+보냅니다. 프롬프트가 토큰을 사용했고 OpenCode가 모델의 컨텍스트 크기를 알 때만 보냅니다. `cost`는 세션과 그
+하위 세션의 총 비용(USD)입니다.
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### 하위 세션
+
+프롬프트가 실행되는 동안 OpenCode는 하위 세션의 업데이트를 프롬프트 세션의 `session/update` 알림으로 보냅니다. 각 업데이트에는 `_meta["opencode/child-session"]`이 있습니다. OpenCode는 도구 호출 ID 앞에 `<childSessionId>:`를 붙입니다. 하위 세션에 제목이 있으면 도구 호출 제목 앞에 그 제목을 붙입니다.
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| 필드      | 타입     | 설명                                                                            |
+| ---------- | -------- | -------------------------------------------------------------------------------------- |
+| `id`       | `string` | 하위 세션의 ID.                                                                |
+| `parentID` | `string` | 하위 세션의 상위 세션 ID.                                          |
+| `depth`    | `number` | 프롬프트를 실행한 세션의 바로 아래는 1, 그 아래는 2이며, 한 단계 내려갈 때마다 1씩 늘어납니다. |
+| `title`    | `string` | 하위 세션의 제목. 하위 세션에 제목이 없으면 OpenCode가 생략합니다.      |
+
+하위 세션의 권한 요청은 `toolCall._meta`에 같은 키를 담습니다. 프롬프트가 끝나면 OpenCode는 하위 세션 업데이트 전송을 멈춥니다. 하위 세션의 권한 요청과 질문은 계속 클라이언트에 도달합니다.
+
+### 재시도 상태
+
+모델 호출이 실패해 OpenCode가 재시도를 예약하면 `session_info_update`를 보내며 `_meta["opencode/retry"]`를 담습니다. 재시도가 시작되면 `"opencode/retry": null`을 보냅니다. 프롬프트 응답이 오면 재시도 상태를 지우세요.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| 필드         | 타입     | 설명                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `attempt`     | `number` | 몇 번째 재시도인지 나타내는 번호.                                                                  |
+| `nextRetryAt` | `string` | 다음 시도 시각(ISO 8601).                                          |
+| `error`       | `object` | `type`과 `message`가 있습니다. 제공자가 보냈으면 `status`와 `response.body`도 있습니다. |
+
+### 압축 마커
+
+클라이언트가 `session.compaction`을 알리지 않으면 OpenCode는 `session_info_update`로 압축 진행 상황을 보고하며 `_meta["opencode/compaction"]`을 담습니다. 하위 세션 압축에는 항상 마커를 사용합니다.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| 필드       | 타입     | 설명                                                                          |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `status`    | `string` | `started`, `completed`, `failed` 중 하나. 취소된 압축은 `failed`입니다.             |
+| `messageId` | `string` | 압축의 시작과 끝을 연결합니다. 불투명 키로 취급하세요.                  |
+| `reason`    | `string` | `auto` 또는 `manual`.                                                                  |
+| `error`     | `object` | `status`가 `failed`일 때 있습니다. [재시도](#retry-status) `error`와 같은 형태입니다. |
+
+마커에는 요약이 포함되지 않습니다. 자동 압축은 `started` 마커 없이 실패할 수 있습니다. 클라이언트가 세션을 로드하면 완료되었거나 실패한 각 압축을 하나의 마커로 재생합니다.
+

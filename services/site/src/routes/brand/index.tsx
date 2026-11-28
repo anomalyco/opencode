@@ -21,6 +21,7 @@ import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd } from "~/component/structured-data"
 import { useLanguage } from "~/context/language"
 import { englishText, localize } from "~/i18n/content"
+import { sentenceGap } from "~/i18n/rich"
 import { brandSource } from "~/i18n/content/areas/brand"
 import { Site } from "~/component/site/site"
 import { useI18n } from "~/context/i18n"
@@ -914,7 +915,14 @@ export default function Brand() {
                             <span data-slot="name">{swatch.name}</span>
                             <span data-slot="use">
                               {swatch.use}
-                              <Show when={"ink" in swatch && swatch.ink}>{(ink) => <> {ink()}</>}</Show>
+                              <Show when={"ink" in swatch && swatch.ink}>
+                                {(ink) => (
+                                  <>
+                                    {sentenceGap(swatch.use)}
+                                    {ink()}
+                                  </>
+                                )}
+                              </Show>
                             </span>
                           </div>
                           {/* Each row copies its value: the icon turns into a check and "Copied" is announced. */}
@@ -1166,7 +1174,9 @@ export default function Brand() {
           <p data-slot="text">{content().integrations.body}</p>
           <Show when={siteSettings.brandBadge === "on"}>
             <p data-slot="text" data-design="brandBadge">
-              {content().integrations.badges.body} {content().integrations.badges.sizes}
+              {content().integrations.badges.body}
+              {sentenceGap(content().integrations.badges.body)}
+              {content().integrations.badges.sizes}
             </p>
             <For each={content().integrations.badges.groups}>
               {(group) => (
@@ -1198,7 +1208,7 @@ export default function Brand() {
                           <PartnerLockup partner={partner.name} />
                         </div>
                         <span data-slot="name">
-                          OpenCode × {partner.name}, {themeName(tone)}
+                          {i18n.t("brand.ui.lockupName", { partner: partner.name, theme: themeName(tone) })}
                         </span>
                       </li>
                     )}
@@ -1230,7 +1240,9 @@ export default function Brand() {
         </Heading>
         <div data-slot="body">
           <p data-slot="text">
-            {content().trademarks.body} {content().trademarks.contact.before}
+            {content().trademarks.body}
+            {sentenceGap(content().trademarks.body)}
+            {content().trademarks.contact.before}
             <a href={`mailto:${content().trademarks.contact.email}`}>{content().trademarks.contact.email}</a>
             {content().trademarks.contact.after}
           </p>

@@ -1,0 +1,203 @@
+---
+title: "API for modelliste"
+description: "Hent modellene et arbeidsområde kan bruke, med grenser, priser, egenskaper og Console-URL-en for hver modell."
+---
+
+Det finnes to typer modellister. [Console-listen](#console-model-list) returnerer alt et arbeidsområde kan bruke,
+inkludert leverandørene det har koblet til. [Inferenslistene](#inference-model-lists) returnerer de offentlige OpenCode Models- og
+Go-katalogene i OpenAIs listeformat.
+
+| Liste                                               | Returnerer                                                                                     | Nøkkel   |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------- |
+| [`/console/api/v1/models`](#console-model-list)     | Alle leverandører og modeller den som kaller, kan bruke, med arbeidsområdets endringer anvendt. | Påkrevd  |
+| [`/inference/v1/models`](#inference-model-lists)    | OpenCode Models. Alle offentlige modeller uten nøkkel; med nøkkel, modellene arbeidsområdet kan bruke. | Valgfri  |
+| [`/inference/go/v1/models`](#inference-model-lists) | [Go](/console/go)-modeller, i samme formater.                                                  | Valgfri  |
+
+Bruk Console-listen når klienten din skal tilby de samme modellene som OpenCode, inkludert tilkoblede leverandører. Bruk en
+inferensliste når du bare trenger OpenCode Models eller Go, eller når du ikke har noen nøkkel ennå og vil ha den offentlige katalogen.
+
+## Console-modelliste
+
+`GET https://opencode.ai/console/api/v1/models` returnerer alle leverandørene den som sender forespørselen, har tilgang til. Under hver
+leverandør vises modellene som vedkommende kan bruke.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+Ethvert medlem av arbeidsområdet kan kalle den: fra en nettleserøkt, en OpenCode-pålogging, en [personlig API-nøkkel](/console/api#personal-api-keys)
+eller en [tjenestekontonøkkel](/console/api#service-accounts) med **Models › Read**. Den bruker de samme reglene som OpenCode-konfigurasjonen
+Console genererer, så listen samsvarer med det `/models` viser i OpenCode. Svaret bufres aldri
+(`Cache-Control: private, no-store`).
+
+### Leverandører
+
+Svaret er et objekt med leverandør-ID som nøkkel, som er ID-en OpenCode bruker.
+
+| Leverandør-ID               | Leverandør                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `opencode`                  | [OpenCode Models](/console/models), betalt fra arbeidsområdets kreditter.                                                        |
+| `opencode-go`               | [Go](/console/go)-modeller. Bare til stede med et Go-abonnement.                                                                 |
+| `console-<connection slug>` | En [tilkobling](/console/providers) arbeidsområdet har lagt til, for eksempel `console-openai`, `console-anthropic` eller `console-aws-bedrock`. |
+
+Hver leverandør har `id`, `name` og `models`. `name` er navnet OpenCode viser, vanligvis arbeidsområdenavnet etterfulgt av
+leverandørnavnet. `models` er et objekt med modell-ID som nøkkel.
+
+### Eksempel
+
+Kortet ned til én leverandør og én modell:
+
+```json
+{
+  "opencode": {
+    "id": "opencode",
+    "name": "Acme Inc. / OpenCode",
+    "models": {
+      "claude-sonnet-5-5": {
+        "type": "chat",
+        "id": "claude-sonnet-5-5",
+        "canonical_id": "anthropic/claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5",
+        "description": "Fast Claude model for everyday coding, agents, and knowledge work",
+        "family": "claude-sonnet",
+        "open_weights": false,
+        "knowledge": "2026-06",
+        "release_date": "2026-09-28",
+        "last_updated": "2026-09-28",
+        "modalities": {
+          "input": ["text", "image/jpeg", "image/png", "application/pdf"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": { "supported": true },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "medium", "high", "xhigh", "max"]
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 2,
+              "cache": { "read": 0.1, "write": 2.5 }
+            },
+            "output": { "price": 10 }
+          }
+        },
+        "api": {
+          "messages": {
+            "base_url": "https://opencode.ai/inference/anthropic/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/anthropic",
+              "opencodeai": "@opencode/ai/providers/anthropic"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Felt
+
+For hver modell får du v2-oppføringen fra [models.dev](https://models.dev), med endringene fra arbeidsområdet. Feltene er dermed de samme
+som [models.dev publiserer](https://models.dev/experimental/v2.0/api.json). Deaktiverte modeller og modeller som models.dev markerer
+som utfaset, utelates.
+
+| Felt           | Betydning                                                                                                                                                                                                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | Typen modell, for eksempel `chat`, `embedding`, `image` eller `decision`.                                                                                                                                                                                                           |
+| `id`           | Modell-ID-en som sendes i forespørsler. Den er også nøkkelen i `models`.                                                                                                                                                                                                             |
+| `name`         | Visningsnavn.                                                                                                                                                                                                                                                                       |
+| `limit`        | `context` er kontekstvinduet. `input` begrenser en forespørsels inndata når modellen setter en grense. `output` begrenser svaret.                                                                                                                                                    |
+| `cost`         | Amerikanske dollar per 1M tokens: `text.input.price`, `text.input.cache.read`, `text.input.cache.write` og `text.output.price`. `0` betyr gratis. Manglende bufferfelt betyr at modellen ikke har bufferpris. Enkelte modeller legger til `cost.multipliers`, som øker prisen på tidspunktene de angir. |
+| `capabilities` | Hva modellen kan, for eksempel verktøykall og resonneringsinnsats.                                                                                                                                                                                                                   |
+| `modalities`   | Godtatte inndatatyper, for eksempel `text`, `image/png` eller `application/pdf`, og utdatatyper.                                                                                                                                                                                    |
+| `api`          | Console-URLen og SDK-et som skal brukes for denne modellen. Se [Modell-API](#model-api).                                                                                                                                                                                             |
+
+### Modell-API
+
+`api` har én oppføring, med nøkkel etter protokollen modellen støtter: `chat-completions` for OpenAI Chat Completions, `responses`
+for OpenAI Responses, `messages` for Anthropic Messages, `generate-content` for Gemini og `embeddings` for
+[OpenAI Embeddings](/console/models#embedding-models). Oppføringen kommer fra models.dev, men leverandørens URL er byttet ut med
+URL-en til Console. De andre protokollene er utelatt.
+
+| Felt             | Betydning                                                                                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`       | Hvor forespørsler for denne modellen skal sendes. OpenCode Models bruker `https://opencode.ai/inference/...`, Go bruker `https://opencode.ai/inference/go/...`, og en tilkobling bruker sin Console-API-URL, `https://opencode.ai/inference/custom/<connection_id>`. |
+| `sdk.aisdk`      | AI SDK-pakken for protokollen, den samme som i tabellen over [modellendepunkter](/console/models#endpoints).                                                                                                                                       |
+| `sdk.opencodeai` | Den tilhørende leverandørmodulen OpenCode laster.                                                                                                                                                                                                  |
+
+En modell på en tilkobling du har lagt til, ser slik ut. Legg til protokollens sti, for eksempel `/chat/completions` eller
+`/responses`, som beskrevet i [API-et for leverandører](/console/api/providers#endpoints).
+
+```json
+"api": {
+  "responses": {
+    "base_url": "https://opencode.ai/inference/custom/conn_...",
+    "sdk": {
+      "aisdk": "@ai-sdk/openai",
+      "opencodeai": "@opencode/ai/providers/openai/responses"
+    }
+  }
+}
+```
+
+## Inferensmodellister
+
+`GET https://opencode.ai/inference/v1/models` lister OpenCode Models, og `GET https://opencode.ai/inference/go/v1/models`
+lister Go-modeller. Begge returnerer OpenAIs listeformat.
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+Kortet ned til én modell og dens vanlige felt:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "claude-sonnet-5-5",
+      "object": "model",
+      "created": 1795006281,
+      "owned_by": "opencode",
+      "name": "Claude Sonnet 5.5",
+      "type": "chat",
+      "limit": { "context": 1000000, "output": 128000 },
+      "cost": {
+        "text": {
+          "input": { "price": 2, "cache": { "read": 0.1, "write": 2.5 } },
+          "output": { "price": 10 }
+        }
+      }
+    }
+  ]
+}
+```
+
+Uten en nøkkel har en liste alle offentlige modeller. Med en nøkkel har den bare modellene som arbeidsområdet til nøkkelen kan bruke, så en
+tjenestekontonøkkel trenger **Models › Read**. Send den i `Authorization: Bearer` eller `x-api-key`. Modeller som er
+private eller utfaset, utelates.
+
+Hvert element starter med OpenAIs `id`, `object`, `created` og `owned_by`, og deretter de samme models.dev-feltene som
+[Console-listen](#fields) bruker: `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`, `api`, `family`,
+`release_date` og andre. I motsetning til Console-listen inkluderer ikke inferenslistene arbeidsområdets tilkoblinger. Hvis
+models.dev-data midlertidig er utilgjengelige, vises elementene fortsatt med bare OpenAIs felt, og `name` tilsvarer ID-en.
+
+Hver Go-modell har også `go`: modellens månedlige bruksgrense for hvert abonnement (`monthly_usage`), om forespørsler brukes til trening
+(`training`), om ingen av dataene dine lagres (`zdr`), og om modellen er utilgjengelig i enkelte land (`limited_regions`).
+
+## Feil
+
+| Status | Betydning                                                                              |
+| ------ | -------------------------------------------------------------------------------------- |
+| `401`  | Tilgangsopplysninger mangler, eller nøkkelen er utløpt eller tilbakekalt.               |
+| `403`  | Nøkkelen kan ikke liste modeller. Tjenestekonto- og begrensede nøkler trenger **Models › Read**. |

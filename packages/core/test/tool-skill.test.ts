@@ -106,7 +106,10 @@ describe("SkillTool", () => {
           })
           const skills = Layer.mock(Skill.Service, {
             get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            resolve: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            instructions: (id) => Effect.succeed(current.find((skill) => skill.id === id)?.content ?? ""),
             files: () => Effect.undefined,
+            approval: (id) => Effect.succeed({ resources: [id], save: [id] }),
             list: () => Effect.succeed(current),
           })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [

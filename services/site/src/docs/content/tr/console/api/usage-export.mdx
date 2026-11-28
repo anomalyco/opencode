@@ -1,0 +1,113 @@
+---
+title: "Kullanım dışa aktarma API'si"
+description: "Bir çalışma alanının günlük kullanımını CSV olarak indirin; her gün, kişi, sağlayıcı ve model için istekler, token'lar ve maliyet dahil."
+---
+
+`GET https://opencode.ai/console/api/v2/usage/export` bir çalışma alanının kullanımını CSV olarak, UTC günü, üye veya
+hizmet hesabı, sağlayıcı ve model başına bir satırla döndürür. **Activity › Usage** sayfasındaki **Export usage**
+düğmesinin indirdiği dosyanın aynısıdır.
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=30d" \
+  --header "Authorization: Bearer oc_sk_..." \
+  --output usage-30d.csv
+```
+
+## Kimlik doğrulama
+
+Bir [API anahtarını](/console/api#api-keys) bearer token olarak gönderin. Yalnızca anahtarın oluşturulduğu çalışma alanının kullanımını dışa aktarabilirsiniz.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+Anahtarın **Usage › Read** izni olmalıdır. **All** veya **Read only** olan anahtarlarda bu izin vardır. Kısıtlı bir
+anahtar şunlara ihtiyaç duyar:
+
+```text
+Permissions: Restricted
+Usage:       Read
+```
+
+Zamanlanmış dışa aktarımlar için bir [hizmet hesabı anahtarı](/console/api#service-accounts) veya bir sahip ya da
+yöneticinin [kişisel API anahtarını](/console/api#personal-api-keys) kullanın. Üyeler çalışma alanı kullanımını
+okuyamaz; bu nedenle anahtarları `403` döndürür.
+
+## İstek
+
+| Parametre | Gerekli | Değer                                                                                                                 |
+| --------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| `range`   | Evet    | `7d`, `30d` veya `90d`.                                                                                                |
+| `user_id` | Hayır   | Bir üye kimliği (`user_...`) veya hizmet hesabı kimliği (`svcacct_...`). Yalnızca o üyenin veya hizmet hesabının satırlarını döndürür. |
+
+`range`, günleri UTC'ye göre sayar ve bugünü de kapsar. Örneğin `7d`, bugünü ve önceki altı günü kapsar. Bugüne ait satırlardaki toplamlar UTC'ye göre gece yarısına kadar artmaya devam eder.
+
+Tek bir hizmet hesabının kullanımını dışa aktarmak için kimliğini önceki bir dışa aktarımın `user_id` sütunundan iletin:
+
+```bash
+curl --fail-with-body "https://opencode.ai/console/api/v2/usage/export?range=7d&user_id=svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+Çalışma alanında olmayan bir kimlik yalnızca başlık satırını döndürür.
+
+## Yanıt
+
+Başarılı bir istek `200` ve `Content-Type: text/csv; charset=utf-8` döndürür. İlk satır başlıktır. Ardından en yeni gün
+önce olacak şekilde satırlar gelir.
+
+```csv
+day,user_type,user_id,user_name,provider,model,requests,input_tokens,output_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,cost_micro_cents,cost_usd
+2026-11-24,service_account,svcacct_01JD8Z4Q2W7N3K5M6P9R0S1T2V,CI Pipeline,opencode,claude-sonnet-5-5,412,1830211,96402,5120330,210044,0,1512334800,15.123348
+2026-11-24,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-haiku-5-5,57,402118,31877,880012,0,0,214500000,2.145
+2026-11-23,member,user_01JC2X7Y8Z9A0B1C2D3E4F5G6H,ada@example.com,opencode,claude-sonnet-5-5,96,711560,48210,2204118,61022,0,587000000,5.87
+```
+
+- Satırlar `\r\n` ile biter.
+- Kullanımı olmayan günlerin satırı yoktur.
+- Yanıt bir indirmedir (`Content-Disposition: attachment; filename="usage-30d.csv"`) ve asla önbelleğe alınmaz
+  (`Cache-Control: private, no-store`).
+- `=`, `+`, `-` veya `@` ile başlayan bir metin hücresinin başına `'` eklenir; böylece elektronik tablolar onu formül
+  olarak çalıştırmaz.
+
+### Sütunlar
+
+| Sütun                   | Anlamı                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `day`                   | UTC tarihi, `YYYY-MM-DD` olarak.                                                                              |
+| `user_type`             | `member` veya `service_account`.                                                                              |
+| `user_id`               | Üyenin veya hizmet hesabının kimliği.                                                                         |
+| `user_name`             | Üyenin e-postası veya hizmet hesabının adı. Boş olabilir.                                                     |
+| `provider`              | İsteklere hizmet veren sağlayıcı, örneğin [OpenCode Models](/console/models) için `opencode`.                 |
+| `model`                 | Model kimliği.                                                                                                |
+| `requests`              | İstek sayısı.                                                                                                 |
+| `input_tokens`          | Girdi token'ları.                                                                                             |
+| `output_tokens`         | Çıktı token'ları.                                                                                             |
+| `cache_read_tokens`     | Prompt önbelleğinden okunan token'lar.                                                                        |
+| `cache_write_5m_tokens` | Prompt önbelleğine 5 dakikalık ömürle yazılan token'lar.                                                      |
+| `cache_write_1h_tokens` | Prompt önbelleğine 1 saatlik ömürle yazılan token'lar.                                                        |
+| `cost_micro_cents`      | Mikro-sent cinsinden tam sayı olarak maliyet. Bir ABD doları `100000000`dir.                                  |
+| `cost_usd`              | Aynı maliyet ABD doları olarak, en az iki ondalık basamaklı tam ondalık sayı, örneğin `2.145` veya `0.00`.      |
+
+### Neler dahil
+
+- Çalışma alanının üyeleri ve hizmet hesapları tarafından yapılan her model isteği.
+- Ücretsiz modellere yapılan istekler ve üyelerin kendi Claude Code, Codex veya OpenCode abonelikleri üzerinden yaptığı
+  istekler, token'larıyla birlikte sıfır maliyetle dahil edilir.
+- [Web araması](/console/websearch) ve diğer barındırılan hizmetler dahil değildir.
+- Toplamlar yeni isteklerin yaklaşık bir dakika gerisinde kalabilir.
+
+## Sınırlar
+
+- Bir dışa aktarım en fazla 90 günü kapsar. Daha uzun geçmişi tutmak için dosyaları düzenli olarak kaydedin.
+- İstekler, Console API'sinin diğer endpoint'lerle paylaşılan hesap başına dakikada 300 istek limitine dahil edilir. Kişisel API anahtarıyla yapılan istekler, anahtarın sahibi olan üyenin limitine dahil edilir.
+
+## Hatalar
+
+| Durum | Anlamı                                                                                                |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| `400`  | `range` eksik veya `7d`, `30d`, `90d` değil ya da `user_id` bir üye veya hizmet hesabı kimliği değil. |
+| `401`  | Kimlik bilgisi yok ya da anahtar süresi dolmuş veya iptal edilmiş.                                    |
+| `403`  | Anahtarda **Usage › Read** yok veya anahtar sahip ya da yönetici olmayan bir üyeye ait.               |
+| `429`  | Hız limiti aşıldı. `Retry-After` başlığındaki saniye sayısı kadar sonra yeniden deneyin.              |
+| `503`  | Günlük toplamlar henüz kullanılamıyor. İsteği daha sonra yeniden deneyin.                             |

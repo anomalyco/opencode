@@ -4702,4 +4702,50 @@ describe("V2 mini transport", () => {
     ])
     await transport.close()
   })
+
+  test("replay limit counts only rendered messages and pages past bookkeeping rows", async () => {
+    const rows: SessionMessages = [
+      { id: "msg_idle", type: "idle", outcome: "succeeded", time: { created: 5 } },
+      {
+        id: "msg_reply",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "model" },
+        content: [{ type: "text", text: "latest reply" }],
+        time: { created: 4, completed: 4 },
+      },
+      { id: "msg_model", type: "model-switched", model: { providerID: "test", id: "model" }, time: { created: 3 } },
+      { id: "msg_prompt", type: "user", text: "latest prompt", time: { created: 2 } },
+      { id: "msg_old", type: "user", text: "older prompt", time: { created: 1 } },
+    ]
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const requests: unknown[] = []
+    spyOn(client.message, "list").mockImplementation((request) => {
+      requests.push(request)
+      const offset = Number(request.cursor ?? 0)
+      const data = rows.slice(offset, offset + (request.limit ?? 50))
+      return ok({ data, cursor: { next: String(offset + data.length) } })
+    })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      replay: true,
+      replayLimit: 2,
+      footer: ui.api,
+    })
+    expect(ui.commits.map((commit) => [commit.kind, commit.text])).toEqual([
+      ["user", "latest prompt"],
+      ["assistant", "latest reply"],
+    ])
+    expect(requests).toEqual([
+      { sessionID: "ses_1", limit: 2, order: "desc" },
+      { sessionID: "ses_1", limit: 1, cursor: "2" },
+      { sessionID: "ses_1", limit: 1, cursor: "3" },
+    ])
+    await transport.close()
+  })
 })

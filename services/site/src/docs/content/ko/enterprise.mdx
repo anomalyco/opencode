@@ -1,0 +1,126 @@
+---
+title: "엔터프라이즈"
+description: "조직의 사용자가 OpenCode에서 사용할 수 있는 모델, 제공자, 통합을 제어하세요."
+---
+
+[정책](/policies)으로 조직의 기기에서 OpenCode가 사용할 수 있는 항목을 제어하세요. 사용자나 프로젝트가 정책을 변경할 수 없도록 관리형 구성에 넣으세요.
+
+## 배포
+
+시스템 구성 파일에 정책을 추가하세요.
+
+| 플랫폼  | 파일                                                  |
+| ------- | ----------------------------------------------------- |
+| macOS   | `/Library/Application Support/opencode/opencode.json` |
+| Linux   | `/etc/opencode/opencode.json`                         |
+| Windows | `%ProgramData%\opencode\opencode.json`                |
+
+macOS에서는 MDM으로 `ai.opencode.managed` 도메인의 관리형 기본 설정으로 배포할 수도 있습니다.
+[구성 위치](/config#locations)를 참고하세요.
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+이 파일의 정책은 사용자 및 프로젝트 구성보다 우선하므로, 조직에서 차단한 항목을 사용자나 저장소에서 허용할 수 없습니다.
+[우선순위](/policies#precedence)를 참고하세요.
+
+## 무료 모델 차단
+
+로그아웃 상태의 무료 등급을 거부합니다. 나머지는 그대로 동작하며, 사용자는 자체 제공자와 계정을 연결할 수 있습니다.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+무료 등급은 계정 없이 사용하는 `opencode` 통합입니다. 로그인한 Console 계정은 `opencode#<account>`이므로 이 선언의
+영향을 받지 않습니다.
+
+Console 워크스페이스도 무료 모델을 제공할 수 있습니다. 이를 차단하려면 다음과 같이 합니다.
+
+- 자체 워크스페이스에서는 Console의 Models 탭에서 **Free models**를 끕니다.
+  [OpenCode Models](/console/providers#opencode-models)을 참고하세요.
+- 모든 계정에서 무료 모델을 숨기려면 OpenCode 서비스에 `OPENCODE_DISABLE_FREE_MODELS=1`을 설정합니다.
+  [무료 모델](/models#free-models)을 참고하세요.
+
+## Console 워크스페이스만 허용
+
+조직의 Console 워크스페이스만 허용합니다. 다른 것은 연결하거나 사용할 수 없습니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect`에는 OpenCode Console만 표시되므로 로그인할 수 있습니다.
+- 조직의 워크스페이스만 사용할 수 있습니다. 무료 등급, 개인 Console 계정, 다른 조직, 환경 변수의 API 키,
+  `opencode.json`의 제공자는 차단됩니다.
+- 워크스페이스의 모델, MCP 서버, 웹 검색은 동작합니다. 정책을 다시 배포하지 않고 Console에서 변경할 수 있습니다.
+
+`org_01M3CAP8H43Z49CER6NT0Y3ZF1`을 워크스페이스의 조직 ID로 바꾸세요. 워크스페이스에서도 무료 모델을 차단하려면
+Console에서 **Free models**를 끄세요.
+
+## 승인한 제공자만 허용
+
+모든 제공자를 거부한 뒤 승인한 제공자만 허용합니다. 이 예제는 내부 OpenAI 호환 게이트웨이만 허용합니다.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+거부된 제공자는 누군가 자격 증명을 가지고 있어도 제거됩니다. [제공자](/policies#providers)를 참고하세요.
+
+## MCP 서버와 도구 제한
+
+승인한 MCP 서버만 허용하고, 에이전트가 사용하면 안 되는 도구는 차단하세요.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+[MCP 서버, 스킬, 플러그인](/policies#mcp-servers-skills-and-plugins)과 [도구](/policies#tools)를 참고하세요.
+
+## 동작 확인
+
+- 사용자 권한으로 `/connect`와 `/models`를 실행해 허용한 항목만 표시되는지 확인하세요.
+- 서버 로그에서 경고를 확인합니다. 검증에 실패한 선언은 무시되고 나머지는 계속 적용됩니다.
+- 차단된 도구 호출은 `Blocked by configuration policy`로 실패합니다.
+
+## 버전
+
+| 작업                                                                      | 필요 버전 |
+| ------------------------------------------------------------------------- | --------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3     |
+| `websearch.use`                                                           | 2.2.6     |
+
+이전 클라이언트는 이 선언을 무시합니다.
+

@@ -6,9 +6,12 @@ import { ServiceUnavailableError } from "../errors.js"
 export const LocationQuery = Schema.Struct({
   location: Schema.optional(
     Schema.Struct({
-      directory: Schema.optional(Schema.String),
+      directory: Schema.optional(Schema.String).annotate({ description: "Absolute path of the directory." }),
     }),
-  ),
+  ).annotateKey({
+    description:
+      "Location to run the request in, sent as location[directory]. Omit to use the server's default location.",
+  }),
 }).annotate({ identifier: "LocationQuery" })
 
 export const locationQueryOpenApi = OpenApi.annotations({

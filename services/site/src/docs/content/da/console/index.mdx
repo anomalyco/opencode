@@ -1,0 +1,32 @@
+---
+title: "Introduktion til Console"
+description: "OpenCode Console er en valgfri tjeneste, der tilføjer teamarbejdsområder, modelinferens, budgetter, politikker og hostet websøgning."
+---
+
+[OpenCode Console](https://opencode.ai/console) er en valgfri tjeneste med ekstra funktioner til dig, der bruger OpenCode alene eller i et team.
+
+- [Arbejdsområder](/console/workspaces) til at dele adgang med dit [team](/console/members)
+- [Inferens](/console/models) til både proprietære og open source-modeller
+- [Udbydere](/console/providers) til at forbinde dine egne udbyderkonti gennem Console-gatewayen
+- Forbrugsstatistik og [budgetstyring](/console/budgets)
+- Udrul politikker for hele teamet for at styre OpenCodes adfærd
+- [Websøgning](/console/websearch)
+- [Harnesses](/console/harnesses) til at bruge Console-modeller fra Claude Code, Codex og andre agenter
+- [OpenCode Go, Go Plus og Go Teams](/console/go) giver adgang til open source-modeller. Månedsprisen er $10 for Go, $40 for Go Plus og $20 pr. medlem for Go Teams
+
+## Kom i gang
+
+Du behøver ikke et team for at bruge Console. Hver konto starter med et **Personal**-arbejdsområde, hvor du er det eneste medlem.
+
+1. Log ind på [Console](https://opencode.ai/console).
+2. Abonnér på [Go](/console/go), tilføj [kredit](/console/billing#add-credits), eller forbind en [udbyder](/console/providers).
+3. Kør `/connect` i OpenCode, og vælg arbejdsområdet.
+4. Du kan også [invitere](/console/members#invite-members) dit team.
+
+```text
+/connect
+```
+
+## Politikker
+
+Reglerne for udbydere og værktøjer på siden Politikker gælder for alle OpenCode-klienter, der er forbundet til arbejdsområdet. Reglerne leveres som [politikerklæringer](/policies#console), der har forrang for medlemmets bruger- og projektkonfiguration og træder i kraft inden for cirka et minut. Centralt administrerede indstillinger og systemets konfigurationsfil har stadig forrang for arbejdsområdets politikker; se [prioritetsrækkefølgen](/policies#precedence).

@@ -12,7 +12,7 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime } from "effect"
-import { emptyMcpLayer } from "../fixture/mcp"
+import { emptyMcp, emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
@@ -132,6 +132,85 @@ describe("CommandPlugin.Plugin", () => {
           delivery: "steer",
         },
       ])
+    }),
+  )
+
+  it.effect("sends an MCP prompt's embedded text and explains missing or rejected arguments (#55181, #52446)", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      const prompts: string[] = []
+      const requested: Array<Record<string, string> | undefined> = []
+      const mcp = Mcp.Service.of({
+        ...emptyMcp,
+        prompts: () =>
+          Effect.succeed([
+            {
+              server: Mcp.ServerName.make("docs"),
+              name: "explain",
+              arguments: [{ name: "topic", required: true }, { name: "depth" }],
+            },
+          ]),
+        prompt: (input) =>
+          Effect.suspend(() => {
+            requested.push(input.args)
+            if (input.args?.topic === "rejected") return Effect.fail(new Error("Invalid topic"))
+            return Effect.succeed({
+              messages: [
+                { role: "user" as const, content: { type: "text" as const, text: "Explain this file:" } },
+                {
+                  role: "user" as const,
+                  content: {
+                    type: "resource" as const,
+                    resource: { uri: "docs://guide", mimeType: "text/plain", text: "the guide" },
+                  },
+                },
+                {
+                  role: "user" as const,
+                  content: { type: "resource" as const, resource: { uri: "docs://logo", blob: "aGVsbG8=" } },
+                },
+              ],
+            })
+          }),
+      })
+      yield* CommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die("unused command.list"),
+            transform: command.transform,
+            reload: command.reload,
+          },
+          session: {
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push(input.text)
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_test"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: input.delivery ?? "steer",
+                })
+              }),
+          },
+        }),
+      ).pipe(Effect.provideService(Mcp.Service, mcp), Effect.provide(locationLayer))
+      const run = (text: string) =>
+        command.execute({
+          name: "docs:explain",
+          invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text }, delivery: "steer" },
+        })
+
+      yield* run("files")
+      expect(prompts).toEqual(["Explain this file:\nthe guide"])
+      expect(requested).toEqual([{ topic: "files" }])
+      expect(yield* run("").pipe(Effect.flip)).toMatchObject({
+        message: "/docs:explain needs topic. Usage: /docs:explain <topic> [depth]",
+      })
+      expect(yield* run("rejected").pipe(Effect.flip)).toMatchObject({
+        message: "MCP prompt docs:explain failed: Invalid topic",
+      })
+      expect(requested).toEqual([{ topic: "files" }, { topic: "rejected" }])
     }),
   )
 })

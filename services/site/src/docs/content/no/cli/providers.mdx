@@ -1,0 +1,139 @@
+---
+title: "CLI-leverandører"
+description: "Koble til leverandørkontoer og administrer tilgangsopplysninger fra CLI-en og TUI-en."
+---
+
+Koble til en leverandør i TUI-en, og velg deretter en av modellene:
+
+```text
+/connect
+/models
+```
+
+`/connect` lister integrasjonene som er tilgjengelige fra gjeldende server og prosjekt. Velg en leverandør, velg en
+autentiseringsmetode når den tilbyr mer enn én, og følg ledetekstene.
+
+## TUI
+
+TUI-en støtter API-nøkler, OAuth og autentiseringskommandoer for leverandører. OAuth åpner en autorisasjons-URL eller viser en
+kode som skal angis; trykk `o` for å åpne URLen og `c` for å kopiere autorisasjonsdetaljene.
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+Kjør `/connect` igjen for å legge til en annen konto. Hvis du velger en leverandør som allerede er tilkoblet, åpnes kontolisten, der du
+kan aktivere, gi nytt navn til eller slette en lagret konto.
+
+## CLI
+
+Bruk `auth login` for de samme leverandørmetodene uten å åpne TUI-en. Uten et leverandørargument åpner kommandoen en
+interaktiv leverandørvelger.
+
+```bash
+opencode auth login
+```
+
+Oppgi integrasjons-ID eller navn for å hoppe over det første valget. Bruk `--method key` for å velge innlogging med API-nøkkel direkte.
+
+```bash
+opencode auth login anthropic --method key
+```
+
+Metode-ID-er er leverandørspesifikke. Kjør kommandoen uten `--method` for å se de tilgjengelige metodene når en leverandør har
+mer enn én.
+
+```bash
+opencode auth login openai
+```
+
+API-nøkkelinnskriving og leverandørskjemaer krever en interaktiv terminal. OAuth-metoder som ber deg lime inn en autorisasjonskode,
+krever også en.
+
+## Metoder
+
+OpenCode kan hente tilgangsopplysninger til leverandører på fire måter:
+
+| Metode | Virkemåte |
+| --- | --- |
+| API-nøkkel | Ber om en hemmelighet og lagrer den som en leverandørkonto. |
+| OAuth | Gir en nettleser-URL, enhetskode eller ledetekst for autorisasjonskode, og lagrer deretter tokens og fornyer dem når det støttes. |
+| Kommando | Kjører en leverandørlevert autentiseringskommando og lagrer standardutdataene som en nøkkel. |
+| Miljøvariabel | Leser en støttet variabel fra serverprosessen uten å lagre den. |
+
+Leverandører kan legge til skjemaer i API-nøkkel- og OAuth-metoder for påkrevde detaljer som et Azure-ressursnavn eller et GitHub
+Enterprise-domene. CLI-en og TUI-en viser disse skjemaene før autentiseringen starter.
+
+## Miljøvariabler
+
+Angi leverandørens støttede miljøvariabel på serverprosessen som kjører modellforespørsler. For en privat engangsserver,
+send den når du starter frittstående modus.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+For den delte bakgrunnsserveren legger du variabelen til i det administrerte miljøet. Dette stopper en kjørende tjeneste; den neste
+OpenCode-kommandoen starter den med den nye verdien.
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+Miljøtilkoblinger vises i `auth list` med typen `environment`. De er ikke kontoer: `auth logout` kan ikke
+fjerne dem, så fjern variabelen for å koble fra. En lagret konto har forrang over en miljøtilkobling for
+samme integrasjon.
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+Enkelte leverandører kan også hente tilgangsopplysninger fra sine vanlige kilder i miljøet i stedet for å bruke en miljøvariabel med en API-nøkkel:
+
+- Amazon Bedrock støtter AWS' standardrekkefølge for tilgangsopplysninger, blant annet profiler, tilgangsnøkler i miljøvariabler,
+  webidentitet og tilgangsopplysninger fra containere. Den støtter også `AWS_BEARER_TOKEN_BEDROCK`.
+- Google Vertex bruker Application Default Credentials og trenger et prosjekt den kan finne. Autentiser for eksempel med
+  `gcloud auth application-default login` og angi `GOOGLE_CLOUD_PROJECT`.
+- Azure eksponerer **Microsoft Entra ID (Azure CLI)** som tilkoblingsmetode når `az` er installert. Kjør `az login` først, og
+  velg deretter metoden i `/connect` eller `auth login azure`.
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+Se [Leverandører](/providers) for leverandørspesifikt oppsett og oppsett på serversiden.
+
+## Kontoer
+
+Hver vellykkede API-nøkkel-, OAuth- eller kommandopålogging oppretter en lagret konto. Den nyeste kontoen blir aktiv; bytt
+aktiv konto med etiketten eller ID-en til tilgangsopplysningene.
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+Fjern en lagret konto med `auth logout`. Begge kommandoene åpner velgere når argumentene utelates.
+
+```bash
+opencode auth logout anthropic work
+```
+
+I TUI-en gir `/connect` de samme handlingene for å legge til, aktivere, gi nytt navn til og slette lagrede kontoer.
+
+## Lagring
+
+Lagrede API-nøkler og OAuth-tokens ligger i serverens SQLite-database. For den lokale serveren skriver du ut databasebanen med:
+
+```bash
+opencode debug paths db
+```
+
+Den vanlige utgivelsesbanen er `~/.local/share/opencode/opencode.db`; `XDG_DATA_HOME`, utgivelseskanalen og `OPENCODE_DB`
+kan endre den. Bruk `/connect` eller `auth`-kommandoene til å administrere tilgangsopplysninger. Ikke rediger databasen.
+
+Når databasen migreres, importerer V2 tilgangsopplysningene som støttes, fra den eldre `auth.json` i OpenCodes datakatalog. Nye og oppdaterte tilgangsopplysninger lagres i SQLite, ikke i den gamle filen.

@@ -10,8 +10,8 @@ import { createWash } from "./use-wash"
 import { siteSettings } from "./settings"
 
 // The steps from CONTRIBUTING.md (Development: Bun 1.3 or newer, `bun install`, `bun dev [directory]`),
-// after `gh repo fork --clone`. Output lines are what gh and git print (gh's "✓" marks left out: OpenTUI
-// Mono has no check mark); comments explain.
+// after `gh repo fork --clone`. Output lines are what gh and git print (gh's "✓" marks left out);
+// comments explain.
 const transcript = [
   { kind: "command", text: "gh repo fork anomalyco/opencode --clone" },
   { kind: "output", text: "Created fork you/opencode" },

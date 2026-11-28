@@ -14,4 +14,13 @@ export default {
   noChanges: "Nicio modificare",
   "settings.wrapLines.title": "Încadrează liniile",
   "settings.wrapLines.description": "Înfășurați linii lungi în diferențele mobile în loc să derulați pe orizontală",
+  "menu.count.one": "{{count}} fișier modificat",
+  "menu.count.few": "{{count}} fișiere modificate",
+  "menu.count.other": "{{count}} de fișiere modificate",
+  "folder.more": "{{count}} · altele neafișate",
+  "folder.failed": "Nu s-au putut încărca modificările",
+  "command.open": "Deschide revizuirea",
+  "load.failed": "Nu s-au putut încărca modificările",
+  "load.timeout": "Serverul nu a răspuns suficient de rapid",
+  offline: "Serverul nu poate fi accesat",
 }

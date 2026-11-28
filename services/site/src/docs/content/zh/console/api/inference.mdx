@@ -1,0 +1,161 @@
+---
+title: "推理 API"
+description: "通过控制台推理服务，使用一个认证请求头调用兼容 OpenAI、Anthropic 和 Gemini 的模型。"
+---
+
+控制台推理服务在 `https://opencode.ai/inference` 下提供兼容 OpenAI、Anthropic 和 Gemini 的 API。请根据模型所属的 API 系列，向对应的端点发送 JSON `POST` 请求。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 认证
+
+将 `<token>` 替换为在 [控制台](https://opencode.ai/console) 中创建的[个人 API 密钥](/console/api#personal-api-keys)或[服务账号密钥](/console/api#service-accounts)。调用付费模型必须带上该请求头。免费层级对话模型只能在 OpenCode 内使用；其他客户端即使带有 API 密钥也会收到 HTTP `403`。其他客户端请使用付费模型或 [Go](/console/go) 订阅。
+
+```text
+Authorization: Bearer <token>
+```
+
+## 端点
+
+| API                     | 路径                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One（决策）  | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+每个模型只通过一个 API 系列提供服务。请参阅[模型端点](/console/models#endpoints)表格，或获取实时列表：
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+[模型列表 API](/console/api/models)说明了响应中的每个字段，以及包含你所连接提供商的控制台模型列表。
+
+### OpenAI Chat Completions
+
+`kimi-k3`、`glm-5.3`、`minimax-m3` 等开源模型以及免费模型使用 Chat Completions API。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT 模型使用 Responses API。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude 和 Qwen 模型使用 Messages API，并且必须提供 `max_tokens`。
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini 模型的模型名和方法都放在路径中。将 `:generateContent` 替换为 `:streamGenerateContent` 即可流式返回响应。
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+`jev-1.14`、`gemini-decision-1` 和 `gpt-6-luna-decision` 等决策模型会针对 `state` 回答有类型定义的问题，而不是生成文本。问题类型和媒体输入请参阅[决策模型](/console/models#jev)。
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+这些模型也接受 OpenAI 的 Decisions 格式，路径为 `/inference/openai/v1/decisions`。
+
+### OpenAI Embeddings
+
+`text-embedding-3-small` 和 `qwen3-embedding-8b` 等嵌入模型使用 Embeddings API。所有模型和选项请参阅[嵌入模型](/console/models#embedding-models)。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints) 会在 `/inference/go` 下的相同路径上提供其包含的决策和嵌入模型。
+
+## 费用
+
+每个响应都会在 API 本身返回的用量之外，报告该请求向你收取的费用：OpenAI 和 Anthropic 在 `usage` 中，Gemini 在 `usageMetadata` 中。流式响应会在携带最终用量的事件中报告费用：使用 `stream_options.include_usage` 的 Chat Completions 在最后的用量数据块中，Responses 在 `response.completed` 中，Messages 在 `message_delta` 中，Gemini 在最后一个数据块中。
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| 字段                     | 含义                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | 从你的余额中扣除的美元金额。免费模型和 [Go](/console/go) 限额内的用量为 `0`。使用你自己的提供商密钥时，如果提供商不自行报告，则为按提供商收费标准估算的金额；模型没有价格时不会出现。 |
+| `opencode.billing_source` | `free`、`balance`、`go`、`go-plus` 或 `byok`（你自己的提供商密钥）。                                                       |
+| `opencode.list_cost`      | 按模型价格计算的美元金额，包括高峰时段和长上下文定价。                                              |
+| `opencode.estimated`      | 当 `cost` 是按模型价格估算的金额、而不是 OpenCode 实际收取的金额时为 `true`。只有使用你自己的提供商密钥时才会设置。 |
+| `opencode.allowance`      | 仅限 Go：该请求计入[用量限额](/console/go#usage-limits)的金额，以套餐每月限额的美元数表示。 |
+| `opencode.tokens`         | 向你计费的 token。`input` 不含缓存读取和写入；`output` 包含 `reasoning`。                      |
+
+图片生成会在响应上报告这些字段，流式响应中则会在每张完成的图片上报告，并附上截至目前产生的费用。费用在响应结束时即已确定，早于余额或 Go 用量的更新。如果请求期间余额或 Go 限额耗尽，实际收取的金额可能少于报告值，但绝不会更多。

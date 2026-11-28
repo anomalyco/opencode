@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
-import { fileDiff, openSession } from "../utils/workspace"
-import { openReviewLauncher } from "../utils/side-panel"
+import { fileDiff, fileNode, openSession } from "../utils/workspace"
+import { openFileLauncher, openReviewLauncher, storedStrips } from "../utils/side-panel"
+import { expectSessionTitle } from "../utils/waits"
 import { base64Encode } from "@opencode/util/encode"
 
 test("review content stays aligned with the side region in both directions", async ({ page }) => {
@@ -274,6 +275,74 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
   await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveCount(0)
 })
 
+test("closing side tabs with the mouse keeps the next close button under the pointer until it leaves the strip", async ({
+  page,
+}) => {
+  // Wide enough for every tab, narrow enough that they shrink below their titles.
+  await page.setViewportSize({ width: 1600, height: 700 })
+  const directory = "C:/OpenCode/CloseWidths"
+  const key = `local\u0000${base64Encode(directory)}/ses_closewidths`
+  // A short tab before the last one keeps its own width while the long ones fill the strip.
+  const files = [...Array.from({ length: 6 }, (_, index) => `notes-file-${index}.md`), "b.md", "notes-file-7.md"]
+
+  await openSession(page, {
+    name: "CloseWidths",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_closewidths: { review: true, sessionWidth: 640 } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: files.map((file) => `file://${file}`), active: `file://${files[0]}` } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const tabs = side.locator('[data-pane-strip="side"] [data-pane-tab]')
+
+  const close = (file: string) =>
+    side.locator(`[data-pane-tab="file://${file}"] [data-slot="tabs-trigger-close-button"]`)
+
+  const center = async (file: string) => {
+    const box = (await close(file).boundingBox())!
+
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  }
+
+  const under = (point: { x: number; y: number }) =>
+    page.evaluate(
+      (point) =>
+        document
+          .elementFromPoint(point.x, point.y)
+          ?.closest('[data-slot="tabs-trigger-close-button"]')
+          ?.closest<HTMLElement>("[data-pane-tab]")?.dataset.paneTab,
+      point,
+    )
+
+  await expect(tabs).toHaveCount(files.length)
+  await expect(side.getByRole("tab", { name: files[0], exact: true })).toHaveAttribute("aria-selected", "true")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const width = (await tabs.nth(1).boundingBox())!.width
+
+  // The next tab slides under the pointer at its old width.
+  const middle = await center(files[2])
+  await page.mouse.click(middle.x, middle.y)
+  await expect(tabs).toHaveCount(files.length - 1)
+  await expect.poll(() => under(middle)).toBe(`file://${files[3]}`)
+
+  // Closing the last tab brings the one before it under the pointer.
+  const last = await center(files[7])
+  await page.mouse.click(last.x, last.y)
+  await expect(tabs).toHaveCount(files.length - 2)
+  await expect.poll(() => under(last)).toBe("file://b.md")
+
+  // Once the pointer leaves the strip, the tabs fill it again.
+  await page.mouse.move(middle.x, middle.y + 200)
+  await expect.poll(async () => (await tabs.nth(1).boundingBox())!.width).toBeGreaterThan(width + 1)
+})
+
 test("a reopened side tab returns to where it closed", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/ReopenPlace"
@@ -304,6 +373,59 @@ test("a reopened side tab returns to where it closed", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+Shift+t")
   await expect(side.getByRole("tab")).toHaveText(["a.md", "b.md", "c.md"])
   await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+})
+
+// The layout stores the side tabs of 50 sessions. It ranked them only by when each was last on screen in this run, so
+// after a restart, or once enough other sessions were used, it forgot a session that was still open in a shell tab:
+// its file, review, terminal and browser tabs were gone when the person switched back to it.
+test("a session open in a shell tab keeps its side tabs when the layout forgets old sessions, at startup and after a scroll", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/KeepOpenStrip"
+  const key = (session: string) => `local\u0000${base64Encode(directory)}/${session}`
+  // Fifty-one sessions whose shell tabs are closed, oldest first, then the one open in a background shell tab.
+  const closed = Array.from({ length: 51 }, (_, index) => key(`ses_closed_${String(index).padStart(2, "0")}`))
+  const strip = { all: ["file://notes.md"], active: "file://notes.md" }
+
+  await openSession(page, {
+    name: "KeepOpenStrip",
+    sessions: [
+      { id: "ses_onscreen", title: "On screen" },
+      { id: "ses_background", title: "In the background" },
+    ],
+    fileList: () => [fileNode(directory, "long.txt")],
+    fileContent: (path) => ({ type: "text", content: path === "long.txt" ? Array.from({ length: 400 }, (_, index) => `line ${index + 1}`).join("\n") : `contents:${path}` }),
+    seed: {
+      panes: { ses_background: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: Object.fromEntries([...closed.map((item) => [item, strip]), [key("ses_background"), strip]]),
+        },
+      },
+    },
+  })
+
+  // Startup: 52 stored strips. The two oldest closed sessions go; the open one, stored last and not used yet, stays.
+  await expect.poll(() => storedStrips(page)).toEqual([...closed.slice(2), key("ses_background")])
+
+  // The person opens a file in the session on screen and scrolls it, which stores a 51st session and prunes again.
+  const panel = page.locator("#review-panel")
+  await page.getByRole("button", { name: "Toggle review" }).click()
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "long.txt" }).click()
+  await expect(panel.getByRole("tab", { name: "long.txt", exact: true })).toHaveAttribute("aria-selected", "true")
+  const code = panel.locator("[data-scrollable]", { has: page.locator('[data-component="file"]') })
+  await expect.poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+  await code.hover()
+  await page.mouse.wheel(0, 2_000)
+  await expect.poll(() => storedStrips(page)).toEqual([...closed.slice(3), key("ses_background"), key("ses_onscreen")])
+
+  // Its side tab is there when the person switches to it.
+  await page.locator("[data-titlebar-tab-slot]", { hasText: "In the background" }).click()
+  await expectSessionTitle(page, "In the background")
+  await expect(panel.getByRole("tab", { name: "notes.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("contents:notes.md", { exact: true })).toBeVisible()
 })
 
 async function expectTreeSentinel(page: Page) {
@@ -386,4 +508,85 @@ test("the new tab view lists recently closed tabs, expands to the rest, and keep
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
   await expect(rows.first()).toContainText("closed-00.ts")
   await expect(recent).not.toContainText("README.md")
+})
+
+test("Mod+F finds in Markdown and HTML previews with the code view's find bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/PreviewFind"
+  const key = `local\u0000${base64Encode(directory)}/ses_previewfind`
+
+  const files = new Map([
+    ["notes.md", "# Needle notes\n\nOne needle here.\n\nAnother **needle** there."],
+    ["diagram.mmd", "flowchart TD\n  A[First needle] --> B[Last needle]"],
+    [
+      "page.html",
+      "<!-- note -->\n<!doctype html><title>Page</title><p>First needle</p><p style='margin-top:2000px'>Last needle</p>",
+    ],
+  ])
+
+  await openSession(page, {
+    name: "PreviewFind",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: files.get(path.split("/").at(-1) ?? "") ?? "" }),
+    seed: {
+      panes: { ses_previewfind: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            [key]: { all: ["file://notes.md", "file://diagram.mmd", "file://page.html"], active: "file://notes.md" },
+          },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const find = page.getByRole("textbox", { name: "Find" })
+  const mod = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+  await side.getByText("One needle here.").click()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toBeFocused()
+  await find.fill("needle")
+  await expect(page.getByText("1/3", { exact: true })).toBeVisible()
+  await find.press("Enter")
+  await expect(page.getByText("2/3", { exact: true })).toBeVisible()
+  await find.press("Shift+Enter")
+  await find.press("Shift+Enter")
+  await expect(page.getByText("3/3", { exact: true })).toBeVisible()
+  await find.press("Escape")
+  await expect(find).toHaveCount(0)
+
+  // A closed side panel keeps its preview mounted out of sight, so Mod+F opens no bar there.
+  const toggle = page.getByRole("button", { name: "Toggle review" })
+  await toggle.click()
+  await expect(side).toBeHidden()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toHaveCount(0)
+  await toggle.click()
+
+  // Mermaid keeps its source in a hidden code block; only the drawn labels count.
+  await side.getByRole("tab", { name: "diagram.mmd", exact: true }).click()
+  await side.locator("svg").getByText("First needle").click()
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toBeFocused()
+  await find.fill("needle")
+  await expect(page.getByText("1/2", { exact: true })).toBeVisible()
+  await find.press("Escape")
+  await expect(find).toHaveCount(0)
+
+  // The HTML runs in a sandboxed frame; Mod+F pressed inside it still opens the bar.
+  await side.getByRole("tab", { name: "page.html", exact: true }).click()
+  const frame = side.frameLocator('iframe[data-file-find="frame"]')
+  await frame.getByText("First needle").click()
+  // The find script goes after the doctype, even behind a comment, so the page keeps standards mode.
+  expect(await frame.locator("html").evaluate(() => document.compatMode)).toBe("CSS1Compat")
+  await page.keyboard.press(`${mod}+f`)
+  await expect(find).toBeFocused()
+  await find.fill("needle")
+  await expect(page.getByText("1/2", { exact: true })).toBeVisible()
+  await find.press("Enter")
+  await expect(page.getByText("2/2", { exact: true })).toBeVisible()
+  await expect(frame.getByText("Last needle")).toBeInViewport()
+  await find.press("Escape")
+  await expect(find).toHaveCount(0)
 })

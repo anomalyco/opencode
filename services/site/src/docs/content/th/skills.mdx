@@ -1,0 +1,246 @@
+---
+title: "สกิล"
+description: "เขียนไฟล์ SKILL.md ที่มอบคำแนะนำที่ใช้ซ้ำได้ให้เอเจนต์ของ OpenCode สำหรับงานหนึ่ง โดยโหลดเฉพาะเมื่อต้องใช้งาน"
+---
+
+สร้างสกิลเพื่อมอบคำแนะนำที่ใช้ซ้ำได้ให้เอเจนต์สำหรับงานเฉพาะ วางไฟล์ `SKILL.md` ใน `.opencode/skills/<skill-id>` และอธิบายว่าใช้เมื่อใดใน `description`
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode จะประกาศสกิลนี้เมื่อเกี่ยวข้อง เอเจนต์จึงโหลดคำแนะนำด้วยเครื่องมือ `skill` ได้ แทนการเพิ่มทุกสกิลในทุกพรอมต์
+
+## การสร้าง
+
+เก็บสคริปต์ การอ้างอิง และเทมเพลตที่เกี่ยวข้องไว้ข้าง `SKILL.md`
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+พาธที่เขียนในสกิลเป็นแบบสัมพัทธ์กับไดเรกทอรีที่มี `SKILL.md` แนะนำให้ใช้รูปแบบไดเรกทอรีเพราะให้ไดเรกทอรีฐานส่วนตัวแก่ไฟล์ประกอบ
+
+## การค้นพบ
+
+OpenCode ค้นหาตำแหน่งเหล่านี้โดยอัตโนมัติ
+
+| ขอบเขต                 | แหล่ง                                |
+| --------------------- | -------------------------------------- |
+| ส่วนกลาง                | `~/.config/opencode/skills`            |
+| ความเข้ากันได้ส่วนกลาง  | `~/.claude/skills`, `~/.agents/skills` |
+| โปรเจกต์               | `.opencode/skills`                     |
+| ความเข้ากันได้ของโปรเจกต์ | `.claude/skills`, `.agents/skills`     |
+
+สำหรับแหล่งสกิลของโปรเจกต์ OpenCode จะค้นหาจากไดเรกทอรีปัจจุบันขึ้นไปจนถึงรากของระบบไฟล์ และใช้ไดเรกทอรีที่ตรงกันในทุกระดับ
+
+แต่ละแหล่งมีรูปแบบใดรูปแบบหนึ่งได้
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- ไฟล์ Markdown ต้องอยู่ที่รากของแหล่ง เช่น `skills/review.md`
+- ไฟล์ที่ชื่อ `SKILL.md` พอดีซ้อนในไดเรกทอรีจัดกลุ่มได้ เช่น `skills/git-release/SKILL.md` หรือ `skills/teams/release/SKILL.md`
+- ไดเรกทอรีที่มี `SKILL.md` ถือเป็นหนึ่งสกิล OpenCode จะไม่ค้นหาสกิลเพิ่มเติมภายใน
+- ไฟล์และไดเรกทอรีที่ซ่อนอยู่และ `node_modules` จะถูกข้าม
+- การค้นหาหยุดที่หกระดับไดเรกทอรีใต้รากของแหล่ง
+
+## แหล่ง
+
+เพิ่มไดเรกทอรีในเครื่องหรือแคตตาล็อก HTTP ผ่านอาร์เรย์ `skills` ใน `opencode.json` หรือ `opencode.jsonc` ใดก็ได้
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| ค่า | วิธีตีความพาธหรือ URL |
+| ----- | ---------- |
+| พาธสัมพัทธ์ | จากไดเรกทอรีทำงานปัจจุบันของ OpenCode ไม่ใช่ไฟล์กำหนดค่า |
+| พาธ `~/` | จากไดเรกทอรีบ้านของผู้ใช้ปัจจุบัน |
+| พาธแบบสัมบูรณ์ | ใช้ตามที่เขียน |
+| URL `http://` หรือ `https://` | โหลดเป็นแคตตาล็อก HTTP |
+
+ระบบนำรายการจากไฟล์กำหนดค่าทุกไฟล์ที่พบมารวมกัน อาร์เรย์ `skills` จากไฟล์หนึ่งไม่แทนที่อาร์เรย์จากอีกไฟล์
+
+เวิร์กสเปซของ [OpenCode Console](/console) ที่เชื่อมต่ออยู่ยังแชร์สกิลได้
+
+## แคตตาล็อก
+
+แคตตาล็อก HTTP คือ base URL ที่มีไฟล์ `index.json`
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+สำหรับรายการนั้น OpenCode ดาวน์โหลดแต่ละไฟล์จาก `<base-url>/git-release/<file>`
+
+| กฎ | ข้อกำหนด |
+| ---- | ----------- |
+| พาธ | ต้องปลอดภัย เป็นพาธสัมพัทธ์ และต้นทางเดียวกัน |
+| ไฟล์หลัก | ต้องมี `SKILL.md` หรือ `<name>.md` เช่น `git-release.md` |
+| การอัปเดต | เพิ่ม `version` เมื่อไฟล์เปลี่ยน เพื่อให้ OpenCode รีเฟรชแคช |
+
+ไดเรกทอรีสกิลที่ดาวน์โหลดแต่ละอันกลายเป็นรากของแหล่งที่ตั้งชื่อตามรายการ ทั้ง `git-release.md` และ `SKILL.md` จึงมี ID `git-release`
+
+## Frontmatter
+
+ใช้ frontmatter เพื่อตั้งชื่อสกิลและควบคุมว่ามันปรากฏที่ใด
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| ฟิลด์                          | ลักษณะการทำงาน                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | ชื่อที่แสดง ค่าเริ่มต้นคือ ID ที่มาจากพาธ                     |
+| `description`                  | สรุปที่ใช้แสดงสกิลให้โมเดล                       |
+| `metadata.opencode/autoinvoke` | ตั้งเป็น `false` เพื่อละสกิลออกจากรายการที่โมเดลใช้ได้  |
+| `disable-model-invocation`     | ตั้งเป็น `true` เพื่อผลเดียวกับ `opencode/autoinvoke: false` |
+
+frontmatter ทั้งหมดเป็นทางเลือกขณะรัน ใส่ `description` ที่ชัดเจนเมื่อต้องการให้โมเดลค้นพบสกิล สกิลที่ไม่มีจะไม่ถูกประกาศ
+
+`opencode/autoinvoke: false` เพียงซ่อนสกิลจากรายการที่โมเดลใช้ได้ สกิลยังลงทะเบียนอยู่และโหลดอย่างชัดเจนด้วย ID ได้ เมื่อตั้งทั้ง `disable-model-invocation` และ `opencode/autoinvoke` จะใช้ `opencode/autoinvoke` V2 รับฟิลด์สำหรับการพกพาเช่น `license` และ `compatibility` แต่ไม่ได้ตีความ
+
+## ID
+
+พาธไฟล์กำหนด ID ของสกิล `name` ใน frontmatter เป็นเพียงป้ายที่แสดง
+
+| ไฟล์                              | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID ตรงตัวและแยกตัวพิมพ์เล็กใหญ่ สำหรับสกิลที่พกพาได้ ให้ใช้ ID แบบ kebab-case ตัวพิมพ์เล็กที่ไม่ซ้ำกัน ความยาว 1–64 อักขระ และให้ตรงกับชื่อไดเรกทอรี
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+ปัจจุบัน V2 ไม่บังคับรูปแบบนี้ คำแนะนำ 1–64 อักขระ ความตรงกันระหว่าง `name` กับไดเรกทอรี หรือความยาวสูงสุดของคำอธิบาย
+
+## ลำดับความสำคัญ
+
+สกิลเลือกตาม ID หากสองแหล่งกำหนด `git-release` แหล่งที่ลงทะเบียนภายหลังจะเป็นผู้ให้สกิลที่ OpenCode โหลด
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+แหล่งลงทะเบียนจากลำดับต่ำไปสูง
+
+1. สกิลในตัว
+2. `.claude/skills` ส่วนกลางก่อน จากนั้นไล่จากไดเรกทอรีแม่ที่อยู่สูงสุดลงมาถึงไดเรกทอรีปัจจุบัน
+3. `.agents/skills` ส่วนกลางก่อน จากนั้นไล่จากไดเรกทอรีแม่ที่อยู่สูงสุดลงมาถึงไดเรกทอรีปัจจุบัน
+4. `~/.config/opencode/skills`
+5. `.opencode/skills` ของโปรเจกต์ จากไดเรกทอรีแม่ที่อยู่สูงสุด ไล่ลงมาจนถึงไดเรกทอรีปัจจุบัน
+6. รายการ `skills` ที่ระบุในไฟล์กำหนดค่า ตามลำดับความสำคัญของไฟล์และลำดับรายการในอาร์เรย์
+
+หลีกเลี่ยง ID ซ้ำ เว้นแต่ตั้งใจจะแทนที่สกิลก่อนหน้า
+
+## การโหลด
+
+ในแต่ละขั้นของโมเดล OpenCode จะแสดงรายการสกิลที่อนุญาตซึ่งมีคำอธิบายและไม่ได้ตั้ง `opencode/autoinvoke` เป็น `false` รายการมีเฉพาะ ID ชื่อ และคำอธิบาย ไม่มีเนื้อหา Markdown ทั้งหมด
+
+โมเดลโหลดสกิลโดยเรียกเครื่องมือ `skill` ด้วย ID ที่ตรงตัว
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+จากนั้น OpenCode จะ
+
+1. เลือกคำจำกัดความปัจจุบันสำหรับ ID นั้น
+2. ตรวจสอบสิทธิ์ `skill` ของเอเจนต์ที่เลือก
+3. เพิ่มเนื้อหา Markdown โดยไม่มี frontmatter ลงในบทสนทนา
+4. ให้ไดเรกทอรีฐานของสกิลและตัวอย่างพาธไฟล์ประกอบสูงสุดสิบรายการ
+
+หากต้องการโหลดสกิลด้วยตัวเอง ให้กล่าวถึงในพรอมต์เป็น `@skill-id`
+
+เนื้อหาไฟล์ประกอบไม่ได้ถูกโหลดโดยอัตโนมัติ เอเจนต์อ่านเมื่อสกิลบอกให้ทำ ตัวอย่างไฟล์มีให้สำหรับสกิลแบบไดเรกทอรีที่มี `SKILL.md` ส่วนสกิล Markdown แบนจะไม่ได้รับรายการไฟล์ข้างเคียง
+
+## สิทธิ์
+
+ใช้ `skill` เป็นการดำเนินการและใช้ ID ของสกิลเป็นทรัพยากร ระบบตรวจทีละกฎตามลำดับและใช้กฎข้อสุดท้ายที่ตรงเงื่อนไข
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| ผล | ลักษณะการทำงาน |
+| ------ | -------- |
+| `allow` | ประกาศและโหลดสกิลที่ตรงโดยไม่ต้องอนุมัติ |
+| `ask` | ประกาศสกิลที่ตรงและถามก่อนโหลด |
+| `deny` | ซ่อนสกิลที่ตรงจากโมเดลและปฏิเสธการโหลด |
+
+วางกฎเดียวกันภายใต้ `agents.<id>.permissions` เพื่อให้มีผลกับเอเจนต์เดียว
+
+## การแก้ปัญหา
+
+ตัวอย่างเช่น ID ของสกิลนี้คือ `release` ไม่ใช่ชื่อ frontmatter `Git Release`
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+หากสกิลหายไปหรือโหลดเนื้อหาผิด
+
+1. ยืนยันว่าไฟล์เป็น `*.md` ที่ระดับราก หรือไฟล์ที่ซ้อนและชื่อ `SKILL.md` พอดี
+2. ตรวจ ID ที่มาจากพาธซึ่งแยกตัวพิมพ์เล็กใหญ่ ไม่ใช่ `name` ใน frontmatter
+3. เพิ่ม `description` หากต้องการให้โมเดลค้นพบสกิล
+4. ตรวจ `opencode/autoinvoke` และสิทธิ์ `skill` ของเอเจนต์ที่เลือก
+5. มองหาแหล่งที่ลงทะเบียนภายหลังซึ่งกำหนด ID เดียวกัน
+6. สำหรับแคตตาล็อก HTTP ให้ตรวจ `index.json` พาธไฟล์ที่ต้นทางเดียวกัน และ `version` ที่เปลี่ยน

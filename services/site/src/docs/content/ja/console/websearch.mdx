@@ -1,0 +1,44 @@
+---
+title: "Console の Web 検索"
+description: "Console を通じて OpenCode にホスト型の Web 検索を提供します。"
+---
+
+Console は、接続している OpenCode ユーザーにホスト型の Web 検索を提供します。ワークスペースのオーナーまたは管理者がワークスペースで一度有効にするだけで、メンバーに検索プロバイダーのキーを別途渡す必要はありません。
+
+検索が成功するたびに **$0.01** がワークスペースの残高から差し引かれ、メンバーの支出上限にも計上されます。
+
+## 有効にする
+
+1. ワークスペースのオーナーまたは管理者として [Console](https://opencode.ai/console) にサインインします。
+2. **Integrations** を開き、**Hosted Web Search** の **Set up** をクリックします。
+3. **Enable** をクリックします。
+
+その後、各メンバーが `/connect` で OpenCode をワークスペースに接続します。
+
+```text
+/connect
+```
+
+ワークスペースの設定では、**OpenCode Web Search** がデフォルトのプロバイダーとして選択されます。メンバーは `websearch.provider` を設定したり、プロバイダーの API キーを追加したりする必要はありません。自分で `websearch.provider` を設定したメンバーは、その設定が引き続き使われます。
+
+## 検索
+
+プロンプトで OpenCode に最新情報を尋ねます。検索は Console のインタラクティブなページからではなく、OpenCode から実行されます。
+
+```text
+Find the latest Bun release and summarize the changes with source links.
+```
+
+ホスト型プロバイダーはパブリック Web を検索し、最大 8 件の結果を返します。OpenCode はその結果を使ってプロンプトに回答し、出典を引用します。
+
+権限を設定したり、ツールを無効にしたりする方法は、[Web 検索ガイド](/websearch)を参照してください。
+
+## 請求
+
+Console は、検索が有効な結果セットを返した後に **$0.01** を請求します。失敗した検索とレート制限された検索は課金されません。
+
+Web 検索は、**Activity › Usage**、**Activity › Overview**、メンバーのアクティビティ、請求書、CSV エクスポートで、モデルの使用量とは別に表示されます。対象となる全支出の予算ポリシーには、Web 検索の料金が含まれます。
+
+## プライバシー
+
+ホスト型 Web 検索ではデータを保持しません。Console とホスト型検索プロバイダーは、検索クエリと結果の内容を保存せずに処理します。

@@ -1,5 +1,6 @@
 import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useData } from "../../context"
 import type { SessionDocument } from "../../document"
 import type { TimelineDetail } from "../../timeline/detail"
 import { TimelineRow } from "../../timeline/timeline-row"
@@ -12,11 +13,14 @@ export function NextSessionTimeline(props: {
   timelineDetail: TimelineDetail
   turnDiffs?: boolean
 }) {
+  const data = useData()
+
   const projection = createNextTimelineProjection({
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
     timelineDetail: () => props.timelineDetail,
     turnDiffs: () => props.turnDiffs ?? false,
+    scriptDiffs: () => data.flag("full_codemode"),
   })
 
   const [disclosure, setDisclosure] = createStore<Record<string, boolean | undefined>>({})

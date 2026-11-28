@@ -1,0 +1,95 @@
+---
+title: "ภาพรวม SDK"
+description: "โฮสต์ OpenCode ไว้ในแอปของคุณด้วย @opencode/sdk ซึ่งให้บริการ API ในหน่วยความจำโดยไม่เปิดตัวรับการเชื่อมต่อ HTTP"
+---
+
+`@opencode/sdk` โฮสต์ OpenCode ไว้ในแอปของคุณโดยตรง ต่างจาก
+[ไคลเอนต์เครือข่าย](/build/client) ตัวนี้ประกอบเซิร์ฟเวอร์ OpenCode และส่งคำขอ API
+ผ่านเราเตอร์ HTTP ในหน่วยความจำโดยไม่เปิดตัวรับการเชื่อมต่อ HTTP และไม่ต้องรับส่งข้อมูลผ่านเครือข่ายระหว่างไคลเอนต์กับเซิร์ฟเวอร์
+
+สำหรับ Cloudflare Durable Objects ดู[คู่มือ Cloudflare](/build/sdk/cloudflare)
+
+ติดตั้ง SDK
+
+```sh
+bun add @opencode/sdk
+```
+
+## สร้างโฮสต์
+
+`OpenCode.create()` คืนโฮสต์ที่มีเจ้าของชัดเจน ใช้ `await using` เพื่อ
+คืนทรัพยากรของเราเตอร์ บริการ Location และ Fiber พร้อมยกเลิกการลงทะเบียนปลั๊กอินที่ผูกกับขอบเขต
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+หากสภาพแวดล้อมไม่รองรับการจัดการทรัพยากรแบบ explicit ให้เรียก `await opencode.close()` เอง
+
+โฮสต์แบบฝังใช้ค่า Promise ข้อผิดพลาดที่ประกาศ ตัวเลือกคำขอ และสตรีม `AsyncIterable`
+เดียวกับ `@opencode/client` เปิดไคลเอนต์ที่สร้างขึ้นทั้งหมดและเพิ่มนามแฝงที่สะดวก `sessions` และ `events`
+สำหรับกลุ่มเซสชันและอีเวนต์
+
+## เวิร์กทรี
+
+การดำเนินการเวิร์กทรีต้องมี `projectID` การสร้างและรีเฟรชจะโหลดการกำหนดค่าและปลั๊กอินจากเช็กเอาต์หลัก
+ที่บันทึกไว้ของโปรเจกต์ รายการอ่านเฉพาะรายการที่บันทึกไว้ ส่วนการลบจะเปิดปลั๊กอินหลักและใช้กลยุทธ์
+ที่บันทึกไว้ โดยล้มเหลวหากกลยุทธ์นั้นใช้ไม่ได้
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+การรีเฟรชค้นพบเวิร์กทรีในรากเช็กเอาต์ที่รู้จักโดยใช้กลยุทธ์ทั้งหมดที่ใช้ได้ ลงทะเบียนกลยุทธ์กำหนดเอง
+ผ่าน[การแปลงเวิร์กทรีของปลั๊กอิน](/build/plugins/server#worktrees)
+
+## สตรีมอีเวนต์
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+ส่ง `AbortSignal` ผ่านตัวเลือกคำขอที่สร้างขึ้น หรือออกจากการวนซ้ำเพื่อยกเลิกบอดีการตอบกลับ
+
+## ปรับแต่ง
+
+ปรับแต่งอินสแตนซ์ OpenCode ของคุณด้วยการลงทะเบียนปลั๊กอิน ส่งปลั๊กอินให้
+`OpenCode.create()` เพื่อปรับแต่งเอเจนต์ โมเดล เครื่องมือ และพฤติกรรมอื่นเมื่อ
+โฮสต์แบบฝังเริ่มทำงาน
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+เรียก `await opencode.plugin(plugin)` เพื่อลงทะเบียนปลั๊กอินอื่นหลังเริ่มทำงาน
+
+ดู[เอกสารปลั๊กอินฉบับเต็ม](/build/plugins/server)สำหรับฮุก การแปลง เครื่องมือ และบริบทปลั๊กอินทั้งหมด

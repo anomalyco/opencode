@@ -16,6 +16,7 @@ import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { canonicalToolName } from "../../util/tool-display"
 import { useSessionLinks } from "../../ui/session-link"
+import { useFindHighlight } from "./find-view"
 
 export const INLINE_TOOL_ICON_WIDTH = 2
 
@@ -47,11 +48,6 @@ export function ReasoningPart(props: {
   message: SessionMessageAssistant
 }) {
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
-  const renderer = useRenderer()
-  const thinkingSyntax = createSyntaxStyleMemo(() =>
-    generateThinkingSyntax(syntax(), theme.text.muted, renderer.nativeScene),
-  )
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -100,19 +96,50 @@ export function ReasoningPart(props: {
               borderColor={theme.decrease(theme.background.base)}
               paddingLeft={inMinimal() ? 3 : 1}
             >
-              <code
-                filetype="markdown"
-                drawUnstyledText={false}
-                streaming={true}
-                syntaxStyle={thinkingSyntax()}
-                content={content()}
-                conceal={ctx.markdownMode() === "rendered"}
-                fg={theme.text.muted}
-              />
+              <ReasoningBody content={content()} streaming={!isDone()} sourceStreaming={true} />
             </box>
           </box>
         </Show>
       </box>
+    </Show>
+  )
+}
+
+/**
+ * Reasoning in the reasoning colors. Rendered mode draws it with OpenTUI's native Markdown, as answers are drawn, so
+ * none of it goes to the highlighter; source mode keeps the highlighted Markdown source.
+ */
+export function ReasoningBody(props: { content: string; streaming: boolean; sourceStreaming: boolean }) {
+  const ctx = use()
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  const renderer = useRenderer()
+  const thinkingSyntax = createSyntaxStyleMemo(() =>
+    generateThinkingSyntax(syntax(), theme.text.muted, renderer.nativeScene),
+  )
+  return (
+    <Show
+      when={ctx.markdownMode() === "rendered"}
+      fallback={
+        <code
+          filetype="markdown"
+          drawUnstyledText={false}
+          streaming={props.sourceStreaming}
+          syntaxStyle={thinkingSyntax()}
+          content={props.content}
+          conceal={false}
+          fg={theme.text.muted}
+        />
+      }
+    >
+      <markdown
+        streaming={props.streaming}
+        syntaxStyle={thinkingSyntax()}
+        content={props.content}
+        tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
+        conceal={true}
+        fg={theme.text.muted}
+      />
     </Show>
   )
 }
@@ -174,24 +201,33 @@ function ReasoningHeader(props: {
 export function TextPart(props: {
   last: boolean
   part: SessionMessageAssistantText
+  partID: string
   message: SessionMessageAssistant
 }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
+  const links = useSessionLinks()
+  const find = useFindHighlight(() => ({
+    messageID: props.message.id,
+    partID: props.partID,
+    text: props.part.text.trim(),
+  }))
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
-          ref={useSessionLinks()}
+          ref={(renderable) => {
+            links(renderable)
+            find(renderable)
+          }}
           syntaxStyle={syntax()}
-          renderNode={plugins.markdown()}
+          renderBlock={plugins.markdown()}
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
-          internalBlockMode="top-level"
-          tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          tableOptions={{ style: "grid", cellPaddingX: 1, borderColor: theme.border.base }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}

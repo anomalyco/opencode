@@ -83,10 +83,7 @@ ${render(current)}`
       [
         "New tools are available:",
         ...restated.map((namespace) => {
-          const shown = fit(
-            namespace.tools.flatMap((path) => lookup(path) ?? []),
-            budget,
-          )
+          const shown = fit(namespace.tools, lookup, budget)
           return [CodeModeCatalog.namespaceLine(namespace, shown.length), ...shown.map((entry) => entry.line)].join(
             "\n",
           )
@@ -95,10 +92,7 @@ ${render(current)}`
     )
   }
   if (added.length > 0) {
-    const shown = fit(
-      added.flatMap((path) => lookup(path) ?? []),
-      budget,
-    )
+    const shown = fit(added, lookup, budget)
     const rest = added.length - shown.length
     parts.push(
       [
@@ -136,12 +130,22 @@ function complete(catalog: CodeModeCatalog.Summary) {
   return catalog.namespaces.every((namespace) => namespace.entries.length === namespace.tools.length)
 }
 
-/** The leading listings whose cost fits `budget`. */
-function fit(listings: ReadonlyArray<CodeModeCatalog.Listing>, budget: number) {
-  const totals: number[] = []
-  for (const entry of listings) totals.push((totals.at(-1) ?? 0) + CodeModeCatalog.cost(entry.line))
-  const end = totals.findIndex((total) => total > budget)
-  return end === -1 ? listings : listings.slice(0, end)
+/** The leading listings whose cost fits `budget`, looked up only until it is spent. */
+function fit(
+  paths: ReadonlyArray<string>,
+  lookup: (path: string) => CodeModeCatalog.Listing | undefined,
+  budget: number,
+) {
+  const listings: CodeModeCatalog.Listing[] = []
+  let total = 0
+  for (const path of paths) {
+    const listing = lookup(path)
+    if (listing === undefined) continue
+    total += CodeModeCatalog.cost(listing.line)
+    if (total > budget) break
+    listings.push(listing)
+  }
+  return listings
 }
 
 const key = Instructions.Key.make("core/codemode")
@@ -158,7 +162,8 @@ export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List =
       // Rendered once, against the inventory that produced `current`, and stored with the update.
       changed: (previous, current) =>
         update(previous, current, inventory === undefined ? () => undefined : CodeModeCatalog.lookup(inventory)),
-      removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
+      removed: () =>
+        "The `execute` tool is no longer available. Permitted tools are now available as direct tool calls.",
     },
   })
 }

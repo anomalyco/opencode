@@ -1,0 +1,40 @@
+---
+title: "Einführung in die Console"
+description: "OpenCode Console ist ein optionaler Dienst mit Team-Workspaces, Modell-Inference, Budgets, Policies und gehosteter Websuche."
+---
+
+Die [OpenCode Console](https://opencode.ai/console) ist ein optionaler Dienst mit zusätzlichen Funktionen für
+OpenCode, ob du allein oder im Team arbeitest.
+
+- [Workspaces](/console/workspaces), um den Zugriff mit deinem [Team](/console/members) zu teilen
+- [Inference](/console/models) für proprietäre und Open-Source-Modelle
+- [Anbieter](/console/providers), um deine eigenen Anbieterkonten über das Console-Gateway zu verbinden
+- Nutzung erfassen und Ausgaben über [Budgets](/console/budgets) begrenzen
+- Teamweite Policies bereitstellen, um das Verhalten von OpenCode zu steuern
+- [Websuche](/console/websearch)
+- [Harnesses](/console/harnesses), um Console-Modelle aus Claude Code, Codex und anderen Agenten zu nutzen
+- [OpenCode Go, Go Plus und Go Teams](/console/go) bieten Zugriff auf Open-Source-Modelle für monatlich $10,
+  $40 bzw. $20 pro Mitglied bei Go Teams
+
+## Loslegen
+
+Du brauchst kein Team, um die Console zu nutzen. Jedes Konto beginnt mit einem **Personal**-Workspace, in dem du das
+einzige Mitglied bist.
+
+1. Melde dich in der [Console](https://opencode.ai/console) an.
+2. Abonniere [Go](/console/go), füge [Guthaben](/console/billing#add-credits) hinzu oder verbinde einen
+   [Anbieter](/console/providers).
+3. Führe `/connect` in OpenCode aus und wähle den Workspace.
+4. Lade optional dein Team [ein](/console/members#invite-members).
+
+```text
+/connect
+```
+
+## Policies
+
+Regeln für Anbieter und Tools auf der Policies-Seite gelten für alle OpenCode-Clients, die mit dem Workspace
+verbunden sind. Sie werden als [Policy](/policies#console)-Anweisungen bereitgestellt, haben Vorrang vor der
+Benutzer- und Projektkonfiguration des Mitglieds und greifen nach etwa einer Minute. Verwaltete Einstellungen
+und die Systemkonfigurationsdatei haben weiterhin Vorrang vor den Workspace-Regeln; siehe
+[Rangfolge](/policies#precedence).

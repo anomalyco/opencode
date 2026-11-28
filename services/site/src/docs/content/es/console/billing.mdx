@@ -1,0 +1,97 @@
+---
+title: "Facturación"
+description: "Agrega créditos, configura la recarga automática, gestiona métodos de pago y descarga facturas en OpenCode Console."
+---
+
+Console es gratis para equipos de cualquier tamaño, sin cargos por miembro. Solo pagas por el uso, con créditos
+prepagados que cubren todo el espacio de trabajo. Los propietarios y administradores gestionan la facturación en **Settings › Billing**.
+
+El uso a través de [tus propios proveedores](/console/providers) lo factura el proveedor, no Console.
+
+## Agregar un método de pago
+
+1. Abre **Settings › Billing**.
+2. En **Payment methods**, haz clic en **Add**.
+3. Elige un método y completa la configuración de Stripe.
+
+Métodos de pago compatibles:
+
+- Tarjeta
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Usa **⋯ › Make default** para elegir el método de pago para los cobros automáticos. Eliminar un método puede detener la recarga
+automática y las renovaciones de Go que lo usan.
+
+## Agregar créditos
+
+1. En **Credits**, haz clic en **Add credits**.
+2. Elige $10, $50 o $100, o selecciona **Other** y escribe un importe.
+3. Elige un método de pago y haz clic en **Confirm and pay**.
+
+Al importe se le suma una comisión de procesamiento del 4.6% + $0.31. Por ejemplo, pagas $52.61 por una recarga de $50
+y recibes los $50 íntegros en tu saldo.
+
+## Recarga automática
+
+Con la recarga automática, se añaden créditos cuando queda poco saldo.
+
+1. En **Auto-recharge**, haz clic en **Add rule**.
+2. Define el saldo que activa un cobro y el importe que se agrega.
+3. Haz clic en **Save**.
+
+El importe de la recarga automática, incluida la comisión de procesamiento, se cobra con el método de pago predeterminado. Si un cobro falla,
+la recarga automática se desactiva hasta que la configures de nuevo.
+
+## Consultar tu saldo
+
+La tarjeta **Billing** de **Activity** muestra el saldo a los propietarios y administradores y abre **Settings › Billing**.
+
+El botón **Billing** de la cabecera del espacio de trabajo o la tecla `B` abre un panel que muestra en tiempo real los
+límites de Go, los créditos y el uso. Los propietarios y administradores ven el saldo, el uso y la recarga automática del espacio
+de trabajo; los miembros solo ven su propio uso y sus límites.
+
+## Cuando se agotan los créditos
+
+Las solicitudes de pago fallan con HTTP `402` cuando el saldo llega a cero. El saldo nunca queda en negativo.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Facturas
+
+Cada pago aparece en **Invoices** con su estado y un enlace para **Download invoice** o **View receipt**.
+
+| Entrada          | Creada por                                             |
+| ---------------- | ------------------------------------------------------ |
+| Recarga de saldo | Agregar créditos                                       |
+| Recarga automática | Recarga automática                                   |
+| Suscripción de Go | Suscribirse a Go, Go Plus o Go Teams                  |
+| Renovación de Go | Renovación mensual de Go                               |
+| Cambio a Go Plus | Pasar de Go a Go Plus                                  |
+| Cambio a Go Teams | Pasar de Go o Go Plus a Go Teams                      |
+| Miembro de Go Teams | Un miembro que se une a un espacio de trabajo en Go Teams |
+| Uso mensual      | Facturación con línea de crédito                       |
+
+## Formularios fiscales
+
+Los clientes de Estados Unidos pueden descargar el [W-9 de Anomaly Innovations Inc.](/assets/anomaly-w9.pdf).
+
+## Facturación con línea de crédito
+
+Los espacios de trabajo con un acuerdo de crédito pueden recibir facturas mensuales en lugar de comprar créditos.
+Contacta con soporte para configurarlo.
+
+- El gasto por uso se imputa a un límite de crédito en lugar de descontarse de un saldo prepagado.
+- La factura de cada mes se emite el día 1 (UTC) y vence 14 días después.
+- Las facturas pendientes tienen un botón **Pay now**.
+- Las solicitudes fallan con HTTP `402` cuando se alcanza el límite de crédito o una factura está vencida.
+
+## Go
+
+Las suscripciones de [OpenCode Go](/console/go) usan los mismos métodos de pago y aparecen en la misma lista de facturas.
+También puedes [pagar Go con el saldo de créditos](/console/go#pay-with-credit). Activa **Extra Usage** en la página **Go** para pagar
+con créditos cuando se alcance un límite de Go.

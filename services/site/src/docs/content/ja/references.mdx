@@ -1,0 +1,269 @@
+---
+title: "参照"
+description: "現在のプロジェクト外にあるローカルディレクトリや Git リポジトリに、OpenCode が名前付きでアクセスできるようにし、プロンプトに添付します。"
+---
+
+参照を使うと、OpenCode は現在のプロジェクト外のディレクトリに名前付きでアクセスできます。`opencode.json` または `opencode.jsonc` に追加し、必要に応じてクライアントでそのエイリアスを添付します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+`docs` を添付したら、エージェントに関連するパスを調べるよう依頼します。
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+ドキュメント、共有ライブラリ、サンプル、別のリポジトリのソースには参照を使用します。
+
+## ローカル
+
+ローカルディレクトリには `path` を使用します。
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+パスは次のように動作します。
+
+- 相対パスは、設定ファイルのあるディレクトリを基準に解決します。
+- 絶対パスに対応しています。
+- `~/docs` などのホームからの相対パスに対応しています。
+
+他のフィールドが不要な場合は、文字列の省略形を使用します。
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  省略形の文字列がローカルパスとして扱われるのは、`.`、`/`、`~` で始まる場合だけです。`docs` ではなく `./docs` を使用してください。`docs` だけの値は Git リポジトリとして解釈されます。
+</Callout>
+
+## Git
+
+リモートの Git リポジトリには `repository` を使用します。
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+対応しているリモートの形式は次のとおりです。
+
+- GitHub の `owner/repo` の省略形
+- Git の URL
+- ホスト / パスの形式
+- SCP 形式のリモート
+
+ローカルの `file:` リポジトリには対応していません。
+
+リモートのデフォルトブランチに追従するには、文字列の省略形を使用します。
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+`branch` がない場合、OpenCode はリモートのデフォルトブランチをチェックアウトして更新します。ブランチ名には文字、数字、`/`、`_`、`.`、`-` を含められますが、`-` で始めたり `..` を含めたりすることはできません。
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## 保存
+
+OpenCode は各リモートを正規化し、リモートとブランチごとに 1 つのチェックアウトをグローバルのデータディレクトリの下に保存します。ブランチを明示しない場合、パスは次の形になります。
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+一般的な Linux のインストールでは、`Effect-TS/effect` は次の場所に保存されます。
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+ブランチを明示すると、エンコードされた `@<branch>` のサフィックスが付きます。
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## 更新
+
+ローカルにないリポジトリは非同期でクローンします。既存のチェックアウトに更新がないかは、参照を読み込むか再読み込みするときと、その Location で新しいユーザープロンプトを受け付けた後に、バックグラウンドで確認します。
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+チェックアウトは、最後の更新の試行から少なくとも 24 時間経過している場合、または試行が記録されていない場合に更新の対象になります。更新では、設定されたブランチまたはリモートのデフォルトブランチをフェッチしてリセットします。
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+更新の動作は次のルールに従います。
+
+- タイムスタンプはサービスの再起動をまたいで保持されます。
+- 同じチェックアウトを使用する Location は、そのタイムスタンプを共有します。
+- 失敗した試行はログに記録され、引き続き 24 時間の制限の対象になります。
+- Location が使われていない間の定期的なポーリングはありません。
+- クローンや更新の失敗は、他の参照の読み込みを妨げません。
+
+プロンプトはクローンや更新を待ちません。後でツールが更新されたチェックアウトを読む場合でも、添付には古い内容が含まれることがあり、新しい参照はチェックアウトの準備ができる前に表示されることがあります。
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  キャッシュされたチェックアウトは共有され、エージェントが使用中でも更新されることがあります。更新するとリセットされるため、キャッシュされたチェックアウトは編集しないでください。
+</Callout>
+
+## ガイダンス
+
+`description` には、その参照をどんなときに使うかを記述します。説明のある参照は、エイリアスや実際に参照するパスとともに、エージェントへの指示に含まれます。
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+description のない参照はクライアントから利用できますが、自動的には提示されません。
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## 可視性
+
+`hidden` を `true` にすると、インタラクティブなクライアントのセレクターから参照を除外します。
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` はインタラクティブな表示にのみ影響します。参照は参照 API に残り、description がある場合はエージェントの指示にも残ります。
+
+## 使用方法
+
+クライアントはルートのエイリアスで参照を添付します。添付には、ルート直下のファイルとディレクトリの非再帰的な一覧が含まれます。
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+ルートより下の内容が必要な場合は、特定のパスを調べるようエージェントに依頼します。
+
+## 権限
+
+参照は追加のツール権限を付与しません。アクティブな Location の外へのアクセスは、通常のツールのルールと `external_directory` 権限に従います。編集には該当する編集権限も必要です。
+
+```text
+Read ../product-docs/api.md
+```
+
+リクエストは、アクティブな権限がその外部読み取りを許可している場合にのみ成功します。
+
+## フィールド
+
+| フィールド    | ローカル | Git    | 説明                                       |
+| ------------- | -------- | ------ | ------------------------------------------ |
+| `path`        | 必須     | いいえ | ローカルディレクトリのパス                 |
+| `repository`  | いいえ   | 必須   | リモートの Git リポジトリ                  |
+| `branch`      | いいえ   | 任意   | フェッチしてチェックアウトするブランチ     |
+| `description` | 任意     | 任意   | エージェントがいつ使用すべきかを説明するガイダンス |
+| `hidden`      | 任意     | 任意   | インタラクティブなクライアントのセレクターから隠す |
+
+完全な Git のエントリでは、Git 互換のすべてのフィールドを使用できます。
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## エイリアス
+
+エイリアスは空にできず、`/`、`\`、空白、バッククォート、カンマを含められません。
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

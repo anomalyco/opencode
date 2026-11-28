@@ -13,7 +13,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { emptyThemeSource } from "../../fixture/fixture"
 
 test("searches settings globally and opens the matching setting", async () => {
-  let current: Info = {}
+  let current: Info = { experimental: { "new-designs": false } }
   const service: Interface = {
     get: async () => current,
     update: async (update) => {

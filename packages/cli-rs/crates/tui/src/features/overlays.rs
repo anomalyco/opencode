@@ -1,0 +1,208 @@
+//! Connection and data-migration overlays. Delay the first reconnect indication longer than subsequent ones to avoid
+//! flashing during startup.
+
+use opencode_api::events::{State, Status};
+use opencode_ui::motion::Spinner;
+
+use crate::prelude::*;
+
+/// `MigrationOverlay` starts polling after this, then polls at the same interval.
+const MIGRATION_POLL: Duration = Duration::from_millis(1000);
+/// The server answers 503 while it boots, so consecutive transient failures are retried for about 30 polls.
+const MIGRATION_RETRIES: u32 = 30;
+
+#[derive(Default)]
+pub struct Overlays {
+    reconnecting: RefCell<Option<View>>,
+    timer: Cell<Option<TimerId>>,
+    migration: RefCell<Option<View>>,
+    migration_failures: Cell<u32>,
+    connected: Cell<bool>,
+    polling: Cell<bool>,
+}
+
+pub fn connected(tui: &Tui) -> bool {
+    tui.overlays.connected.get()
+}
+
+pub fn install(_tui: &Tui) {}
+
+/// Shows or hides the reconnecting overlay after its grace period.
+pub fn connection_changed(tui: &Tui, state: &State) {
+    let overlays = &tui.overlays;
+    if let Some(timer) = overlays.timer.take() {
+        tui.app.cancel_timer(timer);
+    }
+    let connected = state.status == Status::Connected;
+    if connected && !overlays.connected.replace(true) {
+        // Wait for a connection before polling; a starting server must not look like a failed migration.
+        if !overlays.polling.replace(true) {
+            let weak = tui.weak();
+            tui.app.set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
+        }
+        crate::features::location::connected_again(tui);
+    }
+    if connected {
+        if let Some(view) = overlays.reconnecting.take() {
+            view.detach();
+            tui.app.request_redraw();
+        }
+        return;
+    }
+    overlays.connected.set(false);
+    let delay =
+        if state.status == Status::Reconnecting { Duration::from_millis(1000) } else { Duration::from_millis(5000) };
+    overlays.timer.set(Some(tui.app.set_timeout(
+        delay,
+        bind!(tui, |tui, _| {
+            tui.overlays.timer.set(None);
+            if tui.overlays.reconnecting.borrow().is_some() {
+                return;
+            }
+            let view = reconnecting(&tui);
+            opencode_ui::root::add(&tui.app, &view);
+            *tui.overlays.reconnecting.borrow_mut() = Some(view);
+            tui.app.request_redraw();
+        }),
+    )));
+}
+
+fn reconnecting(tui: &Tui) -> View {
+    let app = &tui.app;
+    let theme = tui.page();
+    let managed = tui.startup.args.managed;
+    let spinner = Spinner::new(app).color(theme.text.base).label(if managed {
+        "Restarting service…"
+    } else {
+        "Connection lost…"
+    });
+    let note = Text::new(
+        app,
+        if managed { "Your session will resume automatically." } else { "Reconnecting to the server automatically." },
+    )
+    .fg(theme.text.muted);
+    let panel = View::new(app)
+        .column()
+        .width(48)
+        .max_width(Length::percent(90.0))
+        .bg(theme.background.raised.base)
+        .padding_y(1)
+        .padding_x(2)
+        .gap(1)
+        .child(&spinner)
+        .child(&note);
+    View::new(app)
+        .absolute()
+        .z_index(10_000)
+        .position(Edge::Top, 0)
+        .position(Edge::Right, 0)
+        .position(Edge::Bottom, 0)
+        .position(Edge::Left, 0)
+        .bg(Color::rgba(0, 0, 0, 150))
+        .align_items(Align::Center)
+        .justify(Justify::Center)
+        .child(&panel)
+}
+
+/// Read migration status and continue polling while it runs.
+fn poll_migration(weak: &Weak<Tui>) {
+    let Some(tui) = weak.upgrade() else { return };
+    let client = tui.data.client().clone();
+    let weak = weak.clone();
+    tui.app.spawn(
+        async move {
+            client
+                .experimental_migration_v1_status()
+                .await
+                .map(|status| serde_json::to_value(status).unwrap_or_default())
+        },
+        bind!(weak, |tui, cx, result| {
+            let status = match result {
+                Ok(status) => {
+                    tui.overlays.migration_failures.set(0);
+                    status
+                }
+                Err(error) => {
+                    let failures = tui.overlays.migration_failures.get() + 1;
+                    tui.overlays.migration_failures.set(failures);
+                    if transient(&error) && failures <= MIGRATION_RETRIES {
+                        let weak = weak.clone();
+                        cx.app().set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
+                        return;
+                    }
+                    return migration_failed(&tui, error.tui_message());
+                }
+            };
+            let progress = (status["status"] == "running").then(|| progress(&status["progress"]));
+            set_migration(&tui, progress);
+            match status["status"].as_str() {
+                Some("completed") => {}
+                Some("error") => {
+                    let message = status["error"].as_str().unwrap_or("Unknown error").to_owned();
+                    migration_failed(&tui, message);
+                }
+                _ => {
+                    let weak = weak.clone();
+                    cx.app().set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
+                }
+            }
+        }),
+    );
+}
+
+fn transient(error: &opencode_api::error::Error) -> bool {
+    match error {
+        opencode_api::error::Error::Transport(_) => true,
+        opencode_api::error::Error::UnexpectedStatus { status } | opencode_api::error::Error::Status { status, .. } => {
+            *status >= 500
+        }
+        _ => false,
+    }
+}
+
+fn migration_failed(tui: &Tui, message: String) {
+    set_migration(tui, None);
+    tui.toasts.show(
+        ToastOptions::new(Variant::Error, message)
+            .title("Data migration failed")
+            .duration(Duration::from_millis(10_000)),
+    );
+}
+
+fn progress(value: &serde_json::Value) -> String {
+    let label = value["label"].as_str().unwrap_or_default();
+    match (value["numerator"].as_i64(), value["denominator"].as_i64()) {
+        (None, _) => label.to_owned(),
+        (Some(numerator), None) => format!("{label} {numerator}"),
+        (Some(numerator), Some(denominator)) => format!("{label} {numerator}/{denominator}"),
+    }
+}
+
+fn set_migration(tui: &Tui, progress: Option<String>) {
+    if let Some(view) = tui.overlays.migration.take() {
+        view.detach();
+    }
+    let Some(progress) = progress else {
+        tui.app.request_redraw();
+        return;
+    };
+    let app = &tui.app;
+    let theme = tui.page();
+    let spinner = Spinner::new(app).color(theme.text.feedback.info.base).label(progress);
+    let view = View::new(app)
+        .absolute()
+        .z_index(10_000)
+        .position(Edge::Top, 1)
+        .position(Edge::Right, 2)
+        .row()
+        .bg(theme.background.raised.high)
+        .border(BorderStyle::Heavy)
+        .border_sides(Sides::LEFT)
+        .border_color(theme.text.feedback.info.base)
+        .padding_x(2)
+        .padding_y(1)
+        .child(&spinner);
+    opencode_ui::root::add(&tui.app, &view);
+    *tui.overlays.migration.borrow_mut() = Some(view);
+    tui.app.request_redraw();
+}

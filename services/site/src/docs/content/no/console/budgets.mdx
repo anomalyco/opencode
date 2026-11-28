@@ -1,0 +1,91 @@
+---
+title: "Budsjetter"
+description: "Sett et tak på månedlig forbruk for et arbeidsområde, medlemmene og tjenestekontoene."
+---
+
+Budsjetter setter et tak på månedlig forbruk gjennom policyer. Eiere og administratorer administrerer dem i **Controls**.
+
+## Budsjettnivåer
+
+| Policy-målgruppe        | Gjelder for                                           |
+| ---------------------- | ---------------------------------------------------- |
+| Hele arbeidsområdet | Samlet forbruk for alle medlemmer og tjenestekontoer |
+| Alle medlemmer | Hvert medlem, eller én delt kvote for alle medlemmer |
+| Medlemmer merket med | Medlemmer med de valgte merkene |
+| Disse medlemmene | Bestemte medlemmer |
+| Alle tjenestekontoer | Hver tjenestekonto, eller én delt kvote |
+| Disse tjenestekontoene | Bestemte tjenestekontoer |
+
+En forespørsel må holde seg innenfor alle gjeldende budsjetter. En større kvote overstyrer aldri en mindre. Uten
+budsjetter er forbruket ubegrenset.
+
+## Arbeidsområdebudsjett
+
+Når arbeidsområdet når budsjettgrensen, blokkeres forespørsler fra alle.
+
+1. Åpne **Controls** og klikk **Add policy**.
+2. Velg **Entire workspace** og legg til en **Budget**-regel.
+3. Angi den månedlige grensen i USD og klikk **Save**.
+
+## Medlemsbudsjetter
+
+Velg **All members** i en policy for å gi hvert medlem en månedlig kvote, eller dele ett beløp på gruppen. Velg
+bestemte medlemmer eller merker for å dekke en mindre gruppe.
+
+Slik setter du et budsjett for én person:
+
+1. Åpne medlemmet i **Settings › Members**.
+2. Klikk **Create budget policy**. Personen er allerede valgt når skjemaet åpnes.
+3. Angi beløpet og klikk **Save**.
+
+Medlemmets side viser policyene som gjelder. Hvis et budsjett for alle medlemmer også dekker personen, gjelder begge
+grensene.
+
+## Budsjetter for tjenestekontoer
+
+I **Controls** velger du **All service accounts** eller **These service accounts**, legger til en **Budget**-regel og
+angir en individuell eller delt månedlig kvote. Policyen dekker alle nøkler som tilhører disse kontoene.
+
+## Beløp og tilbakestilling
+
+- Beløp er i amerikanske dollar med opptil to desimaler.
+- Budsjetter tilbakestilles den 1. i hver måned kl. 00:00 UTC.
+- Et budsjett på `$0` blokkerer alt forbruk som teller mot budsjetter.
+- Når du legger til eller endrer et budsjett, tas forbruk som allerede er registrert den måneden, med; kvoten
+  tilbakestilles ikke.
+
+## Hva som teller
+
+Standardinnstillingen er **All spend**. Hvis du avgrenser budsjettet til utvalgte modeller, teller bare forbruk på disse
+modellene. Du kan gi dem én felles kvote eller sette en egen kvote for hver modell.
+
+| Forbruk                                                               | Teller mot budsjetter        |
+| ------------------------------------------------------------------- | ---------------------------- |
+| Betalte Console-modeller | Ja |
+| Modeller hos [dine egne leverandører](/console/providers) med en angitt pris | Ja, til den konfigurerte prisen |
+| [Nettsøk](/console/websearch) | Ja, for budsjetter for alt forbruk |
+| Gratis modeller | Nei |
+| [Go](/console/go)-bruk innenfor planen | Nei |
+| Ekstra Go-bruk betalt med kreditter | Ja |
+
+## Når et budsjett er nådd
+
+Nye forespørsler mislykkes med HTTP `429` til budsjettet tilbakestilles eller en eier eller administrator hever det.
+Svaret sier at en budsjettgrense i en policy er nådd, men ikke hvilken. Åpne forespørselen i **Activity › Logs**
+for å se policyen som blokkerte den.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Budsjetter kontrolleres når en forespørsel starter. Forespørsler som allerede pågår, fullføres, så forbruket kan ende
+litt over grensen.
+
+## Følg forbruket
+
+Hvert medlem ser sitt eget forbruk og sin egen grense på **Activity**. Åpne **My usage** for **Activity › Overview**,
+med budsjettdetaljer og datoer for tilbakestilling.
+
+Eiere og administratorer kan åpne **Activity › Usage** fra forbruksdiagrammet. Der vises kostnadene fordelt på dag, modell og
+person. Med **Export usage** kan du laste ned daglige totaler for de siste 7, 30 eller 90 dagene som CSV. Bruk
+[API-et for brukseksport](/console/api/usage-export) hvis du vil laste ned den samme filen fra et skript.

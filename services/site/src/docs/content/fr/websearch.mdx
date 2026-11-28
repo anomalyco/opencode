@@ -1,0 +1,113 @@
+---
+title: "Recherche web"
+description: "Permettez à OpenCode de rechercher sur le web avec Exa, Firecrawl, Parallel, Tavily, TinyFish ou votre offre Claude, et choisissez le fournisseur et les autorisations applicables aux recherches."
+---
+
+Demandez à OpenCode des informations à jour : il peut rechercher sur le web, lire les résultats et inclure des liens sources dans sa réponse.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+La première recherche vous demande d’autoriser la recherche web et de choisir un fournisseur. OpenCode mémorise votre choix pour les sessions suivantes.
+
+## Fournisseurs
+
+OpenCode inclut cinq fournisseurs de recherche :
+
+| Fournisseur | ID | Variable d’environnement |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (facultative) |
+
+Connectez un compte depuis le TUI avec `/connect`, ou définissez la variable d’environnement du fournisseur avant de démarrer OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+Lorsque [Claude Agent](/claude-agent) est connecté, il propose aussi un fournisseur de recherche avec l’ID `claude-agent`. Il exécute le WebSearch de Claude Code : les recherches sont donc décomptées de votre offre Claude et ne nécessitent aucune clé d’API de recherche. Tous les modèles peuvent l’utiliser, pas seulement Claude.
+
+Claude Agent n’est jamais sélectionné automatiquement. Choisissez-le dans `opencode.jsonc` :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch renvoie le contenu des pages chiffré, donc un modèle Claude doit exécuter chaque recherche. C’est Haiku qui s’en charge : son court résumé des résultats apparaît en premier, suivi des liens. Les recherches utilisent les paramètres de connexion du fournisseur Claude Agent et le compte utilisé par vos dernières conversations.
+
+## Sélection
+
+Définissez un fournisseur dans `opencode.jsonc` pour ignorer l’invite de sélection.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Utilisez `"random"` pour choisir automatiquement un fournisseur disponible. Chaque session conserve son fournisseur sélectionné jusqu’à ce que celui-ci soit limité en débit.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Limites
+
+Lorsqu’un fournisseur renvoie le code HTTP 429, la sélection aléatoire relance la recherche auprès d’un autre fournisseur disponible. Le fournisseur qui a atteint sa limite de débit reste indisponible pendant la durée indiquée par `Retry-After`, ou pendant 60 secondes si la réponse n’indique pas de durée valide.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Si tous les fournisseurs sont en attente, la recherche échoue immédiatement. Déplacer une session ou redémarrer son serveur efface le fournisseur mémorisé ; les périodes d’attente sont partagées par les sessions d’un même espace de travail.
+
+## Autorisations
+
+Les recherches web utilisent l’action d’autorisation `websearch` et la requête de recherche comme ressource. Une confirmation est demandée pour les recherches qui ne sont pas explicitement autorisées.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consultez [Autorisations](/permissions) pour l’ordre des règles et leur mise en correspondance.
+
+## Désactivation
+
+Définissez `websearch` sur `false` pour retirer l’outil de recherche web des requêtes envoyées au modèle.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

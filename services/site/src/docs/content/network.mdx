@@ -1,21 +1,21 @@
 ---
 title: Network
-description: Configure proxies and custom certificate authorities.
+description: Configure proxies, custom certificate authorities and client certificates.
 ---
 
-Set the standard proxy variables and exclude loopback addresses. OpenCode uses local HTTP connections between the CLI and
-its background service, so the loopback exclusion is required when a proxy is configured in the CLI environment.
+Set the standard proxy variables. OpenCode uses local HTTP connections between the CLI and its background service, and
+the CLI automatically excludes loopback addresses from proxying.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
 `HTTP_PROXY` handles HTTP destinations and `HTTPS_PROXY` handles HTTPS destinations. The proxy URL itself can use `http://`
-for both variables. `NO_PROXY` is a comma-separated list of hosts and addresses that connect directly.
+for both variables. The CLI adds `127.0.0.1`, `localhost`, and `::1` to both `NO_PROXY` and `no_proxy` on startup. Use
+`NO_PROXY` as a comma-separated list for other hosts that must connect directly.
 
 ## Service
 
@@ -25,13 +25,13 @@ service configuration so later service starts use the same network settings.
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
 Changing a managed environment variable stops the running service. `service start` starts it again with the new environment.
-Keep `NO_PROXY` in the CLI shell too when that shell sets a proxy, because managed service variables apply to the server
-process, not the CLI process.
+The CLI shell needs its own proxy variables, because managed service variables apply to the server process, not the CLI
+process. Loopback exclusions are added automatically on both sides.
 
 Remove a persisted variable with `service unset env`:
 
@@ -92,6 +92,38 @@ Fix it in one of two ways:
 - Export the inspection certificate authority as a PEM file and trust it with `NODE_EXTRA_CA_CERTS`, as shown in
   [Certificates](#certificates).
 
+## Client certificates
+
+Set `settings.tls` on a provider whose gateway requires mutual TLS. Its model requests present the certificate, and the
+TLS handshake only sends it to servers that ask for one.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "company": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.company.example/v1",
+        "tls": {
+          "cert": "{file:/etc/company/client.pem}",
+          "key": "{file:/etc/company/client.key}",
+          "passphrase": "{env:CLIENT_KEY_PASSPHRASE}",
+        },
+      },
+    },
+  },
+}
+```
+
+- `cert` and `key` are PEM text. Use `{file:...}` to read them from files. A file that can't be read leaves `tls` unset.
+- `passphrase` is only needed for an encrypted key.
+- Works on the Bun and Node builds. A server on Cloudflare Workers can't present a client certificate through `fetch`.
+- Requests with a client certificate don't follow redirects, so the certificate isn't presented to another host.
+
+Every model request of that provider presents the certificate: chat, compaction, image and decision models. A provider
+with `tls` uses HTTP instead of WebSockets. Tools such as webfetch, remote MCP servers and plugin installs don't present
+it.
+
 ## Foreground
 
 `--standalone` and `serve` use the environment of their own process. `opencode service set env` does not configure these
@@ -100,7 +132,6 @@ processes.
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -108,7 +139,6 @@ Apply the same pattern to a foreground server:
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

@@ -59,11 +59,7 @@ export type ProviderDialogStep =
       readonly catalogPending: boolean
       readonly connect: ProviderConnectState
     }
-  | {
-      readonly kind: "models"
-      readonly selectedModel: string
-      readonly collapsed: Readonly<Record<string, boolean>>
-    }
+  | { readonly kind: "models" }
 
 /** What the server lists for the selected integration. The server lists the active account first. */
 export type ProviderAccounts = {
@@ -99,7 +95,7 @@ export type ProviderDialogState =
 export type ProviderCatalogSnapshot = {
   /** The Console workspace providers had not loaded when the wait ran out. */
   readonly pending: boolean
-  readonly firstModel: string | undefined
+  readonly hasModels: boolean
 }
 
 export type ModelChoice = { readonly providerID: string; readonly modelID: string }
@@ -140,13 +136,12 @@ export type ProviderDialogEvent =
       readonly session: number
       readonly check: number
       readonly hasProblem: boolean
-      readonly firstModel: string | undefined
+      readonly hasModels: boolean
     }
   | { readonly type: "link.copied"; readonly session: number; readonly attemptID: string; readonly copied: boolean }
-  | { readonly type: "model.selected"; readonly modelKey: string }
-  | { readonly type: "group.collapsed"; readonly providerID: string; readonly collapsed: boolean }
   | { readonly type: "model.confirmed"; readonly selection: ModelChoice }
-  | { readonly type: "back" }
+  /** A breadcrumb in the header: the provider list, or the provider's accounts or sign-in methods. */
+  | { readonly type: "navigate"; readonly target: ProviderBackTarget }
   | { readonly type: "disposed" }
 
 export type ProviderDialogEffect =
@@ -255,7 +250,11 @@ export function transitionProviderDialog(
 
   if (event.type === "provider.cleared") return toPicker(state)
 
-  if (event.type === "back") return back(state)
+  if (event.type === "navigate") {
+    if (event.target === "picker") return toPicker(state)
+
+    return event.target === providerBackTarget(state) ? back(state) : unchanged(state)
+  }
 
   if (event.type === "accounts.synced") return synced(state, event.accounts)
 
@@ -274,18 +273,6 @@ export function transitionProviderDialog(
   if (step.kind === "claude") return claude(state, step, event)
 
   if (step.kind === "models") {
-    if (event.type === "model.selected")
-      return unchanged({ ...state, step: { ...step, selectedModel: event.modelKey } })
-
-    if (event.type === "group.collapsed") {
-      if (!!step.collapsed[event.providerID] === event.collapsed) return unchanged(state)
-
-      return unchanged({
-        ...state,
-        step: { ...step, collapsed: { ...step.collapsed, [event.providerID]: event.collapsed } },
-      })
-    }
-
     if (event.type !== "model.confirmed") return unchanged(state)
 
     return {
@@ -338,11 +325,14 @@ export function providerBackTarget(state: ProviderDialogState): ProviderBackTarg
 /** Which dialog shell the step uses: the searchable list, the model choice, or a provider step. */
 export type ProviderDialogFrame = "picker" | "models" | "accounts" | "provider"
 
-export type ProviderDialogTitle = "connect" | "console-error" | "console-sign-in" | "anthropic-max"
+/** The header path of a provider step: the provider list, then the provider. A crumb with a `target` links back. */
+export type ProviderDialogCrumb =
+  | { readonly kind: "root"; readonly target?: "picker" }
+  | { readonly kind: "provider"; readonly target?: "accounts" | "methods" }
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
-  | { readonly kind: "models"; readonly selectedModel: string; readonly collapsed: Readonly<Record<string, boolean>> }
+  | { readonly kind: "models" }
   | {
       readonly kind: "accounts"
       readonly action: AccountStepAction
@@ -361,7 +351,6 @@ export function selectProviderDialogView(state: ProviderDialogState) {
   const connect = step && "connect" in step ? selectProviderConnectView(step.connect) : undefined
   const target = providerBackTarget(state)
   const body = selectBody(state, connect)
-  const isConsole = provider?.provider === CONSOLE_INTEGRATION
 
   const frame: ProviderDialogFrame = !step
     ? "picker"
@@ -374,17 +363,7 @@ export function selectProviderDialogView(state: ProviderDialogState) {
     frame,
     connect,
     body,
-    canBack: target !== undefined,
-    title: ((): ProviderDialogTitle => {
-      if (isConsole && connect?.status === "failed") return "console-error"
-
-      if (body.kind === "console-sign-in") return "console-sign-in"
-
-      if (provider?.provider === "anthropic" && connect?.method?.label?.toLowerCase().includes("max"))
-        return "anthropic-max"
-
-      return "connect"
-    })(),
+    crumbs: crumbs(state, target),
     // Closing on a stray backdrop click would abandon a sign-in the user is finishing in the browser.
     preventBackdropDismiss: !!provider && !provider.closed && !!connect?.authorizing,
     completed: state.completed,
@@ -394,6 +373,15 @@ export function selectProviderDialogView(state: ProviderDialogState) {
 
 export type ProviderDialogView = ReturnType<typeof selectProviderDialogView>
 
+function crumbs(state: ProviderDialogState, target: ProviderBackTarget | undefined): readonly ProviderDialogCrumb[] {
+  if (state.status !== "provider" || state.step.kind === "models") return []
+
+  return [
+    { kind: "root", target: state.standalone ? undefined : "picker" },
+    { kind: "provider", target: target === "picker" ? undefined : target },
+  ]
+}
+
 function selectBody(
   state: ProviderDialogState,
   connect: ReturnType<typeof selectProviderConnectView> | undefined,
@@ -402,7 +390,7 @@ function selectBody(
 
   const step = state.step
 
-  if (step.kind === "models") return { kind: "models", selectedModel: step.selectedModel, collapsed: step.collapsed }
+  if (step.kind === "models") return { kind: "models" }
 
   if (step.kind === "accounts") {
     const busy = step.action.type === "activating" || step.action.type === "removing"
@@ -684,7 +672,7 @@ function claude(
     return unchanged(state)
 
   if (event.hasProblem) return set({ status: "idle" })
-  const finished = finish(state, event.firstModel)
+  const finished = finish(state, event.hasModels)
 
   return {
     state: finished.state,
@@ -753,7 +741,7 @@ function connectTransition(
       effects: reveal,
     }
 
-  const finished = finish(notified, catalog?.firstModel, result.state, returnTo)
+  const finished = finish(notified, !!catalog?.hasModels, result.state, returnTo)
 
   return { state: finished.state, effects: [...reveal, ...finished.effects] }
 }
@@ -762,15 +750,15 @@ function connectTransition(
 // open so the workspace can be fixed.
 function finish(
   state: ProviderState,
-  firstModel: string | undefined,
+  hasModels: boolean,
   connect?: ProviderConnectState,
   returnTo: ProviderReturnTarget = "picker",
 ): ProviderDialogTransition {
   const announce: ProviderDialogEffect[] = [{ type: "toast.connected", provider: state.provider }]
 
-  if (firstModel)
+  if (hasModels)
     return {
-      state: { ...state, step: { kind: "models", selectedModel: firstModel, collapsed: {} } },
+      state: { ...state, step: { kind: "models" } },
       effects: announce,
     }
 

@@ -1,4 +1,5 @@
-import { Show } from "solid-js"
+import { Icon } from "@opencode/ui/icon"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 
@@ -11,22 +12,20 @@ export function authServerName(server: ServerConnection.Any) {
   return serverName(server)
 }
 
-export function RemoteAuthNotice(props: { server: ServerConnection.Any }) {
+/** A Console sign-in through another server is stored on that server, so the dialog names it. */
+export function RemoteServerLabel(props: { server: string; class?: string }) {
   const language = useLanguage()
 
   return (
-    <Show when={authServerName(props.server)}>
-      {(name) => (
-        <div
-          class="rounded-md border border-v2-border-border-base bg-v2-background-bg-layer-02 p-3 text-[13px] leading-5"
-          role="note"
-        >
-          <p class="font-medium text-v2-text-text-base">
-            {language.t("provider.connect.remote.title", { server: name() })}
-          </p>
-          <p class="text-v2-text-text-muted">{language.t("provider.connect.remote.description")}</p>
-        </div>
-      )}
-    </Show>
+    <Tooltip
+      value={language.t("provider.connect.remote.description")}
+      placement="bottom"
+      contentClass="!max-w-64 !whitespace-normal"
+      triggerTabIndex={0}
+      class={`flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted ${props.class ?? ""}`}
+    >
+      <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+      <span class="max-w-40 truncate">{language.t("provider.connect.remote.label", { server: props.server })}</span>
+    </Tooltip>
   )
 }

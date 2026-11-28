@@ -1,0 +1,180 @@
+---
+title: "Inference-API"
+description: "Rufe OpenAI-, Anthropic- und Gemini-kompatible Modelle über die Console-Inference mit einem einzigen Authentifizierungs-Header auf."
+---
+
+Die Console-Inference stellt OpenAI-, Anthropic- und Gemini-kompatible APIs unter `https://opencode.ai/inference`
+bereit. Sende eine JSON-`POST`-Anfrage an den Endpunkt, der zur API-Familie des Modells passt.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Authentifizierung
+
+Ersetze `<token>` durch einen [persönlichen API-Schlüssel](/console/api#personal-api-keys) oder einen
+[Schlüssel eines Service-Kontos](/console/api#service-accounts), der in der [Console](https://opencode.ai/console)
+erstellt wurde. Kostenpflichtige Modelle erfordern den Header. Chat-Modelle des Free-Tarifs sind nur aus OpenCode
+heraus verfügbar; andere Clients erhalten HTTP `403`, selbst mit einem API-Schlüssel. Nutze aus anderen Clients
+kostenpflichtige Modelle oder ein [Go](/console/go)-Abo.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Endpunkte
+
+| API                     | Pfad                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+| System One (decisions)  | `/inference/systemone/v1/systemone`                       |
+| OpenAI Decisions        | `/inference/openai/v1/decisions`                          |
+| OpenAI Embeddings       | `/inference/openai/v1/embeddings`                         |
+
+Jedes Modell ist einer API-Familie zugeordnet. Sieh in der Tabelle der
+[Modellendpunkte](/console/models#endpoints) nach oder rufe die aktuelle Liste ab:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+Die [Modelllisten-API](/console/api/models) beschreibt alle Felder der Antwort und die Console-Liste, die auch
+deine verbundenen Anbieter enthält.
+
+### OpenAI Chat Completions
+
+Offene Modelle wie `kimi-k3`, `glm-5.3`, `minimax-m3` und die kostenlosen Modelle nutzen die Chat Completions API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.3",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT-Modelle nutzen die Responses API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude- und Qwen-Modelle nutzen die Messages API. `max_tokens` ist erforderlich.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Bei Gemini stehen Modell und Methode im Pfad. Ersetze `:generateContent` durch `:streamGenerateContent`, um
+die Antwort zu streamen.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+### System One
+
+Entscheidungsmodelle wie `jev-1.14`, `gemini-decision-1` und `gpt-6-luna-decision` beantworten typisierte Fragen zu
+einem `state`, statt Text zu generieren. Siehe [Entscheidungsmodelle](/console/models#jev) für Fragetypen und
+Medien-Eingaben.
+
+```bash
+curl -X POST "https://opencode.ai/inference/systemone/v1/systemone" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My card was charged twice and I need a refund today",
+    "questions": { "urgent": { "type": "noul", "instructions": "Is this request urgent?" } }
+  }'
+```
+
+Dieselben Modelle akzeptieren unter `/inference/openai/v1/decisions` auch das Decisions-Format von OpenAI.
+
+### OpenAI Embeddings
+
+Embedding-Modelle wie `text-embedding-3-small` und `qwen3-embedding-8b` nutzen die Embeddings API. Siehe
+[Embedding-Modelle](/console/models#embedding-models) für alle Modelle und Optionen.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/embeddings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "How do I reset my password?"
+  }'
+```
+
+[Go](/console/go#endpoints) stellt die enthaltenen Entscheidungs- und Embedding-Modelle unter denselben Pfaden unter
+`/inference/go` bereit.
+
+## Kosten
+
+Jede Antwort enthält zusätzlich zu den üblichen Nutzungsdaten der jeweiligen API die Kosten der Anfrage: in
+`usage` bei OpenAI und Anthropic, in `usageMetadata` bei Gemini. Bei Streams stehen die Kosten in dem Event
+mit den abschließenden Nutzungsdaten: bei Chat Completions mit `stream_options.include_usage` im letzten
+Nutzungs-Chunk, bei Responses in `response.completed`, bei Messages in `message_delta` und bei Gemini im
+letzten Chunk.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| Feld                      | Bedeutung                                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | Betrag in US-Dollar, der von deinem Guthaben abgebucht wurde. `0` für kostenlose Modelle und für [Go](/console/go)-Nutzung innerhalb der Limits. Mit eigenem Anbieterschlüssel ist der Betrag eine Schätzung, sofern der Anbieter die Kosten nicht selbst meldet. Das Feld fehlt, wenn für das Modell kein Preis hinterlegt ist. |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus` oder `byok` (dein eigener Anbieterschlüssel).                                              |
+| `opencode.list_cost`      | In US-Dollar zum Preis des Modells, einschließlich Stoßzeiten und Preisen für langen Kontext.                                |
+| `opencode.estimated`      | `true`, wenn `cost` eine Schätzung zum Preis des Modells ist und kein von OpenCode berechneter Betrag. Wird nur mit deinem eigenen Anbieterschlüssel gesetzt. |
+| `opencode.allowance`      | Nur Go: wie viel die Anfrage auf deine [Nutzungslimits](/console/go#usage-limits) angerechnet wurde, in Dollar des Monatslimits des Tarifs. |
+| `opencode.tokens`         | Die Tokens, die dir berechnet wurden. `input` schließt Cache-Lesevorgänge und -Schreibvorgänge aus; `output` enthält `reasoning`. |
+
+Die Bildgenerierung meldet dieselben Felder in der Antwort und bei jedem abgeschlossenen Bild eines Streams mit den
+bisherigen Kosten. Die Kosten stehen fest, wenn die Antwort endet, bevor dein Guthaben oder deine Go-Nutzung
+aktualisiert wird. Wenn dein Guthaben oder deine Go-Limits während einer Anfrage aufgebraucht werden, kann dir weniger
+als gemeldet berechnet werden, nie mehr.

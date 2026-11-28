@@ -1,0 +1,62 @@
+---
+title: "CLI-plugins"
+description: "Indlæs TUI-plugins fra din OpenCode-konfiguration i CLI'en, og tilføj plugins, der kun gælder CLI'en, samt deres indstillinger i cli.json."
+---
+
+CLI'en indlæser automatisk plugins, der er konfigureret i `opencode.json(c)` og stiller en TUI-komponent til rådighed. Se
+[Sådan bygger du plugins](/build/plugins) for en vejledning. Du behøver ikke tilføje den samme pakke til `cli.json`. CLI'en
+henter listen over aktive plugins fra den tilsluttede OpenCode-server, så det virker også, når serveren er ekstern.
+
+Brug `cli.json` til plugins, der kun gælder CLI'en. De kører lokalt i terminalen og forbliver aktive, når CLI'en forbinder
+til en ekstern server:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Posterne behandles i rækkefølge. Sæt `-` foran et ID eller et wildcard for at deaktivere matchende plugins:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Angiv pluginindstillinger med objektformen:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode finder også plugins i den globale konfigurationsmappe og i projektets `.opencode`-mapper. Hvert plugin bruger
+samme struktur som en publiceret pakke, med server- og TUI-entrypoints samlet.
+
+```text title="Stier, hvor plugins findes"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+De plugins, OpenCode finder, kan importere `@opencode/plugin/tui` direkte; OpenCode finder pakken, når plugin'et kører. Se
+[Byg TUI-plugins](/build/plugins/cli) for eksempler.

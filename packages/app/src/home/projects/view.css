@@ -1,3 +1,23 @@
+[data-slot="home-project-nav-button"]:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Paint the project's ring above the hover actions without covering their hit targets. */
+[data-home-row] > [data-slot="home-project-nav-button"]:focus-visible {
+  outline: none;
+}
+
+[data-home-row]:has(> [data-slot="home-project-nav-button"]:focus-visible)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
 /* Home server/project rows keep the label underneath the hover actions.
    The actions carry a tab-style background with a fade on the left, and the
    label fades out where it slides underneath. Mirrors tab-nav.css. */

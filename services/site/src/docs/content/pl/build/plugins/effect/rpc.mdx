@@ -1,0 +1,168 @@
+---
+title: "RPC pluginów Effect"
+description: "Udostępniaj metody i zdarzenia pluginu Effect jako typowane Effecty i strumienie."
+---
+
+Pluginy Effect mogą udostępniać metody i zdarzenia zwracające typowane Effecty i strumienie.
+
+## Definiowanie
+
+Użyj `Rpc.define` z Effect Schema, aby zdefiniować RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### Walidacja
+
+Effect Schema waliduje wartości i wnioskuje ich typy TypeScript.
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+Obsługiwane są też JSON Schema i Standard Schema.
+
+### Wejście i wyjście
+
+Użyj `input` dla argumentu metody, a `output` dla zwracanej wartości. Oba pola są wymagane. Jeśli metoda nie
+przyjmuje argumentu lub nic nie zwraca, użyj `Schema.Struct({})`, wywołaj metodę z `{}` i zwróć `{}`.
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### Błędy
+
+Dodaj oczekiwane niepowodzenia do `errors`. Każdy klucz staje się `type` błędu.
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### Zdarzenia
+
+Dodaj zdarzenia do mapy `events` na najwyższym poziomie. Dane zdarzenia muszą być obiektem. Mapa jest wymagana.
+Jeśli RPC nie ma zdarzeń, użyj `events: {}`.
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## Implementacja
+
+Zarejestruj implementację z Effectu pluginu:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+Mapa błędów staje się typem błędu Effectu każdej metody. Użyj `context.error(...)`, aby utworzyć zadeklarowany błąd.
+
+## Wywoływanie
+
+Po zarejestrowaniu RPC można je wywołać przez HTTP lub z innego pluginu.
+
+### HTTP
+
+Utwórz klienta Effect, a następnie utwórz podklienta RPC:
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### Plugin
+
+Inny plugin Effect może utworzyć lokalnego podklienta ze swojego kontekstu:
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### Subskrypcja
+
+Zdarzenia RPC to strumienie. Subskrybuj według nazwy zdarzenia i uruchom strumień w fiberze w zakresie:
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield* acme.events.subscribe("updated").pipe(
+  Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+  Effect.forkScoped,
+)
+```
+
+Subskrypcje dostarczają tylko bieżące zdarzenia i zamykają się po zakończeniu odczytu strumienia.

@@ -5,7 +5,8 @@ import { ChildProcess } from "effect/process"
 import { Entry, Match } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { collectStream, waitForAbort } from "@opencode/util/process"
-import { Environment } from "./environment/index.js"
+import { TextBoundary } from "@opencode/util/text-boundary"
+import type { Environment } from "./environment/index.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { RipgrepBinary } from "./ripgrep/binary.js"
 
@@ -20,16 +21,19 @@ const ERROR_BYTES = 8 * 1024
 const MAX_SUBMATCHES = 100
 const MAX_LINE_CHARS = 2_000
 
+// rg reports data that is not valid UTF-8 as base64 `bytes` instead of `text`.
+const RawData = Schema.Union([Schema.Struct({ text: Schema.String }), Schema.Struct({ bytes: Schema.String })])
+
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
   data: Schema.Struct({
-    path: Schema.Struct({ text: Schema.String }),
-    lines: Schema.Struct({ text: Schema.String }),
+    path: RawData,
+    lines: RawData,
     line_number: PositiveInt,
     absolute_offset: NonNegativeInt,
     submatches: Schema.Array(
       Schema.Struct({
-        match: Schema.Struct({ text: Schema.String }),
+        match: RawData,
         start: NonNegativeInt,
         end: NonNegativeInt,
       }),
@@ -38,12 +42,15 @@ const RawMatch = Schema.Struct({
 })
 const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
 
-type RawMatchData = (typeof RawMatch.Type)["data"]
+const rawText = (data: typeof RawData.Type) =>
+  "text" in data ? data.text : Buffer.from(data.bytes, "base64").toString("utf8")
 
 export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
+
+export class InvalidGlobError extends Error {}
 
 export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>()("Ripgrep.InvalidPatternError", {
   pattern: Schema.String,
@@ -51,6 +58,7 @@ export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>
 }) {}
 
 export interface FindInput {
+  readonly environment: Environment.Interface
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
@@ -62,6 +70,7 @@ export interface FindInput {
 }
 
 export interface GlobInput {
+  readonly environment: Environment.Interface
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
@@ -71,6 +80,7 @@ export interface GlobInput {
 }
 
 export interface GrepInput {
+  readonly environment: Environment.Interface
   readonly cwd: string
   readonly pattern: string
   readonly file?: string
@@ -103,10 +113,10 @@ const isInvalidPattern = (stderr: string) =>
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const environment = yield* Environment.Service
     const binary = yield* RipgrepBinary.Service
 
     const run = <A>(input: {
+      readonly environment: Environment.Interface
       readonly cwd: string
       readonly args: string[]
       readonly limit: number
@@ -117,9 +127,15 @@ const layer = Layer.effect(
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
-          // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
-          const handle = yield* environment.spawner.spawn(
-            ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
+          const command = !input.environment.rg
+            ? yield* failure(`Search is not available on ${input.environment.id} yet.`)
+            : input.environment.local
+              ? yield* binary.filepath
+              : yield* input.environment.rg.pipe(
+                  Effect.mapError((cause) => failure(`Unable to resolve ripgrep on ${input.environment.id}`, cause)),
+                )
+          const handle = yield* input.environment.spawner.spawn(
+            ChildProcess.make(command, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
             Effect.map((output) => output.buffer.toString("utf8")),
@@ -143,6 +159,11 @@ const layer = Layer.effect(
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
+          if (code === 2) {
+            // rg 13 omits the program name. Ignore-file diagnostics start with a path and line number.
+            const prefix = /^(?:rg: )?error parsing glob /.exec(stderr)
+            if (prefix) return yield* new InvalidGlobError({ message: stderr.slice(prefix[0].length).trimEnd() })
+          }
           if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
@@ -165,6 +186,7 @@ const layer = Layer.effect(
     return Service.of({
       glob: (input) =>
         run<string>({
+          environment: input.environment,
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
@@ -193,6 +215,7 @@ const layer = Layer.effect(
         ),
       find: (input) =>
         run<Entry>({
+          environment: input.environment,
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
@@ -218,7 +241,7 @@ const layer = Layer.effect(
           onItem: input.onEntry,
         }).pipe(Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause)))),
       grep: (input) =>
-        run<RawMatchData>({
+        run({
           ...input,
           args: [
             "--no-config",
@@ -240,17 +263,20 @@ const layer = Layer.effect(
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
                   return Effect.undefined
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => ({
-                    ...match.data,
-                    lines: {
-                      text:
-                        match.data.lines.text.length > MAX_LINE_CHARS
-                          ? Buffer.from(match.data.lines.text.slice(0, MAX_LINE_CHARS), "utf8").toString() + "..."
-                          : match.data.lines.text,
-                    },
-                    path: { text: normalizePath(match.data.path.text) },
-                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
-                  })),
+                  Effect.map((match) => {
+                    const lines = rawText(match.data.lines)
+                    return {
+                      ...match.data,
+                      lines: {
+                        text: lines.length > MAX_LINE_CHARS ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..." : lines,
+                      },
+                      path: { text: normalizePath(rawText(match.data.path)) },
+                      submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
+                        ...submatch,
+                        match: { text: rawText(submatch.match) },
+                      })),
+                    }
+                  }),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),
@@ -279,4 +305,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node, RipgrepBinary.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [RipgrepBinary.node] })

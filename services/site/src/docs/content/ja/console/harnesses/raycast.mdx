@@ -1,0 +1,36 @@
+---
+title: "Raycast"
+description: "Raycast AI で Console と Go のモデルを使用します。"
+---
+
+[OpenCode 拡張機能](https://www.raycast.com/vimtor/opencode)を通じて、Raycast AI Chat、Quick AI、AI Commands で Console と Go のモデルを使用できます。拡張機能が提供するモデルには [Raycast Pro](https://www.raycast.com/pro) が必要です。
+
+## 設定
+
+拡張機能は、ワークスペースで有効になっているモデルを読み込みます。使用料金はそのワークスペースに請求されます。有料モデルまたは Go のモデルを選択してください。無料枠のチャットモデルは OpenCode でのみ利用でき、Raycast からリクエストすると HTTP `403` が返ります。
+
+1. Raycast Store から拡張機能をインストールします。
+2. [パーソナル API キー](/console/harnesses#get-an-api-key)を作成し、拡張機能の **API Key** 設定に貼り付けます。
+3. 拡張機能が提供するモデルを Raycast のモデル選択画面に表示できるようにします。
+
+Console でモデルを有効または無効にした後は、**Refresh Models** を実行します。
+
+```text
+Refresh Models
+```
+
+## Go
+
+[Go](/console/go) のサブスクリプションがあるワークスペースのキーを使用します。拡張機能のモデルピッカーに Go のモデルが表示されます。
+
+## Console MCP
+
+**Install MCP Server** コマンドで [Console MCP](/console/harnesses#console-mcp) サーバーを追加します。
+
+| 項目         | 値                                |
+| ------------ | --------------------------------- |
+| Transport    | HTTP                              |
+| URL          | `https://opencode.ai/console/mcp` |
+| OAuth の種類 | Dynamic                           |
+
+Raycast は初回使用時にサインインを求めます。

@@ -1,0 +1,155 @@
+---
+title: "Effect-клієнт"
+description: "Викликайте HTTP API OpenCode з Effect через @opencode/client/effect, який повертає типізовані Effect і Stream."
+---
+
+`@opencode/client/effect` — це нативний для Effect клієнт HTTP API OpenCode. Він повертає типізовані Effect і Stream
+і декодує відповіді у значення схем OpenCode.
+
+```sh
+bun add @opencode/client effect@4.0.1
+```
+
+## Створення клієнта
+
+Створіть клієнт з URL-адресою сервера, а потім викликайте методи, згруповані за ресурсами API.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## Заголовки та запити
+
+Налаштуйте типові заголовки на переданому `HttpClient`. Нативні операції використовують
+звичайне переривання Effect для скасування. Методи RPC додатково приймають
+параметри локації, заголовків і сигналу для кожного виклику.
+
+{/* prettier-ignore */}
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield* HttpClient.HttpClient
+const client = yield* OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.mapRequest(httpClient, (request) =>
+      HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+    ),
+  ),
+)
+
+const sessions = yield* client.session.list()
+```
+
+## Потокові події
+
+Потокові операції, як-от `event.subscribe()` і `experimental.session.log()`, повертають Effect Stream.
+
+{/* prettier-ignore */}
+```ts
+import { Effect, Stream } from "effect"
+
+yield* client.event
+  .subscribe()
+  .pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+У межах одного клієнта потоки нативних подій і подій RPC використовують одне спільне з'єднання. Воно відкривається
+не під час створення Stream, а коли починається читання потоку. Якщо один споживач зупиняється, решта продовжують
+роботу. Після від'єднання останнього споживача джерело закривається. EOF або збій джерела завершує поточні підписки
+без автоматичних повторних спроб чи відтворення пропущених подій. Споживачі, які підписалися на нативні події пізніше,
+спочатку отримують поточний маркер з'єднання, а потім — нові події.
+
+## RPC плагінів
+
+Використовуйте той самий спільний контракт, що й Promise-клієнти та серверні плагіни:
+
+{/* prettier-ignore */}
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield* acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield* acme.events
+  .subscribe("updated")
+  .pipe(
+    Stream.runForEach((event) =>
+      Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+    ),
+  )
+```
+
+Аргументи й результати методів виводяться з контракту. Другий необов'язковий
+аргумент містить `location`, `signal` і `headers`; якщо локацію не вказано,
+діють стандартні параметри запиту. Переривання Effect, який виконує виклик, перериває і сам виклик.
+Типи з мап помилок методів виводяться для каналу помилок Effect. Оголошені
+помилки декодуються через їхні схеми даних. Типізований субклієнт прибирає загальну
+обгортку помилок HTTP RPC; зарезервовані типи `rpc.*` позначають збої фреймворку.
+
+Події RPC — це типізовані Stream, а не слухачі `on` у стилі колбеків. Вони отримують
+події RPC з усіх локацій, кожна з обов'язковим `location` і звичайним
+типом із префіксом, як-от `rpc.acme.updated`. Це відрізняється від дескрипторів
+серверних плагінів, які прив'язані до власної локації. Дивіться [RPC Effect-плагінів](/build/plugins/effect/rpc),
+щоб дізнатися про визначення, схеми, реєстрацію й семантику живих підписок.
+
+## Локальна фонова служба
+
+Точка входу `@opencode/client/effect/service`, доступна лише в Node, знаходить, запускає, автентифікує й зупиняє
+локальну фонову службу як Effect.
+
+```sh
+bun add @effect/platform-node@4.0.1
+```
+
+Отримайте запущену службу й створіть для неї клієнт з автентифікацією.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, Service.headers(endpoint) ?? {}),
+      ),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+Знайдіть службу, не запускаючи її, або зупиніть саме той зареєстрований екземпляр.
+
+{/* prettier-ignore */}
+```ts
+const endpoint = yield* Service.discover()
+yield* Service.stop()
+```

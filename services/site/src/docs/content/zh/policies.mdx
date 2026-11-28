@@ -1,0 +1,271 @@
+---
+title: "策略"
+description: "允许或拒绝 OpenCode 对指定资源执行操作，托管策略和组织策略优先于用户和项目配置。"
+---
+
+策略决定 OpenCode 能否对指定资源执行某项操作。策略在 `policies` 下编写，也可以由已连接的 [OpenCode 控制台](/console) 工作区下发。
+
+策略与[权限](/permissions)相互独立。权限是针对每个 agent 的工具规则，可以是 `allow`、`deny` 或 `ask`。策略只有允许和拒绝两种结果，从不弹出提示，并且只会收紧权限和提供商原本允许的范围。
+
+## 配置
+
+在 `opencode.jsonc` 中添加一条语句，即可在所有地方禁用某个提供商：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+被拒绝的提供商即使拥有有效的凭据，也会从模型目录和模型选择中消失。
+
+早期版本从 `experimental.policies` 读取策略。该键仍然有效，并会合并到 `policies` 中：
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## 语句
+
+每条语句包含三个字段：
+
+| 字段 | 取值 | 含义 |
+| ---------- | --------------------------------------------- | ---------------------------------------------------- |
+| `action` | `provider.use`、`tool.use`、`integration.connect`、`integration.use`、`mcp.use`、`skill.use`、`plugin.use`、`websearch.use` | 受控制的操作 |
+| `resource` | 字符串或通配符模式 | 语句的作用对象，取决于具体操作 |
+| `effect` | `allow`、`deny` | 语句匹配时的决定 |
+
+未通过校验的语句会被丢弃，并在服务器日志中输出警告，列表中的其余语句仍然生效。编辑 `deny` 语句后，请检查日志。
+
+## 匹配规则
+
+资源使用与权限相同的整值通配符：`*` 匹配零个或多个字符，`?` 匹配一个字符。
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+这会拒绝 `company-us` 和 `company-eu`。以 ` *` 结尾的模式也会匹配不带参数的值，因此 `shell:git push *` 也涵盖单独的 `git push`。
+
+## 顺序
+
+当多条语句匹配时，最后一条生效。这里没有“越具体越优先”的规则，因此请先写宽泛的语句，再写例外。如果没有任何语句匹配，则允许该操作。
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+这样只有 Anthropic 仍然可用。
+
+## 提供商
+
+`provider.use` 控制某个提供商是否可用。资源为提供商 ID：`anthropic`、`openai`、`opencode`，或 [`providers`](/providers) 中的自定义 ID。
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+`providers` 条目配置了端点，而这些语句让它成为 OpenCode 唯一会使用的提供商。无论提供商是通过何种途径发现的，策略都会生效：模型目录数据、环境变量、已保存的账号、内置插件或配置。
+
+请使用 `provider.use` 代替 V1 的 `enabled_providers` 和 `disabled_providers` 列表。V1 配置文件仍然可以加载；请参阅[从 V1 迁移](/migrate-v1#supported-fields-without-direct-native-equivalents)。
+
+## 工具
+
+`tool.use` 语句会强制拒绝某次[权限](/permissions)检查。资源格式为 `<action>:<value>`，会与工具检查的每个资源匹配。
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+被拒绝的检查会直接以 `Blocked by configuration policy` 失败，而不会弹出提示。它在 agent 规则和已保存的批准之后生效，因此无论是 `ask` 还是“Allow always”批准，都会被它覆盖。
+
+| 模式 | 阻止的内容 |
+| ---------------------------- | ------------------------------------------- |
+| `shell:*` | 所有 shell 命令 |
+| `read:*/.ssh/*` | 读取 SSH 相关文件 |
+| `external_directory:*` | 对 Location 或 worktree 之外的任何访问 |
+| `subagent:general` | 启动某个特定 subagent |
+| `github_delete_repository:*` | 某个特定 MCP 工具 |
+| `*` | 所有尚未被拒绝的操作 |
+
+`effect` 为 `allow` 的 `tool.use` 语句永远不会授予访问权限。它只会解除之前更宽泛的 `deny`，之后由 agent 自身的规则决定。
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status` 会回退到 agent 的 `shell` 规则；其他所有命令都会被阻止。
+
+## 集成
+
+集成是你在 `/connect` 中连接的任何内容：OpenCode 控制台（`opencode`）、`anthropic` 这样的提供商、`exa` 这样的网页搜索服务，或 `https://ai.acme.com` 这样的 well-known 配置来源。登录 MCP 服务器不受集成策略影响；请使用 `mcp.use` 控制 MCP 服务器。
+
+`integration.connect` 控制 `/connect` 列出哪些集成，以及哪些集成可以连接。资源是集成 ID。
+
+`integration.use` 控制某个集成提供的一切：它的提供商和模型、网页搜索，以及控制台工作区或 well-known 来源下发的 MCP 服务器和配置。资源格式为 `<integration>#<account>`，其中 account 是所连接的组织或账号 ID，例如 `opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`。没有已连接账号时，就是集成 ID 本身：未登录的免费层级是 `opencode`，`ANTHROPIC_API_KEY` 环境变量是 `anthropic`，`opencode.json` 中的提供商则是其提供商 ID。
+
+以下 MDM 策略只允许使用一个控制台工作区，其他一律不允许。更多示例请参阅[企业版](/enterprise)：
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+`/connect` 只会提供控制台，以便成员登录。免费层级、个人控制台账号、其他组织、环境变量 API 密钥以及 `opencode.json` 中的提供商都不可用。该工作区的提供商、MCP 服务器和网页搜索仍可使用，在控制台中更改它们无需新的 MDM 配置文件。
+
+只有托管策略才能不提供某个集成下发的 MCP 服务器和配置；该集成自身的策略在两种情况下都继续生效。
+
+## MCP 服务器、技能和插件
+
+| 操作 | 资源 |
+| ------------ | ----------------------------------------------------------------- |
+| `mcp.use` | 按配置名称指定的 [MCP 服务器](/mcp-servers) |
+| `skill.use` | 按 ID 指定的[技能](/skills) |
+| `plugin.use` | 按不带版本号的包名或绝对路径指定的[插件](/plugins) |
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+无论如何配置，被拒绝的 MCP 服务器或技能都会被移除，被拒绝的插件也不会被加载。
+
+### 从 `integration.use` 升级
+
+在 OpenCode 2.2.3 之前，`integration.use` 通过 `mcp:`、`skill:` 或 `plugin:` 前缀管控 MCP 服务器、技能和插件。带前缀的语句仍会加载，并会转换为 `mcp.use`、`skill.use` 或 `plugin.use`。
+
+不带这些前缀的语句（包括单独的 `*`）现在作用于集成。像下面这样宽泛的拒绝
+
+```jsonc
+{ "action": "integration.use", "resource": "*", "effect": "deny" }
+```
+
+不再阻止 MCP 服务器、技能或插件，而是会阻止所有提供商（包括免费层级），除非后面的语句允许某个集成。要保留原来的含义，请将其替换为：
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+例外也按同样方式迁移：`integration.use` `mcp:github` 变为 `mcp.use` `github`，`skill:team:review` 变为 `skill.use` `team:review`。
+
+2.2.3 之前的客户端会忽略 `integration.connect`、`integration.use`（新含义）、`mcp.use`、`skill.use` 和 `plugin.use`，因此依赖这些语句时，请要求 2.2.3 或更高版本。
+
+## 网页搜索
+
+`websearch.use` 控制 `websearch` 工具可以使用哪些网页搜索提供商。资源是提供商 ID：控制台提供的 OpenCode Web Search 为 `opencode`，内置提供商为 `exa`、`firecrawl`、`parallel`、`tavily` 或 `tinyfish`，插件添加的提供商则为其 ID。
+
+```jsonc
+{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}
+```
+
+即使某个提供商在没有 API 密钥时也能工作（例如 Exa 和 TinyFish），被拒绝后也会被移除。当所有提供商都被拒绝时，将不再提供 `websearch` 工具。2.2.6 之前的客户端会忽略 `websearch.use`。
+
+## 优先级
+
+普通设置以距离最近的配置为准。策略则相反：来自范围更广的配置的语句会更晚求值，因此会覆盖范围更窄的配置。托管配置和已连接的控制台始终优先于用户和项目文件。
+
+| 权威级别 | 来源 |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1（最高） | macOS 托管偏好设置（`/Library/Managed Preferences/ai.opencode.managed.plist`） |
+| 2 | 系统级 `opencode.json(c)`（`/Library/Application Support/opencode`、`/etc/opencode`、`%ProgramData%\opencode`） |
+| 3 | 已连接的 OpenCode 控制台工作区 |
+| 4 | 全局 `~/.config/opencode/opencode.json(c)` |
+| 5 | 直接放置的 `opencode.json(c)`；外层目录优先于内层目录 |
+| 6（最低） | `.opencode/opencode.json(c)`；外层目录优先于内层目录 |
+
+仓库无法重新启用你在全局范围内拒绝的提供商：
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` 仍然处于拒绝状态。在同一个文件内，语句保持其书写顺序。
+
+## 控制台
+
+[OpenCode 控制台](/console) 上的工作区会将其 Providers 和 Tools 策略编译为工作区配置中的普通 `policies` 语句。OpenCode 会像合并配置文件一样合并该配置，其优先级仅次于托管偏好设置和系统文件，因此组织的 `deny` 无法被仓库或用户的 `allow` 解除，而组织的 `allow` 可以解除权威级别较低的 `deny`。托管偏好设置和系统文件仍会覆盖该工作区配置。
+
+由这些语句导致的拒绝会注明工作区名称：
+
+```text
+Blocked by Acme's policy
+```
+
+语句跟随当前连接的账号。
+
+| 事件 | 结果 |
+| --------------------------- | -------------------------------------------------- |
+| 控制台策略变更 | 在下一次拉取时生效，大约每五分钟一次 |
+| 切换到其他工作区 | 语句替换为该工作区的语句 |
+| 断开连接 | 清除语句 |
+| 无法连接控制台 | 该连接最后一次获取的语句继续生效 |
+
+控制台插件和策略插件无法在 `plugins` 中禁用；请参阅[插件控制](/plugins#control)。
+
+<Callout type="note">
+  策略不会配置端点或凭据，也无法让不可用的提供商变得可用。策略也不会把插件代码放进沙箱：被拒绝的提供商只会在常规的提供商和模型调用路径上被阻止。
+</Callout>

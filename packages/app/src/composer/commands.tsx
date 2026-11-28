@@ -122,6 +122,18 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       keybind: "shift+mod+d",
       onSelect: () => model.variant.cycle(),
     }),
+    // Only for a model that has other speeds, so nothing about speeds shows for the rest.
+    ...(model.speed?.list().length
+      ? [
+          modelCommand({
+            id: "model.speed.cycle",
+            title: language.t("command.model.speed.cycle"),
+            description: language.t("command.model.speed.cycle.description"),
+            slash: "speed",
+            onSelect: () => model.speed?.cycle(),
+          }),
+        ]
+      : []),
     viewCommand({
       id: "usage.view",
       title: language.t("command.usage.view"),

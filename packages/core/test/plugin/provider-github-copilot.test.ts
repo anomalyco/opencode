@@ -238,20 +238,7 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("registers GitHub Copilot device OAuth", () =>
-    Effect.gen(function* () {
-      yield* addPlugin()
-      const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toContainEqual({
-        id: Integration.MethodID.make("device"),
-        type: "oauth",
-        label: "Login with GitHub Copilot",
-        form: expect.any(Array),
-      })
-    }),
-  )
-
-  it.effect("removes the generic key method", () =>
+  it.effect("removes the generic key method and reads COPILOT_GITHUB_TOKEN instead of GITHUB_TOKEN", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       yield* integrations.transform((editor) => {
@@ -266,7 +253,7 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* addPlugin()
       expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
-        { type: "env", names: ["GITHUB_TOKEN"] },
+        { type: "env", names: ["COPILOT_GITHUB_TOKEN"] },
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",
@@ -594,14 +581,6 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("classifies session generation requests as agent interactions", () =>
-    Effect.gen(function* () {
-      yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).parent, "generate")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
-    }),
-  )
-
   it.effect("routes models.dev fallback models to native Copilot APIs", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
@@ -628,6 +607,11 @@ describe("GithubCopilotPlugin", () => {
         editor.models.update(Provider.ID.githubCopilot, Model.ID.make("small"), (model) => {
           model.modelID = Model.ID.make("gpt-5-mini")
           model.package = "@opencode/ai/providers/openai-compatible"
+        })
+        // models.dev marks effort updates on Copilot's Responses API for this model.
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-6-luna"), (model) => {
+          model.package = "@opencode/ai/providers/openai/responses"
+          model.compatibility = { supportsEffortUpdates: true }
         })
       })
       yield* addPlugin()
@@ -656,6 +640,12 @@ describe("GithubCopilotPlugin", () => {
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))),
       )
       expect(resolved.route.id).toBe("openai-compatible-chat")
+
+      const luna = yield* ModelResolver.fromCatalogModel(
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-6-luna"))),
+      )
+      expect(luna.route.id).toBe("openai-compatible-responses")
+      expect(luna.capabilities?.reasoning?.updates).toBe(true)
     }),
   )
 

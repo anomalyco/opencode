@@ -6,7 +6,10 @@ import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode/core/environment/index"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SharedCache } from "@opencode/core/shared-cache"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
+import { EffectSdk } from "../src/internal/effect"
+import { EmbeddedHost } from "../src/internal/host"
 import { Plugin } from "@opencode/plugin/effect"
 import { Context, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
@@ -100,12 +103,15 @@ it.live(
         overrides: [
           llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
           SessionRunnerModel.node.replace(
-            Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+            Layer.succeed(SessionRunnerModel.Service, {
+              select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
+              resolve: () => Effect.succeed(model),
+            }),
           ),
         ],
       }
       yield* llm.push(TestLLM.hangAfter())
-      const first = yield* OpenCode.create(options, embed).pipe(Scope.provide(firstScope))
+      const first = yield* EffectSdk.create(options, embed).pipe(Scope.provide(firstScope))
       const session = yield* first.sessions.create({
         title: "Recovery fixture",
         location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
@@ -121,7 +127,7 @@ it.live(
       yield* Scope.close(firstScope, Exit.void)
       expect(closed).toEqual([1])
       yield* llm.push(TestLLM.toolCall("recovered-tool", "thread_echo", {}), TestLLM.text("Recovered", "answer"))
-      const second = yield* OpenCode.create(options, embed).pipe(Scope.provide(secondScope))
+      const second = yield* EffectSdk.create(options, embed).pipe(Scope.provide(secondScope))
       yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"))
       expect((yield* llm.requests()).length).toBe(1)
       yield* Deferred.succeed(release, undefined)
@@ -159,7 +165,7 @@ it.live(
         suspendForIdle: () => Effect.void,
         destroy: () => Effect.void,
       })
-      const opencode = yield* OpenCode.create(
+      const opencode = yield* EffectSdk.create(
         {
           config: { directory: directory.path, project: false, content: "{}" },
           models: { fetch: false },
@@ -193,7 +199,11 @@ it.live(
           overrides: [
             llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
             SessionRunnerModel.node.replace(
-              Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+              Layer.succeed(SessionRunnerModel.Service, {
+                select: (session) =>
+                  Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
+                resolve: () => Effect.succeed(model),
+              }),
             ),
           ],
         },
@@ -299,4 +309,46 @@ it.live(
       expect(released).toEqual(["thread-7:1", "thread-7:2"])
     }),
   15_000,
+)
+
+it.live("closes private SDK instances before releasing Stage-1 host globals", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const order: string[] = []
+    const host = yield* EmbeddedHost.create(
+      {
+        config: { directory: directory.path, project: false, content: "{}" },
+        models: { fetch: false },
+        fs: { filewatcher: false },
+        instances: {
+          key: (session) => metadata(session.metadata).threadID,
+          configure: () =>
+            Effect.gen(function* () {
+              order.push("instance:acquire")
+              yield* Effect.addFinalizer(() => Effect.sync(() => order.push("instance:release")))
+              return { plugins: [] }
+            }),
+        },
+      },
+      {
+        overrides: [
+          SharedCache.node.replace(
+            SharedCache.node.mapLayer((layer) =>
+              layer.pipe(
+                Layer.tap(() => Effect.addFinalizer(() => Effect.sync(() => order.push("global:SharedCache:release")))),
+              ),
+            ),
+          ),
+        ],
+      },
+    )
+    const session = yield* host.sessions.create({
+      title: "Shutdown order fixture",
+      location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
+      metadata: { threadID: "thread-shutdown" },
+    })
+    yield* host.sessions.prompt({ sessionID: session.id, text: "Hello", resume: false })
+    yield* Effect.promise(() => host.close())
+    expect(order).toEqual(["instance:acquire", "instance:release", "global:SharedCache:release"])
+  }),
 )

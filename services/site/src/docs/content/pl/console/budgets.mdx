@@ -1,0 +1,90 @@
+---
+title: "Budżety"
+description: "Ustaw miesięczne limity wydatków dla obszaru roboczego, jego członków i kont usługowych."
+---
+
+Budżety to zasady ograniczające miesięczne wydatki. Właściciele i administratorzy zarządzają nimi w **Controls**.
+
+## Poziomy budżetów
+
+| Odbiorcy zasady         | Dotyczy                                                       |
+| ----------------------- | ------------------------------------------------------------- |
+| Cały obszar roboczy     | Łączne wydatki wszystkich członków i kont usługowych          |
+| Wszyscy członkowie      | Każdy członek albo jeden wspólny limit dla wszystkich członków |
+| Członkowie z tagami     | Członkowie z wybranymi tagami                                 |
+| Ci członkowie           | Określeni członkowie                                          |
+| Wszystkie konta usługowe | Każde konto usługowe albo jeden wspólny limit                |
+| Te konta usługowe       | Określone konta usługowe                                      |
+
+Każde żądanie musi mieścić się w każdym obowiązującym budżecie. Większy limit nigdy nie zastępuje mniejszego. Bez
+żadnego budżetu wydatki są nieograniczone.
+
+## Budżet obszaru roboczego
+
+Budżet obszaru roboczego blokuje żądania wszystkich, gdy obszar go osiągnie.
+
+1. Otwórz **Controls** i kliknij **Add policy**.
+2. Wybierz **Entire workspace** i dodaj regułę **Budget**.
+3. Wpisz miesięczny limit w USD i kliknij **Save**.
+
+## Budżety członków
+
+Wybierz **All members** w zasadzie, aby dać każdemu członkowi miesięczny limit, albo podziel jedną kwotę między grupę.
+Wybierz konkretnych członków lub tagi, aby objąć mniejszą grupę.
+
+Aby ustawić budżet dla jednej osoby:
+
+1. Otwórz członka w **Settings › Members**.
+2. Kliknij **Create budget policy**, aby otworzyć kreator z wybraną osobą.
+3. Wpisz kwotę i kliknij **Save**.
+
+Strona członka zawiera listę obowiązujących zasad. Jeśli obejmuje go również budżet dla wszystkich członków, obowiązują
+oba limity.
+
+## Budżety kont usługowych
+
+W **Controls** wybierz **All service accounts** lub **These service accounts**, dodaj regułę **Budget** i ustaw
+indywidualny lub wspólny miesięczny limit. Zasada obejmuje każdy klucz należący do tych kont.
+
+## Kwoty i odnawianie limitów
+
+- Kwoty są w dolarach amerykańskich, z dokładnością do dwóch miejsc po przecinku.
+- Budżety resetują się pierwszego dnia każdego miesiąca o 00:00 UTC.
+- Budżet `$0` blokuje wszystkie wydatki liczone do budżetów.
+- Dodanie lub zmiana budżetu uwzględnia wydatki już zarejestrowane w tym miesiącu; nie resetuje limitu.
+
+## Jakie wydatki wliczają się do budżetu
+
+Domyślnie budżet obejmuje **All spend**. Możesz go zawęzić do wybranych modeli; wtedy liczą się tylko one, z jednym
+limitem dla całego zestawu albo osobnym limitem dla każdego modelu.
+
+| Wydatki                                                             | Liczone do budżetów            |
+| ------------------------------------------------------------------- | ------------------------------ |
+| Płatne modele Console                                               | Tak                            |
+| Modele u [własnych dostawców](/console/providers) z ustawioną ceną  | Tak, według skonfigurowanej ceny |
+| [Wyszukiwanie w internecie](/console/websearch)                     | Tak, w budżetach obejmujących wszystkie wydatki |
+| Darmowe modele                                                      | Nie                            |
+| Użycie [Go](/console/go) w ramach planu                             | Nie                            |
+| Dodatkowe użycie Go opłacane ze środków                             | Tak                            |
+
+## Po osiągnięciu budżetu
+
+Nowe żądania kończą się błędem HTTP `429`, dopóki budżet się nie zresetuje albo właściciel lub administrator go nie
+podniesie. Odpowiedź informuje o przekroczeniu budżetu określonego w zasadach, ale nie podaje jego nazwy. Otwórz żądanie
+w **Activity › Logs**, aby zobaczyć zasadę, która je zablokowała.
+
+```text
+Upstream request failed: Policy budget exceeded
+```
+
+Budżety są sprawdzane przy rozpoczęciu żądania. Żądania już w toku kończą się, więc wydatki mogą nieznacznie przekroczyć
+limit.
+
+## Śledzenie wydatków
+
+Każdy członek widzi swoje wydatki i limit w **Activity**. Otwórz **My usage**, aby przejść do **Activity › Overview**,
+wraz ze szczegółami budżetu i datami resetu.
+
+Właściciele i administratorzy mogą otworzyć **Activity › Usage** z wykresu wydatków. Zawiera on podział kosztów według
+dnia, modelu i osoby, a przycisk **Export usage** pobiera dzienne sumy z ostatnich 7, 30 lub 90 dni jako CSV. Aby pobrać
+ten sam plik ze skryptu, użyj [API eksportu użycia](/console/api/usage-export).

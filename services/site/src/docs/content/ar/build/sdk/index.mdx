@@ -1,0 +1,100 @@
+---
+title: "نظرة عامة على SDK"
+description: "استضف OpenCode داخل تطبيقك بـ@opencode/sdk، الذي يقدّم API في الذاكرة بلا مستمع HTTP."
+---
+
+يستضيف `@opencode/sdk` تطبيق OpenCode مباشرةً داخل تطبيقك. وخلافًا
+[لعميل الشبكة](/build/client)، فإنه يجمّع خادم OpenCode ويوجّه
+استدعاءات API عبر موجّه HTTP في الذاكرة، من دون فتح مستمع HTTP أو تمرير الاتصالات
+بين العميل والخادم عبر الشبكة.
+
+ولـCloudflare Durable Objects، راجع [دليل Cloudflare](/build/sdk/cloudflare).
+
+ثبّت SDK:
+
+```sh
+bun add @opencode/sdk
+```
+
+## إنشاء مضيف
+
+يعيد `OpenCode.create()` مضيفًا تقع مسؤولية إغلاقه على المستدعي. استخدم `await using`
+لتحرير الموجّه وخدمات Location ووحدات التنفيذ الخفيفة (fibers) وتسجيلات الملحقات المرتبطة بالنطاق:
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+واستدعِ `await opencode.close()` صراحةً عندما لا تتوفر إدارة الموارد
+الصريحة.
+
+ويستخدم المضيف المضمّن قيم Promise نفسها والأخطاء المعلنة وخيارات
+الطلب وتدفقات `AsyncIterable` التي يستخدمها `@opencode/client`. ويعرض
+العميل المولّد كاملًا ويضيف الاسمين الميسّرين `sessions` و`events`
+لمجموعتي الجلسات والأحداث.
+
+## Worktrees
+
+وتشترط عمليات worktree `projectID`. ويحمّل الإنشاء والتحديث الإعداد والملحقات من النسخة الأساسية
+المحفوظة للمشروع. أما السرد فيقرأ الجرد المحفوظ وحده؛ والإزالة تفعّل الملحقات الأساسية وتستخدم الاستراتيجية المسجّلة،
+وتفشل إذا لم تكن تلك الاستراتيجية متاحة.
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+تكتشف عملية التحديث أشجار worktree في المجلدات الجذرية المعروفة للنسخ المحلية، باستخدام كل الاستراتيجيات المتاحة. يمكنك تسجيل استراتيجية مخصّصة
+عبر [تحويل worktree في ملحق](/build/plugins/server#worktrees).
+
+## بثّ الأحداث
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+لإلغاء جسم الاستجابة، مرّر `AbortSignal` في خيارات الطلب المولّدة،
+أو أوقف التكرار.
+
+## التخصيص
+
+خصّص نسخة OpenCode بتسجيل الملحقات. ومرّر الملحقات إلى
+`OpenCode.create()` لتخصيص الوكلاء والنماذج والأدوات وغيرها من السلوك عند
+بدء المضيف المضمّن:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+واستدعِ `await opencode.plugin(plugin)` لتسجيل ملحق آخر بعد بدء التشغيل.
+
+راجع [وثائق الملحقات الكاملة](/build/plugins/server) لخطافات الملحقات
+وتحويلاتها وأدواتها وسياق الملحق الكامل.

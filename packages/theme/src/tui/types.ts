@@ -32,12 +32,16 @@ export type ResolvedThemeTokens = {
     readonly base: RGBA
     readonly muted: RGBA
     readonly faint: RGBA
+    /** Text inside a mouse or keyboard text selection. */
+    readonly selection: RGBA
     readonly action: Readonly<Record<ActionVariant, StatefulColor>>
     readonly formfield: FormfieldColor
     readonly feedback: Readonly<Record<FeedbackKind, { readonly base: RGBA; readonly muted: RGBA }>>
   }
   readonly background: {
     readonly base: RGBA
+    /** The highlight behind a mouse or keyboard text selection. */
+    readonly selection: RGBA
     readonly raised: {
       readonly base: RGBA
       readonly high: RGBA
@@ -62,6 +66,10 @@ export type ResolvedThemeTokens = {
       readonly text: RGBA
       readonly background: { readonly added: RGBA; readonly removed: RGBA }
     }
+  }
+  readonly find: {
+    readonly text: { readonly current: RGBA }
+    readonly background: { readonly match: RGBA; readonly current: RGBA }
   }
   readonly syntax: Readonly<Record<SyntaxToken, RGBA>>
   readonly markdown: Readonly<Record<MarkdownToken, RGBA>>

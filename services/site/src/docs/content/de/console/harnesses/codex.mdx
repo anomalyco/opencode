@@ -1,0 +1,99 @@
+---
+title: "Codex"
+description: "Nutze Console- und Go-Modelle in Codex."
+---
+
+Codex nutzt die OpenAI Responses API. Verbinde es mit der Console, um beliebige kostenpflichtige Modelle und
+Go-Modelle zu nutzen, darunter Claude, Gemini und offene Modelle. Die Console übersetzt Anfragen für Modelle,
+die Responses nicht unterstützen.
+
+<Callout>
+  Die [Console-CLI](/console/harnesses#console-cli) richtet Codex mit einem Befehl ein, einschließlich der Policies,
+  MCP-Server, Skills und Anweisungen des Workspace. Führe `npx @opencode/console setup codex` aus. Die folgenden
+  Schritte richten es von Hand ein.
+</Callout>
+
+## Konfigurieren
+
+Füge die Console als Modellanbieter in `~/.codex/config.toml` hinzu und mache sie zum Standard.
+
+```toml title="~/.codex/config.toml"
+model = "gpt-6.1-sol"
+model_provider = "opencode"
+
+[model_providers.opencode]
+name = "OpenCode Console"
+base_url = "https://opencode.ai/inference/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+Codex hängt `/responses` an die Basis-URL an und liest den Schlüssel aus `env_key`. Erstelle einen
+[persönlichen API-Schlüssel](/console/harnesses#get-an-api-key) und exportiere ihn dann.
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+codex
+```
+
+<Callout>
+Codex liest Modellanbieter ausschließlich aus `~/.codex/config.toml`. In der `.codex/config.toml` eines
+Projekts kannst du keine Modellanbieter festlegen.
+</Callout>
+
+## Go
+
+Nutze die Go-Basis-URL und einen Schlüssel aus einem Workspace mit [Go](/console/go)-Abo.
+
+```toml title="~/.codex/config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+
+[model_providers.opencode-go]
+name = "OpenCode Go"
+base_url = "https://opencode.ai/inference/go/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+## Modelle
+
+Setze `model` auf eine beliebige Modell-ID aus der [Console](/console/models#endpoints)- oder
+[Go](/console/go#endpoints)-Tabelle. Mit `--model` kannst du die Einstellung für eine einzelne Ausführung
+überschreiben.
+
+```bash
+codex --model claude-sonnet-5-5
+```
+
+Codex kennt weder das Kontextfenster noch die Reasoning-Einstellungen von Modellen außerhalb seines eigenen
+Katalogs. Es greift für solche Modelle auf allgemeine Standardwerte zurück. Die dabei ausgegebene Warnung
+kannst du ignorieren.
+
+## Profile
+
+Mit einem Profile kannst du Pay-as-you-go und Go parallel nutzen. Definiere beide Anbieter in
+`~/.codex/config.toml` und lege dann eine Profile-Datei an, die auf Go umschaltet.
+
+```toml title="~/.codex/go.config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+```
+
+```bash
+codex --profile go
+```
+
+## Console-MCP
+
+Füge den [Console-MCP](/console/harnesses#console-mcp)-Server hinzu und melde dich im Browser an.
+
+```bash
+codex mcp add opencode-console --url https://opencode.ai/console/mcp
+```
+
+Wenn die Anmeldung nicht automatisch startet, führe sie selbst aus.
+
+```bash
+codex mcp login opencode-console
+```

@@ -1,0 +1,96 @@
+---
+title: "Cloudflare"
+description: "Запускайте OpenCode внутри Cloudflare Durable Object с @opencode/sdk/workerd на хранилище SQLite объекта."
+---
+
+Используйте `@opencode/sdk/workerd` внутри Cloudflare Durable Object. Этот профиль записывает события в SQLite-хранилище объекта, чтобы восстановить состояние после выгрузки экземпляра, и заменяет недоступные локальные сервисы работы с файловой системой и процессами.
+
+```sh
+bun add @opencode/sdk
+```
+
+Держите один хост на всё время жизни экземпляра Durable Object вместо создания по одному на каждый запрос.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` не пропускает события Durable Object, пока хост не готов, и сбрасывает объект, если инициализация не удалась. Сохранённый Promise даёт обработчикам запросов прямой доступ к тому же хосту после запуска.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+По условию пакета `workerd` Wrangler выбирает реализации OpenCode, совместимые с Workerd. Cloudflare может выгрузить Durable Object, не выполнив процедуры очистки. Поэтому корректная работа не зависит от вызова `close()`.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Маршрутизация исходящих запросов
+
+Передайте `fetch`, чтобы направлять исходящие HTTP-запросы OpenCode (конфигурация OpenCode Console, запросы к моделям, веб-загрузка и поиск, конфигурация well-known и удалённые MCP-серверы) через собственный обработчик, например Service Binding. Код агента в Code Mode продолжает использовать `globalThis.fetch`.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## Настройка
+
+Настройте экземпляр OpenCode, регистрируя плагины, собранные с вашим Worker. Передайте плагины в `OpenCodeWorkerd.create()`, чтобы настроить агентов, модели, инструменты и другое поведение:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+О хуках, преобразованиях, инструментах и полном контексте плагинов см. [полную документацию по плагинам](/build/plugins/server).

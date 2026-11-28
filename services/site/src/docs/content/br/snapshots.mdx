@@ -1,0 +1,128 @@
+---
+title: "Snapshots"
+description: "Desfaça e refaça mudanças recentes de conversa e de arquivos com /undo e /redo, e veja quais arquivos os snapshots capturam."
+---
+
+Com snapshots, você pode desfazer de uma vez mudanças recentes na conversa e nos arquivos. Use-os para revisar o trabalho recente,
+mas mantenha commits no Git ou backups do que for importante.
+
+## Fluxo de trabalho
+
+Execute `/undo` depois de uma resposta que você quer revisar. O OpenCode prepara a reversão, restaura os arquivos afetados e devolve
+o prompt removido ao composer para você editá-lo.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Enviar o prompt editado confirma a reversão preparada. Antes de enviar, execute `/redo` para cancelá-la e restaurar a
+conversa e os arquivos que você tinha antes de `/undo`.
+
+```text
+/redo
+```
+
+O terminal também oferece atalhos padrão:
+
+| Ação | Comando | Atalho |
+| --- | --- | --- |
+| Preparar a reversão da mensagem anterior | `/undo` | `<leader>u` |
+| Cancelar a reversão preparada | `/redo` | `<leader>r` |
+
+Você também pode selecionar uma mensagem anterior e escolher **Revert** para preparar uma reversão até aquele ponto.
+
+## Captura
+
+Em cada etapa do modelo, o OpenCode tenta capturar um snapshot logo antes da chamada e outro quando registra o sucesso ou a falha
+da etapa. A mensagem do assistente registra quais caminhos mudaram entre esses snapshots.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+A captura não é garantida. Se um dos snapshots não estiver disponível, a conversa continua, mas talvez não seja possível
+restaurar as alterações nos arquivos daquela etapa.
+
+## Escopo
+
+Os snapshots cobrem o diretório ativo da sessão em uma worktree do Git. Por exemplo, uma sessão aberta em `packages/app`
+captura os arquivos elegíveis em `packages/app`, mas não alterações em outras partes do repositório.
+
+| Conteúdo | Capturado | Exemplo |
+| --- | --- | --- |
+| Arquivos rastreados no diretório ativo | Sim | `packages/app/src/app.tsx` |
+| Arquivos não rastreados e não ignorados de até 2 MiB cada | Sim | `packages/app/notes.txt` |
+| Arquivos ignorados pelo Git | Não | `packages/app/dist/app.js` |
+| Arquivos não rastreados individuais maiores que 2 MiB | Não | `packages/app/debug.log` |
+| Arquivos fora do diretório ativo | Não | `packages/server/src/index.ts` |
+| Metadados do Git e outros efeitos colaterais | Não | commits, branches, bancos de dados ou processos |
+
+Os snapshots do sistema de arquivos exigem um repositório Git. Fora de um, `/undo` ainda pode reverter o histórico da conversa, mas
+não consegue restaurar arquivos.
+
+## Restauração
+
+Uma reversão restaura apenas os caminhos atribuídos a etapas do assistente executadas depois do ponto escolhido na conversa.
+Cada caminho volta ao estado anterior à primeira etapa revertida. Se um arquivo não existia antes e foi criado nessas etapas, ele é removido.
+
+| Linha do tempo | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Ponto escolhido | versão A | ausente |
+| Etapas posteriores do assistente | versão B | criado |
+| Depois da reversão | versão A | removido |
+
+Caminhos não atribuídos a essas etapas ficam intactos. Edições atuais em um caminho afetado podem ser sobrescritas, então revise o
+resumo restaurado e o `git diff` antes de continuar.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Armazenamento
+
+O OpenCode armazena snapshots localmente em um banco de objetos Git interno separado, no diretório de dados dele. A captura de snapshots
+não cria commits, não move branches nem faz alterações deliberadas no índice do seu repositório.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Os objetos de snapshot podem conter o conteúdo completo de arquivos rastreados e de arquivos não rastreados elegíveis. Trate o diretório de dados
+do OpenCode como dado local sensível.
+
+## Configurações
+
+Os snapshots vêm ativados por padrão. Defina `snapshots` como `false` na sua [configuração](/config#snapshots) para interromper a captura
+futura do sistema de arquivos.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Desativar os snapshots não exclui os snapshots já armazenados. A reversão de conversa continua disponível, mas sem um
+estado de sistema de arquivos capturado não consegue restaurar as mudanças de arquivo relacionadas.
+
+## Segurança
+
+Snapshots facilitam a reversão, mas não funcionam como transações nem como backups:
+
+- Comandos de shell podem alterar serviços, processos, recursos de rede, bancos de dados, estado do Git, saída ignorada ou arquivos fora
+  do diretório ativo. Restaurar um snapshot não reverte esses efeitos.
+- Trabalho interrompido ou com falha pode deixar mudanças quando a captura falha ou não existe um par de snapshots utilizável.
+- Restaurar caminhos afetados sobrescreve o conteúdo atual deles. Cancelar uma reversão preparada também pode sobrescrever edições posteriores.
+- O OpenCode rejeita operações de reversão enquanto a sessão roda, mas editores e comandos externos ainda podem alterar
+  a worktree entre a captura e a restauração.
+- Confirmar uma reversão remove mensagens da visualização da conversa ativa, não do histórico durável da sessão nem do armazenamento
+  de snapshots existente. Não é apagamento seguro.
+
+Faça commit ou backup do trabalho importante antes de usar `/undo` em uma worktree com alterações sem commit.

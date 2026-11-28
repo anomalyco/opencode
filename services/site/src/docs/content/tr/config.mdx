@@ -1,0 +1,663 @@
+---
+title: "Yapılandırma"
+description: "OpenCode'u opencode.json veya opencode.jsonc içinde yapılandırın; yapılandırma dosyalarının nerede durduğunu, nasıl öncelik kazandığını ve değişkenlerin nasıl değiştirileceğini görün."
+---
+
+OpenCode'u yapılandırmak için projenizde `opencode.jsonc` oluşturun. Düzenleyici doğrulaması için şemayı ekleyin, ardından yalnızca ihtiyaç duyduğunuz seçenekleri ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+OpenCode'dan bu dosyayı sizin için güncellemesini de isteyebilirsiniz.
+
+## Biçim
+
+OpenCode JSON ve JSONC destekler. Yorum veya sondaki virgül istediğinizde JSONC kullanın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+## Konumlar
+
+Yönetilen, makine genelindeki ayarları sistem yapılandırma dizinine koyun:
+
+| Platform | Dizin                                   |
+| -------- | --------------------------------------- |
+| macOS    | `/Library/Application Support/opencode` |
+| Linux    | `/etc/opencode`                         |
+| Windows  | `%ProgramData%\opencode`                |
+
+Sistem dizini genel dizin gibi çalışır. `opencode.json(c)` yanında makinedeki her kullanıcı için `agents/`, `commands/`,
+`skills/` ve `plugins/` dizinlerini de yükler:
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+macOS'ta OpenCode ayrıca MDM araçlarının `ai.opencode.managed` alanı için dağıttığı yönetilen tercihleri okur. Kullanıcıya
+özgü bir profil makine genelindeki profilin yerini alır:
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+Yönetilen ayarlar en yüksek önceliğe sahiptir; bu nedenle kullanıcılar ve projeler onların belirlediği değerleri geçersiz
+kılamaz ve yönetilen tercihler sistem dizinini geçersiz kılar. Ayarlar tek başına kullanıcıların sağlayıcı, MCP sunucusu,
+agent veya eklenti eklemesini engelleyemez; kısıtlamaları uygulamak için yönetilen yapılandırmada
+[politikaları](/policies#precedence) kullanın.
+
+Her proje için kullanıcı ayarlarını genel yapılandırmaya koyun:
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+Proje ayarlarını şu dosyalardan birine koyun:
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode geçerli dizinden dosya sistemi köküne kadar arar. Önce doğrudan `opencode.json(c)` dosyalarını en uzak dizinden en
+yakına doğru, ardından `.opencode` dizinlerindeki dosyaları aynı sırayla birleştirir. Bu, keşfedilen her `.opencode`
+yapılandırmasının doğrudan her yapılandırmanın önüne geçmesi anlamına gelir. Bu davranışa ihtiyacınız yoksa bir dizin
+ağacında tek bir biçim kullanın.
+
+Örneğin OpenCode'u `/home/user/projects/acme/packages/web` dizininden başlatın:
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode bu dosyaları en düşükten en yüksek önceliğe uygular:
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+Paket yapılandırması depo yapılandırmasındaki eşleşen ayarları, depo yapılandırması da genel yapılandırmayı geçersiz kılar.
+Sistem yapılandırması hepsini geçersiz kılar. Çakışmayan ayarlar korunur. Genel ve proje dosyalarındaki
+[politikalar](/policies#precedence) ters sırayla değerlendirilir ve sistem politikaları hepsinin önüne geçer.
+
+## Şema
+
+Eksiksiz OpenCode yapılandırma şeması
+[opencode.ai/config.json](https://opencode.ai/config.json) adresinde bulunur.
+
+JSON Schema destekleyen düzenleyicilerde doğrulama ve otomatik tamamlamayı etkinleştirmek için yapılandırma dosyanıza
+`$schema` alanını ekleyin:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+Kullanılabilir alanlar, kabul edilen değerler ve iç içe yapılandırma biçimleri için şemayı doğruluk kaynağı olarak kullanın.
+
+### Kabuk
+
+Terminalin ve kabuk araçlarının kullandığı kabuğu ayarlayın.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### Model
+
+Varsayılan modeli `provider/model` biçiminde ayarlayın. Kök varsayılan şu anda bir `#variant` saklamaz; agent ve komut model
+referansları bir varyant seçebilir.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-5-5",
+}
+```
+
+Model seçimi ve yerel modeller için [modeller rehberine](/models) bakın.
+
+### Agent
+
+Bir oturum açıkça seçmediğinde kullanılan birincil agent'ı seçin.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+Yerleşik ve özel agent'lar için [agent'lar rehberine](/agents) bakın.
+
+### Güncellemeler
+
+Güncelleme denetimlerini genel yapılandırmadan denetleyin. Denetimleri atlamak için `update` değerini `"disable"`, mevcut
+güncellemeleri kurmadan önce göstermek için `"notify"`, güncellemeleri otomatik kurmak için `"auto"` yapın. Belirtilmezse
+`update` varsayılan olarak `"notify"` olur.
+
+Otomatik kurulum çalışan bir sunucuyu yeniden başlatmaz. Kurulan güncellemeyi etkinleştirmek için sunucuyu elle yeniden
+başlatın. Proje düzeyindeki değerler yok sayılır.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### Kullanıcı adı
+
+Bir kullanıcı adı ayarlayın. OpenCode bu alanı kabul eder ancak konuşmalarda göstermez.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### İzinler
+
+Bir agent bir aracı eşleşen bir kaynakta kullanmadan önce izin veren, reddeden veya onay isteyen sıralı kurallar tanımlayın.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Kural eşleştirme ve kullanılabilir eylemler için [izinler rehberine](/permissions) bakın.
+
+### Politikalar
+
+Daha geniş yapılandırmanın geçersiz kılabileceği sıralı ifadelerle bir sağlayıcının kullanımına izin verin veya reddedin,
+bir izin denetimini kesin olarak reddedin ya da bir MCP sunucusunu, skill'i veya eklentiyi engelleyin.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+Eşleştirme, yapılandırma dosyaları arasındaki öncelik ve Console tarafından yönetilen politika için
+[politikalar rehberine](/policies) bakın.
+
+### Agent'lar
+
+Yerleşik agent'ları geçersiz kılın veya kendi modeli, talimatları, modu ve izinleri olan özel agent'lar tanımlayın.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+Tüm agent seçenekleri ve dosya tabanlı agent'lar için [agent'lar rehberine](/agents) bakın.
+
+### Anlık görüntüler
+
+Geri alma ve revert davranışının kullandığı dosya sistemi anlık görüntülerini etkinleştirin veya devre dışı bırakın.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+Geri alma ve yineleme davranışı için [anlık görüntüler rehberine](/snapshots) bakın.
+
+### İzleyici
+
+Dosya sistemi güncellemelerini tetiklememesi gereken dosya ve dizinleri yok sayın.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### Biçimlendirici
+
+`write`, `edit` veya `patch` araçları dosyaları değiştirdikten sonra onları biçimlendirin. Kullanılabilir yerleşik
+biçimlendiricileri etkinleştirmek için `formatter` değerini `true` yapın.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+Yerleşikler ve özel biçimlendiriciler için [biçimlendiriciler rehberine](/formatters) bakın.
+
+### Medya
+
+`read` aracının yüklediği büyük görsellerin modele gönderilmeden önce nasıl yeniden boyutlandırılacağını veya reddedileceğini
+denetleyin.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Görsel işleme ve sınırlar için [ekler rehberine](/attachments) bakın.
+
+### Çıktı
+
+Bir araç sonucundan saklanan azami satır ve bayt sayısını ayarlayın.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### Arama
+
+OpenCode'un web'de nasıl arama yapacağını seçin. Kullanılabilir bir sağlayıcıyı otomatik seçmek için `"random"` kullanın.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+Sağlayıcılar, kimlik bilgileri, seçim, hız limitleri ve aramayı devre dışı bırakma için
+[web araması rehberine](/websearch) bakın.
+
+### MCP
+
+Yerel ve uzak Model Context Protocol sunucularını yapılandırın. Genel `mcp.timeout` değerleri yapılandırma dosyalarında
+tanımlanan sunuculara uygulanır; her sunucunun `timeout` değeri onları geçersiz kılar.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+Uzak sunucular, OAuth, ortam değişkenleri ve zaman aşımları için [MCP rehberine](/mcp-servers) bakın.
+
+### Sıkıştırma
+
+Otomatik bağlam sıkıştırmasını ve ne kadar son bağlamı koruduğunu denetleyin.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": "15%",
+  },
+}
+```
+
+`buffer`, otomatik sıkıştırma başlamadan önce modelin bağlam penceresinden boş tutulan paydır.
+
+Varsayılan yöntem yerel özetlemedir. Hem otomatik hem de elle başlatılan sıkıştırmayı sağlayıcı tarafında yapmak için
+sağlayıcı veya model politikasında bu yöntemi etkinleştirin:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-6.1-sol": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Model ayarı sağlayıcı ayarını geçersiz kılar. Otomatik sıkıştırma seçilen modelin kullanılabilir girdi bütçesini kullanır.
+Sağlayıcı kontrol noktaları son kullanıcı mesajlarını, yerel özetlerin tutulan kuyruk için kullandığı aynı
+`compaction.keep.tokens` bütçesi içinde tutar. Üst düzey `compaction.auto: false`, kurulu kontrol noktalarını atmadan yeni
+otomatik sıkıştırmayı kapatır. Bütçeleme ve taşma kurtarma için [sıkıştırma rehberine](/compaction) bakın.
+
+### Isıtma
+
+Yakın zamanda etkin olan model oturumlarının önbelleğini düzenli, geçici isteklerle sıcak tutun. Isıtma varsayılan olarak
+kapalıdır. En fazla 30 dakika boyunca, her modelin önbelleğinin süresi dolmadan hemen önce istek göndermek için `true` yapın.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "auto",
+    "duration": "30 minutes",
+  },
+}
+```
+
+Bir sağlayıcının veya modelin `settings.cache.warming` ayarı bunu geçersiz kılar ve `settings.cache.ttl` sağlayıcının
+önbelleği ne kadar tutacağını belirler. İstek davranışı, özelleştirme ve maliyet değerlendirmeleri için
+[ısıtma rehberine](/warming), `cache.ttl` için [önbellek ömrü](/models#cache-lifetime) bölümüne bakın.
+
+### Skill'ler
+
+OpenCode'un agent skill'leri için araması gereken dizinleri veya URL'leri ekleyin.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+Skill yapısı ve `.opencode/skills/` altındaki otomatik keşif için [skill'ler rehberine](/skills) bakın.
+
+### Komutlar
+
+Yeniden kullanılabilir eğik çizgi komutlarını adlandırılmış prompt şablonları olarak tanımlayın.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+Argümanlar, modeller, agent'lar ve dosya tabanlı komutlar için [komutlar rehberine](/commands) bakın.
+
+### Talimatlar
+
+Ek talimat dosyaları, glob'lar veya HTTP(S) URL'leri bildirin. OpenCode bunları keşfedilen `AGENTS.md` dosyalarının yanında
+yükler.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+Proje talimatları ve `AGENTS.md` için [talimatlar rehberine](/instructions) bakın.
+
+### Referanslar
+
+Yerel dizinleri veya Git depolarını adlandırılmış destekleyici bağlam olarak kullanılabilir kılın.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+Kısa yazım, görünürlük ve yol çözümleme için [referanslar rehberine](/references) bakın.
+
+### Worktree'ler
+
+Yeni yerel worktree'ler için üst dizini ayarlayın. OpenCode istenen veya oluşturulan worktree adını sonuna ekler.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Göreli yollar projenin kayıtlı asıl checkout'una göre çözümlenir. Bu hem genel hem de proje yapılandırması için geçerlidir;
+mutlak yollar olduğu gibi kullanılır ve `~/` kullanıcının ana dizinine göre çözümlenir.
+
+Örneğin bu genel yapılandırma yeni worktree'leri her projenin kendi `.lane/trees/` dizini altına yerleştirir:
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+Bu ayar olmadan oluşturma, sunucunun veri dizini altındaki `worktree/<first-six-project-ID-characters>` yolunu kullanır.
+Worktree oluşturma ve yenileme, yapılandırmayı projenin kayıtlı asıl checkout'undan yükler; diğer klonlar aynı proje
+kimliğini paylaştığında da böyle yapar. Bunu değiştirmek var olan worktree'leri taşımaz.
+
+Git yerleşik varsayılandır. Bir strateji kaydeden [eklenti](/build/plugins/server#worktrees) o eklenti çalışma zamanında
+otomatik olarak varsayılan olur. Proje işlemleri asıl checkout'un çalışma zamanını kullanır. Stratejiye özgü seçenekler
+`worktree` yapılandırma nesnesine değil o eklentiye aittir.
+
+### Eklentiler
+
+Eklentileri paketlerden veya yerel eklenti dizinlerinden yükleyin. Bir eklenti seçenek kabul ettiğinde nesne biçimini
+kullanın.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+Eklenti yükleme ve yapılandırma için [eklentiler rehberine](/plugins) bakın.
+
+### Sağlayıcılar
+
+Sağlayıcıları yapılandırın ve modellerini, istek ayarlarını, başlıklarını ve model varyantlarını ekleyin veya geçersiz kılın.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol-custom": {
+          "modelID": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Sağlayıcı `settings.transport: "websocket"` ayarı oturum WebSocket'ini seçer.
+
+Kimlik bilgileri, özel endpoint'ler, sağlayıcı paketleri, WebSocket üzerinden iletişim ve model yapılandırması için
+[sağlayıcılar rehberine](/providers) bakın.
+
+## Değişkenler
+
+Yapılandırmada ortam değişkenlerinin değerlerini ve dosya içeriklerini yer tutucularla kullanabilirsiniz. Yer tutucuları JSON dizelerinin içine yazın.
+
+### Ortam değişkenleri
+
+Bir ortam değişkeninin değerini yapılandırmaya yerleştirmek için `{env:VARIABLE_NAME}` kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Ortam değişkeni ayarlanmamışsa boş bir dizeyle değiştirilir.
+
+### Dosyalar
+
+Bir dosyanın içeriğini yapılandırmaya yerleştirmek için `{file:path/to/file}` kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": {
+        "apiKey": "{file:~/.secrets/openai-key}",
+      },
+    },
+  },
+}
+```
+
+Dosya yolları şunlar olabilir:
+
+- Yapılandırma dosyası dizinine göreli
+- Mutlak veya ana dizininiz için `~/` ile başlayan
+
+Dosya yoksa boş bir dizeyle değiştirilir.
+
+Bunlar şunlar için kullanışlıdır:
+
+- API anahtarları gibi hassas verileri ayrı dosyalarda tutmak.
+- Ortak yapılandırma parçalarını birden fazla yapılandırma dosyası arasında paylaşmak.
+
+## Deneysel
+
+<Callout type="warning">
+  Deneysel ayarlar herhangi bir sürümde önceden bildirilmeden değişebilir, bozulabilir veya kaldırılabilir. Kararlı iş
+  akışları için bunlara güvenmeyin.
+</Callout>
+
+Tüm deneysel ayarlar `experimental` anahtarı altında bulunur:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "todo": true,
+    "subagent_depth": 2,
+    "image_generate": { "model": "openai/gpt-image-2" },
+    "location_idle_timeout": "4 hours",
+  },
+}
+```
+
+### Yapılacaklar
+
+Agent'lara çok adımlı işleri izlemeleri için bir `todowrite` aracı vermek üzere `todo` değerini `true` yapın. Varsayılan
+`false`dur.
+
+### Subagent derinliği
+
+`subagent_depth`, subagent'ların kendi subagent'larını ne kadar derin başlatabileceğini belirler. Varsayılan `1`dir; yani
+bir subagent başka bir subagent başlatamaz.
+
+### Görsel oluşturma
+
+`image_generate`, [`generate_image`](/tools#image-generate) aracı için varsayılan modeli `providerID/modelID` olarak,
+isteğe bağlı `#variant` ile belirler. O model kullanılamadığında veya bir isteği karşılayamadığında OpenCode otomatik olarak
+başka bir görsel modeli seçer.
+
+```jsonc
+{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
+  },
+}
+```
+
+### Location boşta kalma zaman aşımı
+
+`location_idle_timeout`, bir proje konumunun oturum etkinliği olmadan ne kadar süre geçebileceğini ve ardından OpenCode'un
+hizmetlerini boşaltacağını denetler. `"2 hours"` gibi bir süre alır ve varsayılan `"60 minutes"`dır. Çalışan oturumlar ve
+arka plan işleri bir konumu yüklü tutar. Boştaki konumları asla boşaltmamak için `false` yapın. Proje yapılandırması genel
+değeri geçersiz kılabilir.
+
+```jsonc
+{
+  "experimental": {
+    "location_idle_timeout": false,
+  },
+}
+```
+
+### Kullanımdan kaldırılmış politikalar
+
+`experimental.policies` kullanımdan kaldırılmıştır. Bunun yerine üst düzey [`policies`](/policies) kullanın. Eski anahtar
+hâlâ çalışır ve `policies` içine birleşir.

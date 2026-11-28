@@ -1,0 +1,1902 @@
+---
+title: "Sunucu"
+description: "Bir OpenCode eklentisinin sunucu parçasını geliştirin: araçlar, kancalar, entegrasyonlar, komutlar ve agent'lar."
+---
+
+Bir eklentinin sunucu parçası OpenCode sunucusunda çalışır. OpenCode'un davranışını değiştirir ve özellikler ekler:
+araçlar, kancalar, entegrasyonlar, komutlar ve agent'lar. Eklenti paketini nasıl düzenleyeceğinizi, yükleyeceğinizi ve
+yayımlayacağınızı öğrenmek için [Genel bakış](/build/plugins) bölümüne bakın.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+## Yaşam döngüsü
+
+`setup`, eklenti yüklendiğinde çalışır. Eklenti devreden çıkarıldığında çalışacak bir temizleme işlevi döndürebilir.
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### Bağlam
+
+Eklenti bağlamı esasen bir [OpenCode sunucu istemcisidir](/build/client). Okuma ve eylem yöntemleri istemciyle aynı
+girdileri ve yanıtları kullanır. Dönüşümler, çalışma zamanı kancaları, yeniden yüklemeler, kayıtlar ve eklenti seçenekleri
+için eklentiye özgü yöntemler ekler.
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location`, bu eklenti örneğinin yüklendiği konumu açıklar. `directory`, isteğe bağlı `workspaceID` ve `project` üst
+verisini (`id`, `directory` ve `canonical`) içerir. Hem Promise hem de Effect eklentilerinde kullanılabilir. Bu, eklenti
+örneğinin konumudur; erişebileceği her oturumun veya alacağı her olayın konumu değildir.
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### Seçenekler
+
+Eklenti seçeneklerini `opencode.json(c)` içinde nesne biçimiyle iletin.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Bu değerleri `setup` sırasında `ctx.options` üzerinden okuyun.
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## Dönüşümler
+
+Dönüşümler, OpenCode'un ilgili alandaki durumunu eşzamanlı olarak düzenler. Her dönüşüm, o alanda daha önce kaydedilen
+dönüşümlerin sonucuna uygulanır. `ctx.model.list()` gibi kayıt defteri okumaları, eklenti kurulumu sırasında bile o ana
+kadarki tüm kayıtları yansıtır. Başlangıçta yalnızca güncelleme bildirimleri birleştirilir. Okuma sonuçları geciktirilmez.
+Kaynak durum API'leri, çalışmakta olan kaynakların durumunu bildirir. Bir tanımın kaydedilmesi, bağlantının kurulduğu
+veya kaynakla ilgili diğer işlemlerin tamamlandığı anlamına gelmez.
+
+Kaynaklar, `ctx.provider.transform` üzerinden sağlayıcı ve değişmez model tanımları ekler.
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+Herhangi bir kayıt, kaldırma veya `reload()` kayıt defterini değişmiş olarak işaretler; sonraki okuma, etkin her
+dönüşümü kayıt sırasına göre yeni bir değer üzerinde yeniden oynatarak onu yeniden oluşturur. Dönüşümleri ucuz ve
+yinelenebilir tutun. Zaten okuduğunuz bir değer sonraki yeniden oluşturmalarla asla değiştirilmez.
+
+Sağlayıcı dönüşümleri ve kullanılabilirlik çözümlendikten sonra OpenCode etkin sağlayıcıların modellerini somutlaştırır
+ve her model dönüşümünü sırayla yeniden oynatır. Bir model politikası, yeni yenilenen kaynaklar dahil tüm aday
+koleksiyonunu inceleyebilir.
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+Yakalanan girdiler otomatik olarak izlenmez. Harici verileri eşzamanlı geri çağırmadan önce yükleyin, ardından bu girdiler
+değiştikten sonra `reload()` çağırın. Burada `loadFromSource()` `{ info: Provider.Info, models: readonly Model.Info[] }`
+girdileri döndürür.
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+Sağlayıcı değişiklikleri tüm etkin model sonucunu geçersiz kılar; böylece çıktı fiyatı politikası yenilenmiş modelleri
+yine filtreler. Yalnızca bir model dönüşümünün yakaladığı girdi değiştiğinde `ctx.model.reload()` kullanın.
+
+## API
+
+### Agent
+
+Tüm agent'ları okuyun veya kimliğiyle bir tane getirin.
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+Agent'ları incelemek, oluşturmak, güncellemek veya kaldırmak ya da varsayılan agent'ı seçmek için bir dönüşüm kaydedin.
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+Yeni bir agent kaydetmek için `editor.update` kullanın. Kimlik zaten varsa bu yöntem o agent'ı düzenler. Yoksa geri
+çağırma işlevini çalıştırmadan önce `Agent.Info.default(id)` ile bir agent oluşturur.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
+})
+```
+
+Bir dönüşümün kullandığı harici durum değiştikten sonra agent'ları yeniden yükleyin.
+
+```ts
+await ctx.agent.reload()
+```
+
+#### Referans
+
+Şema: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### Sağlayıcılar
+
+Kullanılabilir sağlayıcıları okuyun veya bir sağlayıcının üst verisini kimliğiyle inceleyin.
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+Sağlayıcı dönüşümleri sağlayıcı ayarlarını ve kaynak tanımlarını düzenler. Düzenleyici okumaları etkin olmayan
+sağlayıcıları içerir ve değişmez tanımları sunar; `models.update` bir kaynak modelin sahiplenilmiş kopyasını düzenler.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-5-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+Bir sağlayıcının kaynak envanterini `models.set` ile değiştirin, ardından yakalanan tanımlar değiştikten sonra yeniden
+yükleyin.
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+Hesaba özgü keşif için envanteri yüklemek üzere kullanılan bağlantıyı `sourceConnection` olarak iletin. Eklentiniz
+yenilenmiş envanterini yayımlayana kadar başka bir bağlantı seçiliyken OpenCode o sağlayıcıyı dışlar.
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### Referans
+
+Şemalar: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### Modeller
+
+Kullanılabilir modelleri ve varsayılan seçimi okuyun.
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+Model dönüşümleri etkin sağlayıcının eksiksiz aday koleksiyonunu düzenler. Devre dışı adaylar tüm dönüşümler bitene kadar
+düzenlenebilir kalır; `update` bir modeli yalnızca kullanılabilir bir sağlayıcı altında ekleyebilir.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-5-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+Geri çağırmalar ham model geçersiz kılmalarını düzenler. OpenCode sonucu işlerken sağlayıcı varsayılanları bir kez
+birleştirilir; değişmemiş okumalar o sonucu yeniden kullanır. `editor.provider`, model dönüşümü çıktısı yerine etkin
+olmayan şablonlar dahil değişmez kaynak tanımlarını sunar.
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-5-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### Referans
+
+Şema: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### Komutlar
+
+Bir konumda kullanılabilir komutları okuyun.
+
+```ts
+const commands = await ctx.command.list()
+```
+
+Komutları bir dönüşümle kaydedin. Yürütücü oturumu, prompt eklerini ve istenen teslim modunu alır.
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+Bir dönüşümün kullandığı harici durum değiştikten sonra komutları yeniden yükleyin.
+
+```ts
+await ctx.command.reload()
+```
+
+#### Referans
+
+Şemalar: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### Entegrasyonlar
+
+Entegrasyonları okuyun ve etkin kimlik bilgilerini inceleyin.
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+Entegrasyonları bir API anahtarıyla bağlayın.
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+Bir OAuth bağlantı denemesini başlatın, inceleyin, tamamlayın veya iptal edin.
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+Komut tabanlı bağlantılar aynı başlatma, durum ve iptal akışını sunar.
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+Entegrasyonları incelemek ve kimlik doğrulama yöntemlerini yönetmek için bir dönüşüm kaydedin.
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+Bir dönüşümün kullandığı harici durum değiştikten sonra entegrasyonları yeniden yükleyin.
+
+```ts
+await ctx.integration.reload()
+```
+
+#### Referans
+
+Şemalar: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### Kimlik bilgileri
+
+Kaydedilmiş bir kimlik bilgisini entegrasyonu için etkin olan yapın.
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### Referans
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+MCP sunucularını ve güncel bağlantı durumlarını listeleyin.
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+Eklentiler MCP sunucularını yalnızca dönüşümler üzerinden yönetir. Bir sunucu eklemek veya değiştirmek için `editor.set`,
+yapılandırmasını değiştirmek için `editor.update`, kaldırmak için `editor.remove` kullanın. Yapılandırmayı `editor.list` ve
+`editor.get` ile inceleyin.
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+Bir sunucuyu devre dışı bırakmak ve bağlantısını kesmek için dönüşümde `disabled: true`, etkinleştirmek ve OpenCode'un
+bağlanmasına izin vermek için `disabled: false` ayarlayın. OpenCode sunucu yaşam döngüsünü dönüştürülmüş
+yapılandırmadan uzlaştırır.
+
+Bir dönüşümün kullandığı harici durum değiştiğinde dönüşümleri yeniden uygulamak ve sunucuları uzlaştırmak için
+`reload()` çağırın.
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### Referans
+
+Şemalar: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### Eklentiler
+
+Bir konum için şu anda etkin olan eklentileri listeleyin.
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### Referans
+
+Şemalar: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### Referanslar
+
+Bir konumda kullanılabilir referansları okuyun.
+
+```ts
+const references = await ctx.reference.list()
+```
+
+Yerel ve Git referanslarını incelemek, eklemek veya kaldırmak için bir dönüşüm kaydedin. `get(name)` geçerli
+yapılandırılmış kaynağı veya ad yoksa `undefined` döndürür.
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+Bir dönüşümün kullandığı harici durum değiştikten sonra referansları yeniden yükleyin.
+
+```ts
+await ctx.reference.reload()
+```
+
+#### Referans
+
+Şemalar: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### Generate (deneysel)
+
+Bir oturum oluşturmadan, araç çağırmadan veya oturum geçmişine eklemeden seçili bir modelle oluşturun. Bu API'ler
+değişebilir. `ctx.generate.text` hâlâ çalışır ancak `ctx.experimental.generate.text` lehine kullanımdan kaldırılmıştır.
+
+```ts
+const review = await ctx.experimental.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+  prompt: "Review this proposed action.",
+})
+
+const { images } = await ctx.experimental.generate.image({
+  model: { providerID: "openai", id: "gpt-image-1-mini" },
+  prompt: "A watercolor fox in the snow",
+  aspect: "16:9",
+})
+
+const { answers } = await ctx.experimental.generate.decisions({
+  model: { providerID: "opencode", id: "jev-1.13" },
+  input: [{ type: "text", text: "I was charged twice, please refund one." }],
+  questions: [{ type: "predicate", name: "refund", instructions: "Is this a refund request?" }],
+})
+```
+
+### İzinler
+
+Bir eylem yapmadan önce izin isteyin. `assert`, oturumun [izin kurallarını](/permissions), kaydedilmiş onaylar dahil,
+değerlendirir ve bir kural `ask` olarak sonuçlandığında kullanıcıya sorar. Eyleme izin verildiğinde sonuçlanır.
+
+```ts
+execute: async (input, context) => {
+  await ctx.permission.assert({
+    sessionID: context.sessionID,
+    agent: context.agent,
+    source: { type: "tool", messageID: context.messageID, id: context.id },
+    action: "deploy",
+    resources: [input.environment],
+    save: [input.environment],
+  })
+  return { content: await deploy(input.environment) }
+}
+```
+
+- `action` ve `resources` kurallarla eşleştirilir. Herhangi bir `deny` eylemi engeller; aksi halde herhangi bir `ask`
+  onay ister.
+- `save`, kullanıcı her zaman izin vermeyi seçtiğinde saklanan desenleri listeler.
+- `agent` kimin kurallarının uygulanacağını seçer ve varsayılan olarak oturumun agent'ını kullanır. `source`, istemi bir
+  araç çağrısına bağlar.
+- `metadata`, izin istemlerine ve `evaluate` kancalarına ek ayrıntı iletir.
+
+Bir ret kuralı veya geri bildirimli bir ret, nedeni taşıyan bir `Tool.Error` ile reddeder; böylece model bunu görür ve
+devam eder. Düz bir ret mevcut adımı bitirir. Bu hataları araç çıktısı olarak döndürmek yerine yayılmalarına izin verin.
+
+Bekleyen izin isteklerini inceleyin veya çözümleyin.
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
+```
+
+Oturum kapsamlı izin kurallarını değiştirin. Agent'ın kurallarından sonra değerlendirilirler ve son eşleşen kural kazanır.
+Alt oturumlar oluşturulduklarında yürürlükte olan kuralları devralır.
+
+```ts
+await ctx.session.update({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### Oturumlar
+
+Bir oturum oluşturun veya okuyun.
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+Oturumları sayfa sayfa listeleyin. Sonraki sayfayı almak için `cursor.next` değerini `cursor` olarak geri iletin. İmleç
+filtrelerinizi hatırlar; bu nedenle onları yinelemeniz gerekmez.
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20 })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+```
+
+Sonraki isteklerde kullanılan agent'ı veya modeli değiştirin.
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-5-5" } })
+```
+
+Kullanıcı promptları, geçici oluşturma istekleri, komutlar veya sentetik mesajlar gönderin.
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+await ctx.session.command({ sessionID, name: "review", text: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+`generate`, `text` değerini çağrının `tokens` ve `cost` değerleriyle birlikte döndürür. Bu değerler asistan mesajlarında
+kullanılan biçimdedir.
+
+Bir oturumu yeniden adlandırın, çalışmasını durdurun veya tamamlanmasını bekleyin.
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, resume: false })
+await ctx.session.wait({ sessionID })
+```
+
+Geçici bir oturumu `remove` ile kaldırın. Kaldırma etkin yürütmeyi durdurur ve alt oturumları özyinelemeli olarak siler.
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+Sıkıştırmayı `compact` ile isteyin. Tamamlanmış bir özet değil kabul edilen gelen kutusu öğesini döndürür; sıkıştırma
+varsayılan olarak sonraki adım sınırında çalışır. Kuyruk sırasını korumak için bunun yerine `delivery: "queue"` iletin.
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+Anahtarla tanımlanan oturum talimatlarını `instructions.entry` ile ekleyin, listeleyin veya kaldırın. Girdiler, oturum
+talimatlarında `<context key="...">` blokları olarak yer alır. Güncellemeler ve kaldırmalar, kuyruğa yeni bir mesaj turu
+eklenmeden sonraki adım sınırında bildirilir.
+
+```ts
+await ctx.session.instructions.entry.put({ sessionID, key: "deploy-target", value: "production" })
+const entries = await ctx.session.instructions.entry.list({ sessionID })
+await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
+```
+
+#### Referans
+
+Şemalar: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  instructions: {
+    entry: {
+      list(
+        input: ExperimentalSessionInstructionsEntryListInput,
+        requestOptions?: RequestOptions,
+      ): Promise<readonly InstructionEntryInfo[]>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+    }
+  }
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<void>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### Skill'ler
+
+Bir konumda kullanılabilir skill'leri okuyun.
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+Skill'leri incelemek, eklemek, güncellemek veya kaldırmak için bir dönüşüm kaydedin. `get(id)` geçerli düzenleyici
+girdisini veya skill yoksa `undefined` döndürür.
+
+```ts
+import { Skill } from "@opencode/plugin"
+
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: Skill.ID.make("review"),
+    name: Skill.Name.make("Review"),
+    description: "Review the current changes",
+    path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review/SKILL.md"),
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+Bir dönüşümün kullandığı harici durum değiştikten sonra skill'leri yeniden yükleyin.
+
+```ts
+await ctx.skill.reload()
+```
+
+#### Referans
+
+Şema: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### Depolama
+
+Eklentiye özgü kalıcı JSON değerlerini saklayın, okuyun veya kaldırın.
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+Anahtarları öneklerine göre tarayın. İsterseniz sonuçları imleç kullanarak sayfa sayfa alın.
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### Referans
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### Araçlar
+
+Bir dönüşüm geri çağırmasının dışında, tüm dönüşümlerden sonra şu anda kayıtlı araçları okuyun. Her aracın etkin adını
+içeren bir `id` değeri vardır.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+Promise eklentileri dahil olmak üzere araçları eşzamanlı bir dönüşümle kaydedin, güncelleyin ve kaldırın. Dönüşümü kaydetmeden veya yeniden yüklemeden önce harici verileri yükleyin. Aynı etkin araç adı için sonraki geçerli kayıt, önceki kaydın yerini alır.
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+Promise araç yürütücüleri `context.signal` alır. Oturumu durdurmanın alttaki işlemi de durdurması için onu `fetch` gibi
+iptal edilebilir işlere iletin.
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+#### Serbest biçimli araç girdisi
+
+Tam olarak bir gerekli dize alanı olan doğrudan bir araç, modelin o dizeyi JSON sarmalayıcısı olmadan yazmasına izin
+verebilir. `freeform` değerini `{ type: "text" }`, `{ type: "regex", pattern }` veya `{ type: "lark", grammar }` yapın.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+Seçili modelin API'si models.dev'de `regex` listeliyorsa model `OPS-42` yazabilir. Aksi halde Core **yalnızca**
+`freeform` alanını atlar: model yine `ticket` aracına sahiptir ve onu `{"id":"OPS-42"}` ile çağırır. Eksik veya boş
+biçim listeleri serbest biçim desteği olmadığı anlamına gelir. Yürütücü her iki durumda da `{ id }` alır.
+
+Code Mode içinde (`codemode: true`), serbest biçimli bir araç dizesini doğrudan alır, örneğin
+`await tools.ticket("OPS-42")`. `await tools.ticket({ id: "OPS-42" })` de çalışır.
+
+Geri çağırmanın yakaladığı kaynak verileri değiştirdikten sonra `reload()` çağırın. Yeniden yükleme etkin dönüşümleri
+sıralarını değiştirmeden yeniden oynatır; eklenti kurulumunu yeniden çalıştırmaz.
+
+```ts
+await ctx.tool.reload()
+```
+
+Düzenleyicide şu anda bulunan araçları incelemek için `list()` ve `get()` kullanın. Araçların etkin adlarını içeren bir
+`id` değeri vardır ve o kimlik yoksa `get()` `undefined` döndürür. `update` ve `remove` işlemlerini etkin araç adıyla,
+ad alanı dahil (yukarıdaki `acme_greeting`) kullanın. Ad alanlarındaki noktalar `_` ile değiştirilir. Araç adlarında
+harfler, rakamlar, `_` ve `-` dışındaki karakterler `_` ile değiştirilir. Var olmayan adlar yok sayılır; bir araç
+oluşturmak için `add` yöntemini eksiksiz bir tanımla çağırın.
+Güncellemeler adı ve ad alanını korur. Yeni şemaları veya seçenekleri atayarak onları değiştirin, iç içe değerleri
+değiştirmeyin. Geçersiz güncellemeler günlüğe yazılır ve önceki tanım bozulmadan kalır.
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+Güncellemeler ve kaldırmalar, MCP katalog yenilemelerinden sonra da dahil, eklemelerle sırayla yeniden oynatılır.
+Bu değişikliklerin kayıtları kaldırıldığında araç tanımları kalan dönüşümlerden yeniden oluşturulur.
+
+Bir kaydı kaldırdığınızda ilgili dönüşüm de kaldırılır ve sonuç kalan dönüşümlerden yeniden oluşturulur. Böylece kaldırılan dönüşümün geçersiz kıldığı önceki tanım yeniden geçerli olur. Aynı kaydı tekrar kaldırmanın ek bir etkisi yoktur. Eklenti devreden çıkarıldığında kayıtları da kaldırılır.
+
+```ts
+await registration.dispose()
+```
+
+Her model isteği, çalıştırılabilir araçların o andaki sabit bir görüntüsünü alır. Sonraki dönüşümler, yeniden yüklemeler
+ve kayıt kaldırmaları yalnızca gelecekteki görüntüleri etkiler. Daha önce alınan araç tanımları, Code Mode ad alanı
+açıklamaları ve yürütücüler değişmez. Dış kapsamdan değiştirilebilir eklenti verilerine başvuran yürütücüler bu
+verilerdeki değişiklikleri yine görür. Bir değerin tanıma bağlı kalması gerekiyorsa değeri dönüşüm içinde alın.
+
+#### Referans
+
+Şemalar: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+Depo bilgilerini, çalışma kopyasının durumunu veya dosya farklarını okuyun.
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branch.list({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+Konum kapsamlı bir VCS sağlayıcısını bir dönüşümle kaydedin. Algılanan depo türüyle eşleşen sağlayıcı otomatik olarak
+seçilir; farklı bir sağlayıcı seçmek için `editor.default.set` kullanın.
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+Sağlayıcının geri çağırma işlevleri geçerli konumu, çalışma kopyasının kökünü, projenin asıl kökünü ve varsa deponun
+saklandığı yeri alır. Dosya farklarını hesaplayan işlevler ayrıca seçilen modu, istenen bağlamı ve bayt cinsinden
+çıktı bütçesini alır. OpenCode, depoları bulmak için yerleşik Git ve Mercurial algılayıcılarını kullanmaya devam eder.
+
+Sağlayıcılar isteğe bağlı olarak `scope.worktree` içinde bir depo oluşturmak için `init(scope, { signal })` uygulayabilir.
+Başlatma sağlayıcıyı algılanan depo türüne göre değil kimliğine göre (varsayılan Git) seçer. Konumda henüz depo olmasa
+bile `init` içeren bir sağlayıcı kaydedin; OpenCode onu çağırmadan önce dizinin var olduğunu ve depo içermediğini
+denetler, ardından projeyi yeniden keşfeder. Yeni depo biçimleri yine de bu geri çağırmanın ötesinde keşif desteği
+gerektirir.
+
+#### Referans
+
+Şemalar: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branch: {
+    list(input?: VcsBranchListInput, requestOptions?: RequestOptions): Promise<VcsBranchListOutput>
+  }
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Worktree'ler
+
+Normal eklenti yaşam döngüsünü kullanarak yerel bir worktree stratejisi kaydedin. Bu örnekteki uygulama modülü seçenek
+doğrulamasına ve arka ucun `create`, `remove` ve `list` işlemlerine sahiptir.
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+Eklentiyi `plugins` üzerinden yükleyin ve ortak hedefi ayrıca yapılandırın:
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- Bir strateji eklemek onu otomatik olarak seçer. Son etkin kayıt kazanır; strateji seçimi yapılandırması gerekmez.
+- Stratejinin kaydını kaldırmak veya eklentiyi devreden çıkarmak önceki uygulamayı geri getirir. Başka strateji kalmadığında yerleşik Git stratejisi kullanılır.
+- `reload()`, yakalanan girdiler değiştikten sonra dönüşümleri yeniden oynatır; eklenti kurulumunu yeniden çalıştırmaz.
+- Oluşturma hataları Git üzerinden yeniden denenmez. Var olan worktree'ler, varsayılan değişse bile kaydedilmiş
+  sahiplerini korur.
+- Stratejiler yerel dizinleri yönetir. Uzak çalışma alanı sağlama bu arayüzün parçası değildir.
+
+#### İşlemler
+
+Eklenti bağlamı, istemciyle aynı proje tabanlı worktree işlemlerini sunar. Her işlem bir `projectID` gerektirir. `list`
+yalnızca aynı projenin bilinen checkout'ları dahil kayıtlı envanteri okur; yapılandırma yüklemez, eklenti başlatmaz veya
+dosya sistemi değişikliklerini keşfetmez.
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+Oluşturma, yapılandırmayı ve eklentileri projenin kayıtlı `canonical` dizininden yükler ve seçili stratejilerini kullanır.
+İsteğe bağlı bir üst `directory`, kaynak `from`, başlangıç `branch` ve `name` kabul eder. Kaynak varsayılan olarak asıl
+checkout'tur ve `from` geçersiz kılması o projeye ait olmalıdır. Kaynak seçmek yapılandırma kökünü değiştirmez. Verilen
+başlangıç referansı seçili strateji tarafından desteklenmelidir; örneğin Rift'in yerel anlık görüntü işleminin referans
+seçme seçeneği yoktur.
+
+Oluşturma ve yenileme, asıl checkout'un eklentilerinin etkinleşmesini bekler. O checkout'un eklenti kurulumu sırasında
+yapılan çağrılar o ana kadarki kayıtları görür ve kendi etkinleşmelerini beklemez.
+
+Kaldırma asıl yapılandırmayı yükler ve eklentilerini etkinleştirir, ardından şu anda seçili varsayılan yerine worktree'nin
+kaydedilmiş stratejisini kullanır. Kullanılamayan kaydedilmiş sahip bir hata üretir. Worktree'nin hedefi başka bir yerde
+olabilir:
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+Kayıtlı strateji bulunamazsa Git'e dönülmez; kaldırma işlemi hata verir. Bir strateji, zorla kaldırma için onay istemek üzere `new Worktree.OperationError({
+message: "Uncommitted changes", forceRequired: true })` hatasını fırlatabilir. Bunun için `Worktree` öğesini `@opencode/plugin` paketinden içe aktarın. Core veya Git hatalarına bağımlılık gerekmez.
+
+Yenileme asıl yapılandırmayı yükler ve kullanılabilir tüm stratejilerden bilinen checkout köklerinde worktree'leri
+bulmalarını ister. Sonuçları birleştirir, kaydedilmiş sahipliği korur ve eksik dizinleri budar. Başarısız bir keşif
+kaynağı günlüğe yazılırken diğer kaynaklar devam eder. Var olan dizinler, kullanılabilir hiçbir strateji onları
+bildirmese bile kayıtlı kalır. Değişen envanteri okumak için `worktree.updated` olayını izleyin ve `list` komutunu
+yeniden çağırın.
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### Referans
+
+Uygulamalar, adlandırma ve çakışma işlemesinden sonra önerilen bir hedef alır. `create` işleminden gerçek dizini
+döndürün; bir arka uç kendi düzenini gerektirdiğinde bu farklı olabilir. OpenCode döndürülen yolu çözer ve envanter,
+başlatma komutları ve API sonucu için onu kullanır. Döndürülen dizin var olmalıdır.
+
+Başka bir hedef seçen stratejiler adlandırma çakışmalarını orada yönetir. OpenCode yine de stratejiyi çağırmadan önce
+önerilen üst dizini oluşturur. `list`, stratejinin sahip olduğu dizinleri ve varsa depo köklerini bildirmelidir.
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+Promise geri çağırmaları `signal` iptaliyle işbirliği yapmalıdır. Effect geri çağırmaları Effect döndürür ve bunun
+yerine Effect kesmesini kullanır. Kayıtlar eklenti çalışma zamanına kapsamlı kalır; proje işlemleri asıl checkout'un
+kayıt defterini kullanır. Core yapılandırma bağdaştırıcıları dizin ayarlarını o kayıt defterine besler.
+
+### Websearch
+
+Web araması sağlayıcılarını listeleyin veya seçili sağlayıcı üzerinden bir sorgu çalıştırın.
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+Bir sağlayıcı kaydedin ve bir dönüşümle varsayılan sağlayıcıyı seçin.
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = (await response.json()) as { url: string; title: string; content: string }
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+Web aramasını kapatmak için `false` seçin. Harici durum değiştiğinde sağlayıcıları yeniden yükleyin.
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### Referans
+
+Şemalar: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### Olaylar
+
+Bağlı sunucunun genel olay akışına abone olun. Akışı eklenti temizliği sırasında iptal edin. Yalnızca o olay türlerini
+almak için `types` iletin, örneğin `ctx.event.subscribe({ types: ["config.updated"] })`; olaylar buna uyacak şekilde
+tiplenir. Eklentiler sunucunun içinde çalıştığı için SDK istemcilerinden farklı olarak `server.connected` olayını asla
+almazlar. Bilinmeyen tür adları sunucu günlüğünde bir uyarıyla yok sayılır.
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### Referans
+
+Şema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+type EventType = Exclude<OpenCodeEvent["type"], "server.connected">
+
+interface EventContext {
+  subscribe<Type extends EventType = EventType>(options?: {
+    types?: Type[]
+    signal?: AbortSignal
+  }): AsyncIterable<Extract<OpenCodeEvent, { type: Type }>>
+}
+```
+
+## Kancalar
+
+Kancalar, işlemler yürütülürken devreye girer. Kancayı ilgili alana kaydedin ve artık gerekmediğinde döndürülen kaydı kaldırın.
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+Birden fazla eklenti aynı kancayı kaydedebilir. OpenCode onları eklenti sırasına göre çalıştırır; böylece sonraki kancalar
+önceki kancaların yaptığı değişiklikleri görür.
+
+### Oturumlar
+
+Oturum kancaları prompt kabulünde, model çağrılarında, doğrudan HTTP trafiğinde ve yeniden denemelerde devreye girer.
+
+#### Fork'lar
+
+`fork` kancası, OpenCode geçmişi kopyaladıktan sonra ve oturumu dallandıran çağrı tamamlanmadan önce çalışır. `sessionID` yeni oturumu
+tanımlar.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
+#### Prompt kabulü
+
+Gelen kullanıcı promptlarını, ekler ve skill'ler çözümlenmeden ve prompt kalıcı gelen kutusuna alınmadan önce işleyin:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+Kanca sahiplenilmiş ve değiştirilebilir bir taslak alır:
+
+- `prompt`, `text`, `files`, `agents` içindeki agent anmalarını ve seçili `skills` değerlerini içerir.
+- `metadata`, uygulama tanımlı kabul üst verisini içerir.
+- `delivery` varsayılan olarak `"steer"` olur ve `"queue"` olarak değiştirilebilir.
+- Oturum ve mesaj kimlikleri salt okunurdur; bir kanca kabulü yönlendiremez.
+
+Bir kancanın eklediği dosyalar ve skill'ler normal çözümleme ve doğrulama yolunu izler. Metni yeniden yazarken artık
+eşleşmeyen ek `mention` uzaklıklarını güncelleyin veya kaldırın. Agent anmaları oturumun etkin agent'ını değiştirmez.
+
+Prompt kancaları şu koşullarda çalışır:
+
+- Kancalar, oturumun konum eklentileri hazır olduktan sonra kayıt sırasına göre çalışır.
+- `session.prompt` üzerinden gönderen komutlar kancayı çalıştırır.
+- Sentetik mesajlar, kabuk mesajları, sıkıştırma denetimleri ve taşıma denetimleri çalıştırmaz.
+- Kanca her model çağrısından önce değil, kabul sırasında bir kez çalışır.
+- Model çözümlemesi kabulden sonra yapıldığı için sağlayıcı kapsamı kullanılamaz.
+
+Düzenlemeler kalıcı kullanıcı girdisinin kendisi olur. Hazırlık başarısız olur veya kesilirse OpenCode promptu kabul
+etmez.
+
+Prompt kancalarını yeniden denemeye dayanıklı tutun. Tam olarak bir kez çalışan yan etki sınırı değildirler:
+
+- Zaten bekleyen veya teslim edilmiş bir kimlikle yeniden denemek, kancaları yeniden çalıştırmadan özgün kabulü döndürür.
+- Eşzamanlı gönderimler kancaları birden fazla kez çalıştırabilir, ancak yalnızca ilk başarılı kabul kazanır.
+- Prompt kancaları girdiyi dönüştürür ve tipli bir ret API'si sunmaz.
+
+#### Model istekleri
+
+Model gönderiminden hemen önce birleştirilmiş sistem talimatlarını, mesajları, araçları veya istek seçeneklerini
+değiştirin. Bir oturumun yaptığı her istek türünün kendi kancası vardır; böylece bir eklenti agent döngüsünü ve yardımcı
+istekleri farklı ele alabilir:
+
+- `context`, araç kaynaklı devamlar dahil agent döngüsü için çalışır.
+- `compaction`, kontrol noktası özetleri için çalışır. `messages`, özetlenen konuşma dökümüdür; OpenCode özet promptunu
+  kancalar çalıştıktan sonra ekler. Sıkıştırmayı kendiniz kaydetmek ve model çağrısını atlamak için `result` ayarlayın;
+  tamamlanmış bir sıkıştırma mesajıyla aynı alanları alır.
+- `generate`, geçici `ctx.session.generate` çağrıları için çalışır.
+- `title`, başlık oluşturma için çalışır. `agent` veya `tools` içermez. Başlığı kendiniz sağlamak için `result` ayarlayın.
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+Değişiklikler yalnızca giden model çağrısını etkiler, kalıcı geçmişi veya yapılandırmayı etkilemez. Her isteğe
+uygulanması gereken bir kanca her tür için kaydolmalıdır.
+
+`context`, `compaction` ve `generate` kancalarındaki mesajlar, saklanan mesajlarının `metadata` değerini salt okunur
+olarak taşır (örneğin bir `prompt` kancasının ayarladığı değer). Bu, modele gönderilmez.
+
+OpenCode'un talimatlarını tutan `system` parçası ayrıca her kaynağı `metadata.experimental.instructions` içinde
+`{ key, text }` olarak listeler, örneğin `core/date` veya `core/environment`; böylece bir kanca kaynakları ayırt
+edebilir. Liste bir kopyadır: parçanın `text` değerini düzenlemek onu güncellemez. Bu deneyseldir ve değişebilir.
+
+İstek geçersiz kılmaları şu kuralları izler:
+
+- `options` her model çağrısı için boş başlar; çözümlenmiş model ayarlarını içermez.
+- Tipli anahtarlar üretim ayarlarıdır; diğer her anahtar seçili protokole sağlayıcı seçeneği olarak iletilir.
+- Kancalar kayıt sırasına göre çalışır ve önceki kancaların yaptığı geçersiz kılmaları görür.
+- İstek geçersiz kılmaları model varsayılanlarının, model varsayılanları da rota varsayılanlarının önüne geçer.
+- Sağlayıcı seçenek nesneleri özyinelemeli olarak birleşir; diziler ve skaler değerler önceki değerlerin yerini alır.
+- Bir geçersiz kılmayı silmek veya `undefined` yapmak, onları kaldırmak yerine yapılandırılmış varsayılanlara geri döner.
+- Ham HTTP gövde katmanları protokol indirgemesinden sonra uygulanır ve ortaya çıkan alanları geçersiz kılabilir.
+
+#### Sağlayıcı seçenekleri
+
+Sağlayıcı seçenekleri ham HTTP gövde alanlarını değil seçili protokolün anlamsal seçenek adlarını kullanır. Sağlayıcıya
+özgü ayarları eşleşen sağlayıcıyla sınırlayın. Örneğin OpenAI Responses `reasoningEffort` kullanır:
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+Üretim seçenekleri seçili protokole ve modele bağlıdır:
+
+- `maxTokens` anlamsal çıktı token limitidir.
+- Gemini `topK` destekler; OpenAI Responses bunu sunmaz.
+
+#### Model çözümleme
+
+Deneysel. Bir Oturum bir istek için modeli her çözümlediğinde, onun için herhangi bir şey oluşturulmadan önce çalışır.
+`model` seçili model olarak başlar; bu isteği aynı sağlayıcıdan başka bir modelle, model seçicide gizli olanlar dahil,
+sunmak için onu değiştirin. Oturum seçili modelini korur; istek ve asistan mesajı yeni modeli kullanır. `kind`, hangi
+isteğin çözümlendiğini söyler; böylece bir yönlendirici başlıkları atlayabilir veya sıkıştırmadan sonra yeniden
+yönlendirebilir. Başka bir sağlayıcıdan gelen model kullanılamaz olarak başarısız olur.
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
+
+#### Model isteği
+
+Model istek ayarlarını değiştirin ve isteğe bağlı olarak kancayı tek bir sağlayıcıyla sınırlayın. Olay, aşağıdaki HTTP
+kancalarıyla aynı `kind` değerini taşır.
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### Yerel HTTP
+
+Yerel sağlayıcı isteklerini veya yanıtlarını değiştirin. Gövdeleri tek kullanımlık akışlardır; okumadan önce bir gövdeyi
+klonlayın veya değiştirin.
+
+İki kanca da bir oturumun yaptığı her istek için çalışır. `event.kind`, isteği hangi akışın yaptığını söyler: agent
+döngüsü için `"primary"`, kontrol noktası özetleri için `"compaction"`, başlık oluşturma için `"title"` ve geçici
+`ctx.session.generate` çağrıları için `"generate"`. Yardımcı istekleri ayırt etmek için agent kimliği yerine bunu
+kullanın.
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### Yerel WebSocket (deneysel)
+
+WebSocket üzerinden akış yapan sağlayıcılar oturum başına bir bağlantı açar ve istekler arasında onu yeniden kullanır;
+bu nedenle `http.request` ve `http.response` o trafiği hiç görmez. `experimental.ws.handshake` kancası model çağrısı
+başına bir kez, bağlantı seçilmeden önce çalışır. HTTP kancalarıyla aynı `sessionID`, `agent`, `model` ve `kind`
+değerlerini, ayrıca bağlantının `url` ve `headers` değerlerini taşır. `url` veya `headers` değiştirmek isteğin hangi
+  soketi kullanacağını değiştirir. Bu nedenle bearer token yenilendiğinde bağlantı yeniden açılır.
+
+HTTP kancaları tüm HTTP isteklerinde çalışmaya devam eder. WebSocket yerine HTTP'ye geçildiğinde gönderilen istek de buna dahildir.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send` ve `experimental.ws.receive`, bir HTTP istek veya yanıt gövdesini düzenlemenin WebSocket
+karşılığı olarak çerçevelerin kendisini sunar. `send`, sağlayıcı sürücüsü giden bir çerçeve oluşturduktan sonra ve o
+yazılmadan önce; `receive` ise her gelen çerçevede sürücü onu görmeden önce çalışır. İkisi de çerçeveyi dize olarak
+taşır ve kanca döndüğünde `frame` ne tutuyorsa onu gönderir.
+
+OpenCode yeniden yazılmış çerçeveleri doğrulamaz. Sürücü durumu sağlayıcının yanıtlarından izler; bu nedenle protokol
+anlamını değiştiren bir yeniden yazma, tıpkı yeniden yazılmış bir HTTP gövdesi gibi, eklentinin sorumluluğundadır.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+Bu kancalar deneyseldir ve adları veya biçimleri değişebilir.
+
+#### Yeniden deneme politikası
+
+Bir sağlayıcı hatası için yeniden deneme kararını geçersiz kılın veya gecikmesini milisaniye olarak değiştirin. Kanca,
+OpenCode hatayı sınıflandırıp politikasını önerdikten sonra ama herhangi bir yeniden deneme planlanmadan önce çalışır.
+OpenCode'un sonraki denemeyi dahili olarak nasıl yaptığını sunmaz.
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+Yeniden deneme kancaları, sonlandırıcı bir hatayı yeniden denenebilir yaparak veya önerilen bir yeniden denemeyi veto
+ederek OpenCode'un başlangıçtaki `decision` değerini değiştirebilir.
+
+Yeniden deneme kararları şu kuralları izler:
+
+- Birden fazla kanca kayıt sırasına göre çalışır ve sonraki kancalar geçerli kararı görür.
+- Yerleşik azami deneme sayısı kesin bir sınır olarak kalır.
+- `attempt`, değerlendirilen fiziksel denemedir. İlk istek `1`dir, bu nedenle ilk yeniden deneme `2`dir.
+- `NaN`, sonsuz veya negatif değerler gibi geçersiz gecikmeler hesaplanan gecikmeye geri döner.
+- Bağlam taşması kurtarması ayrıdır; çünkü aynı isteği yeniden denemek yerine konuşmayı sıkıştırır.
+
+#### Oturum referansı
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  native?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### İzinler
+
+Yapılandırılmış kurallar değerlendirildikten sonra ve bir eylem çalışmadan veya bir izin istemi yayımlanmadan önce izin
+kararlarını gözden geçirin.
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-5-5" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+İzin kancaları şu kuralları izler:
+
+- Kancalar `allow` ve `ask` kararları için çalışır.
+- Açıkça yapılandırılmış bir `deny` kesindir ve kancayı çağırmaz.
+- Bir kanca `effect` değerini `allow`, `ask` veya `deny` olarak değiştirebilir.
+- `message`, yükseltilmiş bir izin isteğinde görünür veya ret nedeni olur.
+
+#### Referans
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### Kabuk
+
+Kabuk komutlarını, çalışma dizinlerini, zaman aşımlarını, çalıştırılabilir dosyaları veya ortam değişkenlerini yürütmeden
+önce değiştirin.
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### Referans
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### Araçlar
+
+Yürütmeden önce araç girdisini inceleyin veya değiştirin.
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+Yürütmeden sonra başarılı sonuçları veya hataları inceleyin.
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### Referans
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## V1 desteği
+
+Bir eklenti aynı paket giriş noktasından V1 ve V2 desteği sunabilir. V1 `server()` işlevi ve V2 `setup()` işlevi olan
+tek bir nesneyi varsayılan olarak dışa aktarın:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- V1 `server()` çağırır ve döndürülen kancaları kullanır.
+- V2 varsayılan dışa aktarımın `id` ve `setup()` değerlerini (Effect eklentilerinde `effect()`) okur, `server()` yok
+  sayar.
+- Her uygulamayı kendi API'sinde tutun; bir dışa aktarımı paylaşmak V1 kancalarını V2 kancalarına çevirmez.
+- V2 tanımının türlerini `server()` işlevinden bağımsız olarak denetlemek için `Plugin.define(...)` sonucundaki alanları
+  yayma sözdizimiyle dışa aktarılan nesneye ekleyin.
+
+V1 nesne biçimi OpenCode `1.18.29` sürümünde desteklenir. Daha eski V1 sürümleri bunun yerine işlev dışa aktarımları
+bekleyebilir; kurulu paketi desteklemeyi amaçladığınız en eski V1 sürümüyle ve V2 ile test edin.

@@ -1,0 +1,92 @@
+---
+title: "Katalogsynkronisering"
+description: "Tilføj og fjern medlemmer af arbejdsområdet automatisk fra Okta, Microsoft Entra ID eller enhver SCIM 2.0-identitetsudbyder."
+---
+
+Med katalogsynkronisering (SCIM 2.0) bliver personer automatisk medlemmer af arbejdsområdet, når du tildeler dem adgang hos identitetsudbyderen, og mister adgangen, når du fjerner tildelingen. Roller administreres stadig i Console.
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## Før du starter
+
+- Opsæt [SSO](/console/sso) for arbejdsområdet.
+- [Verificér](/console/sso#verify-email-domains) alle de e-maildomæner, som dine folk logger ind med.
+  Katalogsynkronisering tilføjer kun personer på et verificeret domæne; inviter alle andre fra
+  [Medlemmer](/console/members).
+
+## Opret et token
+
+Kun ejere af arbejdsområdet kan opsætte katalogsynkronisering eller oprette og tilbagekalde dens tokens.
+
+1. Åbn **Settings › Security**, og klik på **Set up** under **Directory sync**.
+2. Kopiér **SCIM base URL** og tokenet. Tokenet vises kun én gang, så gem det i et værktøj til sikker opbevaring af hemmeligheder.
+
+Din identitetsudbyder sender tokenet med hver anmodning.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Forbind din identitetsudbyder
+
+### Okta
+
+1. Tilføj appen **SCIM 2.0 Test App (Header Auth)**.
+2. Angiv base URL'en, og skriv `Bearer ` efterfulgt af tokenet i **API Token**.
+3. Aktivér **Create Users**, **Update User Attributes** og **Deactivate Users**. Lad **Import Groups** og
+   passwordsynkronisering være slået fra.
+
+### Microsoft Entra ID
+
+1. Åbn **Provisioning** i din enterprise-app, og angiv tilstanden til **Automatic**.
+2. Angiv base URL'en som **Tenant URL** og tokenet som **Secret Token**.
+3. Tildel brugere og grupper, og start derefter provisioning.
+
+### Andre udbydere
+
+Brug en SCIM 2.0-app, der peger på den angivne base URL og bruger et token i en HTTP-header til autentificering. Console understøtter endpointene `/Users` og `/Groups`.
+
+Tildel først én testperson. **Directory sync** viser **Connected to your identity provider** efter den første
+anmodning.
+
+## Hvad synkroniseres
+
+| I din identitetsudbyder      | I Console                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| Tildel en person             | Tilføjes som **Member**. Eksisterende medlemmer beholder deres rolle.              |
+| Opdater et navn              | Profilen opdateres.                                                               |
+| Fjern tildelingen eller deaktivér | Adgangen suspenderes, og medlemmet vises som **Deactivated**. API-nøgler, som medlemmet har oprettet, tilbagekaldes. |
+| Tildel igen                  | Adgangen gendannes. Tilbagekaldte nøgler forbliver tilbagekaldt.                   |
+| Slet                          | Fjernes fra arbejdsområdet. Deres konto og andre arbejdsområder påvirkes ikke.     |
+
+- Roller og e-mailadresser ændres ikke af katalogsynkronisering.
+- Den sidste ejer kan ikke deaktiveres eller slettes.
+- Arbejdsområder med et [Go](/console/go)-abonnement kan ikke tilføje medlemmer via katalogsynkronisering.
+
+## Grupper
+
+Send grupper til Console for at give deres medlemmer tags, f.eks. via **Push Groups** i Okta eller gruppetildeling i Entra. Tildel personerne adgang, før du sender deres grupper.
+
+```text
+Platform Admins  →  platform-admins
+```
+
+Hver gruppe tagger sine medlemmer med et tag opkaldt efter gruppen. Under **Settings › Security › Group tags** kan du
+omdøbe et tag, pege flere grupper på ét tag eller stoppe med at tagge en gruppe. Når en person forlader en gruppe, fjernes
+gruppens tag.
+
+## Rotér tokenet
+
+1. Klik på **New token**, og installér det i din identitetsudbyder.
+2. Vent, til der vises et tidspunkt for seneste brug for det nye token.
+3. Tilbagekald det gamle token.
+
+Tilbagekaldelse af et token stopper fremtidige opdateringer, men ændrer ikke eksisterende medlemmer. Sletning af
+SSO-forbindelsen tilbagekalder alle tokens.
+
+## SSO og katalogsynkronisering
+
+Når et arbejdsområde har udstedt et token, [tilføjer SSO ikke længere medlemmer automatisk](/console/sso#automatic-membership).
+Kataloget bestemmer, hvem der hører til, også selvom tokenet senere tilbagekaldes.

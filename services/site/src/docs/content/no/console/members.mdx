@@ -1,0 +1,69 @@
+---
+title: "Medlemmer"
+description: "Inviter folk til et OpenCode Console-arbeidsområde, administrer rollene deres og fjern dem."
+---
+
+Eiere og administratorer administrerer medlemmer i **Settings › Members**. Åpne medlemssiden for å se bruk og budsjettpolicyer.
+
+## Inviter medlemmer
+
+1. Åpne **Settings › Members** og klikk **Invite Members**.
+2. Legg til én eller flere e-postadresser. Skill dem med mellomrom, komma eller semikolon, eller lim inn en liste.
+3. Klikk **Send invitations**.
+
+Hver person får en e-post med tittelen **Join Acme Inc. on OpenCode** og en **Join workspace**-knapp.
+
+Invitasjoner utløper etter 7 dager. Alle blir med som **Member**; [endre rollen](#change-a-role) etter at de har blitt med.
+
+<Callout>
+  På [OpenCode Go](/console/go) og Go Plus bruker folk du inviterer, gratis modeller eller arbeidsområdets saldo. For å gi
+  alle egne Go-grenser kan du oppgradere til Go Teams ($20 per medlem per måned, minst 2 medlemmer). Fra og med det tredje
+  medlemmet belastes arbeidsområdet $20 i måneden per nytt medlem fra innmeldingsdatoen.
+</Callout>
+
+Medlemmer kan også bli med automatisk:
+
+- [SSO](/console/sso#automatic-membership) legger til personer på dine verifiserte e-postdomener når de logger inn første gang.
+- [Katalogsynkronisering](/console/scim) legger til og fjerner personer etter hvert som du gir dem tilgang hos identitetsleverandøren eller trekker den tilbake.
+
+## Godta en invitasjon
+
+Den inviterte må logge inn med e-postadressen invitasjonen ble sendt til. Det finnes to måter å godta:
+
+- Klikk **Join workspace** i invitasjons-e-posten, og logg inn eller opprett en konto.
+- Logg inn på Console, åpne arbeidsområdemenyen og klikk **Join** under **Pending invitations**.
+
+Hvis den inviterte er logget inn med en annen konto, viser Console **Sign out and continue**, slik at personen kan fortsette med e-postadressen i invitasjonen.
+
+## Administrer ventende invitasjoner
+
+Ventende invitasjoner vises i medlemstabellen som **Pending · Expires** etterfulgt av datoen, eller **Expired**.
+
+| Handling | Slik |
+| ------ | ----------------------------------------------------------------------------------------- |
+| Send på nytt | **⋯ › Resend invitation**. Sender en ny lenke som er gyldig i 7 dager; den gamle lenken slutter å virke. |
+| Tilbakekall | **⋯ › Remove...**. Lenken slutter å virke umiddelbart. |
+
+## Endre en rolle
+
+Åpne rollemenyen i raden til et medlem og velg **Member**, **Admin** eller **Owner**.
+
+Du kan bare gi roller opp til din egen, og arbeidsområdet har alltid minst én eier. Se
+[Roller](/console/workspaces#roles).
+
+## Fjern et medlem
+
+1. Klikk **⋯ › Remove...** i raden til medlemmet.
+2. Bekreft med **Remove member**.
+
+Tilgangen tilbakekalles umiddelbart, og du kan invitere personen igjen senere. Tidligere bruk blir liggende i
+arbeidsområdets rapporter.
+
+Fjerner du et medlem, tilbakekalles også API-nøklene personen opprettet i arbeidsområdet, inkludert nøkler for
+tjenestekontoer. Tjenestekontoene består, og nøkler som andre har opprettet, fortsetter å virke. Se
+[Tilbakekalling](/console/api#revocation).
+
+## Medlemsdetaljer
+
+Klikk på et medlem for å se månedsbudsjettet, modellene og klientene personen bruker, bruksdiagrammer og
+forespørselslogger. Herfra kan du angi [budsjettet](/console/budgets#member-budgets) og eksportere bruken som CSV.

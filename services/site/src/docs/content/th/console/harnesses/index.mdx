@@ -1,0 +1,116 @@
+---
+title: "Harnesses"
+description: "ใช้โมเดลของ Console และ Go จากเอเจนต์เขียนโค้ดและแอป AI อื่นๆ"
+---
+
+Console ใช้กับเอเจนต์เขียนโค้ดอื่นนอกเหนือจาก OpenCode ได้ ตั้งค่าให้ harness ส่งคำขอไปที่เกตเวย์ของ Console โดยใช้คีย์ API เพื่อใช้โมเดลแบบเสียค่าใช้จ่ายหรือโมเดล Go ใดก็ได้ ระบบจะคิดค่าใช้งานกับเวิร์กสเปซของคุณเหมือนคำขออื่น ๆ
+
+| Harness                                       | จ่ายตามการใช้งาน | Go        | MCP |
+| --------------------------------------------- | ------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | ได้           | ได้       | ได้ |
+| [Codex](/console/harnesses/codex)             | ได้           | ได้       | ได้ |
+| [Hermes](/console/harnesses/hermes)           | มีในตัว        | มีในตัว   | ได้ |
+| [OpenClaw](/console/harnesses/openclaw)       | ปลั๊กอิน        | มีในตัว   | ได้ |
+| [Pi](/console/harnesses/pi)                   | มีในตัว        | มีในตัว   | ได้ |
+| [Raycast](/console/harnesses/raycast)         | ส่วนขยาย       | ส่วนขยาย  | ได้ |
+
+โมเดลแชตระดับฟรีใช้ได้จากภายใน OpenCode เท่านั้น harness อื่นจะได้รับ HTTP `403` สำหรับโมเดลเหล่านั้น
+แม้จะใช้คีย์ API ของ Console ก็ตาม ให้ใช้โมเดลแบบเสียค่าใช้จ่ายหรือการสมัครสมาชิก Go
+
+## Console CLI
+
+[Console CLI](https://github.com/anomalyco/opencode-console-cli) เชื่อมต่อ harness กับเวิร์กสเปซของคุณด้วย
+คำสั่งเดียว ต้องใช้ Node.js 22 ขึ้นไป
+
+| Harness          | คำสั่ง                                          |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+เบราว์เซอร์ของคุณจะเปิด Console ซึ่งคุณอนุมัติการลงชื่อเข้าใช้และเลือกเวิร์กสเปซ จากนั้น harness จะได้รับ
+
+- โมเดลของเวิร์กสเปซ ผ่าน Console
+- นโยบายของเวิร์กสเปซ ซึ่งตรวจสอบก่อนทุกการเรียกเครื่องมือ
+- เซิร์ฟเวอร์ MCP สกิล และคำแนะนำของเวิร์กสเปซ
+
+CLI จะซิงค์ harness ให้ตรงกับเวิร์กสเปซและอัปเดตตัวเอง
+
+หากต้องการเก็บการลงชื่อเข้าใช้และโมเดลของ harness เอง เช่น การสมัครสมาชิก Claude หรือ ChatGPT ให้เพิ่ม `--keep-provider` harness
+จะยังได้รับนโยบาย เซิร์ฟเวอร์ MCP สกิล และคำแนะนำของเวิร์กสเปซ ใช้ได้กับ Claude Code, Codex, Hermes และ OpenClaw
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+หากต้องการตั้งค่า harness ด้วยตัวเอง หรือตั้งค่า harness ที่ CLI ไม่รองรับ ให้ใช้คีย์ API และ base URL ด้านล่าง
+
+## รับคีย์ API
+
+harness ตรวจสอบสิทธิ์ด้วยคีย์ API ของ Console วิธีที่เร็วที่สุดคือ
+[คีย์ API ส่วนตัว](/console/api#personal-api-keys) ซึ่งเรียกโมเดลในนามของคุณ
+
+1. เปิด **Account** จากเมนูบัญชีใน [Console](https://opencode.ai/console)
+2. ภายใต้ **Personal API keys** คลิก **Add API key**
+3. เลือกเวิร์กสเปซ ตั้งชื่อคีย์ แล้วคลิก **Create**
+4. คัดลอกคีย์ คีย์จะแสดงเพียงครั้งเดียว
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+การใช้งานจะนับรวมใน[งบประมาณของสมาชิก](/console/budgets#member-budgets) ใช้คีย์จากเวิร์กสเปซที่มีเครดิตสำหรับ
+แบบจ่ายตามการใช้งาน หรือจากเวิร์กสเปซที่สมัครสมาชิก [Go](/console/go) สำหรับ Go
+
+สำหรับเครื่องที่ใช้ร่วมกันหรือ CI เจ้าของและผู้ดูแลสามารถสร้างคีย์ของ[บัญชีบริการ](/console/api#service-accounts)แทนได้
+การใช้งานจึงไม่ผูกกับบุคคลใดบุคคลหนึ่ง
+
+## Base URL
+
+แบบจ่ายตามการใช้งานและ Go ให้บริการจาก base URL ที่ต่างกัน ใช้ URL ที่ตรงกับแพ็กเกจของคุณ
+
+| แพ็กเกจ       | Base URL                           |
+| ------------- | ---------------------------------- |
+| จ่ายตามการใช้งาน | `https://opencode.ai/inference`    |
+| Go            | `https://opencode.ai/inference/go` |
+
+ต่อท้ายด้วยพาธของ API ที่ harness ของคุณใช้ ทุก API ให้บริการโมเดลข้อความแบบเสียค่าใช้จ่ายและ Go ทุกตัว: Console ส่งคำขอ
+ไปยังเอนด์พอยต์ของโมเดลเองเมื่อโมเดลรองรับ API นั้น และจะแปลรูปแบบให้หากไม่รองรับ
+
+| API                     | พาธ                                            |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## เซสชัน
+
+ส่ง ID เซสชันที่ไม่เปลี่ยนแปลงไปกับทุกคำขอ เพื่อให้ Console กำหนดเส้นทางการสนทนาได้อย่างสม่ำเสมอและใช้พรอมต์
+แคชซ้ำได้ Go [กำหนดให้ต้องส่ง](/console/go#where-can-i-use-it)
+
+```text
+x-opencode-session: ses_...
+```
+
+Console ยังรู้จักเฮดเดอร์เซสชันแบบเนทีฟที่ Claude Code, Codex, Hermes และ Pi ส่งมา และ OpenClaw ส่ง
+`x-opencode-session` เอง ดังนั้นจึงไม่ต้องกำหนดค่าเพิ่มเติม
+
+## Console MCP
+
+harness ที่รองรับ MCP สามารถจัดการเวิร์กสเปซของคุณผ่านเซิร์ฟเวอร์ Console MCP ได้ เซิร์ฟเวอร์ใช้ OAuth พร้อมการลงทะเบียนไคลเอนต์
+แบบไดนามิก คุณจึงลงชื่อเข้าใช้จากเบราว์เซอร์แทนการวางคีย์
+
+```text
+https://opencode.ai/console/mcp
+```
+
+หน้า harness แต่ละหน้าจะแสดงวิธีเพิ่มเซิร์ฟเวอร์ OpenCode จะเพิ่มเซิร์ฟเวอร์เป็น `opencode_console` โดยอัตโนมัติเมื่อเวิร์กสเปซ
+ของคุณเปิดใช้งาน และจะขอให้คุณลงชื่อเข้าใช้จากเบราว์เซอร์ในครั้งแรกที่ใช้งาน

@@ -26,10 +26,11 @@ const withShell = async (shell: string | undefined, fn: () => void | Promise<voi
 describe("shell", () => {
   test("normalizes shell names", () => {
     expect(ShellSelect.name("/bin/bash")).toBe("bash")
-    if (process.platform === "win32") {
-      expect(ShellSelect.name("C:/tools/NU.EXE")).toBe("nu")
-      expect(ShellSelect.name("C:/tools/PWSH.EXE")).toBe("pwsh")
-    }
+    // A Windows machine's shell path reads the same on any server.
+    expect(ShellSelect.name("C:/tools/NU.EXE")).toBe("nu")
+    expect(ShellSelect.name("C:/tools/PWSH.EXE")).toBe("pwsh")
+    expect(ShellSelect.name("C:\\Program Files\\PowerShell\\7\\pwsh.exe")).toBe("pwsh")
+    expect(ShellSelect.name("powershell.exe")).toBe("powershell")
   })
 
   test("detects login shells", () => {
@@ -56,13 +57,14 @@ describe("shell", () => {
     expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["+o", "nomatch", "-c", "echo hi"])
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
-    expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "Write-Output hi",
-    ])
+    for (const shell of ["pwsh", "powershell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"])
+      expect(ShellSelect.args(shell, "Write-Output hi")).toEqual([
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Write-Output hi",
+      ])
   })
 
   const zsh = which("zsh")

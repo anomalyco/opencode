@@ -1,0 +1,167 @@
+---
+title: "플러그인"
+description: "opencode.json에 npm 패키지나 로컬 플러그인 디렉터리를 추가하고 ID나 와일드카드로 플러그인을 활성화하거나 비활성화하세요."
+---
+
+게시된 패키지, 버전이 지정된 패키지, 스코프 패키지, 로컬 플러그인 디렉터리를 `opencode.json(c)`에 추가하세요.
+
+## 구성
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+상대 경로는 해당 항목이 있는 구성 파일 기준으로 확인됩니다.
+
+구성된 로컬 경로는 디렉터리여야 합니다. 단일 파일 경로는 건너뜁니다. OpenCode가 디렉터리에서 각 부분을 찾는
+방법은 [로드](/build/plugins#load)를 참고하세요.
+
+적용되는 구성 파일의 플러그인 배열은 서로 교체되지 않고 우선순위가 낮은 것부터 높은 것 순서로 적용됩니다.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## 탐색
+
+OpenCode는 `.ts`, `.js` 파일과 바로 아래의 플러그인 패키지 디렉터리도 발견된 모든 `.opencode/plugins/`
+디렉터리에서 로드합니다.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+전역 플러그인은 OpenCode 구성 디렉터리 아래에서 같은 탐색 레이아웃을 사용합니다.
+
+```text
+~/.config/opencode/plugins/
+```
+
+`plugins/` 디렉터리가 프로젝트 루트의 `opencode.json(c)` 옆에 있으면 자동으로 발견되지 않습니다. 플러그인
+디렉터리를 명시적으로 구성하거나 `.opencode/` 아래로 옮기세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## 제어
+
+플러그인 항목은 순서대로 처리됩니다. ID나 와일드카드 앞에 `-`를 붙이면 비활성화되고, `*`는 모든 플러그인,
+`.*`는 ID 접두사와 일치합니다. 뒤에 나오는 ID는 플러그인을 다시 활성화합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+새 포크에 추가되는 안내를 끄려면 `"-opencode.fork-notice"`를 `plugins`에 추가하세요.
+
+저장소가 [정책](/policies) 적용을 끌 수 없도록 두 내장 플러그인은 제거를 무시합니다. `opencode.config.policy`와,
+조직 정책을 전달하는 Console 연결인 `opencode.provider.opencode`입니다.
+
+## 관리
+
+CLI로 전역 패키지 플러그인을 설치, 조회, 확인, 업데이트, 제거하세요.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check`는 서버, GUI 전용, TUI 전용 패키지 플러그인의 업데이트를 확인합니다. `plugin update`는 오래된
+패키지를 모두 업데이트하며, 설정에 등록된 패키지를 인수로 지정하면 해당 패키지만 확인하거나 업데이트합니다. 로컬 플러그인과
+정확한 패키지 리비전은 건너뜁니다.
+
+패키지가 따라갈 대상을 지정하면 스스로 업데이트됩니다. `name@latest`, `name@^1.2.0`, `name@~1.2.0`, `name@1.x`,
+`name@>=1.2.0 <2` 같은 버전 범위, `github:acme/plugin#main` 같은 Git 브랜치, Git `semver:` 범위가 여기에
+해당합니다. OpenCode는 시작할 때와 24시간마다 확인해 더 새로운 버전을 설치하고 다시 로드합니다. 버전 범위를 지정하면 그 범위에 속한 버전으로만 업데이트합니다. 새 버전을 로드하지 못하면 이전 버전이 계속 실행되고 설치된 상태로 남습니다.
+
+이름만 있는 경우(`name`)나 저장소(`github:acme/plugin`)는 설치된 버전에 머뭅니다. `name@next` 같은 다른 npm
+태그와 Git 태그도 마찬가지입니다. `plugin check`는 여전히 업데이트를 보고하고 `plugin update`는 이를 설치합니다.
+정확한 버전과 커밋 해시는 고정됩니다.
+
+패키지 설치는 버전, 태그, 범위가 붙은 npm 이름과 npm 호환 Git 패키지 명세를 받습니다. Git 저장소는 호스팅 단축
+표기, HTTPS, SSH를 사용할 수 있으며, 기존 Git 자격 증명으로 접근할 수 있는 비공개 저장소도 포함됩니다.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+브랜치, 태그, 전체 커밋 해시, npm의 `::path:` 저장소 하위 디렉터리 선택자를 지원합니다. 로컬 경로는 직접
+구성하세요. `plugin add`는 tarball과 npm 별칭 대상을 받지 않습니다.
+
+## 다시 로드
+
+감시 중인 구성 디렉터리의 변경은 자동으로 다시 로드됩니다. 서버 시작 시 캐시된 패키지 플러그인을 즉시 로드하고,
+없는 패키지를 백그라운드에서 설치하며, 고정되지 않은 npm 및 Git 플러그인의 업데이트를 확인합니다. 정확한 npm
+버전과 전체 Git 커밋 해시는 고정된 상태로 유지됩니다. 감시하지 않는 로컬 의존성의 변경은 OpenCode를 다시
+시작해야 할 수 있습니다.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Desktop
+
+`./gui-experimental`을 내보내는 플러그인은 OpenCode Desktop에 패널, 명령어, 설정도 추가합니다. 앱은 자체적으로 실행하는 서버에서 플러그인을 로드하므로, 모든 창에서 사용하려면 전역 `opencode.json(c)`에 플러그인을 구성하세요.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+앱 자체 서버를 선택하면 **Settings > Extensions > Plugins**에 표시됩니다. 플러그인의 스위치는 데스크톱 UI만
+끄고, **Reload**는 실패 후 다시 로드합니다. 플러그인 전체를 끄려면 `-`와 ID를 `plugins`에 추가하세요. 예를 들어
+`"-acme"`입니다.
+
+## 터미널
+
+TUI 전용 플러그인은 별도로 구성하며 원격 서버에 연결해도 계속 활성 상태로 남습니다.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Build a plugin" href="/build/plugins">
+  도구, 훅, 통합, 명령어, 에이전트 및 기타 동작을 추가하는 플러그인을 만드세요.
+</Card>
+

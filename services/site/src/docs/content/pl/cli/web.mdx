@@ -1,0 +1,170 @@
+---
+title: "Web"
+description: "Uruchamiaj OpenCode w przeglądarce."
+---
+
+OpenCode zawiera interfejs webowy udostępniany przez ten sam serwer, który obsługuje
+TUI. Jest dostępny domyślnie i chroniony hasłem.
+
+## Dostęp
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Otwarcie linku w przeglądarce loguje ją za pomocą ciasteczka sesji i wczytuje interfejs
+webowy. Zeskanowanie kodu QR w aplikacji OpenCode lub wklejenie linku w polu adresu serwera
+łączy aplikację w ten sam sposób. Sesje trwają 30 dni;
+zmiana hasła serwera wylogowuje wszystkie sesje.
+
+### Przez SSH
+
+Gdy serwer nasłuchuje tylko na localhost, przekieruj jego port ze swojej maszyny
+i otwórz wypisany link lokalnie:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Domyślnie serwer nasłuchuje tylko na localhost. Jego port zależy od
+platformy:
+
+| Platforma              | Domyślny port |
+| ---------------------- | ------------- |
+| macOS, Linux i WSL     | 49374         |
+| Windows                | 28894         |
+
+Windows rezerwuje porty od 49152 w górę, a tryb sieci lustrzanej WSL rezerwuje
+kolejny blok poniżej. Wypisz bieżący adres poleceniem
+`opencode service status`:
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+Tę konfigurację możesz zmienić poleceniem `opencode service`.
+
+### Zdalny dostęp
+
+Aby połączyć się z dowolnego miejsca, sparuj przez zdalny adres [OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+Przy pierwszym włączeniu zdalnego dostępu pyta przed kontynuowaniem:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Bez interaktywnego terminala polecenie kończy się błędem, chyba że przekażesz `--yes`, aby
+zaakceptować. Po akceptacji kolejne uruchomienia pomijają pytanie, nawet po wyłączeniu zdalnego dostępu
+poleceniem `opencode service set remote false`.
+
+## Konfiguracja
+
+Ustaw dowolną opcję poleceniem `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Zmiana ustawienia zatrzymuje serwer w tle. Uruchom go ponownie, aby zastosować nową konfigurację:
+
+```bash
+$ opencode service start
+```
+
+## Tryb standalone
+
+`opencode serve` uruchamia ten sam serwer na pierwszym planie zamiast przez
+współdzieloną usługę w tle.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Użyj go, gdy chcesz:
+
+- Uruchomić OpenCode na współdzielonym, stale działającym lub zdalnym hoście, a następnie połączyć klienty przez
+  `opencode --server <url>`.
+- Kontrolować nazwę hosta, port i źródła CORS w jednym procesie.
+- Uruchomić OpenCode za pomocą systemd, Dockera lub innego środowiska wymagającego
+  procesu na pierwszym planie.
+- Utrzymywać osobny serwer zamiast współdzielonej usługi w tle.
+
+Połącz z nim klienta opcją `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### Uwierzytelnianie
+
+Ustaw `OPENCODE_PASSWORD`, aby użyć stałego hasła zamiast generowanego. Ta sama zmienna przekazuje hasło
+do `opencode --server`.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Inne klienty HTTP używają uwierzytelniania Basic. Nazwa użytkownika to zawsze `opencode`, a zmienić można tylko
+hasło.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+Polecenie `opencode service set password` dotyczy tylko zarządzanej usługi w tle. `opencode serve` odczytuje hasło
+z `OPENCODE_PASSWORD`. Jeśli zmienna nie jest ustawiona, przy każdym uruchomieniu generuje nowe hasło.
+
+### Docker
+
+Z każdym wydaniem w `ghcr.io/anomalyco/opencode` pojawia się obraz z tagiem wersji. Punktem wejścia obrazu jest
+polecenie `opencode`, które domyślnie uruchamia TUI, więc podaj `serve`. Ustaw nasłuch na `0.0.0.0`: domyślny adres
+`127.0.0.1` jest dostępny tylko z wnętrza kontenera.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Ustaw `OPENCODE_PASSWORD`, aby hasło nie zmieniało się po ponownym uruchomieniu.
+- Zamontuj katalog danych `/root/.local/share/opencode`. Zawiera bazę danych z Twoimi sesjami. Bez tego montowania
+  usunięcie kontenera oznacza utratę sesji. Zamontuj też katalog konfiguracji `/root/.config/opencode`, aby zachować
+  konfigurację globalną.
+- Sprawdź, czy serwer jest gotowy, poleceniem `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

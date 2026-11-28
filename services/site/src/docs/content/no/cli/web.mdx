@@ -1,0 +1,168 @@
+---
+title: "Web"
+description: "Kjør OpenCode i nettleseren."
+---
+
+OpenCode har et nettgrensesnitt på samme server som TUI-en bruker.
+Nettgrensesnittet er tilgjengelig som standard og beskyttet med passord.
+
+## Tilgang
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Når du åpner en lenke i nettleseren, logges du inn med en informasjonskapsel for økten, og nettgrensesnittet åpnes.
+I OpenCode-appen kan du koble til på samme måte ved å skanne QR-koden eller lime inn lenken i feltet for serveradresse.
+Øktene varer i 30 dager. Hvis du endrer serverpassordet, logges alle øktene ut.
+
+### Via SSH
+
+Når serveren bare lytter på localhost, videresend porten fra maskinen din
+og åpne den utskrevne lenken lokalt:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Som standard lytter serveren bare på localhost. Porten avhenger av
+plattformen:
+
+| Plattform             | Standardport |
+| --------------------- | ------------ |
+| macOS, Linux og WSL   | 49374        |
+| Windows               | 28894        |
+
+Windows reserverer porter fra og med 49152, og WSL-speilnettverk reserverer
+en annen blokk under det. Skriv ut gjeldende adresse med
+`opencode service status`:
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+Du kan endre denne konfigurasjonen med kommandoen `opencode service`.
+
+### Ekstern tilgang
+
+For å koble til fra hvor som helst, par gjennom en ekstern [OpenTunnel](https://github.com/anomalyco/opentunnel)-adresse:
+
+```bash
+$ opencode pair --remote
+```
+
+Første gang den slår på ekstern tilgang, spør den før den fortsetter:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Uten en interaktiv terminal mislykkes kommandoen med mindre du sender `--yes` for å
+godta. Når du har godtatt, hopper senere kjøringer over spørsmålet, selv etter at ekstern tilgang er
+slått av med `opencode service set remote false`.
+
+## Konfigurer
+
+Angi et hvilket som helst alternativ med `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Endring av en innstilling stopper bakgrunnsserveren. Start den igjen for å bruke den nye konfigurasjonen:
+
+```bash
+$ opencode service start
+```
+
+## Frittstående
+
+`opencode serve` kjører den samme serveren i forgrunnen i stedet for gjennom den
+delte bakgrunnstjenesten.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Bruk den når du vil:
+
+- Kjøre OpenCode på en delt vert, en vert som alltid er på, eller en ekstern vert, og deretter koble til klienter med
+  `opencode --server <url>`.
+- Styre vertsnavn, port og hvilke origins CORS tillater for én prosess.
+- Kjøre under en overvåker som systemd, Docker eller et annet miljø som forventer
+  en forgrunnsprosess.
+- Ha en dedikert server i stedet for den delte bakgrunnstjenesten.
+
+Koble en klient til den med `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### Autentisering
+
+Angi `OPENCODE_PASSWORD` for å bruke et fast passord i stedet for et generert. Den
+samme variabelen gir passordet til `opencode --server`.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Andre HTTP-klienter bruker Basic-auth. Brukernavnet er alltid `opencode`, og bare
+passordet kan endres.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+`opencode service set password` gjelder bare den administrerte bakgrunnstjenesten. `opencode serve` leser
+`OPENCODE_PASSWORD`. Hvis variabelen ikke er satt, opprettes et nytt passord ved hver oppstart.
+
+### Docker
+
+For hver versjon publiseres et image på `ghcr.io/anomalyco/opencode` med versjonsnummeret som tagg. Imaget kjører
+`opencode` som startkommando. Den starter TUI-en som standard, så legg til `serve`. Bind serveren til `0.0.0.0`.
+Standardadressen `127.0.0.1` kan bare nås fra innsiden av containeren.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Angi `OPENCODE_PASSWORD` for å beholde samme passord etter omstart.
+- Monter datakatalogen `/root/.local/share/opencode`. Den inneholder databasen med øktene dine. Ellers går øktene
+  tapt når containeren fjernes. Monter konfigurasjonskatalogen `/root/.config/opencode` for å beholde den globale konfigurasjonen.
+- Sjekk at serveren er klar med `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info`.

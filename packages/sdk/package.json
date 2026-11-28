@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.7",
+  "version": "2.4.1",
   "name": "@opencode/sdk",
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,7 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "pack": "bun run script/pack.ts",
-    "test": "bun test --timeout 5000",
+    "test": "bun run ../core/script/test.ts --timeout=5000",
     "typecheck": "bun check --no-script -b",
     "typecheck:tsc": "tsc -b",
     "verify:package": "bun run script/verify-package.ts"

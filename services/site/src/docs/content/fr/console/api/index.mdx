@@ -1,0 +1,138 @@
+---
+title: Présentation de l’API
+description: Authentifiez-vous auprès de l’API OpenCode Console avec des clés d’API personnelles ou des clés de compte de service, et définissez les autorisations de chaque clé.
+---
+
+L’API Console permet à vos scripts et intégrations d’appeler des modèles et d’exporter les données d’utilisation. Envoyez une clé d’API à chaque requête pour l’authentifier.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API | Endpoints |
+| --- | --- |
+| [Modèles](/console/api/models) | `https://opencode.ai/console/api/v1/models` |
+| [Inférence](/console/api/inference) | `https://opencode.ai/inference/...` |
+| [Fournisseurs](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [Export d’utilisation](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## Clés d’API
+
+Les membres d’un espace de travail comme les comptes de service peuvent avoir des clés d’API. Envoyez la clé sous forme de token Bearer.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+| | Clé d’API personnelle | Clé de compte de service |
+| --- | --- | --- |
+| Créée par | Tout membre, pour lui-même | Propriétaires et administrateurs |
+| Créée dans | **Account › Personal API keys** | **Settings › Service accounts** |
+| Agit en tant que | Le membre qui l’a créée | Le compte de service |
+| Utilisation imputée à | Le [budget](/console/budgets#member-budgets) du membre | Le [budget](/console/budgets#service-account-budgets) du compte de service |
+| Idéale pour | Vos propres scripts et [harnesses](/console/harnesses) | La CI, les machines partagées et les intégrations |
+
+- Chaque clé fonctionne dans un seul espace de travail, choisi à sa création. Aucun en-tête d’espace de travail n’est nécessaire.
+- La clé complète n’est affichée qu’une fois, juste après sa création. Ensuite, Console n’affiche que son préfixe.
+- **Expiration** est facultative : **Never**, **1 day**, **7 days**, **30 days** ou **Custom** (1 à 365 jours). Une clé expirée ne peut pas être renouvelée : créez-en une nouvelle.
+
+## Clés d’API personnelles
+
+Une clé personnelle agit en votre nom. Elle est soumise à votre rôle, à vos [budgets](/console/budgets#member-budgets) et aux règles qui déterminent les modèles auxquels vous avez accès.
+
+1. Ouvrez **Account** depuis le menu du compte et trouvez **Personal API keys**.
+2. Cliquez sur **Add API key**.
+3. Choisissez le **Workspace**, un **Key name** et une **Expiration** facultative. Les propriétaires et administrateurs choisissent aussi les **Permissions**.
+4. Cliquez sur **Create** et copiez la clé.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+La clé reflète vos droits d’accès actuels à l’espace de travail. Si votre rôle change, ses autorisations changent aussi. Si l’espace de travail applique le [SSO](/console/sso#sso-enforcement), la clé ne fonctionne que tant que vous avez une session SSO active, sauf si vous êtes propriétaire.
+
+## Comptes de service
+
+Un compte de service représente un service plutôt qu’une personne dans l’espace de travail. Il a ses propres clés d’API, son propre suivi de l’utilisation et son propre [budget](/console/budgets#service-account-budgets). Utilisez-en un pour l’automatisation, afin que l’utilisation ne soit pas liée à une personne. Les propriétaires et administrateurs les gèrent.
+
+1. Ouvrez **Settings › Service accounts** et cliquez sur **Add Service Account**, puis nommez-le, par exemple `CI Pipeline`.
+2. Ouvrez le compte de service et cliquez sur **Add API Key**.
+3. Choisissez un **Key name**, une **Expiration** facultative et les **Permissions**, puis cliquez sur **Create**.
+4. Copiez la clé.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Les propriétaires et administrateurs peuvent ensuite renommer une clé de compte de service ou modifier ses autorisations avec **Edit…** dans le menu d’actions de la clé.
+
+## Autorisations
+
+Choisissez le niveau d’autorisation de la clé dans **Permissions** lorsque vous la créez.
+
+| Autorisations | Accès accordé |
+| --- | --- |
+| **All** | Tout ce que le membre ou le compte de service peut faire, sauf **This account's API keys**. |
+| **Restricted** | Uniquement les ressources que vous choisissez. |
+| **Read only** | L’accès en lecture à toutes les ressources. La clé peut lister les modèles mais pas les appeler. |
+
+Une clé ne peut pas accorder plus de droits que le membre ou le compte de service qu’elle représente. Une clé personnelle est plafonnée par le rôle actuel du membre, et une clé de compte de service par ce que [les comptes de service peuvent faire](#limitations).
+
+### Clés restreintes
+
+Définissez chaque ressource sur **None**, **Read** ou **Write**. **Write** inclut **Read**.
+
+| Ressource | Niveaux |
+| --- | --- |
+| **Models** | **Read**, **Request** |
+| **Usage** | **Read** |
+| **Budgets** | **Read**, **Write** |
+| **Members** | **Read**, **Write** |
+| **Providers** | **Read**, **Write** |
+| **Billing** | **Read**, **Write** |
+| **Workspace settings** | **Read**, **Write** |
+| **SSO** | **Read** |
+| **Service accounts** | **Read** |
+| **This account's API keys** | **Write** |
+
+**Models › Read** liste les modèles, et **Models › Request** les appelle aussi via les API [Inference](/console/api/inference) et [Providers](/console/api/providers). Par exemple, une clé qui ne fait qu’appeler des modèles a besoin de :
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+Les clés créées en **Inference only** avant l’introduction des autorisations par ressource apparaissent comme **Restricted** avec **Models** réglé sur **Request**.
+
+### Qui peut accorder quoi
+
+- **Members** ne peuvent créer que des clés personnelles qui listent et appellent des modèles. La Console affiche « This key can list and call models as you. » au lieu de présenter des options d’autorisation.
+- **Owners and admins** peuvent donner à leurs clés personnelles **All**, **Restricted** ou **Read only**, dans la limite de leur propre rôle. La valeur par défaut est **Restricted** avec **Models** sur **Request**. S’ils sont rétrogradés par la suite, les droits de leurs clés sont réduits en conséquence.
+- **Service account keys** ont le niveau **All** par défaut. Les propriétaires et administrateurs choisissent leurs autorisations.
+
+### Limitations
+
+Certaines actions nécessitent toujours une personne connectée à la Console, et la création de clés avec une clé est fortement limitée.
+
+- Aucune clé d’API ne peut modifier les réglages SSO ni supprimer l’espace de travail.
+- Les clés de compte de service ne peuvent pas inviter de membres, changer de rôles, retirer des membres, gérer la facturation, modifier les réglages de l’espace de travail, gérer les modèles, ni créer ou supprimer des comptes de service, même avec **All**.
+- **This account's API keys** n’est disponible que sur les clés de compte de service, et **All** ne l’inclut pas. Une clé qui en dispose peut créer et révoquer des clés pour son propre compte de service uniquement. Les nouvelles clés doivent être **Restricted**, ne pas dépasser les autorisations de la clé qui les crée et ne pas inclure **This account's API keys**.
+- Les clés personnelles ne peuvent jamais obtenir **This account's API keys**, et aucune clé d’API ne peut créer ou révoquer des clés d’API personnelles.
+
+Les requêtes que la clé n’autorise pas renvoient le code HTTP `403`.
+
+## Révocation
+
+| Clé | Qui peut la révoquer | Où |
+| --- | --- | --- |
+| Clé d’API personnelle | Le membre qui la possède | **Account › Personal API keys**, puis **Revoke** |
+| Clé d’API personnelle | Propriétaires et administrateurs | La page du membre dans **Settings › Members**, sous **API Keys** |
+| Clé de compte de service | Propriétaires et administrateurs | La page du compte de service dans **Settings › Service accounts**, sous **API Keys** |
+
+Les clés sont aussi révoquées automatiquement :
+
+- Si un membre quitte un espace de travail ou en est retiré, notamment via [SCIM](/console/scim), toutes les clés qu’il y a créées sont révoquées, y compris les clés de comptes de service. Les autres clés du même compte de service continuent de fonctionner.
+- Supprimer un compte de service révoque toutes ses clés.
+
+Les clés révoquées et expirées cessent de fonctionner immédiatement et renvoient un HTTP `401`.

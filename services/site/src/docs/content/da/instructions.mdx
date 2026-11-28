@@ -1,0 +1,139 @@
+---
+title: "Instruktioner"
+description: "Giv OpenCode vedvarende projektvejledning med AGENTS.md-filer, og se, hvor de gælder, i hvilken rækkefølge de indlæses, og hvordan CLAUDE.md-fallbacket virker."
+---
+
+Tilføj en `AGENTS.md`-fil for at give OpenCode vedvarende projektvejledning. Brug den til build-kommandoer, arkitekturnoter, kodekonventioner og verifikationskrav.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Commit projektets instruktionsfiler, så alle, der arbejder i repositoryet, får samme vejledning.
+
+## Omfang
+
+Placér `AGENTS.md` i den mappe, hvor vejledningen skal gælde. OpenCode indlæser først den globale fil og derefter hver `AGENTS.md` fra arbejdsområdets aktuelle mappe op mod hjemmemappen. For arbejdsområder uden for hjemmemappen stopper OpenCode ved projektroden.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+I dette eksempel indlæses alle fire filer. De kombineres i denne rækkefølge:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Læg vejledning, der gælder overalt, i den globale fil. Læg repositorydækkende vejledning i projektroden og mere specifik vejledning tættere på den kode, den dækker. OpenCode kombinerer filerne og løser ikke konflikter mellem dem.
+
+Hvis arbejdsområdet ligger uden for projektroden, indlæses kun den globale fil. Angiv `OPENCODE_DISABLE_PROJECT_CONFIG=1` for at springe søgningen efter projektets `AGENTS.md` over uden at deaktivere den globale fil.
+
+### CLAUDE.md-fallback
+
+I enhver mappe uden en `AGENTS.md` læser OpenCode i stedet `CLAUDE.md`. Uden en global
+`~/.config/opencode/AGENTS.md` læses `~/.claude/CLAUDE.md`. En mappes `AGENTS.md` vinder altid over dens
+`CLAUDE.md`, så et symlink mellem de to indlæses kun én gang.
+
+Angiv `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` for at springe alle `CLAUDE.md` over, eller `OPENCODE_DISABLE_CLAUDE_CODE=1` for også at springe
+`.claude`-skills over. Serveren læser begge ved start. For baggrundstjenesten skal du gøre dem varige med
+`opencode service set env` og køre `opencode service restart`.
+
+## Søgning
+
+Instruktionsfiler under arbejdsområdet findes, efterhånden som agenten udforsker projektet. Når en fil læses, eller en mappe listes, indlæses alle `AGENTS.md`-filer mellem målet og arbejdsområdet.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Indlejrede filer indlæses nærmest først og deduplikeres, så længe deres instruktionspost findes i den model-synlige historik. Når det samme område læses igen, indsættes de normalt ikke igen. Hvis komprimering eller en tilbagerulning fjerner posten, kan en senere læsning indlæse filen igen.
+
+Ændringer i en indlejret fil registreres ikke automatisk, efter at den er indlæst. Start en ny session, når opdateret tekst straks skal gælde.
+
+## Rækkefølge
+
+Den valgte agents eller udbyders systemprompt sendes først. OpenCode sammensætter derefter de indledende instruktioner i denne rækkefølge:
+
+```text
+1. Agent or provider system prompt
+2. Code Mode tool guidance, when enabled
+3. MCP server, reference, and skill guidance
+4. Global and project AGENTS.md files, then configured instructions
+5. Built-in date and environment context
+6. Session-specific instruction entries supplied through the API
+```
+
+Disse kilder kombineres i stedet for at bruges som tilsidesættelser. Indlejrede `AGENTS.md`-filer, der findes senere, føjes til sessionshistorikken i den rækkefølge, de findes.
+
+## Opdateringer
+
+For at opdatere vejledningen i en kørende session kan du redigere den globale `AGENTS.md` eller en af dem, OpenCode fandt ved at søge opad i mappestrukturen.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Før den næste modelanmodning registrerer OpenCode ændringen og tilføjer en instruktionsopdatering, før den leverer ventende input:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Fjernelse af alle omkringliggende `AGENTS.md` fortæller sessionen, at de tidligere omkringliggende instruktioner ikke længere gælder.
+- En midlertidig læsefejl bevarer de senest kendte instruktioner i stedet for at behandle dem som slettede.
+- Flytning af en session bevarer dens instruktionstilstand, så vejledning på destinationen introduceres som en opdatering.
+- Når en sessions tilbagerulning gennemføres, ryddes dens instruktionstilstand, og instruktionerne genindlæses før den næste prompt.
+
+Instruktionsværdier forbliver privilegerede. Klienter kan se, hvilke kilder der er ændret, men ikke deres indhold.
+
+## Konfiguration
+
+Brug `instructions`-arrayet til at tilføje filer, globmønstre eller HTTP(S)-URL'er ved siden af de fundne `AGENTS.md`-filer:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    "~/rules/opencode.md",
+    "https://example.com/instructions.md",
+  ],
+}
+```
+
+Konfigurerede instruktioner indlæses efter `AGENTS.md`-filerne i den rækkefølge, de er angivet. Poster fra hvert konfigurationsdokument kombineres.
+
+| Post                    | Sådan findes den                                                     |
+| ----------------------- | -------------------------------------------------------------------- |
+| Relativ sti eller glob  | Søges i hver mappe fra arbejdsområdet op til projektroden            |
+| `~/`-sti                | Fortolkes i forhold til din hjemmemappe                              |
+| Absolut sti             | Bruges som skrevet; filnavnet kan være en glob                       |
+| `http://` eller `https://` | Hentes, når konfigurationen indlæses, med en timeout på fem sekunder |
+
+- Lokale filer opdateres som `AGENTS.md`, når de ændres. Nye filer, der matcher en glob, indlæses ved den næste konfigurationsændring.
+- Manglende filer springes over. En URL, der ikke kan hentes, springes over eller beholder sit senest hentede indhold.
+- Med `OPENCODE_DISABLE_PROJECT_CONFIG=1`, eller når arbejdsområdet ligger uden for projektet, fortolkes relative poster i forhold til den globale konfigurationsmappe.
+
+Et tilsluttet [OpenCode Console](/console)-arbejdsområde kan også dele instruktioner.
+
+Se [Konfiguration](/config) for placeringer og prioritet.

@@ -1,0 +1,114 @@
+---
+title: "Harnesses"
+description: "Brug Console- og Go-modeller fra andre kodningsagenter og AI-apps."
+---
+
+Console fungerer med andre kodningsagenter end OpenCode. Konfigurer dit harness til at bruge Console-gatewayen med en API-nøgle, så du kan bruge alle betalte modeller og Go-modeller. Forbruget afregnes på dit arbejdsområde som ved enhver anden anmodning.
+
+| Harness                                       | Betaling efter forbrug | Go        | MCP |
+| --------------------------------------------- | ------------- | --------- | --- |
+| [Claude Code](/console/harnesses/claude-code) | Ja            | Ja        | Ja  |
+| [Codex](/console/harnesses/codex)             | Ja            | Ja        | Ja  |
+| [Hermes](/console/harnesses/hermes)           | Indbygget     | Indbygget | Ja  |
+| [OpenClaw](/console/harnesses/openclaw)       | Plugin        | Indbygget | Ja  |
+| [Pi](/console/harnesses/pi)                   | Indbygget     | Indbygget | Ja  |
+| [Raycast](/console/harnesses/raycast)         | Udvidelse     | Udvidelse | Ja  |
+
+Chatmodeller på gratisniveauet er kun tilgængelige fra OpenCode. Andre harnesses får HTTP `403` for disse modeller,
+selv med en Console-API-nøgle. Brug betalte modeller eller et Go-abonnement.
+
+## Console CLI
+
+[Console CLI](https://github.com/anomalyco/opencode-console-cli) forbinder et harness til dit arbejdsområde med én
+kommando. Den kræver Node.js 22 eller nyere.
+
+| Harness          | Kommando                                       |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+Din browser åbner Console, hvor du godkender login og vælger arbejdsområde. Dit harness får derefter
+
+- arbejdsområdets modeller gennem Console
+- arbejdsområdets politikker, som kontrolleres før hvert værktøjskald
+- arbejdsområdets MCP-servere, skills og instruktioner
+
+CLI'en holder dit harness synkroniseret med arbejdsområdet og opdaterer sig selv.
+
+Hvis et harness skal beholde sit eget login og sine egne modeller, f.eks. et Claude- eller ChatGPT-abonnement, skal du
+tilføje `--keep-provider`. Dit harness får stadig arbejdsområdets politikker, MCP-servere, skills og instruktioner. Det
+virker med Claude Code, Codex, Hermes og OpenClaw.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+Skal du konfigurere et harness manuelt, eller understøtter CLI'en det ikke, skal du bruge en API-nøgle og de base URL'er, der står nedenfor.
+
+## Få en API-nøgle
+
+Harnesses bruger en Console-API-nøgle til autentificering. Det hurtigste er at bruge en [personlig API-nøgle](/console/api#personal-api-keys), der kalder modeller på dine vegne.
+
+1. Åbn **Account** i kontomenuen i [Console](https://opencode.ai/console).
+2. Klik på **Add API key** under **Personal API keys**.
+3. Vælg arbejdsområdet, giv nøglen et navn, og klik på **Create**.
+4. Kopiér nøglen. Den vises kun én gang.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Forbruget tæller med i dit [medlemsbudget](/console/budgets#member-budgets). Brug en nøgle fra et arbejdsområde med kredit, hvis du vil betale efter forbrug, eller fra et arbejdsområde med et [Go](/console/go)-abonnement, hvis du vil bruge Go.
+
+På delte maskiner eller i CI kan ejere og administratorer i stedet oprette en nøgle til en
+[tjenestekonto](/console/api#service-accounts), så forbruget ikke er knyttet til én person.
+
+## Base URL'er
+
+Betaling efter forbrug og Go har hver deres base URL. Brug den, der passer til dit abonnement.
+
+| Plan          | Base URL                           |
+| ------------- | ---------------------------------- |
+| Betaling efter forbrug | `https://opencode.ai/inference`    |
+| Go            | `https://opencode.ai/inference/go` |
+
+Tilføj stien for det API, dit harness bruger. Alle API'erne giver adgang til alle betalte tekstmodeller og Go-tekstmodeller: Console sender anmodningen direkte til modellens endpoint, når modellen understøtter API'et, og oversætter den ellers.
+
+| API                     | Sti                                             |
+| ----------------------- | ----------------------------------------------- |
+| OpenAI Responses        | `/openai/v1/responses`                          |
+| OpenAI Chat Completions | `/openai/v1/chat/completions`                   |
+| Anthropic Messages      | `/anthropic/v1/messages`                        |
+| Gemini                  | `/google/v1beta/models/<model>:generateContent` |
+
+```text
+https://opencode.ai/inference/go/openai/v1/chat/completions
+```
+
+## Sessioner
+
+Send et stabilt sessions-ID med hver anmodning, så Console kan route en samtale konsekvent og genbruge dens
+prompt-cache. Go [kræver det](/console/go#where-can-i-use-it).
+
+```text
+x-opencode-session: ses_...
+```
+
+Console genkender også de native sessionsheadere, som Claude Code, Codex, Hermes og Pi sender, og OpenClaw sender selv
+`x-opencode-session`, så ingen af dem kræver ekstra konfiguration.
+
+## Console MCP
+
+Harnesses med MCP-understøttelse kan administrere dit arbejdsområde gennem Console MCP-serveren. Den bruger OAuth med
+dynamisk klientregistrering, så du logger ind i browseren i stedet for at indsætte en nøgle.
+
+```text
+https://opencode.ai/console/mcp
+```
+
+Hver harness-side viser, hvordan du tilføjer den. OpenCode tilføjer serveren automatisk som `opencode_console`, når dit
+arbejdsområde aktiverer den, og beder dig logge ind i browseren, første gang den bruger den.

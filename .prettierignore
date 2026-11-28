@@ -2,4 +2,5 @@ sst-env.d.ts
 packages/desktop/src/bindings.ts
 packages/client/src/generated/
 packages/client/src/generated-effect/
+packages/core/src/plugin/skill/opencode/
 packages/plugins/figma/skills/

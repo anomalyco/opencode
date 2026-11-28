@@ -14,4 +14,13 @@ export default {
   noChanges: "Nav izmaiņu",
   "settings.wrapLines.title": "Aplauzt rindas",
   "settings.wrapLines.description": "Aptiniet garās līnijas mobilajās diffās, nevis ritiniet horizontāli",
+  "menu.count.zero": "Mainīti {{count}} faili",
+  "menu.count.one": "Mainīts {{count}} fails",
+  "menu.count.other": "Mainīti {{count}} faili",
+  "folder.more": "{{count}} · vairāk netiek rādīts",
+  "folder.failed": "Neizdevās ielādēt izmaiņas",
+  "command.open": "Atvērt pārskatu",
+  "load.failed": "Neizdevās ielādēt izmaiņas",
+  "load.timeout": "Serveris pārāk ilgi neatbildēja",
+  offline: "Nevar sasniegt šo serveri",
 }

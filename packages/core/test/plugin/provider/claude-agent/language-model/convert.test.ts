@@ -79,16 +79,21 @@ describe("Claude conversions", () => {
         role: "user",
         content: [
           { type: "text", text: "/compact @README.md are literal text" },
-          { type: "file", mediaType: "image/png", data: bytes },
-          { type: "file", mediaType: "application/pdf", data: "cGRm" },
+          { type: "file", mediaType: "image/png", data: bytes, filename: "chart.png" },
+          { type: "file", mediaType: "application/pdf", data: "cGRm", filename: "report.pdf" },
           { type: "file", mediaType: "image/jpeg", data: new URL("https://example.com/photo.jpg") },
         ],
       },
     ])
     expect(blocks).toEqual([
       { type: "text", text: "/compact @README.md are literal text" },
+      { type: "text", text: "Attached image: chart.png" },
       { type: "image", source: { type: "base64", media_type: "image/png", data: "AQID" } },
-      { type: "document", source: { type: "base64", media_type: "application/pdf", data: "cGRm" } },
+      {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: "cGRm" },
+        title: "report.pdf",
+      },
       { type: "image", source: { type: "url", url: "https://example.com/photo.jpg" } },
     ])
   })

@@ -4,7 +4,8 @@ import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Schema } from "effect"
 import type { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 
-export const ServerOptions = Schema.Struct({
+/** The application runtime: everything the service graph reads, with or without an HTTP listener in front. */
+export const AppOptions = Schema.Struct({
   app: Schema.optional(
     Schema.Struct({
       name: Schema.optional(Schema.String),
@@ -12,11 +13,6 @@ export const ServerOptions = Schema.Struct({
       channel: Schema.optional(Schema.String),
     }),
   ),
-  hostname: Schema.optional(Schema.String),
-  port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
-  password: Schema.optional(Schema.String),
-  cors: Schema.optional(Schema.Array(Schema.String)),
-  simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
   pty: Schema.optional(PersistentPty.Options),
   events: Schema.optional(
@@ -40,6 +36,12 @@ export const ServerOptions = Schema.Struct({
       content: Schema.optional(Schema.String),
     }),
   ),
+  instructions: Schema.optional(
+    Schema.Struct({
+      // false skips the per-directory and ~/.claude/CLAUDE.md fallbacks.
+      claude: Schema.optional(Schema.Boolean),
+    }),
+  ),
   windows: Schema.optional(
     Schema.Struct({
       gitbash: Schema.optional(Schema.String),
@@ -52,4 +54,28 @@ export const ServerOptions = Schema.Struct({
     }),
   ),
 })
+export type AppOptions = typeof AppOptions.Type
+
+/** The HTTP listener in front of the application: where it binds, who may call it, and which origins it trusts. */
+export const HttpListenerOptions = Schema.Struct({
+  hostname: Schema.optional(Schema.String),
+  port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
+  password: Schema.optional(Schema.String),
+  cors: Schema.optional(Schema.Array(Schema.String)),
+})
+export type HttpListenerOptions = typeof HttpListenerOptions.Type
+
+export const ServerOptions = Schema.Struct({
+  ...AppOptions.fields,
+  ...HttpListenerOptions.fields,
+  // Swaps the service graph for the simulation backend (`OPENCODE_SIMULATE`).
+  simulation: Schema.optional(Schema.Boolean),
+})
 export type ServerOptions = typeof ServerOptions.Type
+
+/**
+ * What routes served without a listener honor: the application, plus the origin allowlist the WebSocket handlers
+ * check and the simulation switch. There is no `hostname`, `port` or `password`: nothing binds, and the embedder
+ * owns access control.
+ */
+export type EmbeddedRoutesOptions = AppOptions & Pick<ServerOptions, "cors" | "simulation">

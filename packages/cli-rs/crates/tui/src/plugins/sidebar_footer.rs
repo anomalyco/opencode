@@ -1,0 +1,94 @@
+//! Sidebar footer with the session location and dismissible getting-started card.
+
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Click, Command, Justify, Layout, Placement, Span, Wrap};
+use opencode_plugin::slot;
+use serde_json::json;
+
+use super::kept;
+
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.sidebar.footer", setup }
+}
+
+const DISMISS: &str = "sidebar.footer.dismiss";
+const KEY: &str = "getting-started";
+const ROOT: &str = "footer";
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key(KEY);
+    setup.command(Command::new(DISMISS), |host, _| {
+        host.storage_merge(KEY, serde_json::Map::from_iter([("dismissed".to_owned(), json!(true))]));
+    });
+    setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::SIDEBAR_FOOTER)), |cx| {
+        let session = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()).unwrap_or_default();
+        let changed = &cx.input.changed;
+        if !(changed.all || changed.local || changed.size || changed.session(session) || !changed.locations.is_empty())
+        {
+            return kept(ROOT);
+        }
+        view(cx.read, session).with_id(ROOT)
+    }));
+    Ok(())
+}
+
+fn view(read: &dyn abi::Read, session: &str) -> Node {
+    let info = read.info();
+    let location = read
+        .session(session)
+        .map(|session| abi::LocationRef { directory: session.info.location.directory.0, workspace: None })
+        .unwrap_or(info.location);
+    let connected =
+        match (read.integrations(Some(&location)), read.providers(Some(&location)), read.models(Some(&location))) {
+            (Some(integrations), Some(providers), Some(models)) => {
+                Some(crate::local::has_connected_provider(&integrations, &providers, &models))
+            }
+            _ => None,
+        };
+    let branch = read.vcs(Some(&location)).and_then(|vcs| vcs.branch.current);
+    let dismissed = read.storage_get(KEY).and_then(|value| value.get("dismissed")?.as_bool()).unwrap_or(false);
+    let mut children = Vec::new();
+    if info.size.1 >= 22 && connected == Some(false) && !dismissed {
+        children.push(card());
+    }
+    let home = opencode_local::paths::home();
+    let directory = opencode_ui::path::abbreviate_home(&location.directory, &home);
+    let value = match branch {
+        Some(branch) => format!("{directory}:{branch}"),
+        None => directory,
+    };
+    let path = Node::text([Span::new(crate::dialogs::open::truncate_file_path(&value, 38))])
+        .fg("text.muted")
+        .hover_fg("text.base")
+        .wrap(Wrap::None)
+        .truncate()
+        .on_click(Click::command("workspace.directory").input(location.directory));
+    children.push(Node::column(vec![path]));
+    Node::column(children).gap(1)
+}
+
+fn card() -> Node {
+    let muted = |text: &str| Node::text([Span::new(text)]).fg("text.muted");
+    let body = Node::column(vec![
+        Node::row(vec![
+            Node::text([Span::new("Getting started").fg("text.base").bold()]),
+            Node::text([Span::new("✕")]).fg("text.muted").on_click(Click::command(DISMISS)),
+        ])
+        .justify(Justify::SpaceBetween),
+        muted("OpenCode includes free models so you can start immediately."),
+        muted("Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc"),
+        Node::row(vec![
+            Node::text([Span::new("Connect provider").fg("text.base")]),
+            Node::text([Span::new("/connect").fg("text.muted")]),
+        ])
+        .gap(1)
+        .justify(Justify::SpaceBetween)
+        .on_click(Click::command("provider.connect")),
+    ])
+    .gap(1)
+    .layout(Layout::default().grow());
+    Node::row(vec![Node::text([Span::new("⬖").fg("text.base")]).layout(Layout::default().shrink(false)), body])
+        .bg("background.raised.high")
+        .padding(2, 1)
+        .gap(1)
+}

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Használat",
   "usage.cost": "Költség",
   "usage.view": "Tekintse meg a környezethasználatot",
-  "systemPrompt.title": "Rendszer prompt",
   "rawMessages.title": "Nyers üzenetek",
   "export.session": "Exportálási munkamenet",
   "stats.session": "Munkamenet",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "A munkamenet elmentve ide: {{filename}}",
   "export.failed.title": "Nem sikerült exportálni a munkamenetet",
   "export.failed.description": "Hiba történt a munkamenet exportálása közben",
+  "usage.toggle": "Munkamenet kontextusának megjelenítése/elrejtése",
 }

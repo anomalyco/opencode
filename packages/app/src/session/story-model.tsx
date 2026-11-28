@@ -88,6 +88,7 @@ export type SessionPreviewProps = {
   description: string
   document: SessionDocument
   draft?: string
+  composerPreview?: (finish: (activity: string) => void) => JSX.Element
   request?:
     | { type: "permission"; value: PermissionRequest }
     | { type: "question" | "websearch" | "elicitation"; value: FormInfo }
@@ -198,11 +199,13 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     reviewOpened: boolean
     request: SessionPreviewProps["request"]
     searchProvider: string
+    composerPreviewOpen: boolean
   }>({
     activity: "Ready",
     reviewOpened: props.reviewOpened ?? false,
     request: props.request,
     searchProvider: "random",
+    composerPreviewOpen: !!props.composerPreview,
   })
 
   const prompt = createPromptController({
@@ -337,7 +340,20 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                         </SessionComposerLane>
                       </SettingsProvider>
                     }
-                    composer={<Composer model={prompt.controller} borderUnderlay />}
+                    composer={
+                      <Show
+                        when={state.composerPreviewOpen && props.composerPreview}
+                        fallback={<Composer model={prompt.controller} borderUnderlay />}
+                      >
+                        {(preview) =>
+                          preview()((activity) => {
+                            setState("activity", activity)
+                            setState("composerPreviewOpen", false)
+                            queueMicrotask(() => prompt.controller.restoreFocus())
+                          })
+                        }
+                      </Show>
+                    }
                   />
                 </section>
                 <Show when={side()}>

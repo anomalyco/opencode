@@ -1,0 +1,95 @@
+---
+title: "Conceitos básicos"
+description: "Crie, alterne, renomeie e exclua espaços de trabalho do OpenCode Console, e entenda as funções dos membros."
+---
+
+Um espaço de trabalho reúne tudo no [Console](https://opencode.ai/console): membros, créditos, orçamentos, provedores,
+políticas e contas de serviço. O uso e a cobrança são acompanhados por espaço de trabalho.
+
+Um espaço de trabalho pode ter um único membro. Você pode usar créditos, [seus próprios provedores](/console/providers), orçamentos e [Go](/console/go) sozinho,
+e [convidar membros](/console/members) só quando precisar.
+
+## Seu primeiro espaço de trabalho
+
+O Console cria um espaço de trabalho chamado **Personal** quando você se cadastra, com você como proprietário e único membro. Se você se
+cadastra a partir de um convite, entra no espaço de trabalho que o convidou e nenhum espaço de trabalho Personal é criado.
+
+## Criar um espaço de trabalho
+
+1. Abra o menu de espaços de trabalho na barra superior.
+2. Clique em **Create Workspace**.
+3. Informe um **Workspace name** e clique em **Create**.
+
+Você se torna o proprietário do novo espaço de trabalho.
+
+## Alternar espaços de trabalho
+
+Escolha outro espaço de trabalho no menu. O Console mantém você na mesma página, então alternar de
+`/acme/settings/members` abre a página de Membros do outro espaço de trabalho.
+
+Os convites pendentes aparecem no topo do mesmo menu. Consulte [Membros](/console/members#accept-an-invitation).
+
+## Conectar o OpenCode
+
+Execute `/connect` no OpenCode e escolha o espaço de trabalho no navegador. O OpenCode então usa os modelos,
+as políticas e os orçamentos desse espaço de trabalho.
+
+```text
+/connect
+```
+
+Execute `/connect` de novo para mudar o OpenCode para outro espaço de trabalho. As [políticas](/policies#console) do espaço de trabalho são substituídas
+pelas do novo espaço de trabalho e são removidas quando você desconecta.
+
+## Funções
+
+Cada membro tem uma função. Novos membros sempre entram como **Member**.
+
+| Função   | Pode fazer                                                                                                               |
+| ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Member | Usar o OpenCode, ver o próprio uso, os próprios logs e o próprio orçamento.                                                                 |
+| Admin  | Tudo o que um membro pode, além de gerenciar membros, cobrança, orçamentos, provedores, políticas, contas de serviço e configurações. |
+| Owner  | Tudo o que um admin pode, além de gerenciar SSO e sincronização de diretório, conceder a função Owner e excluir o espaço de trabalho.         |
+
+Os membros veem o próprio uso e os próprios logs em **Activity**, além do ranking quando ele está visível para membros.
+Quando o espaço de trabalho tem assinatura [Go Teams](/console/go), eles também veem **Go**, com os próprios limites.
+Eles abrem **Account** no menu da conta.
+
+### Regras de funções
+
+- Um espaço de trabalho pode ter vários proprietários e sempre mantém pelo menos um.
+- Você não pode atribuir uma função superior à sua, então só proprietários podem tornar alguém proprietário.
+- Você não pode alterar a própria função.
+
+### Transferir a propriedade
+
+1. Como proprietário, abra **Settings › Members** e defina a função do novo proprietário como **Owner**.
+2. Peça ao novo proprietário que mude a sua função para **Admin** ou **Member**.
+
+## Excluir um espaço de trabalho
+
+Só proprietários podem excluir um espaço de trabalho, e só quando pertencem a pelo menos um outro espaço de trabalho.
+
+1. Abra **Settings › General** e clique em **Delete workspace**.
+2. Marque todas as confirmações.
+3. Clique em **Delete workspace** para confirmar.
+
+A exclusão é imediata e não pode ser desfeita:
+
+- Os membros perdem o acesso na hora.
+- Todas as chaves de API de contas de serviço e os convites pendentes são revogados.
+- A recarga automática para.
+- Uma assinatura Go ativa termina.
+- Qualquer saldo de créditos restante é perdido.
+
+<Callout type="warning">A exclusão fica bloqueada enquanto um pagamento está sendo processado. Tente de novo em alguns minutos.</Callout>
+
+## Sair de um espaço de trabalho
+
+1. Abra **Account** no menu da conta.
+2. Em **Connected workspaces**, clique em **Leave** ao lado do espaço de trabalho.
+3. Confirme com **Leave workspace**.
+
+O último proprietário não pode sair; torne outro membro proprietário primeiro. Em espaços de trabalho com SSO ou sincronização de diretório, seu
+provedor de identidade controla quem tem acesso, então você não pode sair pelo Console. Para voltar depois de sair, peça um novo
+convite.

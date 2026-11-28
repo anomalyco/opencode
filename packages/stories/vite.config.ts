@@ -6,8 +6,7 @@ import { defineConfig, searchForWorkspaceRoot } from "vite"
 import solid from "vite-plugin-solid"
 import { storyIndex } from "./src/index-plugin"
 
-// Serves one story at a time for the component tests, the way Storybook's iframe did, without Storybook. The app's
-// browsing UI for stories is the components lab in the app itself.
+// The standalone Lab and the isolated story frames share the same mock runtime.
 const here = path.dirname(fileURLToPath(import.meta.url))
 const packages = path.resolve(here, "..")
 const app = path.resolve(packages, "app/src")
@@ -36,10 +35,10 @@ export default defineConfig({
   publicDir: path.resolve(packages, "app/public"),
   optimizeDeps: {
     // Vite finds a dependency on its first import and reloads every open page, which would abort a component test
-    // mid-import. Crawl the stories, the workers (the scan does not follow `new Worker(new URL(…))`), the modules the
+    // mid-import. Crawl the Lab pages, the workers (the scan does not follow `new Worker(new URL(…))`), the modules the
     // component tests load, and the frame, so the first browser request never discovers a new dependency.
     entries: [
-      "../{ui,session-ui,app,gui-plugins}/src/**/*.{stories.tsx,worker.ts}",
+      "../{ui,session-ui,app,gui-plugins}/src/**/*.{lab.tsx,worker.ts}",
       ...new Set(componentTestModules.map(entry)),
       "index.html",
     ],

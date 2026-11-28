@@ -369,6 +369,7 @@ const lowerTool = (tool: ToolDefinition): MistralTool => ({
   function: { name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false },
 })
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MistralOptions))(
     request.providerOptions ?? {},
@@ -385,11 +386,10 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
         tool: (name) => ({ type: "function" as const, function: { name } }),
       })
     : undefined
-  const flattened = ProviderShared.flattenToolRequest(request)
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request),
-    tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
+    messages: yield* lowerMessages(request),
+    tools: request.tools.length > 0 ? ProviderShared.flattenTools(request.tools).map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.maxTokens,

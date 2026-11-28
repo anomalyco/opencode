@@ -1,0 +1,138 @@
+---
+title: "Provider della CLI"
+description: "Collega account provider e gestisci le credenziali dalla CLI e dalla TUI."
+---
+
+Collega un provider nella TUI, poi scegli uno dei suoi modelli:
+
+```text
+/connect
+/models
+```
+
+`/connect` elenca le integrazioni disponibili dal server e dal progetto correnti. Seleziona un provider, scegli un
+metodo di autenticazione quando ne offre più di uno e segui le istruzioni.
+
+## TUI
+
+La TUI supporta chiavi API, OAuth e comandi di autenticazione dei provider. OAuth apre un URL di autorizzazione o mostra un
+codice da inserire; premi `o` per aprire l'URL e `c` per copiare i dettagli di autorizzazione.
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+Esegui di nuovo `/connect` per aggiungere un altro account. Selezionare un provider già collegato apre il suo elenco di account, dove puoi
+attivare, rinominare o eliminare un account salvato.
+
+## CLI
+
+Usa `auth login` per gli stessi metodi dei provider senza aprire la TUI. Senza argomento provider, il comando apre un
+selettore interattivo di provider.
+
+```bash
+opencode auth login
+```
+
+Passa un ID o un nome di integrazione per saltare il primo selettore. Usa `--method key` per selezionare esplicitamente l'inserimento della chiave API.
+
+```bash
+opencode auth login anthropic --method key
+```
+
+Gli ID dei metodi dipendono dal provider. Esegui il comando senza `--method` per vedere i metodi disponibili quando un provider ne ha
+più di uno.
+
+```bash
+opencode auth login openai
+```
+
+L'inserimento delle chiavi API e i moduli dei provider richiedono un terminale interattivo. Anche i metodi OAuth che chiedono di incollare un codice di autorizzazione
+lo richiedono.
+
+## Metodi
+
+OpenCode riceve le credenziali dei provider tramite quattro metodi di integrazione:
+
+| Metodo | Comportamento |
+| --- | --- |
+| Chiave API | Chiede un segreto e lo salva come account del provider. |
+| OAuth | Fornisce un URL del browser, un codice dispositivo o una richiesta di codice di autorizzazione, poi salva i token e li rinnova quando supportato. |
+| Comando | Esegue un comando di autenticazione fornito dal provider e salva il suo standard output come chiave. |
+| Ambiente | Legge una variabile supportata dal processo del server senza salvarla. |
+
+I provider possono aggiungere moduli ai metodi chiave API e OAuth per dettagli obbligatori come il nome di una risorsa Azure o un dominio GitHub
+Enterprise. La CLI e la TUI mostrano quei moduli prima di avviare l'autenticazione.
+
+## Ambiente
+
+Imposta la variabile d'ambiente supportata da un provider sul processo del server che esegue le richieste ai modelli. Per un server privato
+una tantum, passala all'avvio in modalità standalone.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+Per il server in background condiviso, aggiungi la variabile al suo ambiente gestito. Questo ferma un servizio in esecuzione; il comando
+OpenCode successivo lo avvia con il nuovo valore.
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+Le connessioni tramite variabile d'ambiente compaiono in `auth list` con tipo `environment`. Non sono account e `auth logout` non può rimuoverle: per disconnetterti, rimuovi la variabile. Per la stessa integrazione, un account salvato ha la precedenza su una connessione tramite variabile d'ambiente.
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+Alcuni provider possono anche usare la propria catena di credenziali dell'ambiente anziché una variabile per la chiave API:
+
+- Amazon Bedrock supporta la catena di credenziali predefinita di AWS, compresi profili, ambienti con chiavi di accesso, identità web
+  e credenziali dei container. Supporta anche `AWS_BEARER_TOKEN_BEDROCK`.
+- Google Vertex usa le credenziali predefinite dell'applicazione e un progetto risolvibile. Ad esempio, autenticati con
+  `gcloud auth application-default login` e imposta `GOOGLE_CLOUD_PROJECT`.
+- Azure espone **Microsoft Entra ID (Azure CLI)** come metodo di connessione quando `az` è installato. Esegui prima `az login`, poi
+  seleziona quel metodo in `/connect` o `auth login azure`.
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+Vedi [Provider](/providers) per la configurazione specifica dei provider e lato server.
+
+## Account
+
+Ogni accesso riuscito con chiave API, OAuth o comando crea un account salvato. L'account più recente diventa attivo; cambia
+account attivo tramite la sua etichetta o il suo ID credenziale.
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+Rimuovi un account salvato con `auth logout`. Entrambi i comandi aprono selettori quando gli argomenti sono omessi.
+
+```bash
+opencode auth logout anthropic work
+```
+
+Nella TUI, `/connect` offre le stesse operazioni di aggiunta, attivazione, rinomina ed eliminazione per gli account salvati.
+
+## Archiviazione
+
+Le chiavi API e i token OAuth salvati risiedono nel database SQLite del server. Per il server locale, stampa il suo percorso con:
+
+```bash
+opencode debug paths db
+```
+
+Il percorso abituale di rilascio è `~/.local/share/opencode/opencode.db`; `XDG_DATA_HOME`, il canale di rilascio e `OPENCODE_DB`
+possono cambiarlo. Non modificare il database per gestire le credenziali; usa `/connect` o i comandi `auth`.
+
+V2 importa le credenziali supportate dal vecchio `auth.json` nella directory dei dati di OpenCode durante la migrazione del database.
+Le credenziali nuove e aggiornate vengono archiviate in SQLite invece di essere riscritte in quel file.

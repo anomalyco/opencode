@@ -1,0 +1,112 @@
+---
+title: "Providers API"
+description: "Console 게이트웨이에서 Console 키로 워크스페이스에 연결된 제공자를 호출하세요."
+---
+
+워크스페이스에 연결된 각 [제공자](/console/providers)는 Console 게이트웨이에 고유한 URL이 있습니다.
+OpenCode는 `/connect` 후 해당 URL을 자동으로 사용합니다. 자체 도구에서도 이 URL로 같은 제공자를 호출할 수 있습니다.
+Console이 요청을 전달하기 전에 제공자 자격 증명을 추가하므로 이 비밀 정보는 워크스페이스 밖에 공개되지 않습니다.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 제공자 URL
+
+**Providers**의 제공자 페이지에서 **Console API URL**을 복사하세요.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## 인증
+
+`<token>`을 Console에서 만든 [서비스 계정 키](/console/api#service-accounts)로 바꾸세요. Console은 전달 전에
+이를 연결의 자격 증명으로 교체합니다.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console은 `x-api-key`, `api-key`, `x-goog-api-key` 헤더에서도 키를 읽습니다. 따라서 제공자 SDK가 Console API URL로
+요청을 보내도록 설정하면 그대로 사용할 수 있습니다.
+
+## 엔드포인트
+
+Console API URL 뒤에 제공자의 API 경로를 붙이세요. Console은 요청을 연결의 기본 URL로 전달하고 제공자 응답을
+그대로 반환합니다.
+
+| 형식                 | 경로                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+| Embeddings           | `/embeddings`                     |
+
+제공자 페이지에 표시되는 그대로 모델 ID를 보내세요. 업스트림에서 모델의 API ID가 다르면 Console이 이를 바꿔 씁니다.
+연결에서 활성화되지 않은 모델에 대한 요청은 거부됩니다.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens`는 필수입니다.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+모델과 메서드는 경로의 일부입니다. 응답을 스트리밍하려면 `:generateContent`를 `:streamGenerateContent`로
+바꾸세요.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## 사용량
+
+요청은 각 모델에 설정된 가격으로 [예산](/console/budgets)에 반영됩니다. 토큰 요금은 제공자가
+청구합니다.

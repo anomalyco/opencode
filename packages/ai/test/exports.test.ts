@@ -8,6 +8,7 @@ import {
   EmbeddingClient,
   Generation,
   ImageClient,
+  VideoClient,
   LanguageModel,
   LLMClient,
   LLMEvent,
@@ -15,7 +16,7 @@ import {
   RawEvent,
 } from "@opencode/ai/effect"
 import { AI } from "@opencode/ai"
-import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
+import { Speech, SpeechClient, SpeechEvent, TranscriptionClient } from "@opencode/ai/experimental"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import {
   Alibaba,
@@ -74,9 +75,12 @@ describe("public exports", () => {
     expect(LanguageModel.make).toBeFunction()
     expect(Media.bytes).toBeFunction()
     expect(ai.image.generate).toBeFunction()
-    expect(Video.start).toBeFunction()
-    expect(Video.resume).toBeFunction()
+    expect(ai.video.start).toBeFunction()
+    expect(ai.video.status).toBeFunction()
+    expect(ai.video.result).toBeFunction()
+    expect(ai.video.cancel).toBeFunction()
     expect(VideoClient.layer).toBeDefined()
+    expect(AI.ai.video.start).toBeFunction()
     expect(Speech.generate).toBeFunction()
     expect(Speech.stream).toBeFunction()
     expect(SpeechClient.layer).toBeDefined()

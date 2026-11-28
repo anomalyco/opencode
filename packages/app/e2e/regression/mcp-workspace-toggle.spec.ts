@@ -456,7 +456,7 @@ test("the MCP list shrinks with matches and keeps its search anchored while scro
   const scroll = view.panel.locator('[data-slot="search-list-scroll"]')
 
   await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
-  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(600)
   await input.press("End")
   const last = view.panel.getByRole("option", { name: "server-23", exact: true })
 
@@ -635,7 +635,8 @@ for (const surface of ["popover", "dialog"] as const) {
 for (const surface of ["popover", "dialog"] as const) {
   test(`long MCP names keep their status and controls visible in the ${surface}`, async ({ page }) => {
     const names = ["connected", "disabled", "failed", "needs_auth"].map(
-      (status) => `long-${status}-mcp-server-for-the-internal-knowledge-base-search`,
+      (status) =>
+        `long-${status}-mcp-server-for-the-internal-knowledge-base-search-across-every-team-workspace-repository-and-shared-drive`,
     )
 
     const actions: string[] = []

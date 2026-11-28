@@ -1,0 +1,104 @@
+---
+title: "CLI 소개"
+description: "OpenCode 터미널 인터페이스를 시작하고, 스크립트와 CI에서 프롬프트를 실행하고, 공유 백그라운드 서비스를 관리하세요."
+---
+
+프로젝트에서 CLI를 실행하면 전체 화면 터미널 인터페이스가 열립니다.
+
+```bash
+opencode
+```
+
+다른 프로젝트에서 작업하려면 디렉터리를 지정하세요.
+
+```bash
+opencode ~/code/my-project
+```
+
+권장 터미널:
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+트루컬러를 지원하는 터미널은 테마 색상을 가장 정확하게 표시합니다. 지원하지 않으면 터미널 팔레트에서 가장 가까운 색상을 사용합니다.
+
+## 자동화
+
+`opencode run`을 사용하면 대화형 인터페이스를 열지 않고 프롬프트를 제출할 수 있습니다. 스크립트, CI 작업, 모델
+출력을 터미널에서 바로 받아야 하는 워크플로를 위해 만들었습니다.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+`opencode mini`를 사용하면 전체 화면 TUI 대신 OpenCode의 최소 대화형 인터페이스를 시작합니다.
+
+```bash
+opencode mini
+```
+
+세션, 모델, 에이전트, 프롬프트, 재생 옵션은 `opencode mini --help`로 확인하세요.
+
+## 백그라운드 서비스
+
+기본적으로 OpenCode는 사용자 계정별로 공유 백그라운드 서버 하나를 찾아 연결하거나 새로 시작합니다. 로컬 OpenCode 클라이언트는
+모두 이 서버에 연결되며, 세션, 구성, 통합, 권한, 도구 실행은 서버가 관리합니다.
+
+개인 서버로 실행하려면 `--standalone`을, 특정 서버 URL에 연결하려면 `--server`를 사용하세요.
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+공유 서비스를 시작하지 않고 개인 서버를 CLI 명령의 기본값으로 사용하려면 공유 서비스를 비활성화하세요.
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+실행 중인 백그라운드 서비스가 중지됩니다. `--server`는 여전히 명시적으로 선택한 서버에 연결하고,
+`opencode service start`로 공유 서비스를 직접 시작할 수도 있습니다. 자동 서비스 사용으로 돌아가려면
+`opencode service unset disabled`를 실행하세요. 페어링은 공유 서비스가 필요하므로 비활성화된 동안에는 사용할 수
+없습니다.
+
+공유 서비스 진단은 [문제 해결](/troubleshooting)을, 서버 엔드포인트는 [API 참조](/api)를 참고하세요.
+
+## 경로
+
+다른 도구에서 사용할 특정 로컬 경로를 출력합니다.
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+선택적 셀렉터는 `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log`, `repos` 중 하나를 받으며,
+경로와 줄바꿈만 출력합니다. 데이터베이스 경로는 릴리스 채널과 `OPENCODE_DB`를 따르며, 데이터베이스 경로를 상대 경로로 지정하면 데이터 디렉터리를 기준으로 해석하며 `:memory:`는 그대로 출력됩니다. 이 명령은 서버를 시작하거나 데이터베이스를 열지
+않습니다.
+
+셀렉터를 생략하면 레이블과 함께 모든 경로를 표시합니다.
+
+```bash
+opencode debug paths
+```
+
+## 제거
+
+제거될 파일과 설치를 미리 확인합니다.
+
+```bash
+opencode uninstall --dry-run
+```
+
+`opencode uninstall`을 실행한 뒤 제거를 확인하세요. OpenCode는 모든 버전과 채널이 공유하는 전역 캐시 디렉터리를
+제거하기 전에 등록된 백그라운드 서비스와 상시 터미널을 중지합니다. 세션 데이터, 구성, 상태는 절대 제거하지 않습니다.
+
+- `--force`(`-f`)는 확인 절차를 건너뜁니다. 비대화형 제거에 사용하세요.
+- 패키지 관리자로 설치한 경우 감지된 패키지 관리자를 사용합니다. Curl로 설치한 경우 실행 파일을 직접 제거하는
+  최종 명령을 출력합니다.

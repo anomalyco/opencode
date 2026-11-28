@@ -1,0 +1,120 @@
+---
+title: "Crear plugins"
+description: "Crea un plugin de OpenCode: un paquete con una parte de servidor, una parte de TUI, una parte de GUI o cualquier combinación."
+---
+
+Los plugins modifican el comportamiento de OpenCode y agregan funciones nuevas. Un plugin es un paquete con una parte de servidor, una parte de TUI, una parte de GUI
+o cualquier combinación.
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+Si migras un plugin de OpenCode 1 existente, sigue la [guía de migración de plugins de V1](/build/plugins/migrate-v1).
+
+## Partes
+
+El paquete exporta cada parte por separado. Los SDK de todas las partes proceden de una sola dependencia, `@opencode/plugin`.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **Servidor** (`.` o `./server`) se ejecuta en el servidor de OpenCode con `@opencode/plugin`. Agrega herramientas, hooks,
+  integraciones, comandos y agentes. Consulta [Servidor](/build/plugins/server) o [Plugins de Effect](/build/plugins/effect)
+  para la API de Effect.
+- **TUI** (`./tui`) se ejecuta en la interfaz de terminal con `@opencode/plugin/tui`. Consulta [TUI](/build/plugins/cli).
+- **GUI** (`./gui-experimental`) ejecuta su `setup` en cada ventana de OpenCode Desktop y su `main` en el proceso principal de la
+  aplicación de escritorio, con `@opencode/plugin/gui`. Consulta [GUI](/build/plugins/gui).
+- **RPC** (`./rpc`) es un contrato tipado que implementa la parte de servidor y que las demás partes y los clientes usan para hacer llamadas. Consulta
+  [RPC](/build/plugins/rpc).
+
+El `id` del plugin viene del `Plugin.define` de su parte de servidor. Un paquete con una parte de GUI y sin parte de servidor toma su
+nombre de paquete (o el nombre de un directorio local) como `id`. Una parte de TUI declara su propio `id`; una parte de GUI no declara ninguno y
+toma el del plugin.
+
+## Carga
+
+Los plugins de `.opencode/plugins/` se cargan automáticamente, como el ejemplo local anterior. Para cargar paquetes publicados o
+directorios de plugins de otras ubicaciones, agrégalos a `plugins` en `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- Una entrada carga todas las partes. La TUI carga las partes de TUI de los plugins que carga su servidor, y OpenCode Desktop carga
+  las partes de GUI de los plugins de tu `opencode.json(c)` global.
+- Si el paquete solo contiene código de TUI, configúralo en [`cli.json`](/cli/plugins).
+- Si el directorio de un plugin local tiene un `package.json` con `name` y `exports`, OpenCode carga sus partes como las de un paquete publicado.
+  Si no, usa los archivos de la raíz del directorio: `server` (o, si no existe, `index`), `tui` y `rpc` con extensión `.ts`,
+  `.tsx` o `.js`, y `gui-experimental.cjs` (o `.js`).
+- Consulta [Configurar plugins](/plugins) para más opciones de carga y configuración.
+
+## Publicar
+
+Un plugin publicado es un paquete npm con el `package.json` anterior. Sus partes usan las mismas exportaciones predeterminadas que un plugin local.
+
+```bash
+npm publish
+```
+
+- Exporta `./rpc` cuando otros plugins y clientes deban importar tu [contrato RPC](/build/plugins/rpc) sin cargar
+  tu implementación.
+- Compila el bundle de GUI antes de publicar e inclúyelo mediante `files`. Consulta
+  [Compilar el bundle](/build/plugins/gui#build-the-bundle).
+- Usa versiones compatibles con la versión de OpenCode a la que apuntas y prueba el paquete instalado, no solo una
+  copia enlazada al espacio de trabajo. Publica una actualización compatible del plugin cuando adoptes un contrato de API más nuevo.
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    Agrega herramientas, hooks, integraciones, comandos y agentes en el servidor de OpenCode.
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    Agrega comandos, rutas, slots y renderizadores de Markdown a la interfaz de terminal.
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    Agrega paneles, comandos, páginas de ajustes e integraciones nativas a OpenCode Desktop.
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    Expón métodos y eventos tipados desde la parte de servidor a las demás partes y a los clientes.
+  </Card>
+</CardGroup>

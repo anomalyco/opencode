@@ -1,0 +1,262 @@
+---
+title: "Komutlar"
+description: "Promptları Markdown veya JSON ile yeniden kullanılabilir eğik çizgi komutlarına dönüştürün; argümanlar, kabuk çıktısı ve eklerle birlikte."
+---
+
+Bir promptu `/review` komutuna dönüştürmek için `.opencode/commands/review.md` dosyasını oluşturun:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+TUI'dan bir hedef vererek çalıştırın:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode, `Review src/auth.ts for bugs and missing tests.` metnini bir kullanıcı promptu olarak gönderir.
+
+## Markdown
+
+Genel komutları `~/.config/opencode/commands/` dizinine, proje komutlarını `.opencode/commands/` dizinine koyun.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Yalnızca `.md` dosyaları keşfedilir. İç içe yollar, `/` ayırıcılarıyla komut adlarına dönüşür:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+İç içe komutu `/team/review src/auth.ts` olarak çalıştırın. Eski tekil `command/` dizini de keşfedilir, ancak yeni dosyalar
+için `commands/` kullanın.
+
+Komutun üst veriye ihtiyacı olduğunda YAML frontmatter ekleyin. Kırpılmış Markdown gövdesi her zaman prompt şablonudur.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-5-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Komutları herhangi bir OpenCode JSON veya JSONC [yapılandırma dosyasında](/config) `commands` altında tanımlayın. Her komut
+bir `template` gerektirir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Alanlar
+
+Markdown frontmatter ve JSON girdileri aynı alanları kabul eder; ancak Markdown `template` değerini dosya gövdesinden alır.
+
+| Alan | Gerekli | Davranış |
+| --- | --- | --- |
+| `template` | Yalnızca JSON | Prompt şablonu. |
+| `description` | Hayır | Komut listelerinde ve keşifte gösterilen metin. |
+| `agent` | Hayır | Komut çalıştığında seçilen agent. |
+| `model` | Hayır | `provider/model` veya `provider/model#variant` biçiminde model geçersiz kılma. |
+| `subagent` | Hayır | `true` arka plandaki alt oturumda çalıştırır; `false` geçerli oturumu zorunlu kılar. |
+| `subtask` | Hayır | `subagent` için kullanımdan kaldırılmış takma ad. |
+
+Örneğin bu JSON komutu güncel tüm isteğe bağlı alanları ayarlar:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+`template` alanını Markdown frontmatter'a koymayın; gövde bu değeri sağlar.
+
+## Argümanlar
+
+Girilen argüman dizesinin tamamı için `$ARGUMENTS` kullanın.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+`/component Account Settings` için yer tutucu `Account Settings` olur.
+
+## Konumlar
+
+Ayrıştırılmış konumsal argümanlar için `$1`, `$2` ve daha yüksek sayıları kullanın. Tek veya çift tırnak sözcükleri
+gruplar ve kaldırılır.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+`/check src/auth.ts "error handling"` için `$1` değeri `src/auth.ts`, `$2` değeri `error handling` olur.
+
+En yüksek numaralı yer tutucu kendi argümanını ve sonrasındaki her şeyi tüketir. Eksik konumlar boş dize olur.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+`/compare api stable branch` için OpenCode `Compare api with stable branch.` metnini gönderir.
+
+## Yedek davranış
+
+Bir şablonda `$ARGUMENTS` veya konumsal yer tutucu yoksa OpenCode boş olmayan argümanları boş bir satırdan sonra ekler.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+`/explain src/cache.ts` için prompt şu hale gelir:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Kabuk
+
+Kabuk komutunun çıktısını prompt gönderilmeden önce eklemek için komutu ters tırnak içine alın ve açılış tırnağının önüne `!` koyun.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode her bloğu yapılandırılmış kabukla etkin proje konumunda çalıştırır ve birleşik çıktısını ekler. Argüman yer
+tutucuları önce genişletilir:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+`/history 5` için kabuk `git log --oneline -5` alır. Güvenilmeyen argümanları kabuk bloklarının içine koymayın.
+
+<Callout type="warning">
+  Kabuk blokları, OpenCode komutu değerlendirdiğinde agent'ın araç izin akışının dışında çalışır. Yalnızca güvendiğiniz
+  kaynaklardan gelen komutları kullanın.
+</Callout>
+
+## Ekler
+
+Saklanan şablonlar `@path` ifadesini genişletmez; bu ifade normal prompt metni olarak kalır.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Bir dosya eklemek için komutu çağırırken dosyayı giriş alanından ekleyin. OpenCode, genişletilmiş promptu gönderirken bu
+giriş alanı eklerini korur.
+
+## Yürütme
+
+Komutlar, kalıcı bir kullanıcı promptu göndermeden önce argümanları ve kabuk bloklarını genişletir. Varsayılan olarak geçerli
+oturumda çalışırlar.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+`/plan migration` çalıştırmak, promptu göndermeden önce geçerli oturumu `plan` agent'ına geçirir.
+
+Model seçimi şu kuralları izler:
+
+1. Komuttaki `model` diğer tüm modelleri geçersiz kılar.
+2. Aksi halde seçilen komut agent'ının yapılandırılmış modeli, çağrı sırasında etkin olan modeli geçersiz kılar.
+3. Aksi halde geçerli oturumun modeli etkin kalır.
+
+Örneğin bu komut hem agent'ını hem de açık bir model seçer:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-6.1-sol#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Arka plan
+
+Bir komutu arka plandaki alt oturumda çalıştırmak için `subagent: true` ayarlayın.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+Üst oturum kullanılabilir kalır ve agent'ını ve modelini korur. OpenCode, alt oturum bittiğinde sonucunu veya hatasını üst
+oturuma geri gönderir.
+
+| Değer | Davranış |
+| --- | --- |
+| `true` | Seçilen agent `mode: primary` olsa bile her zaman bir alt oturum kullan. |
+| `false` | Seçilen agent `mode: subagent` olsa bile her zaman geçerli oturumu kullan. |
+| Belirtilmemiş | Yalnızca seçilen agent `mode: subagent` olduğunda bir alt oturum kullan. |
+
+Alt oturum önce komut modelini, sonra seçilen agent'ın modelini, sonra üst oturumun modelini kullanır. Eski `subtask` alanı
+kabul edilmeye devam eder; iki alan da varsa `subagent` kazanır.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Bu örnek, `subagent` öncelikli olduğu için geçerli oturumda çalışır.
+
+## Yükleme
+
+Markdown ve JSON komutları tek bir kayıt defterini paylaşır. Sonraki kaynaklar aynı ada sahip önceki komutların yerini alır.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Proje kaynakları genel kaynakların, yakın proje kaynakları üst dizin kaynaklarının önüne geçer. Özel bir tanım daha önceki
+yerleşik bir komutun yerini de alabilir. OpenCode komut dosyalarını ve yapılandırma değişikliklerini otomatik olarak yeniden
+yükler.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Bu dosyayı kaydetmek, OpenCode'u yeniden başlatmadan `/review` komutunu günceller.

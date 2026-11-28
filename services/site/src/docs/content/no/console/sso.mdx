@@ -1,0 +1,92 @@
+---
+title: "SSO"
+description: "Logg inn i et OpenCode Console-arbeidsområde gjennom identitetsleverandøren din med OIDC eller SAML."
+---
+
+Med enkel pålogging (SSO) logger medlemmer av arbeidsområdet inn via bedriftens identitetsleverandør.
+Eiere setter opp SSO i **Settings › Security**. Funksjonen følger med alle arbeidsområder.
+
+| Protokoll      | Leverandører                                                                           |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity eller en hvilken som helst OIDC-leverandør |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta eller en hvilken som helst SAML-leverandør |
+
+Hvert arbeidsområde har én SSO-tilkobling.
+
+## Sett opp OIDC
+
+1. Åpne **Settings › Security**, klikk **Configure SSO** og velg **OpenID Connect** og leverandøren din.
+2. Følg trinnene som vises, for å opprette en app hos leverandøren med tilgangsomfangene `openid`, `email` og `profile`.
+3. Angi **Issuer URL**, eller tenanten eller domenet ditt, samt **Client ID**, **Client Secret** og et
+   **Display Name**, og klikk **Save**.
+4. Kopier **Callback URL** fra tilkoblingen til leverandørens tillatte omdirigerings-URI-er.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Console sjekker at utstederen er tilgjengelig når du lagrer. SSO er aktivt så snart tilkoblingen er lagret.
+
+## Sett opp SAML
+
+1. Åpne **Settings › Security**, klikk **Configure SSO** og velg **SAML 2.0** og leverandøren din.
+2. Kopier **ACS URL** og **SP Entity ID** til leverandøren. Egendefinerte leverandører kan bruke **SP Metadata URL**
+   eller laste ned XML-en i stedet.
+3. Legg til leverandørens metadata via URL, XML-opplasting eller innliming. Du kan også angi **IdP Entity ID**,
+   **IdP SSO URL** og **IdP Certificate** manuelt.
+4. Se gjennom detaljene og klikk **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Leverandøren må signere svaret eller SAML-påstanden og sende brukerens e-postadresse som et `email`-attributt eller som
+NameID.
+
+## Verifiser e-postdomener
+
+Personer som logger inn på [Console](https://opencode.ai/console) med en e-postadresse på et verifisert domene, sendes
+til identitetsleverandøren din. Når SSO er aktivt, klikker du **Add domain** under **Email domains**, angir domenet
+ditt og publiserer TXT-oppføringen som vises.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Klikk **Verify Domain** når oppføringen er publisert. Det kan ta litt tid før DNS-endringene blir synlige. Hvert domene kan
+tilhøre bare ett arbeidsområde.
+
+## Håndheving av SSO
+
+Når et arbeidsområde har SSO, må administratorer og medlemmer logge inn gjennom det for å åpne arbeidsområdet, og
+Console omdirigerer dem automatisk. Tilkobling av OpenCode med `/connect` følger samme regel.
+
+Eiere kan også logge inn uten SSO. Dermed har de fortsatt tilgang til innstillingene selv om leverandøren er feilkonfigurert.
+
+## Automatisk medlemskap
+
+Personer på et verifisert domene blir med i arbeidsområdet som **Member** første gang de logger inn gjennom SSO. De
+legges ikke til automatisk når:
+
+- De har en ventende invitasjon. Invitasjonen brukes i stedet.
+- Arbeidsområdet bruker [katalogsynkronisering](/console/scim), som bestemmer medlemskapet.
+- Arbeidsområdet har et [Go](/console/go)-abonnement.
+
+Invitasjoner til et SSO-arbeidsområde sender den inviterte til identitetsleverandøren din når de åpner lenken.
+
+## Eksisterende kontoer
+
+Hvis noen allerede har en Console-konto med samme e-postadresse, logger de inn på nytt i SSO-flyten og bekrefter med
+**Link account**. En invitasjon hopper ikke over denne bekreftelsen. Kontoer som er provisjonert via SCIM på et
+verifisert arbeidsområdedomene, kan fortsatt kobles automatisk.
+
+## Rediger eller slett
+
+Klikk **Edit** på tilkoblingen for å endre detaljene. La hemmeligheten eller sertifikatet stå tomt for å beholde det
+gjeldende. For å bytte mellom OIDC og SAML, slett tilkoblingen og opprett en ny.
+
+Slett tilkoblingen fra **⋯ › Delete...**. Medlemmene går tilbake til sine andre påloggingsmetoder, og
+katalogsynkroniseringen stopper og tokens tilbakekalles. E-postdomener beholdes.

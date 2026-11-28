@@ -23,6 +23,7 @@ import {
   selectProviderDialogView,
   transitionProviderDialog,
   type ProviderAccounts,
+  type ProviderBackTarget,
   type ProviderDialogEffect,
   type ProviderDialogEvent,
 } from "./dialog-machine"
@@ -116,11 +117,7 @@ export function createProviderDialogController(options: {
     provider() === CONSOLE_INTEGRATION ? consoleProviderGroup(connectionProviders()) : undefined,
   )
 
-  const firstModel = () => {
-    const model = connectionGroups()[0]?.models[0]
-
-    return model ? modelKey(model) : undefined
-  }
+  const hasModels = () => connectionGroups().length > 0
 
   const settler = createConsoleCatalogSettler({
     isLoaded: () => consoleCatalogLoaded(connectionProviders()),
@@ -227,7 +224,7 @@ export function createProviderDialogController(options: {
             session: effect.session,
             check: effect.check,
             hasProblem: accountsOf(CLAUDE_AGENT_INTEGRATION).problem,
-            firstModel: firstModel(),
+            hasModels: hasModels(),
           }),
         )
 
@@ -276,7 +273,7 @@ export function createProviderDialogController(options: {
     const integrationID = input.provider
     const isConsole = integrationID === CONSOLE_INTEGRATION
 
-    const result = (event: ProviderConnectEvent, catalog?: { pending: boolean; firstModel: string | undefined }) =>
+    const result = (event: ProviderConnectEvent, catalog?: { pending: boolean; hasModels: boolean }) =>
       dispatch({ type: "connect.result", session: input.session, provider: integrationID, event, catalog })
 
     if (effect.type === "load") {
@@ -544,15 +541,12 @@ export function createProviderDialogController(options: {
   const refresh = async (
     effect: Extract<ProviderConnectEffect, { type: "refresh" }>,
     integrationID: string,
-    result: (event: ProviderConnectEvent, catalog?: { pending: boolean; firstModel: string | undefined }) => void,
+    result: (event: ProviderConnectEvent, catalog?: { pending: boolean; hasModels: boolean }) => void,
   ) => {
     const refreshed = await sync()
 
     if (integrationID !== CONSOLE_INTEGRATION)
-      return result(
-        { type: "refresh.succeeded", attempt: effect.attempt },
-        { pending: false, firstModel: firstModel() },
-      )
+      return result({ type: "refresh.succeeded", attempt: effect.attempt }, { pending: false, hasModels: hasModels() })
 
     if (!refreshed)
       return result({
@@ -567,7 +561,7 @@ export function createProviderDialogController(options: {
     if (outcome === "cancelled") return
     result(
       { type: "refresh.succeeded", attempt: effect.attempt },
-      { pending: outcome === "timed-out", firstModel: firstModel() },
+      { pending: outcome === "timed-out", hasModels: hasModels() },
     )
   }
 
@@ -607,12 +601,9 @@ export function createProviderDialogController(options: {
   })
 
   createEffect(
-    on(
-      [claudePhase, () => !!claudeProblem(), () => connectionGroups().length > 0],
-      ([phase, hasProblem, hasModels]) => {
-        if (phase) dispatch({ type: "claude.status.changed", hasProblem, hasModels })
-      },
-    ),
+    on([claudePhase, () => !!claudeProblem(), hasModels], ([phase, hasProblem, hasModels]) => {
+      if (phase) dispatch({ type: "claude.status.changed", hasProblem, hasModels })
+    }),
   )
 
   onCleanup(() => dispatch({ type: "disposed" }))
@@ -635,7 +626,7 @@ export function createProviderDialogController(options: {
       dispatch({ type: "provider.selected", provider: id, fromPicker: true, accounts: accountsOf(id) }),
     input: (event: ProviderConnectEvent) => dispatch({ type: "connect.input", event }),
     rename: accountActions.rename,
-    back: () => dispatch({ type: "back" }),
+    navigate: (target: ProviderBackTarget) => dispatch({ type: "navigate", target }),
     checkClaude: () => {
       const id = provider()
 

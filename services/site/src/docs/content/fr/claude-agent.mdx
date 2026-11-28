@@ -1,0 +1,172 @@
+---
+title: "Claude Agent"
+description: "Utilisez une offre Claude ou une connexion Claude Code dans OpenCode via Claude Agent, qui exécute Claude Code sur votre machine."
+noindex: true
+---
+
+Utilisez votre offre Claude ou une autre connexion Claude Code. Claude Agent exécute Claude Code sur votre machine : installez donc Claude Code 2.1.248 ou une version ultérieure et connectez-vous d’abord.
+
+```bash
+claude auth login
+```
+
+Connectez ensuite **Claude Agent** et choisissez un modèle. La liste des modèles provient de Claude Code. Les intensités de raisonnement sont proposées sous forme de variantes, par exemple `claude-agent/opus#high`.
+
+```text
+/connect
+# Select Claude Agent.
+/models
+```
+
+Vous pouvez aussi vous connecter depuis le CLI avec `auth login claude-agent`.
+
+OpenCode trouve `claude` dans votre `PATH`. Pour utiliser une autre copie, définissez `OPENCODE_CLAUDE_PATH` sur le serveur.
+
+```bash
+opencode service set env OPENCODE_CLAUDE_PATH /opt/claude/bin/claude
+```
+
+## Fonctionnement
+
+Claude Code appelle le modèle et OpenCode fait tout le reste.
+
+- Claude reçoit le prompt système de Claude Code, ainsi que le prompt de votre agent, les fichiers `AGENTS.md`, les skills et les instructions MCP.
+- Claude utilise les outils et autorisations d’OpenCode au lieu des outils intégrés de Claude Code.
+- Vos réglages Claude Code, fichiers `CLAUDE.md`, hooks, serveurs MCP, skills et mémoire ne sont pas chargés.
+- OpenCode gère le compactage et lance les subagents.
+- Vous pouvez passer de Claude Agent à d’autres modèles dans la même session.
+
+## Coût
+
+Le coût dépend de la façon dont Claude Code est connecté.
+
+| Connexion | Coût affiché |
+| --- | --- |
+| Abonnement Claude | Aucun, votre offre le couvre |
+| Clé d’API Anthropic, ou Claude Platform sur AWS ou Google Cloud | Tarifs Anthropic |
+| Amazon Bedrock | Tarifs Bedrock, ou tarifs Anthropic sur Bedrock Mantle |
+| Google Vertex | Tarifs Vertex |
+| Microsoft Foundry | Tarifs Azure |
+| URL de base personnalisée | Aucun |
+
+## Configuration
+
+Les réglages de connexion du fournisseur `claude-agent` sont transmis à Claude Code. Ils remplacent les mêmes variables définies dans votre shell.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+| Configuration | Variable Claude Code |
+| --- | --- |
+| `settings.baseURL` | `ANTHROPIC_BASE_URL` |
+| `settings.apiKey` | `ANTHROPIC_API_KEY` |
+| `settings.authToken` | `ANTHROPIC_AUTH_TOKEN` |
+| `settings.headerTimeout` | `API_TIMEOUT_MS` |
+| `settings.chunkTimeout` | `CLAUDE_STREAM_IDLE_TIMEOUT_MS` |
+| `settings.configDir` | `CLAUDE_CONFIG_DIR` |
+| `headers` | `ANTHROPIC_CUSTOM_HEADERS` |
+| `body` | `CLAUDE_CODE_EXTRA_BODY` |
+
+Définissez-les sur un modèle pour remplacer les valeurs du fournisseur pour ce modèle.
+
+## Utiliser un second compte Claude
+
+Connectez-vous au second compte dans son propre dossier. Votre connexion habituelle reste inchangée.
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-2" claude auth login
+```
+
+Dans PowerShell :
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME\.claude-2"; claude auth login
+```
+
+Ajoutez ensuite des modèles qui utilisent ce dossier :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "models": {
+        "sonnet-2": {
+          "modelID": "sonnet",
+          "name": "Sonnet (Claude 2)",
+          "settings": { "configDir": "~/.claude-2" },
+        },
+      },
+    },
+  },
+}
+```
+
+Pour utiliser un compte pour tous les modèles d’un projet, définissez plutôt `settings.configDir` sur le fournisseur dans la configuration de ce projet.
+
+## Alterner entre les comptes
+
+Si vous avez plusieurs comptes interchangeables, OpenCode peut passer au suivant lorsqu’un compte atteint sa limite d’utilisation. Connectez-vous à chaque compte supplémentaire dans son propre dossier. Votre connexion existante dans `~/.claude` peut rester telle quelle :
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Listez ensuite les dossiers :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "claude-agent": {
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
+    },
+  },
+}
+```
+
+Une conversation reste sur le compte qui y a répondu en dernier, et les nouvelles conversations démarrent sur le compte qui a fonctionné en dernier. L’alternance ne s’applique qu’aux connexions à un abonnement Claude, pas à `apiKey` ni `authToken`.
+
+## Recherche web
+
+Claude Agent peut aussi fournir la recherche web d’OpenCode avec le WebSearch de Claude Code : les recherches sont décomptées de votre offre Claude au lieu de nécessiter une clé d’API de recherche. Tous les modèles peuvent l’utiliser. Sélectionnez-le dans `opencode.jsonc` :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+Consultez [Recherche web](/websearch#claude-agent) pour plus de détails.
+
+## Limitations
+
+- Claude Code doit être installé sur la même machine que le serveur OpenCode. Claude Agent n’est pas disponible dans les espaces de travail distants.
+- Le prompt système de Claude Code remplace le prompt intégré d’OpenCode. Les prompts d’agents personnalisés s’appliquent toujours.
+- La température, top-p, top-k, la graine et les séquences d’arrêt ne sont pas prises en charge.
+- Les hooks `http.request` et `http.response` des plugins ne s’exécutent pas, car c’est Claude Code qui effectue les appels d’API.
+- Les fonctionnalités de Claude Code comme `/usage`, `/loop`, le mode automatique et les équipes d’agents ne sont pas disponibles.
+
+## Erreurs
+
+| Erreur ou symptôme | Vérification |
+| --- | --- |
+| `Claude Code is not installed` | Installez Claude Code, ou définissez `OPENCODE_CLAUDE_PATH` sur son chemin. |
+| `Claude Code is not logged in` | Lancez `claude auth login`, puis reconnectez Claude Agent. Avec `configDir`, lancez la commande indiquée par l’erreur pour ce dossier. |
+| `Claude Code ... is too old` | Lancez `claude update`. |

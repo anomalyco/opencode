@@ -1,0 +1,102 @@
+---
+title: "Cloudflare"
+description: "OpenCode'u nesnenin SQLite depolamasıyla desteklenen @opencode/sdk/workerd ile bir Cloudflare Durable Object içinde çalıştırın."
+---
+
+Cloudflare Durable Object içinde `@opencode/sdk/workerd` kullanın. Bu profil nesnenin SQLite depolamasını kullanır,
+tahliye kurtarması için kalıcı olayları saklar ve kullanılamayan yerel dosya sistemi ve süreç hizmetlerinin yerini alır.
+
+```sh
+bun add @opencode/sdk
+```
+
+Her istek için yeni bir gömülü sunucu oluşturmak yerine Durable Object örneğinin ömrü boyunca aynı sunucuyu kullanın.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile`, gömülü sunucu hazır olana kadar Durable Object olaylarının işlenmesini engeller. Başlatma başarısız olursa nesneyi sıfırlar. Saklanan Promise sayesinde istek işleyicileri, başlatma tamamlandıktan sonra aynı sunucuya doğrudan erişir.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler, OpenCode'un Workerd'de güvenli uygulamalarını `workerd` paket koşulu üzerinden seçer. Cloudflare bir Durable
+Object'i temizlik çalıştırmadan tahliye edebilir; bu nedenle doğruluk `close()` çağrılmasına bağlı değildir.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Giden istekleri yönlendirme
+
+OpenCode'un giden HTTP isteklerini (OpenCode Console yapılandırması, model istekleri, web getirme ve arama, well-known
+yapılandırma ve uzak MCP sunucuları) Service Binding gibi özel bir işleyici üzerinden yönlendirmek için `fetch` iletin.
+Code Mode'daki agent kodu `globalThis.fetch` kullanmaya devam eder.
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  fetch: (input, init) => {
+    const request = new Request(input, init)
+    return new URL(request.url).hostname === "console.example.com" ? env.CONSOLE.fetch(request) : fetch(request)
+  },
+})
+```
+
+## Özelleştirme
+
+OpenCode örneğinizi Worker'ınızla paketlenen eklentileri kaydederek özelleştirin. Agent'ları, modelleri, araçları ve diğer
+davranışları özelleştirmek için eklentileri `OpenCodeWorkerd.create()` istemcisine iletin:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Eklenti kancaları, dönüşümler, araçlar ve eksiksiz eklenti bağlamı için
+[eklentiler belgelerinin tamamına](/build/plugins/server) bakın.

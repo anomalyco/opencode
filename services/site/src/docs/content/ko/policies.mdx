@@ -1,0 +1,303 @@
+---
+title: "정책"
+description: "이름으로 지정한 리소스에 대해 OpenCode 작업을 허용하거나 거부하세요. 관리형 정책과 조직 정책은 사용자 및 프로젝트 구성보다 우선합니다."
+---
+
+정책은 OpenCode가 이름 있는 리소스에 대해 작업을 수행할 수 있는지 결정합니다. `policies` 아래에 작성하며, 연결된
+[OpenCode Console](/console) 워크스페이스가 전달할 수도 있습니다.
+
+정책은 [권한](/permissions)과 별개입니다. 권한은 `allow`, `deny`, `ask`를 사용할 수 있는 에이전트별 도구 규칙입니다.
+정책은 허용과 거부만 결정하며 확인을 요청하지 않습니다. 권한과 제공자가 허용하는 범위를 좁힐 수만 있습니다.
+
+## 구성
+
+`opencode.jsonc`에 선언을 추가해 모든 곳에서 한 제공자를 거부하세요.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+거부된 제공자는 유효한 자격 증명이 있어도 카탈로그와 모델 선택에서 사라집니다.
+
+이전 릴리스는 `experimental.policies`에서 정책을 읽었습니다. 이 키도 계속 동작하며 `policies`에 병합됩니다.
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## 선언
+
+각 선언에는 세 개의 필드가 있습니다.
+
+| 필드      | 값                                                                                                                      | 의미                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use` | 제어하는 작업                       |
+| `resource` | 문자열 또는 와일드카드 패턴                                                                                                  | 선언이 적용되는 대상. 액션에 따라 다릅니다 |
+| `effect`   | `allow`, `deny`                                                                                                             | 이 선언이 일치할 때의 결정             |
+
+검증에 실패한 선언은 서버 로그에 경고와 함께 무시되고 나머지 목록은 계속 적용됩니다. `deny`를 편집한 뒤에는 로그를
+확인하세요.
+
+## 일치
+
+리소스는 권한과 같은 값 전체 와일드카드를 사용합니다. `*`는 0개 이상의 문자, `?`는 한 문자와 일치합니다.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+이 선언은 `company-us`와 `company-eu`를 거부합니다. ` *`로 끝나는 패턴은 인수 없는 값과도 일치하므로
+`shell:git push *`는 `git push`만 있는 경우도 포괄합니다.
+
+## 순서
+
+여러 선언이 일치하면 마지막 선언이 우선합니다. 더 구체적인 선언이 자동으로 우선하지는 않으므로 넓게 적용할 선언을 먼저 두고, 예외는 그 뒤에 두세요.
+아무것도 일치하지 않으면 작업이 허용됩니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Anthropic만 남습니다.
+
+## 제공자
+
+`provider.use`는 제공자를 사용할 수 있는지 자체를 제어합니다. 리소스는 제공자 ID입니다. `anthropic`, `openai`,
+`opencode` 또는 [`providers`](/providers)의 커스텀 ID입니다.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+`providers` 항목은 엔드포인트를 구성하고, 선언은 그 제공자만 OpenCode가 사용하게 합니다. 정책은 제공자가 알려진
+경로(카탈로그 데이터, 환경 변수, 저장된 계정, 내장 플러그인, 구성)와 관계없이 적용됩니다.
+
+`provider.use`를 사용하세요. V1의 `enabled_providers`와 `disabled_providers` 목록 대신입니다. V1 파일도 계속 로드되며
+[V1에서 마이그레이션](/migrate-v1#supported-fields-without-direct-native-equivalents)을 참고하세요.
+
+## 도구
+
+`tool.use` 선언은 [권한](/permissions) 검사를 강제로 거부합니다. 리소스는 `<action>:<value>`이며 도구가 확인하는 모든 리소스와 대조합니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+거부된 검사는 확인을 요청하는 대신 `Blocked by configuration policy`로 실패합니다. 에이전트 규칙과 저장된 승인 뒤에
+적용되므로 `ask`와 "Allow always" 승인을 모두 재정의합니다.
+
+| 패턴                      | 차단하는 대상                                      |
+| ---------------------------- | ------------------------------------------- |
+| `shell:*`                    | 모든 셸 명령                         |
+| `read:*/.ssh/*`              | SSH 자료 읽기                        |
+| `external_directory:*`       | Location이나 워크트리 밖의 모든 접근 |
+| `subagent:general`           | 서브에이전트 하나 실행                      |
+| `github_delete_repository:*` | MCP 도구 하나                                |
+| `*`                          | 아직 거부되지 않은 모든 것               |
+
+`tool.use` 선언에 `allow`가 있으면 접근을 부여하지 않습니다. 앞의 더 넓은 `deny`를 해제할 뿐이며, 그 뒤에는 에이전트
+자체 규칙이 결정합니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status`는 에이전트의 `shell` 규칙으로 넘어가고 다른 모든 명령은 차단됩니다.
+
+## 통합
+
+통합은 `/connect`에서 연결하는 모든 것입니다. OpenCode Console(`opencode`), `anthropic` 같은 제공자, `exa` 같은
+웹 검색 서비스, `https://ai.acme.com` 같은 well-known 구성 출처입니다. MCP 서버 로그인은 통합 정책의 영향을 받지
+않으며, MCP 서버를 제어하려면 `mcp.use`를 사용하세요.
+
+`integration.connect`는 `/connect`가 나열하는 통합과 연결 가능한 통합을 제어합니다. 리소스는 통합 ID입니다.
+
+`integration.use`는 통합이 제공하는 모든 것을 제어합니다. 그 제공자와 모델, 웹 검색, Console 워크스페이스나
+well-known 출처가 전달하는 MCP 서버와 구성입니다. 리소스는 `<integration>#<account>`이며, account는 연결된 조직
+또는 계정 ID입니다. 예를 들어 `opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1`입니다. 연결된 계정이 없으면 통합 ID만
+씁니다. 로그아웃 무료 등급은 `opencode`, `ANTHROPIC_API_KEY` 환경 변수는 `anthropic`, `opencode.json`의 제공자는
+그 제공자 ID입니다.
+
+이 MDM 정책은 Console 워크스페이스 하나만 요구하고 다른 것은 허용하지 않습니다. 더 많은 예제는 [엔터프라이즈](/enterprise)를 참고하세요.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+`/connect`는 멤버가 로그인할 수 있도록 Console만 제공합니다. 무료 등급, 개인 Console 계정, 다른 조직, 환경 API
+키, `opencode.json`의 제공자는 모두 사용할 수 없습니다. 워크스페이스의 제공자, MCP 서버, 웹 검색은 동작하며
+Console에서 이를 바꾸는 데 새 MDM 프로필은 필요하지 않습니다.
+
+통합에서 전달하는 MCP 서버와 구성을 받지 않도록 차단할 수 있는 것은 관리형 정책뿐입니다. 통합 자체의 정책은 차단 여부와 관계없이 계속 적용됩니다.
+
+## MCP 서버, 스킬, 플러그인
+
+| 액션       | 리소스                                                          |
+| ------------ | ----------------------------------------------------------------- |
+| `mcp.use`    | 구성된 이름으로 지정한 [MCP 서버](/mcp-servers)              |
+| `skill.use`  | ID로 지정한 [스킬](/skills)                                      |
+| `plugin.use` | 버전 없는 패키지 이름이나 절대 경로로 지정한 [플러그인](/plugins) |
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "plugin.use", "resource": "opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+거부된 MCP 서버나 스킬은 제거되고 거부된 플러그인은 로드되지 않으며, 구성 방식과 무관합니다.
+
+### `integration.use`에서 업그레이드
+
+OpenCode 2.2.3 이전에는 `integration.use`가 `mcp:`, `skill:`, `plugin:` 접두사로 MCP 서버, 스킬, 플러그인까지
+포괄했습니다. 접두사가 있는 선언은 계속 로드되며 `mcp.use`, `skill.use`, `plugin.use`로 변환됩니다.
+
+해당 접두사가 없는 선언(단순 `*` 포함)은 이제 통합에 적용됩니다. 다음과 같은 포괄 거부는
+
+```jsonc
+{ "action": "integration.use", "resource": "*", "effect": "deny" }
+```
+
+더 이상 MCP 서버, 스킬, 플러그인을 차단하지 않습니다. 대신 뒤에 나오는 선언이 통합을 허용하지 않는 한 무료 등급을
+포함한 모든 제공자를 차단합니다. 이전 의미를 유지하려면 다음으로 바꾸세요.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "skill.use", "resource": "*", "effect": "deny" },
+    { "action": "plugin.use", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+예외도 같은 방식으로 옮깁니다. `integration.use` `mcp:github`는 `mcp.use` `github`이 되고,
+`skill:team:review`는 `skill.use` `team:review`가 됩니다.
+
+2.2.3보다 오래된 클라이언트는 `integration.connect`, `integration.use`(새 의미), `mcp.use`, `skill.use`,
+`plugin.use`를 무시하므로 이를 사용하는 곳에서는 2.2.3 이상을 요구하세요.
+
+## 웹 검색
+
+`websearch.use`는 `websearch` 도구가 사용할 수 있는 웹 검색 제공자를 제어합니다. 리소스는 제공자 ID입니다. Console의
+OpenCode Web Search는 `opencode`, 내장 제공자는 `exa`, `firecrawl`, `parallel`, `tavily`, `tinyfish` 같은 ID,
+플러그인이 추가한 제공자는 그 ID입니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}
+```
+
+거부된 제공자는 Exa와 TinyFish처럼 API 키 없이 동작하는 경우에도 제거됩니다. 모든 제공자가 거부되면 `websearch`
+도구는 더 이상 제공되지 않습니다. 2.2.6보다 오래된 클라이언트는 `websearch.use`를 무시합니다.
+
+## 우선순위
+
+일반 설정은 가장 가까운 구성이 이깁니다. 정책은 이를 뒤집습니다. 더 넓은 구성의 선언을 나중에 평가하므로 더 좁은
+선언을 재정의합니다. 관리형 구성과 연결된 Console은 항상 사용자 및 프로젝트 파일보다 우선합니다.
+
+| 권한        | 소스                                                                                                           |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (최고)    | macOS 관리형 기본 설정(`/Library/Managed Preferences/ai.opencode.managed.plist`)                              |
+| 2           | 시스템 `opencode.json(c)`(`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`)  |
+| 3           | 연결된 OpenCode Console 워크스페이스                                                                           |
+| 4           | 전역 `~/.config/opencode/opencode.json(c)`                                                                     |
+| 5           | 직접 `opencode.json(c)`. 상위 디렉터리의 구성이 하위 디렉터리의 구성보다 우선합니다                                              |
+| 6 (최저)    | `.opencode/opencode.json(c)`. 상위 디렉터리의 구성이 하위 디렉터리의 구성보다 우선합니다                                         |
+
+저장소는 전역에서 거부한 제공자를 다시 활성화할 수 없습니다.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai`는 거부된 상태로 남습니다. 한 파일 안에서 선언은 작성한 순서를 유지합니다.
+
+## Console
+
+[OpenCode Console](/console)의 워크스페이스는 Providers 및 Tools 정책을 워크스페이스 구성의 일반 `policies` 선언으로
+컴파일합니다. OpenCode는 그 구성을 관리형 기본 설정과 시스템 파일 바로 아래 순위의 구성 파일처럼 병합하므로, 조직의
+`deny`는 저장소나 사용자의 `allow`로 해제할 수 없고 조직의 `allow`는 더 낮은 권한의 `deny`를 해제합니다. 관리형
+기본 설정과 시스템 파일은 여전히 워크스페이스를 재정의합니다.
+
+이 선언의 거부는 워크스페이스를 표시합니다.
+
+```text
+Blocked by Acme's policy
+```
+
+선언은 연결된 계정을 따릅니다.
+
+| 이벤트                       | 결과                                              |
+| --------------------------- | --------------------------------------------------- |
+| Console 정책 변경      | 다음 가져오기에서 적용. 약 5분마다 |
+| 다른 워크스페이스로 전환 | 선언이 그 워크스페이스의 것으로 교체됨           |
+| 연결 해제                  | 선언이 지워짐                                  |
+| Console에 연결할 수 없음         | 해당 연결의 마지막 선언이 계속 적용됨  |
+
+Console 플러그인과 정책 플러그인은 `plugins`에서 비활성화할 수 없습니다.
+[플러그인 제어](/plugins#control)를 참고하세요.
+
+<Callout type="note">
+  정책은 엔드포인트나 자격 증명을 구성하지 않으며 사용할 수 없는 제공자를 사용 가능하게 만들지 않습니다. 플러그인
+  코드를 샌드박스로 격리하지도 않습니다. 거부된 제공자는 일반 제공자 및 모델 경로에서 차단됩니다.
+</Callout>
+

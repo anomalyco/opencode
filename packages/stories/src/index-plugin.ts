@@ -5,19 +5,27 @@ import type { Plugin } from "vite"
 const id = "virtual:story-index"
 
 /**
- * `virtual:story-index`: every story in `roots` by the id Storybook gave it (`<meta id or title>--<export>`), so the
+ * `virtual:story-index`: every story (a Lab page's state) in `roots` by the id Storybook gave it (`<meta id or title>--<export>`), so the
  * component tests keep their ids. Each entry loads only its own file.
  */
 export function storyIndex(roots: string[]): Plugin {
   return {
     name: "opencode:story-index",
     resolveId: (source) => (source === id ? `\0${id}` : undefined),
+    hotUpdate({ file }) {
+      if (!file.endsWith(".lab.tsx")) return
+
+      // The index reads the export names itself. Recompute them for the next /?id=… visit.
+      const graph = this.environment.moduleGraph
+      const index = graph.getModuleById(`\0${id}`)
+      if (index) graph.invalidateModule(index)
+    },
     load(source) {
       if (source !== `\0${id}`) return
 
       const files = roots.flatMap((root) =>
         readdirSync(root, { recursive: true, encoding: "utf8" })
-          .filter((file) => file.endsWith(".stories.tsx") && !file.includes("node_modules"))
+          .filter((file) => file.endsWith(".lab.tsx") && !file.includes("node_modules"))
           .map((file) => path.join(root, file).replaceAll("\\", "/")),
       )
 

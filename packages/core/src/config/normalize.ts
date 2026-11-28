@@ -28,7 +28,7 @@ import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
 export interface Diagnostic {
-  readonly kind: "conflict" | "invalid" | "unsupported"
+  readonly kind: "conflict" | "invalid" | "removed" | "unsupported"
   readonly path: readonly string[]
   readonly message: string
 }
@@ -153,7 +153,19 @@ export function normalize(input: unknown): Result {
     canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent({ ...value, mode: "primary" })),
   )
   const migratedAgents = mergeMaps(legacyAgents, modeAgents, ["agents"], diagnostics)
-  const nativeAgents = decodeMap(input.agents, ConfigAgent.Info, ["agents"], diagnostics, decodeEncoded)
+  const nativeAgents = decodeMap(
+    isRecord(input.agents)
+      ? mapValues(input.agents, (agent) =>
+          isRecord(agent) && agent.permissions !== undefined
+            ? { ...agent, permissions: renameTools(agent.permissions) }
+            : agent,
+        )
+      : input.agents,
+    ConfigAgent.Info,
+    ["agents"],
+    diagnostics,
+    decodeEncoded,
+  )
   diagnoseAgentUnsupported(input.agent, ["agent"], diagnostics)
   diagnoseAgentUnsupported(input.mode, ["mode"], diagnostics)
   mergeMap(
@@ -178,7 +190,13 @@ export function normalize(input: unknown): Result {
 
   const toolRules = migrateTools(input.tools, diagnostics)
   const permissionRules = migratePermissions(input.permission, diagnostics)
-  const nativePermissions = decodeList(input.permissions, Permission.Rule, ["permissions"], diagnostics, decodeEncoded)
+  const nativePermissions = decodeList(
+    renameTools(input.permissions),
+    Permission.Rule,
+    ["permissions"],
+    diagnostics,
+    decodeEncoded,
+  )
   const permissions = [...toolRules, ...permissionRules, ...nativePermissions]
   if (permissions.length || Array.isArray(input.permissions)) encoded.permissions = permissions
 
@@ -211,6 +229,7 @@ export function normalize(input: unknown): Result {
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
     timezone: Info.fields.timezone,
+    automations: Info.fields.automations,
     snapshots: Info.fields.snapshots,
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
@@ -288,7 +307,7 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           )
           return
         }
-        const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
+        const server = decodeValue(ConfigMCPV1.Info, camelCaseLegacyOAuth(value), path, diagnostics)
         if (server !== undefined)
           setOwn(legacyServers, name, canonical(ConfigMCP.Server, ConfigMigrateV1.migrateMcp(server)))
       })
@@ -302,6 +321,29 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
   encoded.mcp = {
     ...(Object.keys(timeout).length ? { timeout } : {}),
     ...(Object.keys(servers).length ? { servers } : {}),
+  }
+}
+
+const LegacyOAuthKeys = new Map([
+  ["client_id", "clientId"],
+  ["client_secret", "clientSecret"],
+  ["callback_port", "callbackPort"],
+  ["redirect_uri", "redirectUri"],
+])
+
+// V1 spelled oauth keys in camelCase, and its schema drops the snake_case ones the current schema and docs use, which
+// leaves a configured client ID unused. A camelCase key wins when both are given.
+function camelCaseLegacyOAuth(value: unknown) {
+  if (!isRecord(value) || !isRecord(value.oauth)) return value
+  const oauth = value.oauth
+  return {
+    ...value,
+    oauth: Object.fromEntries(
+      Object.entries(oauth).map(([key, field]) => {
+        const camel = LegacyOAuthKeys.get(key)
+        return camel && !own(oauth, camel) ? [camel, field] : [key, field]
+      }),
+    ),
   }
 }
 
@@ -353,14 +395,15 @@ function normalizeCompaction(
   unsupportedIfPresent(input.compaction, "tail_turns", ["compaction", "tail_turns"], diagnostics)
   unsupportedIfPresent(input.compaction, "prune", ["compaction", "prune"], diagnostics)
   const result: Record<string, unknown> = {}
-  if (own(input.compaction, "auto")) {
+  for (const key of ["auto", "background"] as const) {
+    if (!own(input.compaction, key)) continue
     const value = decodeEncoded(
-      ConfigCompaction.Info.fields.auto,
-      input.compaction.auto,
-      ["compaction", "auto"],
+      ConfigCompaction.Info.fields[key],
+      input.compaction[key],
+      ["compaction", key],
       diagnostics,
     )
-    if (value !== undefined) result.auto = value
+    if (value !== undefined) result[key] = value
   }
   const legacyTokens = own(input.compaction, "preserve_recent_tokens")
     ? decodeEncoded(
@@ -459,6 +502,14 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
+      for (const key of ["automations", "schedules"]) {
+        if (!own(experimental, key)) continue
+        diagnostics.push({
+          kind: "removed",
+          path: ["experimental", key],
+          message: "Use the top-level automations setting. Automations are enabled by default.",
+        })
+      }
       // `policies` merges into top-level `policies` in normalizePolicies.
       Object.entries(ConfigExperimental.Info.fields).forEach(([key, schema]) => {
         if (key === "policies" || !own(experimental, key)) return
@@ -519,6 +570,16 @@ function migrateTools(value: unknown, diagnostics: Diagnostic[]) {
     if (enabled === undefined) return []
     return [{ action: ConfigMigrateV1.normalizeAction(action), resource: "*", effect: enabled ? "allow" : "deny" }]
   })
+}
+
+// Native rules may still name the media tools by their old experimental names.
+function renameTools(rules: unknown) {
+  if (!Array.isArray(rules)) return rules
+  return rules.map((rule) =>
+    isRecord(rule) && typeof rule.action === "string"
+      ? { ...rule, action: ConfigMigrateV1.renamedTool(rule.action) }
+      : rule,
+  )
 }
 
 function migratePermissions(value: unknown, diagnostics: Diagnostic[]) {

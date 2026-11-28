@@ -36,6 +36,12 @@ export type NewTabsState = {
   /** The current session is in an open-and-empty span of the side region, which opened its New tab once. */
   readonly openedEmpty: boolean
   readonly panes: Readonly<Record<SessionPane, PaneNewTabs>>
+  /**
+   * The pane whose New tab the person just asked for, with + or ⌘T or by opening the side region: it gives the keyboard
+   * to its first field once that renders. A New tab that opens by itself, as when another session routes into an open
+   * side region, leaves the keyboard where it is.
+   */
+  readonly focus: SessionPane | undefined
   /** The region as the last `sync` saw it, which the next one compares against. */
   readonly snapshot: RegionTabSnapshot | undefined
 }
@@ -46,8 +52,17 @@ export type NewTabsEvent =
   | { readonly type: "select.new"; readonly pane: SessionPane; readonly id: string }
   /** The user selects a tab of the pane, which shows over its New tabs. */
   | { readonly type: "select.tab"; readonly pane: SessionPane }
+  /**
+   * A tab opens in the pane that already selects it. The open changes no selection for `sync` to see, so this replaces
+   * the New tab the pane shows over it, as a tab that selects itself does.
+   */
+  | { readonly type: "open.selected"; readonly pane: SessionPane }
   /** `empty`: the strip holds no tab, so closing the last New tab empties the region. */
   | { readonly type: "dismiss"; readonly id: string; readonly empty: boolean }
+  /** The person opens the side region: the New tab it shows, if any, takes the keyboard. */
+  | { readonly type: "focus.requested"; readonly pane: SessionPane }
+  /** The New tab gave the keyboard to its field. */
+  | { readonly type: "focus.taken" }
 
 /** The last New tab of a strip with no tabs closed: the region closes, as closing its last tab does. */
 export type NewTabsEffect = { readonly type: "emptied" }
@@ -58,13 +73,18 @@ export type NewTabsTransition = {
 }
 
 export function createNewTabsState(): NewTabsState {
-  return { serial: 0, session: "", openedEmpty: false, panes: emptyPanes(), snapshot: undefined }
+  return { serial: 0, session: "", openedEmpty: false, panes: emptyPanes(), focus: undefined, snapshot: undefined }
 }
 
 export function transitionNewTabs(state: NewTabsState, event: NewTabsEvent): NewTabsTransition {
   if (event.type === "sync") return { state: sync(state, event.snapshot), effects: [] }
 
-  if (event.type === "open") return { state: open(state, event.pane), effects: [] }
+  if (event.type === "open") return { state: { ...open(state, event.pane), focus: event.pane }, effects: [] }
+
+  if (event.type === "focus.requested")
+    return { state: state.focus === event.pane ? state : { ...state, focus: event.pane }, effects: [] }
+
+  if (event.type === "focus.taken") return { state: state.focus ? { ...state, focus: undefined } : state, effects: [] }
 
   if (event.type === "select.new") {
     const pane = state.panes[event.pane]
@@ -80,6 +100,18 @@ export function transitionNewTabs(state: NewTabsState, event: NewTabsEvent): New
     if (pane.chosen === undefined) return { state, effects: [] }
 
     return { state: withPane(state, event.pane, { ids: pane.ids, chosen: undefined }), effects: [] }
+  }
+
+  if (event.type === "open.selected") {
+    // The pane selects a tab, so the New tab it shows is the chosen one.
+    const pane = state.panes[event.pane]
+
+    if (pane.chosen === undefined) return { state, effects: [] }
+
+    return {
+      state: withPane(state, event.pane, { ids: pane.ids.filter((id) => id !== pane.chosen), chosen: undefined }),
+      effects: [],
+    }
   }
 
   const owner = SESSION_PANES.find((pane) => state.panes[pane].ids.includes(event.id))
@@ -105,6 +137,11 @@ export function selectShownNewTab(state: NewTabsState, pane: SessionPane, paneAc
   return shown(state.panes[pane], paneActive)
 }
 
+/** The pane's New tab should take the keyboard now. */
+export function selectNewTabFocus(state: NewTabsState, pane: SessionPane) {
+  return state.focus === pane
+}
+
 export function selectHasNewTabs(state: NewTabsState) {
   return SESSION_PANES.some((pane) => state.panes[pane].ids.length > 0)
 }
@@ -112,7 +149,7 @@ export function selectHasNewTabs(state: NewTabsState) {
 function sync(state: NewTabsState, snapshot: RegionTabSnapshot): NewTabsState {
   // Another session starts with none, and opens one when it routes into an open, empty side region.
   if (snapshot.session !== state.session) {
-    const reset = { ...state, session: snapshot.session, panes: emptyPanes(), snapshot }
+    const reset = { ...state, session: snapshot.session, panes: emptyPanes(), focus: undefined, snapshot }
     const openedEmpty = snapshot.sideOpen && snapshot.empty
 
     return openedEmpty ? open({ ...reset, openedEmpty }, "side") : { ...reset, openedEmpty }
@@ -152,12 +189,28 @@ function sync(state: NewTabsState, snapshot: RegionTabSnapshot): NewTabsState {
   const want = snapshot.sideOpen && snapshot.empty
   const opened = want && !state.openedEmpty
 
-  const result =
+  const opening =
     opened && selectShownNewTab(synced, "side", snapshot.panes.side.active) === undefined
       ? open({ ...synced, openedEmpty: true }, "side")
       : { ...synced, openedEmpty: want }
 
-  if (result.panes === state.panes && result.openedEmpty === state.openedEmpty && result.snapshot === previous)
+  // A request whose pane shows a tab rather than a New tab is over: the person opened the region onto a tab, or picked
+  // one. The side pane's waits while the region is closed, as the request comes just before it opens.
+  const focus = opening.focus
+
+  const stale =
+    focus !== undefined &&
+    (focus !== "side" || snapshot.sideOpen) &&
+    selectShownNewTab(opening, focus, snapshot.panes[focus].active) === undefined
+
+  const result = stale ? { ...opening, focus: undefined } : opening
+
+  if (
+    result.panes === state.panes &&
+    result.openedEmpty === state.openedEmpty &&
+    result.focus === state.focus &&
+    result.snapshot === previous
+  )
     return state
 
   return result

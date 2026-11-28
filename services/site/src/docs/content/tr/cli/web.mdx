@@ -1,0 +1,162 @@
+---
+title: "Web"
+description: "OpenCode'u tarayıcıda çalıştırın."
+---
+
+OpenCode'un web arayüzü TUI ile aynı sunucuda çalışır. Varsayılan olarak açıktır ve parolayla korunur.
+
+## Erişim
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Bağlantıyı tarayıcıda açtığınızda oturum çereziyle giriş yapılır ve web arayüzü yüklenir. OpenCode uygulamasında QR
+kodunu tarayarak veya bağlantıyı sunucu adresi alanına yapıştırarak uygulamayı aynı şekilde bağlayabilirsiniz. Oturumlar
+30 gün açık kalır; sunucu parolası değiştiğinde tüm oturumlar kapanır.
+
+### SSH üzerinden
+
+Sunucu yalnızca localhost üzerinde dinliyorsa bağlantı noktasını makinenizden yönlendirin ve yazdırılan bağlantıyı yerel
+olarak açın:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Sunucu varsayılan olarak yalnızca localhost üzerinde dinler. Bağlantı noktası platforma bağlıdır:
+
+| Platform              | Varsayılan bağlantı noktası |
+| --------------------- | --------------------------- |
+| macOS, Linux ve WSL   | 49374                       |
+| Windows               | 28894                       |
+
+Windows 49152 ve üzerindeki bağlantı noktalarını ayırır ve WSL yansıtmalı ağ bağlantısı bunun altında başka bir blok
+ayırır. Geçerli adresi `opencode service status` ile yazdırın:
+
+```bash
+$ opencode service status
+http://127.0.0.1:49374
+```
+
+Bu yapılandırmayı `opencode service` komutuyla değiştirebilirsiniz.
+
+### Uzak erişim
+
+Her yerden bağlanmak için bir [OpenTunnel](https://github.com/anomalyco/opentunnel) uzak adresi üzerinden eşleştirin:
+
+```bash
+$ opencode pair --remote
+```
+
+Uzak erişimi ilk açtığında devam etmeden önce sorar:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Etkileşimli bir terminal yoksa komut, kabul etmek için `--yes` iletmediğiniz sürece başarısız olur. Kabul edildikten sonra
+sonraki çalıştırmalar istemi atlar; uzak erişim `opencode service set remote false` ile kapatılmış olsa bile.
+
+## Yapılandırma
+
+Herhangi bir seçeneği `opencode service set` ile ayarlayın:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Bir ayarı değiştirmek arka plan sunucusunu durdurur. Yeni yapılandırmayı uygulamak için yeniden başlatın:
+
+```bash
+$ opencode service start
+```
+
+## Bağımsız
+
+`opencode serve` aynı sunucuyu paylaşılan arka plan hizmeti yerine ön planda çalıştırır.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Şu durumlarda kullanın:
+
+- OpenCode'u paylaşılan, sürekli açık veya uzak bir ana bilgisayarda çalıştırıp istemcileri
+  `opencode --server <url>` ile bağlamak.
+- Tek bir süreç için ana bilgisayar adını, bağlantı noktasını ve CORS kaynaklarını denetlemek.
+- systemd, Docker veya ön plan süreci bekleyen başka bir ortam gibi bir gözetleyici altında çalıştırmak.
+- Paylaşılan arka plan hizmeti yerine ayrılmış bir sunucu tutmak.
+
+Bir istemciyi `--server` ile ona bağlayın:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```
+
+### Kimlik doğrulama
+
+Oluşturulan parola yerine sabit bir parola kullanmak için `OPENCODE_PASSWORD` ayarlayın. Aynı değişken parolayı
+`opencode --server` komutuna da verir.
+
+```bash
+$ OPENCODE_PASSWORD="a-long-secret" opencode serve --port 4096
+$ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
+```
+
+Diğer HTTP istemcileri Basic auth kullanır. Kullanıcı adı her zaman `opencode`dur ve yalnızca parola değiştirilebilir.
+
+```bash
+$ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
+```
+
+`opencode service set password` yalnızca yönetilen arka plan hizmeti için geçerlidir. `opencode serve`,
+`OPENCODE_PASSWORD` değişkenini okur. Değişken ayarlı değilse her başlatmada yeni bir parola üretir.
+
+### Docker
+
+Her sürümde `ghcr.io/anomalyco/opencode` adresinde sürüm etiketiyle bir imaj yayımlanır. İmajın giriş noktası
+`opencode` komutudur ve TUI'yi başlatır; sunucuyu çalıştırmak için `serve` argümanını verin. Sunucuyu `0.0.0.0`
+adresine bağlayın; varsayılan `127.0.0.1` adresine yalnızca kapsayıcının içinden erişilebilir.
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- Parolanın yeniden başlatmalar arasında değişmemesi için `OPENCODE_PASSWORD` değişkenini ayarlayın.
+- Veri dizinini (`/root/.local/share/opencode`) kapsayıcıya bağlayın. Bu dizin oturumlarınızın veritabanını barındırır.
+  Bağlamazsanız kapsayıcı silindiğinde oturumlarınız da kaybolur. Genel yapılandırmanızı korumak için yapılandırma
+  dizinini (`/root/.config/opencode`) de bağlayın.
+- Sunucunun hazır olup olmadığını `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info` komutuyla kontrol edin.

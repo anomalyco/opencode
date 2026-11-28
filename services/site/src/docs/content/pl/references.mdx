@@ -1,0 +1,282 @@
+---
+title: "Referencje"
+description: "Udostępnij OpenCode lokalne katalogi i repozytoria Git spoza bieżącego projektu pod aliasami, a następnie dołączaj je do promptów."
+---
+
+Referencje udostępniają OpenCode katalogi spoza bieżącego projektu pod aliasami. Dodaj referencję w `opencode.json`
+lub `opencode.jsonc`, a gdy będzie potrzebna, dołącz jej alias w aplikacji klienckiej.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Po dołączeniu `docs` poproś agenta o sprawdzenie odpowiedniej ścieżki:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Używaj referencji do dokumentacji, współdzielonych bibliotek, przykładów lub kodu z innego repozytorium.
+
+## Lokalne
+
+Użyj `path` dla lokalnego katalogu:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Ścieżki działają tak:
+
+- Ścieżki względne są liczone od katalogu zawierającego plik konfiguracji.
+- Ścieżki bezwzględne są obsługiwane.
+- Ścieżki względne wobec katalogu domowego, takie jak `~/docs`, są obsługiwane.
+
+Użyj skrótu tekstowego, gdy inne pola nie są potrzebne:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  Skrót tekstowy jest ścieżką lokalną tylko wtedy, gdy zaczyna się od `.`, `/` lub `~`. Użyj `./docs`, a nie `docs`;
+  sama wartość `docs` jest interpretowana jako repozytorium Git.
+</Callout>
+
+## Git
+
+Użyj `repository` dla zdalnego repozytorium Git:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Obsługiwane formy zdalne to między innymi:
+
+- Skrót GitHub `owner/repo`
+- Adresy URL Git
+- Formy host/ścieżka
+- Zdalne adresy w stylu SCP
+
+Lokalne repozytoria `file:` nie są obsługiwane.
+
+Użyj skrótu tekstowego, aby podążać za domyślną gałęzią zdalnego repozytorium:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Bez `branch` OpenCode przełącza lokalną kopię na domyślną gałąź zdalnego repozytorium i ją odświeża. Nazwy gałęzi mogą zawierać
+litery, cyfry, `/`, `_`, `.` i `-`, ale nie mogą zaczynać się od `-` ani zawierać `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Przechowywanie
+
+OpenCode normalizuje każde zdalne repozytorium i przechowuje jeden checkout na repozytorium i gałąź w globalnym katalogu
+danych. Bez jawnej gałęzi ścieżka ma taki kształt:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+W typowej instalacji Linuksa `Effect-TS/effect` jest przechowywane w:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+Jawna gałąź dodaje zakodowany sufiks `@<branch>`:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Odświeżanie
+
+Brakujące repozytoria są klonowane asynchronicznie. Istniejące checkouty są sprawdzane w tle przy wczytywaniu lub
+przeładowaniu referencji oraz po przyjęciu nowego promptu użytkownika w ich lokalizacji.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+Checkout kwalifikuje się, gdy jego ostatnia próba odświeżenia miała miejsce co najmniej 24 godziny temu albo gdy nie
+zapisano żadnej próby. Odświeżenie pobiera i resetuje do skonfigurowanej gałęzi lub domyślnej gałęzi zdalnego
+repozytorium.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+Odświeżanie podlega tym zasadom:
+
+- Znaczniki czasu przetrwają restarty usługi.
+- Lokalizacje używające tego samego checkoutu współdzielą jego znacznik czasu.
+- Nieudane próby są zapisywane i nadal podlegają limitowi 24 godzin.
+- Nie ma okresowego odpytywania, gdy lokalizacja jest nieużywana.
+- Błędy klonowania lub odświeżania nie blokują wczytywania innych referencji.
+
+Prompty nie czekają na klonowanie ani odświeżanie. Załącznik może zawierać starszą treść, nawet jeśli późniejszy odczyt
+narzędzia widzi zaktualizowany checkout, a nowa referencja może pojawić się przed gotowością swojego checkoutu.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Zapisane checkouty są współdzielone i mogą się aktualizować, gdy agent ich używa. Nie edytuj zapisanych checkoutów,
+  ponieważ odświeżenie je resetuje.
+</Callout>
+
+## Wskazówki
+
+`description` mówi agentom, kiedy referencja jest istotna. Referencje z opisem pojawiają się w instrukcjach agenta
+z aliasem i ścieżką wynikową.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Referencje bez opisu pozostają dostępne dla klientów, ale nie są automatycznie ogłaszane.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Widoczność
+
+Ustaw `hidden` na `true`, aby usunąć referencję z interaktywnych wyborów klienta:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` wpływa tylko na widoczność interaktywną. Referencja pozostaje w API referencji, a gdy ma opis, także
+w instrukcjach agenta.
+
+## Użycie
+
+Aplikacje klienckie dołączają referencję za pomocą aliasu jej katalogu głównego. Załącznik zawiera listę plików
+i katalogów znajdujących się bezpośrednio w katalogu głównym, bez przeszukiwania podkatalogów.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Poproś agenta o sprawdzenie konkretnej ścieżki, gdy potrzebujesz treści poniżej katalogu głównego.
+
+## Uprawnienia
+
+Referencje nie przyznają dodatkowych uprawnień narzędzi. Dostęp poza aktywną lokalizacją nadal podlega normalnym zasadom
+narzędzi i uprawnieniu `external_directory`; edycja wymaga też odpowiedniego uprawnienia edycji.
+
+```text
+Read ../product-docs/api.md
+```
+
+Żądanie kończy się powodzeniem tylko wtedy, gdy aktywne uprawnienia zezwalają na ten zewnętrzny odczyt.
+
+## Pola
+
+| Pole          | Lokalna  | Git      | Opis                                          |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path`        | Wymagane | Nie      | Ścieżka lokalnego katalogu                    |
+| `repository`  | Nie      | Wymagane | Zdalne repozytorium Git                       |
+| `branch`      | Nie      | Opcjonalne | Gałąź, którą OpenCode pobierze i na którą przełączy lokalną kopię |
+| `description` | Opcjonalne | Opcjonalne | Wskazówka opisująca, kiedy agenci powinni jej używać |
+| `hidden`      | Opcjonalne | Opcjonalne | Ukrywa ją w interaktywnych wyborach klienta |
+
+Kompletny wpis Git może używać każdego pola zgodnego z Git:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Aliasy
+
+Alias nie może być pusty ani zawierać `/`, `\`, białych znaków, backticka ani przecinka.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

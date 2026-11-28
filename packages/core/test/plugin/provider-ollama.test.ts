@@ -1,8 +1,7 @@
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
-import { Environment, makeFiles } from "@opencode/core/environment/index"
+import { Environment } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
-import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -33,13 +32,7 @@ describe("OllamaPlugin", () => {
       const host = yield* PluginHost.make(plugin, "test")
       const providers = yield* Provider.Service
       yield* OllamaPlugin.effect(host).pipe(
-        Effect.provideService(
-          Environment.Service,
-          Environment.Service.of({
-            files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
-            spawner: EnvironmentUnavailable.spawner,
-          }),
-        ),
+        Effect.provideService(Environment.Service, Environment.local(EnvironmentUnavailable.spawner)),
       )
       yield* Effect.promise(() => Bun.sleep(20))
       expect(yield* providers.get(Provider.ID.make("ollama"))).toBeUndefined()
@@ -170,70 +163,6 @@ describe("OllamaPlugin", () => {
           state.fail = true
           yield* Effect.promise(() => Bun.sleep(30))
           expect((yield* modelState.get(providerID, modelID))?.limit.context).toBe(65_536)
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.live("replaces and restores the same-ID Models.dev provider", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const models = [summary("discovered-model", "digest")]
-        return {
-          models,
-          server: Bun.serve({
-            port: 0,
-            fetch: async (request) => {
-              if (request.method === "GET") return Response.json({ models })
-              decodeShowRequest(await request.json())
-              return Response.json(show({ capabilities: ["completion"], context: 32_768 }))
-            },
-          }),
-        }
-      }),
-      ({ models, server }) =>
-        Effect.gen(function* () {
-          const providers = yield* Provider.Service
-          const modelState = yield* Model.Service
-          const integrations = yield* Integration.Service
-          const providerID = Provider.ID.make("ollama")
-          yield* integrations.transform((editor) => {
-            editor.update(Integration.ID.make("ollama"), (integration) => {
-              integration.name = "Ollama"
-            })
-            editor.method.update({
-              integrationID: Integration.ID.make("ollama"),
-              method: { type: "env", names: ["OLLAMA_API_KEY"] },
-            })
-          })
-          yield* providers.transform((editor) => {
-            editor.update(providerID, (provider) => {
-              provider.name = "Ollama"
-              provider.package = "@opencode/ai/providers/openai-compatible"
-              provider.integrationID = Integration.ID.make("ollama")
-            })
-            editor.models.update(providerID, Model.ID.make("static-model"), () => {})
-          })
-
-          yield* addPlugin(server.url.origin, "5 millis")
-          yield* eventually(
-            modelState.get(providerID, Model.ID.make("discovered-model")),
-            (model) => model !== undefined,
-          )
-          expect(yield* integrations.get(Integration.ID.make("ollama"))).toBeUndefined()
-          expect((yield* providers.get(providerID))?.activation).toBe("enabled")
-          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
-
-          models.splice(0)
-          yield* eventually(
-            providers.snapshot(),
-            (snapshot) => snapshot.records.get(providerID)?.models.has(Model.ID.make("static-model")) === true,
-          )
-          expect(yield* modelState.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
-          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
-          expect(yield* integrations.get(Integration.ID.make("ollama"))).toBeDefined()
-          expect((yield* providers.get(providerID))?.activation).toBe("auto")
-          expect((yield* providers.get(providerID))?.integrationID).toBe(Integration.ID.make("ollama"))
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

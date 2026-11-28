@@ -1,0 +1,549 @@
+---
+title: "Modelli di Console"
+description: "Una selezione di modelli per il coding, prezzi a consumo e accesso API tramite OpenCode Console."
+---
+
+OpenCode Console offre un elenco di modelli testati e verificati dal team di OpenCode. Accedi, aggiungi crediti e ottieni una
+chiave API per usarli con OpenCode o un altro agente di coding.
+
+Console funziona come qualsiasi altro provider in OpenCode. È **completamente opzionale**, e puoi usare qualsiasi altro provider
+al suo posto. Per un abbonamento con utilizzo incluso, vedi [OpenCode Go](/console/go).
+
+## Come funziona
+
+1. Accedi alla [console](https://opencode.ai/console), aggiungi i dettagli di fatturazione e i crediti, e copia la tua chiave API.
+2. Esegui `/connect` nella TUI, scegli il provider a consumo di OpenCode e incolla la tua chiave API.
+
+   ```text
+   /connect
+   ```
+
+3. Esegui `/models` per vedere i modelli disponibili e selezionarne uno.
+
+   ```text
+   /models
+   ```
+
+Paghi per ogni richiesta e puoi aggiungere crediti al tuo account.
+
+## Endpoint
+
+Puoi anche accedere ai modelli direttamente tramite i seguenti endpoint API. I modelli chat del piano Free richiedono OpenCode;
+usa modelli a pagamento o [Go](/console/go) da altri client.
+
+Ogni modello è elencato con la sua API nativa, ma ogni modello testuale funziona anche tramite le altre API, che Console
+traduce. Vedi [URL di base](/console/harnesses#base-urls) per l'insieme completo.
+
+<div class="docs-table-scroll" role="region" aria-label="Console model endpoints" tabIndex={0}>
+
+| Modello                     | ID modello                  | Endpoint                                                                                    | Pacchetto AI SDK            |
+| --------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- | --------------------------- |
+| GPT 6.2 Astra               | gpt-6.2-astra               | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 6.2 Sol                 | gpt-6.2-sol                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 6 Astra                 | gpt-6-astra                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 6 Sol                   | gpt-6-sol                   | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 6.1 Sol                 | gpt-6.1-sol                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 6 Luna                  | gpt-6-luna                  | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.6 Sol                 | gpt-5.6-sol                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.6 Terra               | gpt-5.6-terra               | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.6 Luna                | gpt-5.6-luna                | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.5                     | gpt-5.5                     | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.5 Pro                 | gpt-5.5-pro                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.4                     | gpt-5.4                     | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.4 Pro                 | gpt-5.4-pro                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.4 Mini                | gpt-5.4-mini                | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.4 Nano                | gpt-5.4-nano                | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.3 Codex               | gpt-5.3-codex               | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.3 Codex Spark         | gpt-5.3-codex-spark         | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.2                     | gpt-5.2                     | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.2 Codex               | gpt-5.2-codex               | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.1                     | gpt-5.1                     | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.1 Codex               | gpt-5.1-codex               | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max           | gpt-5.1-codex-max           | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini          | gpt-5.1-codex-mini          | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5                       | gpt-5                       | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5 Codex                 | gpt-5-codex                 | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| GPT 5 Nano                  | gpt-5-nano                  | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Claude Fable 5.2            | claude-fable-5-2            | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Fable 5.1            | claude-fable-5-1            | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Fable 5              | claude-fable-5              | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Opus 5.5             | claude-opus-5-5             | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Opus 5               | claude-opus-5               | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Opus 4.8             | claude-opus-4-8             | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Opus 4.7             | claude-opus-4-7             | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6             | claude-opus-4-6             | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5             | claude-opus-4-5             | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Sonnet 5.5           | claude-sonnet-5-5           | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Sonnet 5             | claude-sonnet-5             | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6           | claude-sonnet-4-6           | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.5           | claude-sonnet-4-5           | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Haiku 5.5            | claude-haiku-5-5            | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5            | claude-haiku-4-5            | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Gemini 4 Neon               | gemini-4-neon               | `https://opencode.ai/inference/google/v1beta/models/gemini-4-neon`                          | `@ai-sdk/google`            |
+| Gemini 4 Carbon             | gemini-4-carbon             | `https://opencode.ai/inference/google/v1beta/models/gemini-4-carbon`                        | `@ai-sdk/google`            |
+| Gemini 4 Argon              | gemini-4-argon              | `https://opencode.ai/inference/google/v1beta/models/gemini-4-argon`                         | `@ai-sdk/google`            |
+| Gemini 4 Hydrogen           | gemini-4-hydrogen           | `https://opencode.ai/inference/google/v1beta/models/gemini-4-hydrogen`                      | `@ai-sdk/google`            |
+| Gemini 3.8 Flash            | gemini-3.8-flash            | `https://opencode.ai/inference/google/v1beta/models/gemini-3.8-flash`                       | `@ai-sdk/google`            |
+| Gemini 3.7 Flash            | gemini-3.7-flash            | `https://opencode.ai/inference/google/v1beta/models/gemini-3.7-flash`                       | `@ai-sdk/google`            |
+| Gemini 3.6 Flash            | gemini-3.6-flash            | `https://opencode.ai/inference/google/v1beta/models/gemini-3.6-flash`                       | `@ai-sdk/google`            |
+| Gemini 3.5 Flash            | gemini-3.5-flash            | `https://opencode.ai/inference/google/v1beta/models/gemini-3.5-flash`                       | `@ai-sdk/google`            |
+| Gemini 3.5 Flash Lite       | gemini-3.5-flash-lite       | `https://opencode.ai/inference/google/v1beta/models/gemini-3.5-flash-lite`                  | `@ai-sdk/google`            |
+| Grok 4.7                    | grok-4.7                    | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Grok 4.6                    | grok-4.6                    | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Grok 4.5                    | grok-4.5                    | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Grok Build 0.1              | grok-build-0.1              | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Muse Ember 1.0              | muse-ember-1.0              | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Muse Wonder 1.0             | muse-wonder-1.0             | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Muse Spark 1.3              | muse-spark-1.3              | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Muse Spark 1.2              | muse-spark-1.2              | `https://opencode.ai/inference/openai/v1/responses`                                         | `@ai-sdk/openai`            |
+| Qwen3.8 Max                 | qwen3.8-max                 | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Qwen3.8 Flash               | qwen3.8-flash               | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus                | qwen3.6-plus                | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| Qwen3.5 Plus                | qwen3.5-plus                | `https://opencode.ai/inference/anthropic/v1/messages`                                       | `@ai-sdk/anthropic`         |
+| DeepSeek V4.1 Flash         | deepseek-v4.1-flash         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro             | deepseek-v4-pro             | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| MiniMax M3                  | minimax-m3                  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7                | minimax-m2.7                | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5                | minimax-m2.5                | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| GLM 5.3 Flash               | glm-5.3-flash               | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| GLM 5.3                     | glm-5.3                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K2.5                   | kimi-k2.5                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K2.6                   | kimi-k2.6                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code              | kimi-k2.7-code              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K3                     | kimi-k3                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K3.1 Pro               | kimi-k3.1-pro               | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Mistral Large 4             | mistral-large-4             | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| GPT 6 Luna Decision         | gpt-6-luna-decision         | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Gemini Decision 1           | gemini-decision-1           | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Jev 1.14                    | jev-1.14                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Jev 1.13                    | jev-1.13                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Jev 1.13 Free               | jev-1.13-free               | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| GPT Image 2.5 Sunburst      | gpt-image-2.5-sunburst      | `https://opencode.ai/inference/openai/v1/images/generations`                                | `@ai-sdk/openai`            |
+| Nano Banana 2.1             | gemini-nano-banana-2.1      | `https://opencode.ai/inference/google/v1beta/models/gemini-nano-banana-2.1:generateContent` | `@ai-sdk/google`            |
+| Grok Imagine Image 2.0      | grok-imagine-image-2.0      | `https://opencode.ai/inference/xai/v1/images/generations`                                   | `@ai-sdk/xai`               |
+| text-embedding-3-small      | text-embedding-3-small      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| text-embedding-3-large      | text-embedding-3-large      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Gemini Embedding 2          | gemini-embedding-2          | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Gemini Embedding 001        | gemini-embedding-001        | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Codestral Embed             | codestral-embed             | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Mistral Embed               | mistral-embed               | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Embed 5 Pro                 | cohere-embed-v5-pro         | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Embed 5 Fast                | cohere-embed-v5-fast        | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| voyage-4                    | voyage-4                    | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| voyage-code-4               | voyage-code-4               | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Qwen3 Embedding 8B          | qwen3-embedding-8b          | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| BGE M3                      | bge-m3                      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
+| Big Pickle                  | big-pickle                  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Tidepool Alpha Free         | tidepool-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Seaglass Alpha Free         | seaglass-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Iceman Free                 | iceman-free                 | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| DeepSeek V4.1 Flash Free    | deepseek-v4.1-flash-free    | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Beam Free                   | beam-free                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Flint 40B Free              | flint-40b-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Hy4 flash Free              | hy4-flash-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash Free        | mimo-v2.6-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Nemotron 3.5 Lightning Free | nemotron-3.5-lightning-free | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Nemotron 3.5 Super VL Free  | nemotron-3.5-super-vl-free  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+
+</div>
+
+Questi pacchetti AI SDK sono per le applicazioni che chiamano gli endpoint direttamente. Per selezionare un [modello](/models) in OpenCode,
+usa il formato `opencode/<model-id>`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/gpt-6.1-sol",
+}
+```
+
+### Elenco dei modelli
+
+Scarica l'elenco completo dei modelli disponibili e i loro metadati dall'endpoint dei modelli:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+Vedi l'[API dell'elenco dei modelli](/console/api/models) per ogni campo della risposta, e per l'elenco di Console che include anche
+i provider collegati dal tuo spazio di lavoro.
+
+### Jev
+
+Jev è un modello System One di TypeSafe AI per decisioni strutturate e veloci. Invece di generare testo, valuta uno `state` rispetto a domande tipizzate e restituisce valori e probabilità che il tuo codice può usare direttamente. Supporta domande sì/no (`noul`), a scelta multipla (`choice`) e basate su rubriche (`score`).
+
+Usa la tua chiave API di OpenCode Console con l'endpoint `https://opencode.ai/inference/systemone/v1/systemone`. Questo esempio verifica se una richiesta di supporto è urgente:
+
+```bash
+curl https://opencode.ai/inference/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Puoi porre più domande in un'unica richiesta. Jev le valuta in parallelo e restituisce ogni risposta sotto l'ID della domanda corrispondente:
+
+```bash
+curl https://opencode.ai/inference/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.14",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Usa `jev-1.13-free` per usare il modello gratuito a tempo limitato, che esegue Jev 1.13. Vedi la [documentazione di TypeSafe AI](https://docs.typesafe.ai/) per i dettagli sui tipi di domanda e i campi di risposta.
+
+### GPT 6 Luna Decision e Gemini Decision 1
+
+`gpt-6-luna-decision` e `gemini-decision-1` accettano la stessa richiesta System One di Jev, sullo stesso endpoint. Passa immagini, audio, video e PDF in `state` come parti in stile chat (`image_url`, `input_audio`, `video_url`, `file`). GPT 6 Luna Decision accetta testo e immagini; Gemini Decision 1 accetta anche audio, video e PDF.
+
+```bash
+curl https://opencode.ai/inference/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-decision-1",
+    "state": "I was charged twice for my order.",
+    "questions": {
+      "refund": {
+        "type": "noul",
+        "instructions": "Is this a refund request?"
+      }
+    }
+  }'
+```
+
+### Modelli di immagini
+
+`gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1` e `grok-imagine-image-2.0` generano e modificano immagini. Non sono modelli chat, quindi non compaiono mai in `/models` né nell'endpoint dei modelli,
+e `opencode/<model-id>` non li seleziona. Chiamali sulla loro API nativa con una chiave di Console, oppure lascia che lo strumento
+[`generate_image`](/tools#image-generate) di OpenCode usi un modello di immagini impostando
+`experimental.image_generate.model`, ad esempio `opencode/gpt-image-2.5-sunburst`.
+
+```bash
+curl https://opencode.ai/inference/openai/v1/images/generations \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.5-sunburst",
+    "prompt": "A mountain at sunrise",
+    "size": "1024x1024"
+  }'
+```
+
+Google accetta i suoi `contents` e `generationConfig` nativi, e xAI le sue opzioni native come `resolution` e
+`quality`. OpenAI Images e xAI Images accettano anche modifiche su `/images/edits`.
+
+### Modelli di embedding
+
+`text-embedding-3-small`, `qwen3-embedding-8b` e gli altri modelli di embedding della tabella sopra trasformano il testo in
+vettori. OpenCode non li usa per la chat, quindi non compaiono mai in `/models`, e il piano gratuito non li include.
+[Go](/console/go#embedding-models) ne include alcuni. Chiamali sull'API Embeddings di OpenAI con una chiave di Console.
+
+```bash
+curl https://opencode.ai/inference/openai/v1/embeddings \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["hello world", "goodbye"]
+  }'
+```
+
+- `input` accetta una stringa o un array di stringhe. `data` restituisce un vettore per input, nello stesso ordine.
+- `dimensions` accorcia i vettori sui modelli che lo supportano, come `text-embedding-3-small`.
+- `encoding_format: "base64"` restituisce i vettori codificati in base64 invece che come float.
+- Ogni input deve rientrare nella finestra di contesto del modello.
+- La risposta riporta `usage.cost` come qualsiasi richiesta di inferenza. Vedi [Costo](/console/api/inference#cost).
+
+I vettori di modelli diversi non sono confrontabili, quindi genera gli embedding dei tuoi documenti e delle tue query con lo stesso modello. Un
+[provider collegato](/console/api/providers#endpoints) serve i propri modelli di embedding su `/embeddings`.
+
+## Prezzi
+
+Console applica tariffe a consumo. I prezzi qui sotto sono **per 1M token**. Per i modelli di immagini, dove indicato si paga
+per immagine.
+
+<div class="docs-table-scroll" role="region" aria-label="Console model pricing" tabIndex={0}>
+
+| Modello                             | Input           | Output            | Lettura cache      | Scrittura cache |
+| ----------------------------------- | --------------- | ----------------- | ------------------ | --------------- |
+| Big Pickle                          | Gratuito        | Gratuito          | Gratuito           | -               |
+| Tidepool Alpha Free                 | Gratuito        | Gratuito          | Gratuito           | -               |
+| Seaglass Alpha Free                 | Gratuito        | Gratuito          | Gratuito           | -               |
+| Iceman Free                         | Gratuito        | Gratuito          | Gratuito           | -               |
+| DeepSeek V4.1 Flash Free            | Gratuito        | Gratuito          | Gratuito           | -               |
+| Beam Free                           | Gratuito        | Gratuito          | Gratuito           | -               |
+| Flint 40B Free                      | Gratuito        | Gratuito          | Gratuito           | -               |
+| Hy4 flash Free                      | Gratuito        | Gratuito          | Gratuito           | -               |
+| MiMo-V2.6-Flash Free                | Gratuito        | Gratuito          | Gratuito           | -               |
+| Nemotron 3.5 Lightning Free         | Gratuito        | Gratuito          | Gratuito           | -               |
+| Nemotron 3.5 Super VL Free          | Gratuito        | Gratuito          | Gratuito           | -               |
+| Jev 1.13 Free                       | Gratuito        | Gratuito          | -                  | -               |
+| Jev 1.14                            | $0.042          | Gratuito          | -                  | -               |
+| Jev 1.13                            | $0.042          | Gratuito          | -                  | -               |
+| Gemini Decision 1                   | $0.10           | Gratuito          | -                  | -               |
+| GPT 6 Luna Decision (≤ 272K token)  | $0.10           | Gratuito          | $0.01              | $0.125          |
+| GPT 6 Luna Decision (> 272K token)  | $0.20           | Gratuito          | $0.02              | $0.25           |
+| MiniMax M3                          | $0.30           | $1.20             | $0.06              | -               |
+| MiniMax M2.7                        | $0.30           | $1.20             | $0.06              | -               |
+| MiniMax M2.5                        | $0.30           | $1.20             | $0.06              | -               |
+| GLM 5.3 Flash                       | $0.15           | $0.50             | $0.03              | -               |
+| GLM 5.3 (60% off)                   | ~~$1.40~~ $0.56 | ~~$4.40~~ $1.76   | ~~$0.26~~ $0.104   | -               |
+| Kimi K2.7 Code                      | $0.95           | $4.00             | $0.19              | -               |
+| Kimi K3.1 Pro                       | $2.00           | $10.00            | $0.20              | $2.00           |
+| Kimi K3                             | $3.00           | $15.00            | $0.30              | $3.00           |
+| Kimi K2.6                           | $0.95           | $4.00             | $0.16              | -               |
+| Kimi K2.5                           | $0.60           | $3.00             | $0.10              | -               |
+| Mistral Large 4 (50% off)           | ~~$1.36~~ $0.68 | ~~$4.18~~ $2.09   | ~~$0.14~~ $0.07    | -               |
+| Qwen3.8 Max                         | $2.00           | $6.00             | $0.25              | $2.50           |
+| Qwen3.8 Flash                       | $0.15           | $0.47             | $0.016             | $0.20           |
+| Qwen3.6 Plus                        | $0.50           | $3.00             | $0.05              | $0.625          |
+| Qwen3.5 Plus                        | $0.20           | $1.20             | $0.02              | $0.25           |
+| DeepSeek V4.1 Flash (60% off)       | ~~$0.30~~ $0.12 | ~~$1.20~~ $0.48   | ~~$0.006~~ $0.0024 | -               |
+| DeepSeek V4 Pro                     | $1.74           | $3.48             | $0.145             | -               |
+| Claude Fable 5.2                    | $8.00           | $40.00            | $0.20              | $10.00          |
+| Claude Fable 5.1                    | $10.00          | $50.00            | $0.25              | $12.50          |
+| Claude Fable 5                      | $10.00          | $50.00            | $1.00              | $12.50          |
+| Claude Opus 5.5                     | $4.00           | $20.00            | $0.20              | $5.00           |
+| Claude Opus 5                       | $5.00           | $25.00            | $0.50              | $6.25           |
+| Claude Opus 4.8                     | $5.00           | $25.00            | $0.50              | $6.25           |
+| Claude Opus 4.7                     | $5.00           | $25.00            | $0.50              | $6.25           |
+| Claude Opus 4.6                     | $5.00           | $25.00            | $0.50              | $6.25           |
+| Claude Opus 4.5                     | $5.00           | $25.00            | $0.50              | $6.25           |
+| Claude Sonnet 5.5                   | $2.00           | $10.00            | $0.10              | $2.50           |
+| Claude Sonnet 5                     | $2.00           | $10.00            | $0.20              | $2.50           |
+| Claude Sonnet 4.6                   | $3.00           | $15.00            | $0.30              | $3.75           |
+| Claude Sonnet 4.5 (≤ 200K token)    | $3.00           | $15.00            | $0.30              | $3.75           |
+| Claude Sonnet 4.5 (> 200K token)    | $6.00           | $22.50            | $0.60              | $7.50           |
+| Claude Haiku 5.5 (≤ 100K token)     | $0.10           | $0.50             | $0.01              | $0.125          |
+| Claude Haiku 5.5 (> 100K token)     | $0.50           | $2.50             | $0.05              | $0.625          |
+| Claude Haiku 4.5                    | $1.00           | $5.00             | $0.10              | $1.25           |
+| Gemini 4 Neon                       | $3.00           | $15.00            | $0.15              | -               |
+| Gemini 4 Carbon (50% off)           | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10    | -               |
+| Gemini 4 Argon (50% off)            | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10    | -               |
+| Gemini 4 Hydrogen                   | $1.50           | $7.50             | $0.075             | -               |
+| Gemini 3.8 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075   | -               |
+| Gemini 3.7 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075   | -               |
+| Gemini 3.6 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075   | -               |
+| Gemini 3.5 Flash                    | $1.50           | $9.00             | $0.15              | -               |
+| Gemini 3.5 Flash Lite               | $0.30           | $2.50             | $0.03              | -               |
+| Grok 4.7 (≤ 200K token)             | $2.00           | $6.00             | $0.50              | -               |
+| Grok 4.7 (> 200K token)             | $4.00           | $12.00            | $1.00              | -               |
+| Grok 4.6 (≤ 200K token)             | $2.00           | $6.00             | $0.50              | -               |
+| Grok 4.6 (> 200K token)             | $4.00           | $12.00            | $1.00              | -               |
+| Grok 4.5 (≤ 200K token)             | $2.00           | $6.00             | $0.30              | -               |
+| Grok 4.5 (> 200K token)             | $4.00           | $12.00            | $0.60              | -               |
+| Grok Build 0.1                      | $1.00           | $2.00             | $0.20              | -               |
+| Muse Ember 1.0 (≤ 200K token)       | $0.10           | $0.50             | $0.004             | -               |
+| Muse Ember 1.0 (> 200K token)       | $0.30           | $1.50             | $0.012             | -               |
+| Muse Wonder 1.0                     | $4.00           | $20.00            | $0.20              | -               |
+| Muse Spark 1.3                      | $1.25           | $4.25             | $0.15              | -               |
+| Muse Spark 1.2                      | $1.25           | $4.25             | $0.15              | -               |
+| GPT 6.2 Astra (≤ 272K token)        | $8.00           | $40.00            | $0.40              | $10.00          |
+| GPT 6.2 Astra (> 272K token)        | $16.00          | $60.00            | $0.80              | $20.00          |
+| GPT 6.2 Sol (≤ 272K token)          | $2.00           | $10.00            | $0.10              | $2.50           |
+| GPT 6.2 Sol (> 272K token)          | $4.00           | $15.00            | $0.20              | $5.00           |
+| GPT 6 Astra (≤ 272K token)          | $10.00          | $50.00            | $1.00              | $12.50          |
+| GPT 6 Astra (> 272K token)          | $20.00          | $75.00            | $2.00              | $25.00          |
+| GPT 6 Sol (≤ 272K token)            | $2.00           | $10.00            | $0.20              | $2.50           |
+| GPT 6 Sol (> 272K token)            | $4.00           | $15.00            | $0.40              | $5.00           |
+| GPT 6.1 Sol (≤ 272K token)          | $2.00           | $10.00            | $0.10              | $2.50           |
+| GPT 6.1 Sol (> 272K token)          | $4.00           | $15.00            | $0.20              | $5.00           |
+| GPT 6 Luna (≤ 272K token)           | $0.10           | $0.50             | $0.01              | $0.125          |
+| GPT 6 Luna (> 272K token)           | $0.20           | $0.75             | $0.02              | $0.25           |
+| GPT 5.6 Sol (≤ 272K token)          | $4.00           | $20.00            | $0.40              | $5.00           |
+| GPT 5.6 Sol (> 272K token)          | $8.00           | $30.00            | $0.80              | $10.00          |
+| GPT 5.6 Terra (≤ 272K token)        | $2.00           | $12.00            | $0.20              | $2.50           |
+| GPT 5.6 Terra (> 272K token)        | $4.00           | $18.00            | $0.40              | $5.00           |
+| GPT 5.6 Luna (≤ 272K token)         | $0.20           | $1.20             | $0.02              | $0.25           |
+| GPT 5.6 Luna (> 272K token)         | $0.40           | $1.80             | $0.04              | $0.50           |
+| GPT 5.5 (≤ 272K token)              | $5.00           | $30.00            | $0.50              | -               |
+| GPT 5.5 (> 272K token)              | $10.00          | $45.00            | $1.00              | -               |
+| GPT 5.5 Pro                         | $30.00          | $180.00           | $30.00             | -               |
+| GPT 5.4 (≤ 272K token)              | $2.50           | $15.00            | $0.25              | -               |
+| GPT 5.4 (> 272K token)              | $5.00           | $22.50            | $0.50              | -               |
+| GPT 5.4 Pro                         | $30.00          | $180.00           | $30.00             | -               |
+| GPT 5.4 Mini                        | $0.75           | $4.50             | $0.075             | -               |
+| GPT 5.4 Nano                        | $0.20           | $1.25             | $0.02              | -               |
+| GPT 5.3 Codex Spark                 | $1.75           | $14.00            | $0.175             | -               |
+| GPT 5.3 Codex                       | $1.75           | $14.00            | $0.175             | -               |
+| GPT 5.2                             | $1.75           | $14.00            | $0.175             | -               |
+| GPT 5.2 Codex                       | $1.75           | $14.00            | $0.175             | -               |
+| GPT 5.1                             | $1.07           | $8.50             | $0.107             | -               |
+| GPT 5.1 Codex                       | $1.07           | $8.50             | $0.107             | -               |
+| GPT 5.1 Codex Max                   | $1.25           | $10.00            | $0.125             | -               |
+| GPT 5.1 Codex Mini                  | $0.25           | $2.00             | $0.025             | -               |
+| GPT 5                               | $1.07           | $8.50             | $0.107             | -               |
+| GPT 5 Codex                         | $1.07           | $8.50             | $0.107             | -               |
+| GPT 5 Nano                          | $0.05           | $0.40             | $0.005             | -               |
+
+</div>
+
+**Gemini 4 Carbon e Gemini 4 Argon:** Lo sconto del 50% si applica fino al 30 novembre 2026.
+
+**Gemini 3.8 Flash, Gemini 3.7 Flash e Gemini 3.6 Flash:** Lo sconto del 50% si applica fino al 31 dicembre 2026.
+
+Potresti notare [modelli a basso costo](/models), come Haiku, Nano o Flash, nella tua cronologia di utilizzo. OpenCode usa questi
+modelli per generare i titoli delle sessioni.
+
+<Callout>
+  A ogni acquisto di crediti si aggiunge una commissione del 4.6% + $0.31 per coprire i costi di pagamento. Non applichiamo altri addebiti.
+</Callout>
+
+### Prezzi delle immagini
+
+| Modello                | Prezzo                               | Note                                                                                        |
+| ---------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| GPT Image 2.5 Sunburst | $1.00 / immagine                     | Più $8 / $30 per 1M token di input / output, e $2 per 1M token di input in cache.            |
+| Nano Banana 2.1        | $1.50 / $7.50 / $30.00 per 1M token  | Input / output di testo / output di immagini. Circa $0.034 per immagine a 1K, $0.050 a 2K e $0.113 a 4K. |
+| Grok Imagine Image 2.0 | $0.04 / immagine                     | $0.01 per immagine di input; qualità e risoluzione possono alzare il prezzo di output a $0.05–$0.08. |
+
+### Prezzi degli embedding
+
+I modelli di embedding addebitano solo i token di input. I prezzi sono **per 1M token**.
+
+| Modello                | Input |
+| ---------------------- | ----- |
+| text-embedding-3-small | $0.02 |
+| text-embedding-3-large | $0.13 |
+| Gemini Embedding 2     | $0.20 |
+| Gemini Embedding 001   | $0.15 |
+| Codestral Embed        | $0.15 |
+| Mistral Embed          | $0.10 |
+| Embed 5 Pro            | $0.12 |
+| Embed 5 Fast           | $0.08 |
+| voyage-4               | $0.06 |
+| voyage-code-4          | $0.12 |
+| Qwen3 Embedding 8B     | $0.01 |
+| BGE M3                 | $0.01 |
+
+### Modelli gratuiti
+
+- DeepSeek V4.1 Flash Free è gratuito su OpenCode per un periodo limitato. Il suo provider segue una policy di zero-retention e non usa i tuoi dati per l'addestramento dei modelli.
+- MiMo-V2.6-Flash Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback.
+- Nemotron 3.5 Lightning Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Nemotron 3.5 Super VL Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Big Pickle è un modello stealth gratuito su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Tidepool Alpha Free è un modello stealth gratuito su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Seaglass Alpha Free è un modello stealth gratuito su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Iceman Free è un modello stealth gratuito su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Beam Free è gratuito su OpenCode per un periodo limitato. Il suo provider non usa i tuoi dati per l'addestramento dei modelli e li conserva per 30 giorni per motivi di sicurezza. Non è disponibile in Angola, Bielorussia, Cambogia, Cina (comprese Hong Kong e Macao), Cuba, Repubblica Democratica del Congo, Guinea Equatoriale, Iran, Iraq, Laos, Libia, Nigeria, Corea del Nord, Russia, Siria, Turkmenistan, Uzbekistan, Venezuela o nelle regioni di Crimea, Donetsk e Luhansk dell'Ucraina.
+- Flint 40B Free è gratuito su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Hy4 flash Free è gratuito su OpenCode per un periodo limitato. Il suo provider segue una policy di zero-retention e non usa i tuoi dati per l'addestramento dei modelli.
+- Jev 1.13 Free è disponibile su OpenCode per un periodo limitato.
+
+Per nascondere i modelli gratuiti in OpenCode, imposta `OPENCODE_DISABLE_FREE_MODELS=1`. Vedi [modelli gratuiti](/models#free-models).
+
+[Contattaci](mailto:help@anoma.ly) se hai domande.
+
+### Ricarica automatica e budget
+
+[La ricarica automatica](/console/billing#auto-recharge) acquista crediti quando il saldo si abbassa, e i
+[budget](/console/budgets) limitano la spesa mensile dello spazio di lavoro e di ogni membro.
+
+### Modelli deprecati
+
+| Modello                 | Data di deprecazione |
+| ----------------------- | -------------------- |
+| LongCat-2.0             | 22 novembre 2026     |
+| GLM 5.2                 | 19 novembre 2026     |
+| GLM 5.1                 | 19 novembre 2026     |
+| Gemini 3.1 Pro          | 17 novembre 2026     |
+| Gemini 3 Flash          | 17 novembre 2026     |
+| DeepSeek V4 Flash       | 26 ottobre 2026      |
+| GPT 5.2 Codex           | 23 luglio 2026       |
+| GPT 5.1 Codex           | 23 luglio 2026       |
+| GPT 5.1 Codex Max       | 23 luglio 2026       |
+| GPT 5.1 Codex Mini      | 23 luglio 2026       |
+| GPT 5 Codex             | 23 luglio 2026       |
+| Claude Opus 4.1         | 5 agosto 2026        |
+| Claude Sonnet 4         | 15 giugno 2026       |
+| Claude Haiku 3.5        | 16 febbraio 2026     |
+| Gemini 3 Pro            | 9 marzo 2026         |
+| MiniMax M2.5            | 5 agosto 2026        |
+| MiniMax M2.1            | 15 marzo 2026        |
+| GLM 5                   | 14 maggio 2026       |
+| GLM 4.7                 | 15 marzo 2026        |
+| GLM 4.6                 | 15 marzo 2026        |
+| Kimi K2.5               | 5 agosto 2026        |
+| Kimi K2 Thinking        | 6 marzo 2026         |
+| Kimi K2                 | 6 marzo 2026         |
+| Qwen3 Coder 480B        | 6 febbraio 2026      |
+
+## Privacy
+
+Tutti i nostri modelli sono ospitati negli Stati Uniti e nell'UE. I nostri provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le seguenti eccezioni:
+
+- Big Pickle: durante il suo periodo gratuito, i dati raccolti possono essere usati per migliorare il modello.
+- Tidepool Alpha Free: durante il suo periodo gratuito, i dati raccolti vengono conservati e usati per migliorare il modello.
+- Seaglass Alpha Free: durante il suo periodo gratuito, i dati raccolti vengono conservati e usati per migliorare il modello.
+- Iceman Free: durante il suo periodo gratuito, i dati raccolti vengono conservati e usati per migliorare il modello.
+- Flint 40B Free: durante il suo periodo gratuito, i dati raccolti possono essere usati per migliorare il modello. I dati vengono conservati per 30 giorni.
+- Nemotron 3.5 Lightning Free (endpoint gratuiti NVIDIA): solo uso di prova — non inviare dati personali o riservati. Il tuo utilizzo viene registrato per motivi di sicurezza e per migliorare i prodotti e i servizi NVIDIA. I dati di sessione registrati per scopi di miglioramento non sono collegati alla tua identità né a un identificatore persistente. Per ulteriori informazioni sulle nostre pratiche di trattamento dei dati, vedi la nostra [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Interagendo con questo endpoint, acconsenti alla raccolta, alla registrazione e all'uso di tali informazioni e ai [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
+- Nemotron 3.5 Super VL Free (endpoint gratuiti NVIDIA): solo uso di prova — non inviare dati personali o riservati. Il tuo utilizzo viene registrato per motivi di sicurezza e per migliorare i prodotti e i servizi NVIDIA. I dati di sessione registrati per scopi di miglioramento non sono collegati alla tua identità né a un identificatore persistente. Per ulteriori informazioni sulle nostre pratiche di trattamento dei dati, vedi la nostra [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Interagendo con questo endpoint, acconsenti alla raccolta, alla registrazione e all'uso di tali informazioni e ai [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
+- API OpenAI: le richieste vengono conservate per 30 giorni in conformità con le [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
+- API Anthropic: le richieste vengono conservate per 30 giorni in conformità con le [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
+- API Mistral: prompt e altri input non vengono usati per l'addestramento. I dati vengono conservati in conformità con la [Mistral's Data Retention Policy](https://docs.mistral.ai/admin/monitor-comply/zero-data-retention).
+- API Google: le richieste vengono conservate per un massimo di 55 giorni per il monitoraggio degli abusi in conformità con i [Google's Gemini API Terms](https://ai.google.dev/gemini-api/terms).
+- API xAI: le richieste vengono conservate per 30 giorni in conformità con la [xAI's Privacy Policy](https://x.ai/legal/privacy-policy).
+- Beam Free: prompt e altri input non vengono usati per l'addestramento. I dati vengono conservati per 30 giorni per motivi di sicurezza.
+
+Per i modelli in abbonamento, vedi [privacy di Go](/console/go#privacy).
+
+## Per i team
+
+Condividi i modelli di Console con il tuo team da uno [spazio di lavoro](/console/workspaces). I proprietari e gli amministratori possono
+[invitare membri](/console/members), scegliere quali modelli abilitare dalla scheda **Models**, impostare
+[budget](/console/budgets) e collegare [i propri provider](/console/providers).
+
+## Contesto
+
+Ci sono molti modelli disponibili, ma solo pochi funzionano bene come agenti di coding. I provider variano anche per configurazione,
+prestazioni e qualità, quindi un modello accessibile tramite un gateway come OpenRouter può comportarsi diversamente.
+
+<Callout type="tip">Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con OpenCode.</Callout>
+
+Per creare questo catalogo, abbiamo:
+
+1. Testato un gruppo selezionato di modelli e parlato con i loro team di come eseguirli al meglio.
+2. Lavorato con i provider per assicurarci che i modelli fossero serviti correttamente.
+3. Fatto benchmark di ogni combinazione modello/provider per produrre un elenco che ci sentiamo di consigliare.
+
+Console è un gateway di IA che ti dà accesso a questi modelli.
+
+## Obiettivi
+
+Abbiamo creato Console per:
+
+1. Fare **benchmark** dei migliori modelli e provider per gli agenti di coding.
+2. Offrire le opzioni di **massima qualità** senza ridurre le prestazioni o instradare verso provider più economici.
+3. Trasferire i **cali di prezzo** vendendo a costo, con un ricarico solo per coprire le commissioni di elaborazione.
+4. Non avere **lock-in**: usa Console con qualsiasi agente di coding, o usa un altro provider con OpenCode.

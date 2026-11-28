@@ -222,3 +222,28 @@ describe("pty create defaults", () => {
     }),
   )
 })
+
+const unsupportedIt = testEffect(Pty.unsupportedLayer)
+
+describe("Pty.unsupportedLayer", () => {
+  unsupportedIt.effect("returns empty list, fails lookups with NotFoundError, and dies on create", () =>
+    Effect.gen(function* () {
+      const pty = yield* Pty.Service
+      const id = Pty.ID.make("pty_unsupported")
+
+      expect(yield* pty.list()).toEqual([])
+      expect(yield* pty.get(id).pipe(Effect.flip)).toEqual(new Pty.NotFoundError({ ptyID: id }))
+      expect(yield* pty.update(id, { title: "nope" }).pipe(Effect.flip)).toEqual(new Pty.NotFoundError({ ptyID: id }))
+      expect(yield* pty.remove(id).pipe(Effect.flip)).toEqual(new Pty.NotFoundError({ ptyID: id }))
+      expect(yield* pty.write(id, "hi").pipe(Effect.flip)).toEqual(new Pty.NotFoundError({ ptyID: id }))
+      expect(yield* pty.attach(id, { onData: () => {}, onEnd: () => {} }).pipe(Effect.flip)).toEqual(
+        new Pty.NotFoundError({ ptyID: id }),
+      )
+
+      const created = yield* pty.create({}).pipe(Effect.exit)
+      expect(Exit.isFailure(created) && Cause.hasDies(created.cause)).toBe(true)
+      if (Exit.isFailure(created))
+        expect(Cause.pretty(created.cause)).toContain("Pty.create is not supported in this runtime")
+    }),
+  )
+})

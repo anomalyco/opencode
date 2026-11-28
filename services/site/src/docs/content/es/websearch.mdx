@@ -1,0 +1,119 @@
+---
+title: "Búsqueda web"
+description: "Deja que OpenCode busque en la web con Exa, Firecrawl, Parallel, Tavily, TinyFish o tu plan de Claude, y elige el proveedor y los permisos de las búsquedas."
+---
+
+Pide a OpenCode información actual y podrá buscar en la web, leer los resultados e incluir enlaces a las fuentes en su respuesta.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+La primera búsqueda te pide permitir la búsqueda web y seleccionar un proveedor. OpenCode recuerda tu elección para las sesiones posteriores.
+
+## Proveedores
+
+OpenCode incluye cinco proveedores de búsqueda:
+
+| Proveedor | ID | Variable de entorno |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (opcional) |
+
+Conecta una cuenta desde la TUI con `/connect`, o define la variable de entorno del proveedor antes de iniciar OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+Cuando [Claude Agent](/claude-agent) está conectado, también ofrece un proveedor de búsqueda con el ID `claude-agent`. Ejecuta
+WebSearch de Claude Code, así que las búsquedas cuentan para tu plan de Claude y no necesitan clave de API de búsqueda. Todos los modelos pueden usarlo, no solo Claude.
+
+Claude Agent nunca se elige automáticamente. Selecciónalo en `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch devuelve el contenido de las páginas cifrado, así que un modelo de Claude debe ejecutar cada búsqueda. Haiku la ejecuta, y su breve resumen
+de los resultados aparece primero, seguido de los enlaces. Las búsquedas usan los ajustes de conexión del proveedor Claude Agent y la cuenta
+que usaron tus chats por última vez.
+
+## Selección
+
+Define un proveedor en `opencode.jsonc` para omitir la pregunta de selección.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Usa `"random"` para elegir automáticamente un proveedor disponible. Cada sesión sigue usando el mismo proveedor hasta que este alcanza su límite de solicitudes.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Límites
+
+Cuando un proveedor devuelve HTTP 429, la selección aleatoria vuelve a intentar la búsqueda con otro proveedor disponible. El primero queda en espera
+durante el tiempo que indique `Retry-After` o durante 60 segundos si la respuesta no indica un tiempo válido.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Si todos los proveedores están en espera, la búsqueda falla de inmediato. Mover una sesión o reiniciar su servidor borra la selección del proveedor.
+Los periodos de espera se comparten entre las sesiones del mismo espacio de trabajo.
+
+## Permisos
+
+Las búsquedas web usan la acción de permiso `websearch` y la consulta de búsqueda como recurso. Pregunta antes de las búsquedas que no estén
+permitidas explícitamente.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consulta [Permisos](/permissions) para el orden de las reglas y la coincidencia.
+
+## Deshabilitar
+
+Define `websearch` como `false` para eliminar la herramienta de búsqueda web de las solicitudes a los modelos.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

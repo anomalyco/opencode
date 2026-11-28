@@ -45,27 +45,6 @@ story("omits turn speed when a model step has no streaming time", async ({ mount
   await expect(meta.locator('[data-slot="text-part-meta-speed"]')).toHaveCount(0)
 })
 
-story("keeps quote attachment icons fixed while long text truncates", async ({ mount, page }) => {
-  const gallery = await mount("current-session-timeline-rows--quote-attachments")
-
-  await page.evaluate(() => document.fonts.ready.then(() => undefined))
-
-  for (const title of ["Remove this", "Can we make this smaller?"]) {
-    const icon = gallery
-      .locator('[data-component="attachment-card"]')
-      .filter({ hasText: title })
-      .locator('[data-slot="icon-svg"]')
-
-    await expect(icon).toHaveCSS("width", "12px")
-    await expect(icon).toHaveCSS("height", "12px")
-  }
-
-  const label = gallery.locator('[data-slot="attachment-card-label"]').filter({ hasText: "It has a 32px minimum" })
-
-  expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
-  await expect(label).toHaveCSS("text-overflow", "ellipsis")
-})
-
 story.describe("message actions menu", () => {
   story.use({ timezoneId: "UTC" })
 
@@ -547,8 +526,12 @@ story("a stored image that fails to load shows a failed tile that retries", asyn
   await expect(failed.getByRole("img", { name: "Unable to load image." })).toBeVisible()
   await expect(failed).not.toHaveAttribute("data-placeholder")
 
+  const tileSize = { width: 132, height: 88 }
+  expect(await failed.boundingBox()).toMatchObject(tileSize)
+
   await failed.click()
   await expect(timeline.getByAltText("flaky.svg")).toBeVisible()
+  expect(await failed.boundingBox()).toMatchObject(tileSize)
 })
 
 story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {

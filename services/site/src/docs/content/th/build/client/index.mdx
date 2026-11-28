@@ -1,0 +1,180 @@
+---
+title: "JavaScript"
+description: "เชื่อมต่อแอปของคุณกับเซิร์ฟเวอร์ OpenCode ด้วย @opencode/client ซึ่งเป็นไคลเอนต์ TypeScript สำหรับ OpenCode HTTP API"
+---
+
+`@opencode/client` เป็นไคลเอนต์ TypeScript สำหรับ OpenCode HTTP
+API ใช้เมื่อแอปของคุณเชื่อมต่อกับเซิร์ฟเวอร์ OpenCode ผ่าน
+เครือข่าย ชนิดและเมธอดเนทีฟสร้างจากสัญญาเดียวกับ
+[เอกสารอ้างอิง API](/api) ชนิด RPC ของปลั๊กอินมาจากคำจำกัดความ RPC ที่นำเข้า
+
+## การติดตั้ง
+
+```sh
+bun add @opencode/client
+```
+
+## สร้างไคลเอนต์
+
+สร้างไคลเอนต์ด้วย URL ของเซิร์ฟเวอร์ แล้วเรียกเมธอดที่จัดกลุ่มตามทรัพยากร API
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## เฮดเดอร์และคำขอ
+
+ส่งเฮดเดอร์การตรวจสอบสิทธิ์หรือเฮดเดอร์แอปพลิเคชันเริ่มต้นให้ `OpenCode.make` ด้วย
+`headers` คุณยังให้การใช้งาน `fetch` กำหนดเองได้ แต่ละการดำเนินการ
+รับตัวเลือกคำขอเป็นอาร์กิวเมนต์สุดท้ายสำหรับ `AbortSignal` หรือ
+เฮดเดอร์ต่อคำขอ การสมัครรับอีเวนต์เป็นข้อยกเว้น: รับเฉพาะ
+การยกเลิกภายในของผู้สมัครและใช้เฮดเดอร์ของไคลเอนต์ฐาน
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## สตรีมอีเวนต์
+
+เอนด์พอยต์แบบสตรีมคืน async iterable
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+ตัวรับอีเวนต์เนทีฟและ RPC ใช้การเชื่อมต่อร่วมกันหนึ่งรายการต่อไคลเอนต์ ระบบจะเชื่อมต่อเมื่อเริ่มอ่านอีเวนต์ ไม่ใช่ตอนสร้างไคลเอนต์ แฮนเดิล หรือ iterable
+การออกจากลูปหรือยกเลิกตัวรับจะหยุดเฉพาะ iterator นั้น ส่วนการเชื่อมต่อจะปิดเมื่อตัวรับรายสุดท้ายหยุดทำงาน
+แหล่งอีเวนต์ที่ใช้ร่วมกันจะรอให้ตัวรับที่ยังทำงานอยู่รับแต่ละอีเวนต์ จึงควรพักอีเวนต์ไว้ในบัฟเฟอร์ก่อนทำงานที่ใช้เวลานาน
+
+การสมัครรับจะได้รับเฉพาะอีเวนต์ใหม่ ไม่มีการส่งย้อนหลังหรือเชื่อมต่อใหม่โดยอัตโนมัติ หากแหล่งอีเวนต์ขัดข้อง การสมัครรับที่เปิดอยู่จะสิ้นสุดลง ให้สมัครรับใหม่เมื่อระบบกลับมาทำงาน
+ผู้ที่เริ่มรับอีเวนต์เนทีฟภายหลังจะได้รับตัวบ่งชี้ `server.connected` ปัจจุบัน แต่จะไม่ได้รับอีเวนต์การทำงานที่เกิดขึ้นก่อนหน้า
+
+ส่ง `types` เพื่อรับเฉพาะบางชนิดอีเวนต์ อีเวนต์จะมีชนิดให้ตรง และ
+`server.connected` ผ่านมาเสมอเพื่อให้ผู้สมัครที่กรองแล้วรู้ว่าเมื่อใดควรซิงค์ใหม่
+การกรองเกิดบนการเชื่อมต่อที่ใช้ร่วมกัน ภายในไคลเอนต์
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
+## Plugin RPC
+
+นำเข้าสัญญาที่ใช้ร่วมกันของปลั๊กอินและส่งให้ `client.rpc`
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+อาร์กิวเมนต์เมธอดที่ไม่บังคับตัวที่สองเก็บ `location`, `signal` และ `headers`
+แยกจากอินพุตที่ปลั๊กอินกำหนด location ที่ละไว้เป็นไปตามค่าเริ่มต้นของคำขอ
+เนทีฟ: เฮดเดอร์ location ฐาน แล้วจึงไดเรกทอรีทำงานของเซิร์ฟเวอร์ ไม่มี location
+ถูกเลือกเมื่อสร้างไคลเอนต์ย่อย
+
+เมธอดอนุมานอาร์กิวเมนต์และผลลัพธ์จากคำจำกัดความ การแยกวิเคราะห์ตาม schema ทำที่
+ขอบเขตสัญญา ผู้เรียกส่งการแทนอินพุตที่ยอมรับ ส่วนตัวจัดการได้รับค่าที่แยกวิเคราะห์แล้ว
+ไคลเอนต์ Promise รับคำจำกัดความ Standard Schema หรือ JSON Schema ธรรมดา และ
+ไม่รันตัวแยกวิเคราะห์ schema ในเครื่อง เพราะเซิร์ฟเวอร์คืนเอาต์พุตที่แยกวิเคราะห์และแปลงแล้ว
+คำจำกัดความ Effect Schema ต้องใช้ไคลเอนต์ Effect
+
+ข้อผิดพลาดเมธอดที่ประกาศจะ reject เหมือนข้อผิดพลาดจากเอนด์พอยต์ไคลเอนต์ Promise อื่น
+และข้อผิดพลาดที่จับได้ยังไม่มีชนิด ตัวห่อข้อผิดพลาด HTTP RPC ทั่วไปจะถูกนำออกโดย
+ไคลเอนต์ย่อยที่มีชนิด ความล้มเหลวของเฟรมเวิร์ก `rpc.*` ที่สงวนไว้ยังเป็นความล้มเหลว RPC ธรรมดา
+ส่วนข้อผิดพลาดการตรวจสอบสิทธิ์ การรับส่ง และโปรโตคอลที่ไม่เกี่ยวข้องยังคงการแทนไคลเอนต์ปกติ
+
+การสมัครรับ RPC ใช้ชื่อท้องถิ่นและรับอีเวนต์ของ RPC นั้นจากทุก
+location ตรวจ `event.location` ที่จำเป็นเพื่อกรอง `events.subscribe`
+ตรงกับ API async iterable เนทีฟ
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` เป็นตัวห่อที่สะดวกเหนือแหล่งเดียวกัน คืนฟังก์ชันยกเลิกการสมัคร
+callback แบบ async จะถูก await ตามลำดับ ความล้มเหลวของ callback หรือแหล่งจะถูกบันทึก
+และจบตัวรับฟังนั้น การสมัครรับเนทีฟและแบบมีชนิดได้รับซอง `rpc.<rpcID>.<event>`
+ปกติเดียวกันพร้อมข้อมูลอีเวนต์เป็นออบเจกต์โดยตรง การสมัครรับแบบสด
+ไม่เล่นอีเวนต์ที่พลาดซ้ำ
+
+ปลั๊กอินเซิร์ฟเวอร์ต้องกำหนดค่าและใช้งาน RPC การนำเข้าคำจำกัดความไม่ได้ลงทะเบียน
+ดู [plugin RPC](/build/plugins/rpc)สำหรับ API คำจำกัดความและการลงทะเบียน ไคลเอนต์ HTTP ใดก็ได้
+เรียกเส้นทางทั่วไป `POST /api/rpc/{rpcID}/{method}` ด้วย `{ "input": ... }` และรับ
+`{ "output": ... }` ได้ ฟิลด์อินพุต/เอาต์พุตที่ละไว้หมายถึงไม่มีค่า
+
+## บริการเบื้องหลังในเครื่อง
+
+จุดนำเข้าหลักของไคลเอนต์รองรับเบราว์เซอร์ แต่ไม่มีฟังก์ชันจัดการโปรเซสในเครื่อง
+ในแอป Node ให้นำเข้า API บริการ Promise เนทีฟจาก `@opencode/client/service`
+
+- `Service.discover()` คืนเอนด์พอยต์ที่ลงทะเบียนไว้และทำงานได้ตามปกติ โดยไม่เริ่มโปรเซส
+- `Service.ensure()` คืนบริการที่เข้ากันได้ โดยเริ่มเมื่อจำเป็น
+- `Service.stop()` หยุดอินสแตนซ์บริการที่ลงทะเบียนไว้ตรงตัว
+- `Service.headers(endpoint)` สร้างเฮดเดอร์การตรวจสอบสิทธิ์สำหรับไคลเอนต์
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` รับไฟล์ลงทะเบียน เวอร์ชัน คำสั่งบริการ และ callback `onStart`
+ที่ไม่บังคับ `version` รับได้ทั้งค่าตรงตัวหรือเพรดิเคตความเข้ากันได้
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+ละตัวเลือกเหล่านี้เพื่อใช้เส้นทางการลงทะเบียนมาตรฐานและคำสั่ง
+`opencode serve --service`

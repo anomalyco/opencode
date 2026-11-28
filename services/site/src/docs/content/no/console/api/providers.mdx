@@ -1,0 +1,112 @@
+---
+title: "API for leverandører"
+description: "Kall leverandørene som er koblet til arbeidsområdet ditt, gjennom Console-gatewayen med en Console-nøkkel."
+---
+
+Hver [leverandør](/console/providers) som er koblet til arbeidsområdet ditt, får sin egen URL i Console-gatewayen.
+OpenCode bruker URL-en automatisk etter `/connect`. Bruk den direkte hvis du vil bruke de samme leverandørene fra egne verktøy.
+Console legger til leverandørens tilgangsopplysninger før forespørselen videresendes. Den hemmelige verdien forlater dermed aldri arbeidsområdet.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Leverandør-URL
+
+Kopier **Console API URL** fra leverandørens side under **Providers**.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## Autentisering
+
+Erstatt `<token>` med en [tjenestekontonøkkel](/console/api#service-accounts) opprettet i Console. Console bytter den ut med
+tilkoblingens tilgangsopplysninger før forespørselen videresendes.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console leser også nøkkelen fra `x-api-key`, `api-key` eller `x-goog-api-key`, slik at leverandør-SDK-er fungerer når de pekes mot
+Console-API-URLen.
+
+## Endepunkter
+
+Legg leverandørens API-sti til API-URL-en for Console. Console videresender forespørselen til tilkoblingens basis-URL og
+returnerer leverandørens svar uendret.
+
+| Format               | Sti                               |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+| Embeddings           | `/embeddings`                     |
+
+Send modell-ID-en slik den vises på leverandørsiden. Hvis leverandørens API bruker en annen ID for modellen, bytter Console til den.
+Forespørsler til modeller som ikke er aktivert på tilkoblingen, avvises.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-v4.1-flash",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens` er påkrevd.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+Modellen og metoden er en del av stien. Erstatt `:generateContent` med `:streamGenerateContent` for å strømme
+svaret.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-4-argon:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## Bruk
+
+Forespørsler belastes [budsjettene](/console/budgets) etter prisen som er angitt for hver modell. Leverandøren
+fakturerer deg for tokens.

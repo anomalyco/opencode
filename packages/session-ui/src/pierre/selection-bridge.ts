@@ -80,20 +80,3 @@ export function toRange(source: Range | StaticRange): Range {
 
   return range
 }
-
-export function restoreShadowTextSelection(root: ShadowRoot | undefined, range: Range | undefined) {
-  if (!root || !range) return
-
-  requestAnimationFrame(() => {
-    // Chromium exposes `getSelection` on shadow roots; the DOM types do not list it.
-    const shadow: ShadowRoot & { getSelection?: () => Selection | null } = root
-    const selection = shadow.getSelection?.() ?? window.getSelection()
-
-    if (!selection) return
-
-    try {
-      selection.removeAllRanges()
-      selection.addRange(range)
-    } catch {}
-  })
-}

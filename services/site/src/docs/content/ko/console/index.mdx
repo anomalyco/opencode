@@ -1,0 +1,37 @@
+---
+title: "Console 소개"
+description: "OpenCode Console은 팀 워크스페이스, 모델 추론, 예산, 정책, 호스팅 웹 검색을 제공하는 선택형 서비스입니다."
+---
+
+[OpenCode Console](https://opencode.ai/console)은 개인이나 팀이 OpenCode를 사용할 때 추가 기능을 제공하는
+선택형 서비스입니다.
+
+- [워크스페이스](/console/workspaces): [팀](/console/members)과 접근 권한 공유
+- 독점 모델과 오픈 소스 모델을 모두 지원하는 [추론](/console/models)
+- [제공자](/console/providers): Console 게이트웨이를 통해 자체 제공자 계정 연결
+- 사용량 추적과 [예산](/console/budgets) 관리
+- OpenCode 동작을 제어하는 팀 전체 정책 배포
+- [웹 검색](/console/websearch)
+- [Harnesses](/console/harnesses): Claude Code, Codex 등 다른 에이전트에서 Console 모델 사용
+- [OpenCode Go, Go Plus, Go Teams](/console/go): 오픈 소스 모델을 이용할 수 있는 구독 요금제. 각각 월 $10, 월 $40, 멤버당 월 $20
+
+## 시작하기
+
+Console을 사용하는 데 팀이 필요하지는 않습니다. 모든 계정은 본인만 멤버인 **Personal** 워크스페이스로
+시작합니다.
+
+1. [Console](https://opencode.ai/console)에 로그인하세요.
+2. [Go](/console/go)를 구독하거나 [크레딧](/console/billing#add-credits)을 충전하거나 [제공자](/console/providers)를 연결하세요.
+3. OpenCode에서 `/connect`를 실행하고 워크스페이스를 선택하세요.
+4. 필요하면 [팀을 초대](/console/members#invite-members)하세요.
+
+```text
+/connect
+```
+
+## 정책
+
+Policies 페이지의 Providers 및 Tools 규칙은 워크스페이스에 연결된 모든 OpenCode 클라이언트에 적용됩니다.
+이 규칙은 [정책](/policies#console) 선언으로 전달되어 멤버의 사용자 및 프로젝트 구성보다 우선하며, 약 1분
+안에 적용됩니다. 관리형 기본 설정과 시스템 구성 파일은 여전히 워크스페이스보다 우선합니다.
+[우선순위](/policies#precedence)를 참고하세요.

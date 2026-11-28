@@ -1,0 +1,113 @@
+---
+title: "البحث على الويب"
+description: "دع OpenCode يبحث على الويب باستخدام Exa أو Firecrawl أو Parallel أو Tavily أو TinyFish أو خطة Claude لديك، واختر المزوّد والأذونات للبحث."
+---
+
+اطلب من OpenCode معلومات حديثة فيستطيع البحث على الويب وقراءة النتائج وتضمين روابط المصادر في استجابته.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+ويطلب منك البحث الأول السماح بالبحث على الويب واختيار مزوّد. ويتذكّر OpenCode اختيارك للجلسات اللاحقة.
+
+## المزوّدون
+
+يتضمن OpenCode خمسة مزوّدي بحث:
+
+| المزوّد | المعرّف | متغيّر البيئة |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (اختياري) |
+
+واربط حسابًا من TUI بـ `/connect`، أو اضبط متغيّر بيئة المزوّد قبل تشغيل OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+### Claude Agent
+
+عندما يكون [Claude Agent](/claude-agent) مرتبطًا، يقدّم أيضًا مزوّد بحث بالمعرّف `claude-agent`. فهو يشغّل WebSearch في Claude Code، لذا تُحتسب عمليات البحث على خطة Claude لديك ولا تحتاج مفتاح API للبحث. ويستطيع كل نموذج استخدامه، لا Claude وحده.
+
+ولا يُختار Claude Agent تلقائيًا أبدًا. فاختره في `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+ويعيد WebSearch محتويات الصفحات مشفّرة، لذا يجب أن يشغّل نموذج Claude كل بحث. ويشغّله Haiku، ويأتي ملخصه القصير للنتائج أولًا، تتبعه الروابط. وتستخدم عمليات البحث إعدادات اتصال مزوّد Claude Agent والحساب الذي استخدمته محادثاتك أخيرًا.
+
+## الاختيار
+
+حدّد مزوّدًا في `opencode.jsonc` كي لا يطلب منك OpenCode اختياره.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+واستخدم `"random"` لاختيار مزوّد متاح تلقائيًا. وتواصل كل جلسة استخدام مزوّدها المختار حتى يبلغ ذلك المزوّد حد المعدل.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## الحدود
+
+عندما يعيد مزوّد HTTP 429، يعيد الاختيار العشوائي البحث بمزوّد آخر متاح. وينتظر المزوّد المحدود المعدل فترة `Retry-After` الخاصة به، أو 60 ثانية عندما لا تتضمن الاستجابة فترة صالحة.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+إذا كان جميع المزوّدين في فترة انتظار بعد بلوغ حد المعدل، يفشل البحث فورًا. عند نقل الجلسة أو إعادة تشغيل خادمها، يُمحى اختيار المزوّد المحفوظ لها؛ أما فترات الانتظار فتشترك فيها جلسات مساحة العمل نفسها.
+
+## الأذونات
+
+تستخدم عمليات البحث على الويب إجراء الإذن `websearch` واستعلام البحث كمورد. واسأل قبل عمليات البحث غير المسموح بها صراحةً.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+راجع [الأذونات](/permissions) لترتيب القواعد والمطابقة.
+
+## التعطيل
+
+اضبط `websearch` على `false` لإزالة أداة البحث على الويب من طلبات النموذج.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

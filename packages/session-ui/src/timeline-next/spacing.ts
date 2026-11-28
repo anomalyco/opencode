@@ -16,16 +16,19 @@ export type TimelineBlock = "user" | "agent" | "event"
 export type TimelineItem = "prose" | "line"
 
 /**
- * The space above a row: small between rows of activity in a reply or a run of session events, medium between the
+ * The space between two rows: small between rows of activity in a reply or a run of session events, medium between the
  * agent's words and its activity, and large around each thing the user did and wherever a new block starts.
  */
 export type TimelineGap = "s" | "m" | "l"
 
 /**
- * Each row's gap above it, by key; the first row gets none. Background work reporting back always starts a block, which
- * the agent's reply continues. Turn gaps stay out of it: they only hold the user's consecutive messages together, so a
- * row after one compares with the row before it. A message joining the one above in a run sits closer still, which the
- * row renderer applies.
+ * The gap each row holds below itself, by key: the space above the next row that shows something. The last row holds
+ * none. The row directly above holds a row's gap, never the row itself: older history loads above rows the reader is
+ * looking at, and a row that took its gap on top would grow there when the row before it arrived, and move what is on
+ * screen. So the turn gap before a turn's first row holds that row's gap, and arrives and leaves with the turn; any
+ * other gap is the row before's. A turn gap is not compared with: the row after it compares with the row before it.
+ * Background work reporting back always starts a block, which the agent's reply continues. A message joining the one
+ * above in a run sits closer still, which the row renderer applies.
  */
 export function timelineGaps(
   rows: readonly TimelineRow.TimelineRow[],
@@ -33,13 +36,15 @@ export function timelineGaps(
 ) {
   const gaps = new Map<string, TimelineGap>()
 
-  rows.reduce<{ block: TimelineBlock; item: TimelineItem } | undefined>((previous, row) => {
+  rows.reduce<{ block: TimelineBlock; item: TimelineItem } | undefined>((previous, row, index) => {
     const block = rowBlock(row, messageByID)
 
     if (!block) return previous
     const item = rowItem(row, messageByID)
 
-    if (previous) gaps.set(TimelineRow.key(row), gap(previous, { block, item }, reportsBack(row)))
+    // Live status takes its own space above it (laneGap), so the row above it holds none.
+    if (previous && !Predicate.isTagged(row, "Activity"))
+      gaps.set(TimelineRow.key(rows[index - 1]!), gap(previous, { block, item }, reportsBack(row)))
 
     return { block, item }
   }, undefined)

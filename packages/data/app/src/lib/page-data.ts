@@ -4,9 +4,10 @@ import {
   getStatsModelData,
   getStatsModelsComparisonData,
   type MarketDay,
+  type NewModelCandidate,
   type TokenCostEntry,
 } from "@opencode/data-core/domain/home"
-import { statModel } from "@opencode/data-core/domain/model-normalization"
+import { STEALTH_MODELS, statModel } from "@opencode/data-core/domain/model-normalization"
 import { runStatsEffect } from "../stats-runtime"
 import {
   catalogSlug,
@@ -17,8 +18,21 @@ import {
   type ModelCatalog,
 } from "../routes/model-catalog"
 import { resolveComparisonFamily } from "./comparison-pages"
+import { estimateUsersSinceLaunch } from "./estimate-users"
 
-export async function loadHomePage() {
+const DAY_MS = 86_400_000
+const NEW_MODEL_DAYS = 30
+const NEW_MODEL_LIMIT = 8
+
+export async function loadHomePage(): Promise<HomePageData> {
+  if (import.meta.env.DEV && !process.env.DATA_DATABASE_HOST) {
+    const { loadPublicHomePage } = await import("./page-data.public")
+    return loadPublicHomePage()
+  }
+  return loadDatabaseHomePage()
+}
+
+async function loadDatabaseHomePage() {
   const [stats, catalog] = await Promise.all([runStatsEffect(getStatsHomeData()), loadModelCatalog()])
   const link = <T extends { model: string; provider: string }>(entry: T) => ({
     ...entry,
@@ -27,21 +41,22 @@ export async function loadHomePage() {
   })
   return {
     updatedAt: stats.updatedAt,
-    usage: stats.usage.Go["2M"],
-    users: stats.users.Go["2M"],
+    usage: { daily: stats.usage.Go["2M"], weekly: stats.weekly.usage },
+    users: { daily: stats.users.Go["2M"], weekly: stats.weekly.users },
     leaderboard: { daily: stats.leaderboard.Go["1D"].map(link), weekly: stats.leaderboard.Go["1W"].map(link) },
-    market: stats.market["2M"],
+    market: { daily: stats.market["2M"], weekly: stats.weekly.market },
     tokenCost: priceTokenCostFromCatalog(stats.tokenCost.Go, catalog),
     cacheRatio: stats.cacheRatio.Go,
     sessionCost: stats.sessionCost.Go,
     retention: stats.retention.map(link),
     country: stats.country,
+    newModels: newModelsFromCatalog(stats.newModels, catalog).map(link),
     catalogLabs: catalog.labs.map((lab) => lab.id),
     labPaths: authorLabPaths(catalog, stats.market["2M"]),
   }
 }
 
-export type HomePageData = Awaited<ReturnType<typeof loadHomePage>>
+export type HomePageData = Awaited<ReturnType<typeof loadDatabaseHomePage>>
 
 export async function loadLabPage(labParam: string) {
   const [catalog, home] = await Promise.all([loadModelCatalog(), runStatsEffect(getStatsHomeData())])
@@ -71,10 +86,15 @@ export async function loadModelPage(labParam: string, modelParam: string) {
   const lab = entry?.lab ?? labParam
   const model = entry?.slug ?? modelParam
   const stats = lab && model ? await runStatsEffect(getStatsModelData(model, lab)) : null
+  const stealthKey = statModel(stats?.model ?? modelParam, undefined)
   return {
     catalog: {
       entry,
-      stealthSpecs: entry ? null : (catalog.stealthSpecs[statModel(stats?.model ?? modelParam, undefined)] ?? null),
+      stealthSpecs: entry
+        ? null
+        : Object.hasOwn(catalog.stealthSpecs, stealthKey)
+          ? catalog.stealthSpecs[stealthKey]
+          : null,
       labs: catalog.labs.map((item) => ({ id: item.id, name: item.name })),
       labModels:
         catalog.labs
@@ -141,6 +161,47 @@ function priceTokenCostFromCatalog(data: TokenCostEntry[], catalog: ModelCatalog
       ]
     })
     .toSorted((a, b) => a.total - b.total || a.model.localeCompare(b.model))
+}
+
+// A model is new when it was released in the past 30 days. Stealth models have no catalog entry, so their first day
+// of usage stands in for the release date.
+function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCatalog) {
+  const latest = candidates
+    .flatMap((item) => item.daily.map((day) => day.date))
+    .toSorted()
+    .at(-1)
+  if (!latest) return []
+  const cutoff = new Date(Date.parse(latest) - (NEW_MODEL_DAYS - 1) * DAY_MS).toISOString().slice(0, 10)
+  return candidates
+    .flatMap((item) => {
+      const entry = findModelCatalogEntry(catalog, item.model, item.provider)
+      const releaseDate = entry?.releaseDate ?? (STEALTH_MODELS.has(item.model) ? item.firstSeen : undefined)
+      if (!releaseDate || releaseDate < cutoff) return []
+      // Count from launch: early access under the same name shows up before the release date.
+      const launch = releaseDate > item.firstSeen ? releaseDate : item.firstSeen
+      const daily = item.daily.filter((day) => day.date >= launch)
+      return [
+        {
+          ...item,
+          free: catalog.freeModels.includes(item.model),
+          releaseDate,
+          daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
+          users: estimateUsersSinceLaunch({
+            daily: item.daily,
+            weekly: item.weekly,
+            firstSeen: item.firstSeen,
+            launch,
+          }),
+          tokens: daily.reduce((sum, day) => sum + day.tokens, 0),
+          sessions: daily.reduce((sum, day) => sum + day.sessions, 0),
+          peakUsers: Math.max(0, ...daily.map((day) => day.users)),
+          daily,
+        },
+      ]
+    })
+    .filter((item) => item.tokens > 0)
+    .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
+    .slice(0, NEW_MODEL_LIMIT)
 }
 
 function authorLabPaths(catalog: ModelCatalog, market: MarketDay[]) {
