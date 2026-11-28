@@ -112,11 +112,15 @@ const load = Effect.fn("PluginModule.load")(function* (
       ? yield* npm.resolve(operation.target)
       : yield* npm.add(operation.target)
   // Legacy auto-discovery still admits standalone server sources. Configured
-  // local plugins always arrive here as directories.
-  const entrypoints: Host.Entrypoints =
-    local && (yield* Effect.promise(() => stat(operation.target))).isFile()
-      ? { server: pathToFileURL(operation.target).href }
-      : yield* Effect.sync(() => Host.resolve(installed ?? { directory: operation.target }))
+  // local plugins always arrive here as directories. A configured path can be gone
+  // by now (deleted or misspelled), which is a plugin failure like any other, so a
+  // missing path falls through to the entrypoint check that names the plugin.
+  const standalone =
+    local &&
+    (yield* Effect.promise(() => stat(operation.target).then((info) => info.isFile(), () => false)))
+  const entrypoints: Host.Entrypoints = standalone
+    ? { server: pathToFileURL(operation.target).href }
+    : yield* Effect.sync(() => Host.resolve(installed ?? { directory: operation.target }))
   const entrypoint = entrypoints.server
   // A TUI-only package is not the server's to list; the TUI loads it from its own config.
   const found = entrypoint || entrypoints.gui
