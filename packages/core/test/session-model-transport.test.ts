@@ -8,7 +8,7 @@ import type {
 } from "@opencode/ai/route"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Session } from "@opencode/schema/session"
-import { Cause, Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Metric, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Headers } from "effect/http"
 
@@ -48,7 +48,7 @@ const run = <A, E>(connector: WebSocketConnector, effect: Effect.Effect<A, E, Se
 
 const runWithTestClock = <A, E>(
   connector: WebSocketConnector,
-  effect: Effect.Effect<A, E, SessionModelTransport.Service>,
+  effect: Effect.Effect<A, E, SessionModelTransport.Service | Scope.Scope>,
 ) =>
   Effect.runPromise(
     effect.pipe(
@@ -1044,6 +1044,75 @@ describe("SessionModelTransport", () => {
           failure: { reason: { _tag: "Transport", code: "message", delivery: "accepted" } },
         })
         yield* Deferred.await(closed)
+      }),
+    )
+  })
+
+  test("closes a completed idle connection after the idle TTL", async () => {
+    const fixture = automatic()
+
+    await runWithTestClock(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        yield* collect(transport.bind(session), exchange("first"))
+        expect(fixture.connections[0]?.closed).toBe(0)
+
+        yield* TestClock.adjust("25 minutes")
+        yield* Effect.yieldNow
+
+        expect(fixture.connections[0]?.closed).toBe(1)
+      }),
+    )
+  })
+
+  test("starts the idle TTL after the most recent exchange", async () => {
+    const fixture = automatic()
+
+    await runWithTestClock(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collectComplete(executor, exchange("first"))
+        yield* TestClock.adjust("24 minutes")
+        yield* collectComplete(executor, exchange("second"))
+        yield* TestClock.adjust("1 minute")
+        expect(fixture.connections[0]?.closed).toBe(0)
+        yield* TestClock.adjust("24 minutes")
+        expect(fixture.connections[0]?.closed).toBe(1)
+      }),
+    )
+  })
+
+  test("keeps an active connection past the idle TTL", async () => {
+    const messages = queue<string | Uint8Array, AIError>()
+    const closed = { count: 0 }
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: () => Effect.void,
+          messages: Stream.fromQueue(messages),
+          close: Effect.sync(() => {
+            closed.count++
+          }).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+        }),
+    }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const execution = yield* transport.bind(session).execute(exchange("first"))
+        const fiber = yield* execution.frames.pipe(Stream.runCollect, Effect.forkChild)
+
+        yield* TestClock.adjust("25 minutes")
+        expect(closed.count).toBe(0)
+
+        Queue.offerUnsafe(messages, "completed")
+        yield* Fiber.join(fiber)
+        yield* TestClock.adjust("25 minutes")
+        expect(closed.count).toBe(1)
       }),
     )
   })
