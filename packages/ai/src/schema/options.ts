@@ -289,7 +289,10 @@ export interface Capabilities {
   readonly temperature?: boolean
   readonly topP?: boolean
   readonly topK?: boolean
-  /** Accepts mid-conversation system messages. Anthropic Messages detects it from the model ID when unset. */
+  /**
+   * Accepts mid-conversation system messages. When unset, Anthropic Messages detects it from the model ID and OpenAI
+   * Chat enables it only on OpenAI and Azure endpoints.
+   */
   readonly systemUpdates?: boolean
   /** Accepts `store`. OpenAI Chat detects it from the provider when unset. */
   readonly store?: boolean

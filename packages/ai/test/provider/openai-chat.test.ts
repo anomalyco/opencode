@@ -34,6 +34,11 @@ const model = OpenAIChat.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
   .model({ id: "gpt-4o-mini" })
 
+// Endpoints other than OpenAI and Azure wrap system updates in user text.
+const compatibleModel = OpenAICompatible.configure({ baseURL: "https://api.compatible.test/v1", apiKey: "test" }).model(
+  "compatible-model",
+)
+
 const request = ai.request({
   id: "req_1",
   model,
@@ -151,7 +156,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model,
+          model: compatibleModel,
           messages: [
             Message.user("Before."),
             Message.system("Treat <admin> & data literally."),
@@ -166,6 +171,116 @@ describe("OpenAI Chat route", () => {
           content: "Before.\n<system-update>\nTreat &lt;admin&gt; &amp; data literally.\n</system-update>",
         },
         { role: "assistant", content: "After." },
+      ])
+    }),
+  )
+
+  it.effect("sends system updates as native system messages to OpenAI and Azure", () =>
+    Effect.gen(function* () {
+      const prepare = (target: LanguageModel) =>
+        compileRequest(
+          ai.request({
+            model: target,
+            system: "Initial instructions.",
+            messages: [
+              Message.user("Before."),
+              Message.system("Treat <admin> & data literally."),
+              Message.assistant("After."),
+            ],
+          }),
+        )
+      const expected = [
+        { role: "system", content: "Initial instructions." },
+        { role: "user", content: "Before." },
+        { role: "system", content: "Treat <admin> & data literally." },
+        { role: "assistant", content: "After." },
+      ]
+
+      expect(
+        (yield* prepare(OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o")))
+          .body.messages,
+      ).toEqual(expected)
+      expect(
+        (yield* prepare(
+          OpenAICompatible.configure({ baseURL: "https://api.openai.com/v1", apiKey: "test" }).model("gpt-4o"),
+        )).body.messages,
+      ).toEqual(expected)
+      expect(
+        (yield* prepare(
+          Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat("gpt-4o"),
+        )).body.messages,
+      ).toEqual(expected)
+    }),
+  )
+
+  it.effect("sends native system updates elsewhere only when the capability opts in", () =>
+    Effect.gen(function* () {
+      const prepare = (target: LanguageModel) =>
+        compileRequest(ai.request({ model: target, messages: [Message.user("Before."), Message.system("Update.")] }))
+      const openai = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o")
+
+      expect(
+        (yield* prepare(LanguageModel.update(compatibleModel, { capabilities: { systemUpdates: true } }))).body
+          .messages,
+      ).toEqual([
+        { role: "user", content: "Before." },
+        { role: "system", content: "Update." },
+      ])
+      expect((yield* prepare(compatibleModel)).body.messages).toEqual([
+        { role: "user", content: "Before.\n<system-update>\nUpdate.\n</system-update>" },
+      ])
+      expect(
+        (yield* prepare(LanguageModel.update(openai, { capabilities: { systemUpdates: false } }))).body.messages,
+      ).toEqual([{ role: "user", content: "Before.\n<system-update>\nUpdate.\n</system-update>" }])
+    }),
+  )
+
+  it.effect("places cache markers on native system updates", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: OpenAIChat.route
+            .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
+            .model({
+              id: "claude-sonnet-5",
+              capabilities: { systemUpdates: true },
+              compatibility: { cacheFormat: "anthropic" },
+            }),
+          messages: [Message.user("Before."), Message.system("Update.")],
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "system",
+        content: [{ type: "text", text: "Update.", cache_control: { type: "ephemeral" } }],
+      })
+    }),
+  )
+
+  it.effect("keeps tool images ahead of a following native system update", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o"),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+              },
+            }),
+            Message.system("Inspect the image."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.slice(1)).toEqual([
+        { role: "tool", tool_call_id: "call_1", content: "" },
+        { role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AAEC" } }] },
+        { role: "system", content: "Inspect the image." },
       ])
     }),
   )
@@ -830,7 +945,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model,
+          model: compatibleModel,
           messages: [
             Message.tool({
               id: "call_1",
@@ -871,7 +986,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model,
+          model: compatibleModel,
           messages: [
             Message.user({ type: "media", media: Media.base64("AAEC", "image/png") }),
             Message.system("Keep the image."),

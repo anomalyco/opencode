@@ -697,8 +697,28 @@ const lowerMessages = Effect.fnUntraced(function* (
     bridgeTools()
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
+  const nativeSystemUpdates =
+    request.model.capabilities?.systemUpdates ??
+    detectOfficialEndpoint(request.model.provider, request.model.route.endpoint.baseURL)
   for (const message of request.messages) {
     if (message.role === "user") bridgeTools()
+    if (message.role === "system" && nativeSystemUpdates) {
+      const content = yield* ProviderShared.systemUpdateText("OpenAI Chat", message)
+      flushAttachments()
+      messages.push(
+        content.some((part) => part.cache !== undefined) && options.cacheControl !== undefined
+          ? {
+              role: "system",
+              content: content.map((part) => ({
+                type: "text",
+                text: part.text,
+                cache_control: options.cacheControl?.(part.cache),
+              })),
+            }
+          : { role: "system", content: ProviderShared.joinText(content) },
+      )
+      continue
+    }
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
       const cacheControl = options.cacheControl?.(part.cache)
@@ -804,10 +824,12 @@ const detectMaxTokensField = (
   return "max_completion_tokens"
 }
 
+// OpenAI and Azure accept `store` and mid-conversation system messages. Many
+// OpenAI-style APIs reject an unknown `store` field or a system message after
+// the first, so other endpoints get neither unless their capabilities opt in.
 // `store` defaults to false on OpenAI and Azure, but org-level logging can still
-// store requests that omit it, so send an explicit `store: false` there. Strict
-// OpenAI-style APIs reject the field with a 400, so omit it everywhere else.
-const detectSupportsStore = (provider: string, baseURL: string | undefined): boolean => {
+// store requests that omit it, so send an explicit `store: false` there.
+const detectOfficialEndpoint = (provider: string, baseURL: string | undefined): boolean => {
   const p = provider.toLowerCase()
   const url = (baseURL ?? "").toLowerCase()
   return (
@@ -886,7 +908,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
   const maxTokensField = request.model.compatibility?.maxTokensField ?? detectedMaxTokensField
-  const supportsStore = request.model.capabilities?.store ?? detectSupportsStore(provider, baseURL)
+  const supportsStore = request.model.capabilities?.store ?? detectOfficialEndpoint(provider, baseURL)
   const supportsStrictMode = request.model.capabilities?.tools?.strict ?? detectSupportsStrictMode(provider, baseURL)
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
