@@ -1340,7 +1340,7 @@ flowchart TD
   test("parses inline edge labels written without spaces", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   A[Start]--yes-->B[End]
-  B==done==>C
+  B==done==>C[Done]
   C-.retry.->A
   A --- D --> E`)
 
