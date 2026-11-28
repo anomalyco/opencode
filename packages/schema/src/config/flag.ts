@@ -8,6 +8,8 @@ export const wildcard = "all"
  * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
  */
 export const registry = {
+  copilot_expiring_tokens:
+    "Request expiring GitHub Copilot OAuth tokens on new sign-ins and refresh them automatically.",
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
