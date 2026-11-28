@@ -10,6 +10,7 @@ import {
   onCleanup,
   Show,
   Switch,
+  untrack,
   type Accessor,
 } from "solid-js"
 import path from "node:path"
@@ -124,7 +125,7 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { parseTodos } from "../../util/todo"
 import { createHistoryPrepend } from "./history"
-import { context, use, type PendingAction } from "./render-context"
+import { context, use, type ExpandedGroup, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
@@ -332,6 +333,7 @@ export function Session(props: {
         if (!previous) return
         clearMessageNavigation()
         if (scroll && !scroll.isDestroyed) updateAwayFromBottom()
+        refreshPinnedGroup()
       },
     ),
   )
@@ -383,6 +385,43 @@ export function Session(props: {
   let sent = false
   let restored = false
   let scroll: ScrollBoxRenderable
+  const [pinnedGroup, setPinnedGroup] = createSignal<ExpandedGroup>()
+  const expandedGroups = new Set<ExpandedGroup>()
+
+  // The group a reader is inside: its header scrolled above the viewport while its body still shows. Its summary pins
+  // there so the reader can collapse it without scrolling back up to find it.
+  function refreshPinnedGroup() {
+    untrack(() => {
+      if (!scroll || scroll.isDestroyed || expandedGroups.size === 0) {
+        setPinnedGroup(undefined)
+        return
+      }
+      const top = scroll.viewport.y
+      const bottom = top + scroll.viewport.height
+      let next: ExpandedGroup | undefined
+      for (const group of expandedGroups) {
+        const root = group.root()
+        const header = group.header()
+        if (!root || !header || root.isDestroyed || header.isDestroyed) continue
+        if (root.y + root.height <= top || root.y >= bottom || header.y >= top) continue
+        next = group
+      }
+      setPinnedGroup(next)
+    })
+  }
+
+  function collapseExpandedGroup(group: ExpandedGroup) {
+    const root = group.root()
+    group.collapse()
+    // Bring the header back where the pinned summary was, so the collapse does not leave the reader elsewhere.
+    if (root && scroll && !scroll.isDestroyed) afterLayout(() => scroll.scrollChildIntoView(root, { align: "start" }))
+    afterLayout(refreshPinnedGroup)
+  }
+
+  const onScrollChanged = () => {
+    updateAwayFromBottom()
+    refreshPinnedGroup()
+  }
   createEffect(() => {
     if (restored || !synced() || !rowsSynced() || !scroll || scroll.isDestroyed) return
     restored = true
@@ -396,7 +435,7 @@ export function Session(props: {
     prependHistory.cancel()
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
-    scroll.verticalScrollBar.off("change", updateAwayFromBottom)
+    scroll.verticalScrollBar.off("change", onScrollChanged)
     scroll.content.off("resize", contentResized)
     saveScrollAnchor(true)
   })
@@ -540,6 +579,7 @@ export function Session(props: {
   // clears "Jump to latest".
   function contentResized() {
     if (awayFromBottom()) updateAwayFromBottom()
+    refreshPinnedGroup()
   }
   function updateAwayFromBottom() {
     const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending || !!firstJump()
@@ -1621,6 +1661,17 @@ export function Session(props: {
           if (anchor && !(ending && !isAwayFromBottom())) afterLayout(scroll.anchor(anchor))
           sessionTabs.setGroupExpanded(sessionID, id, expanded)
           afterLayout(saveScrollAnchor)
+          afterLayout(refreshPinnedGroup)
+        },
+        groups: {
+          register(group) {
+            expandedGroups.add(group)
+            refreshPinnedGroup()
+            return () => {
+              expandedGroups.delete(group)
+              refreshPinnedGroup()
+            }
+          },
         },
         get width() {
           return contentWidth()
@@ -1677,7 +1728,7 @@ export function Session(props: {
                 ref={(r) => {
                   scroll = r
                   props.scrollRef?.(r)
-                  scroll.verticalScrollBar.on("change", updateAwayFromBottom)
+                  scroll.verticalScrollBar.on("change", onScrollChanged)
                   scroll.content.on("resize", contentResized)
                 }}
                 viewportOptions={{
@@ -1724,6 +1775,20 @@ export function Session(props: {
                   {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
                 </Show>
               </scrollbox>
+              <Show when={pinnedGroup()} keyed>
+                {(group) => (
+                  <PinnedGroupSummary
+                    group={group}
+                    right={showScrollbar() ? 1 : 0}
+                    onCollapse={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      collapseExpandedGroup(group)
+                    }}
+                    // Reuse the transcript's own wheel handling: navigation reset, row reveals, acceleration and speed.
+                    onScroll={(event) => scroll.processMouseEvent(event)}
+                  />
+                )}
+              </Show>
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={firstJump()}>
@@ -1831,6 +1896,40 @@ export function Session(props: {
         </box>
       </box>
     </context.Provider>
+  )
+}
+
+/** The summary of the expanded group a reader is inside, pinned over the first viewport row. */
+function PinnedGroupSummary(props: {
+  group: ExpandedGroup
+  right: number
+  onCollapse: () => void
+  onScroll: (event: MouseEvent) => void
+}) {
+  const theme = useTheme()
+  const [hover, setHover] = createSignal(false)
+  return (
+    <box
+      position="absolute"
+      top={0}
+      left={0}
+      right={props.right}
+      zIndex={1}
+      backgroundColor={theme.background.base}
+      onMouseScroll={props.onScroll}
+    >
+      <InlineToolRow
+        icon="−"
+        color={hover() ? theme.text.base : theme.text.muted}
+        complete={true}
+        pending={props.group.label()}
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={props.onCollapse}
+      >
+        {props.group.label()}
+      </InlineToolRow>
+    </box>
   )
 }
 

@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { RGBA, TextAttributes, type MouseEvent } from "@opentui/core"
+import { RGBA, TextAttributes, type BoxRenderable, type MouseEvent } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type {
   SessionMessageAssistant,
@@ -255,9 +255,16 @@ export function InlineToolRow(props: {
   onMouseOver?: () => void
   onMouseOut?: () => void
   onMouseUp?: (event: MouseEvent) => void
+  onNode?: (node: BoxRenderable | undefined) => void
 }) {
   return (
-    <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
+    <box
+      ref={props.onNode}
+      paddingLeft={3}
+      onMouseOver={props.onMouseOver}
+      onMouseOut={props.onMouseOut}
+      onMouseUp={props.onMouseUp}
+    >
       <Switch>
         <Match when={props.spinner}>
           <Show when={props.status} fallback={<Spinner color={props.color} children={props.children} />}>

@@ -38,6 +38,7 @@ test("reasoning follows the markdown setting, also when it changes", async () =>
                 anchors: createTimelineAnchors(),
                 groupExpanded: () => false,
                 setGroupExpanded: () => {},
+                groups: { register: () => () => {} },
                 thinkingMode: () => "show",
                 markdownMode: mode,
                 groupExploration: () => true,

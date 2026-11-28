@@ -1,5 +1,5 @@
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
-import { RGBA, type Renderable } from "@opentui/core"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { RGBA, type BoxRenderable, type Renderable } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
 import { useTheme } from "../../context/theme"
@@ -199,15 +199,34 @@ function GroupContent(props: GroupProps) {
 
 /** Low verbosity: one summary for a run of tools, thoughts and instruction loads. */
 function ActivityGroup(props: GroupProps) {
+  const ctx = use()
   const theme = useTheme()
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
+  const [header, setHeader] = createSignal<BoxRenderable>()
+  const [root, setRoot] = createSignal<BoxRenderable>()
   const entries = createMemo(() => descendants(props.node))
   const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
+
+  // While open, the group offers the session a summary it can pin once the header scrolls away.
+  createEffect(() => {
+    const id = disclosure.id()
+    if (!disclosure.expanded() || !id || !summary().label) return
+    onCleanup(
+      ctx.groups.register({
+        label: () => summary().label,
+        header,
+        root,
+        collapse: () => disclosure.toggle(),
+      }),
+    )
+  })
+
   return (
-    <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
+    <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""} onNode={setRoot}>
       <Show when={summary().label}>
         <InlineToolRow
+          onNode={setHeader}
           icon={disclosure.expanded() ? "−" : "+"}
           color={hover() ? theme.text.base : theme.text.muted}
           complete={true}

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
 import { createTestRenderer, TestRecorder } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
@@ -143,6 +144,34 @@ async function withSession(run: (setup: Setup) => Promise<void>, history = messa
 const lines = (frame: string) => frame.split("\n")
 const rowOf = (frame: string, label: string) => lines(frame).findIndex((line) => line.includes(label))
 
+function findScroll(node: Renderable): ScrollBoxRenderable | undefined {
+  const found: ScrollBoxRenderable[] = []
+  const visit = (current: Renderable) => {
+    if (current instanceof ScrollBoxRenderable) found.push(current)
+    current.getChildren().forEach(visit)
+  }
+  visit(node)
+  // The transcript scrolls furthest; side panels have little to scroll.
+  return found.sort((a, b) => b.scrollHeight - a.scrollHeight)[0]
+}
+
+/** Opens a group and scrolls into its body until its real header leaves the viewport. */
+async function pin(setup: Setup, label: string) {
+  const scroll = findScroll(setup.renderer.root)
+  if (!scroll) throw new Error("Missing transcript")
+  const pinned = () => rowOf(setup.captureCharFrame(), `− ${label}`)
+  setup.renderer.clearSelection()
+  await setup.mockMouse.click(8, rowOf(setup.captureCharFrame(), label))
+  await setup.waitForFrame((frame) => frame.includes(`− ${label}`) && frame.includes("echo tall step 0"))
+  await setup.waitForVisualIdle({ quietFrames: 3 })
+  for (let tick = 0; tick < 30 && pinned() !== scroll.screenY; tick++) {
+    await setup.mockMouse.scroll(scroll.screenX + 2, scroll.screenY + 2, "down")
+    await setup.renderOnce()
+  }
+  expect(pinned()).toBe(scroll.screenY)
+  return { scroll }
+}
+
 /** Clicks the summary and returns its row in every frame rendered afterwards. */
 async function toggle(setup: Setup, label: string) {
   const row = rowOf(setup.captureCharFrame(), label)
@@ -230,5 +259,30 @@ test("collapsing details that no longer overflow hides Jump to latest", async ()
     await click()
     await setup.waitForFrame((frame) => frame.includes(`+ ${label}`) && frame.includes("Tall answer"))
     await setup.waitForFrame((frame) => !frame.includes("Jump to latest"))
+  }, tall)
+}, 20000)
+
+test("the wheel over a pinned summary scrolls the transcript", async () => {
+  await withSession(async (setup) => {
+    const label = "24 commands"
+    const { scroll } = await pin(setup, label)
+    const before = scroll.scrollTop
+    await setup.mockMouse.scroll(8, scroll.screenY, "down")
+    await setup.renderOnce()
+    expect(scroll.scrollTop).toBeGreaterThan(before)
+    expect(rowOf(setup.captureCharFrame(), `− ${label}`)).toBe(scroll.screenY)
+  }, tall)
+}, 20000)
+
+test("a group pins its summary while its body scrolls under the viewport top", async () => {
+  await withSession(async (setup) => {
+    const label = "24 commands"
+    const { scroll } = await pin(setup, label)
+    expect(setup.captureCharFrame()).toContain("tall step")
+
+    setup.renderer.clearSelection()
+    await setup.mockMouse.click(8, scroll.screenY)
+    await setup.waitForFrame((frame) => frame.includes(`+ ${label}`) && frame.includes("Tall answer"))
+    expect(rowOf(setup.captureCharFrame(), `− ${label}`)).toBe(-1)
   }, tall)
 }, 20000)

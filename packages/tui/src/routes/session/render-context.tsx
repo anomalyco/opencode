@@ -10,6 +10,14 @@ import type { GroupKind } from "./grouping/session"
 
 export type PendingAction = "steer" | "queue" | "cancel"
 
+/** An expanded group whose summary can pin to the top of the viewport while its body is read. */
+export type ExpandedGroup = {
+  label: () => string
+  header: () => Renderable | undefined
+  root: () => Renderable | undefined
+  collapse: () => void
+}
+
 export const context = createContext<{
   /** Content width: terminal width minus vertical tabs, sidebar, and padding. */
   width: number
@@ -25,6 +33,10 @@ export const context = createContext<{
   groupExpanded: (groupID: string, kind: GroupKind) => boolean
   /** An anchor keeps its viewport row through the layout change the toggle causes. */
   setGroupExpanded: (groupID: string, expanded: boolean, anchor?: Renderable | null) => void
+  /** Expanded groups whose summary can pin above their scrolled body. */
+  groups: {
+    register: (group: ExpandedGroup) => () => void
+  }
   thinkingMode: () => ThinkingMode
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
