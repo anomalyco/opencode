@@ -25,6 +25,9 @@ export const dict = {
   "ui.sessionReviewV2.expandMode": "展開或收合差異",
   "ui.sessionReviewV2.filterFiles": "篩選檔案",
   "ui.sessionReviewV2.toggleSidebar": "切換檔案樹",
+  "ui.sessionReviewV2.sidebarPosition": "側邊欄位置",
+  "ui.sessionReviewV2.sidebarPosition.left": "左側",
+  "ui.sessionReviewV2.sidebarPosition.right": "右側",
   "ui.sessionReviewV2.showAllLines": "顯示所有行",
   "ui.sessionReviewV2.hideNonDiffLines": "隱藏無差異的行",
   "ui.sessionReviewV2.unifiedDiff": "統一格式差異",
@@ -132,6 +135,7 @@ export const dict = {
   "ui.promptInput.chooseAgent": "選擇代理程式",
   "ui.promptInput.chooseModel": "選擇模型",
   "ui.promptInput.chooseVariant": "選擇模型變體",
+  "ui.promptInput.chooseSpeed": "選擇模型速度",
   "ui.promptInput.send": "傳送",
   "ui.promptInput.stop": "停止",
 
@@ -253,6 +257,8 @@ export const dict = {
   "ui.promptInput.dropFiles.pdf": "拖放要新增的 PDF 或文件",
   "ui.promptInput.dropFiles.imagePdf": "拖放要新增的圖像、PDF 或文件",
   "ui.promptInput.exitShell": "出口",
+  "ui.sessionTimeline.notice.speedSwitched": "已將速度切換為 {{speed}}",
+  "ui.sessionTimeline.notice.speedStandard": "已將速度切換為標準",
   "ui.sessionTimeline.notice.agentChanged": "代理變更",
 
   "ui.sessionTurn.retry.attemptWaiting.one": "嘗試 {{attempt}} - 在 {{count}} 秒內重試",
@@ -405,4 +411,7 @@ export const dict = {
   "ui.question.singleHint": "選取一個答案",
   "ui.question.classic.multiHint": "選取所有適用的答案",
   "ui.question.custom.answerPlaceholder": "輸入你自己的答案…",
+
+  "ui.message.wrapLines": "自動換行",
+  "ui.message.unwrapLines": "不自動換行",
 } satisfies Partial<Record<Keys, string>>

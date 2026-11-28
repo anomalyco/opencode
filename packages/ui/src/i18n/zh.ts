@@ -25,6 +25,9 @@ export const dict = {
   "ui.sessionReviewV2.expandMode": "展开或折叠差异",
   "ui.sessionReviewV2.filterFiles": "筛选文件",
   "ui.sessionReviewV2.toggleSidebar": "切换文件树",
+  "ui.sessionReviewV2.sidebarPosition": "侧栏位置",
+  "ui.sessionReviewV2.sidebarPosition.left": "左侧",
+  "ui.sessionReviewV2.sidebarPosition.right": "右侧",
   "ui.sessionReviewV2.showAllLines": "显示所有行",
   "ui.sessionReviewV2.hideNonDiffLines": "隐藏未更改的行",
   "ui.sessionReviewV2.unifiedDiff": "统一格式差异",
@@ -132,6 +135,7 @@ export const dict = {
   "ui.promptInput.chooseAgent": "选择智能体",
   "ui.promptInput.chooseModel": "选择模型",
   "ui.promptInput.chooseVariant": "选择模型变体",
+  "ui.promptInput.chooseSpeed": "选择模型速度",
   "ui.promptInput.send": "发送",
   "ui.promptInput.stop": "停止",
 
@@ -253,6 +257,8 @@ export const dict = {
   "ui.promptInput.dropFiles.pdf": "拖放要添加的 PDF 或文件",
   "ui.promptInput.dropFiles.imagePdf": "拖放要添加的图像、PDF 或文件",
   "ui.promptInput.exitShell": "出口",
+  "ui.sessionTimeline.notice.speedSwitched": "已将速度切换为 {{speed}}",
+  "ui.sessionTimeline.notice.speedStandard": "已将速度切换为标准",
   "ui.sessionTimeline.notice.agentChanged": "代理变更",
 
   "ui.sessionTurn.retry.attemptWaiting.one": "尝试 {{attempt}} - 在 {{count}} 秒内重试",
@@ -405,4 +411,7 @@ export const dict = {
   "ui.question.singleHint": "选择一个答案",
   "ui.question.classic.multiHint": "选择所有适用的答案",
   "ui.question.custom.answerPlaceholder": "输入你自己的答案…",
+
+  "ui.message.wrapLines": "自动换行",
+  "ui.message.unwrapLines": "不自动换行",
 } satisfies Partial<Record<Keys, string>>
