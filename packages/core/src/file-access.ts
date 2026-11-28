@@ -10,11 +10,13 @@ import { Environment } from "./environment/index.js"
 import { EnvironmentPath } from "./environment/path.js"
 import { Flag } from "./flag.js"
 import { Location } from "./location.js"
+import { Machine } from "./machine/index.js"
 import { Permission } from "./permission.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
 import type { SessionErrors } from "./session/error.js"
 import type { Tool } from "./tool.js"
+import { Workspace } from "./workspace.js"
 
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
@@ -137,6 +139,15 @@ const layer = Layer.effect(
     // Locations (`wrk_...`) stay confined to their own environment.
     const isServerLocation = environment.id === Environment.localID
 
+    // Nothing on an offline machine is resolved or asked for: its files wait on its worker, and its path rules on the
+    // worker's next hello. A cold workspace sandbox is not offline, it wakes on its first operation.
+    const reachable = Effect.fnUntraced(function* (id: Environment.ID, text: string) {
+      const ready = yield* environments.ready(id)
+      if (!ready && !Workspace.isID(id))
+        return yield* new Environment.Failed({ path: text, cause: new Machine.NotSent({ machine: id }) })
+      return ready
+    })
+
     // The flag and the working directory are read once per operation by `locate` and `resolve`, which both call this.
     const place = Effect.fnUntraced(function* (
       text: string,
@@ -164,11 +175,11 @@ const layer = Layer.effect(
           environment: { id },
         } satisfies Environment.Place
       }
-      // Another environment's paths follow its own path rules (falling back to POSIX when unknown). Only `~` and `~/`
-      // are expanded when the target environment exposes `home` (e.g. a paired machine's hello or a sandbox with home).
-      // With the flag off no home is asked for, so a base on another machine refuses every `~`.
+      // Another environment's paths follow its own path rules (falling back to POSIX when unknown). Only `~` and `~/`,
+      // and `~\` on Windows, are expanded when the target environment exposes `home` (e.g. a paired machine's hello or a
+      // sandbox with home). With the flag off no home is asked for, so a base on another machine refuses every `~`.
       const written = parsed?.path ?? text
-      const isHome = written === "~" || written.startsWith("~/")
+      const isHome = written === "~" || written.startsWith("~/") || written.startsWith("~\\")
       const target = crossEnvironment
         ? yield* environments
             .lookup(id)
@@ -178,14 +189,22 @@ const layer = Layer.effect(
               ),
             )
         : undefined
+      if (target) yield* reachable(id, text)
       const rules = target ? target.path : path.posix
+      const windows = rules === path.win32
       const home =
-        crossEnvironment && isHome && target?.home
+        crossEnvironment && isHome && target?.home && (windows || !written.startsWith("~\\"))
           ? yield* target.home.pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause })))
           : undefined
       const rooted = home !== undefined ? rules.join(home, written.slice(1)) : written
-      if (rooted.startsWith("~"))
-        return yield* new Environment.Failed({ path: text, cause: new EnvironmentPath.NotAbsolute({ machine: id }) })
+      // A prefixed path must be absolute by its machine's own rules, or it would resolve against this server's working
+      // directory (`gpu:C:/x` on a POSIX machine) or the worker's current drive (`win:/x` on Windows).
+      const absolute = windows ? /^(?:[A-Za-z]:[\\/]|\\\\)/.test(rooted) : rules.isAbsolute(rooted)
+      if (rooted.startsWith("~") || (parsed && target && !absolute))
+        return yield* new Environment.Failed({
+          path: text,
+          cause: new EnvironmentPath.NotAbsolute({ machine: id, ...(windows ? { windows } : {}) }),
+        })
       // A relative text is relative to the directory it was written in, which is the base when there is one and
       // otherwise the working directory itself: a session cwd in another environment is still a directory there.
       return {
@@ -268,7 +287,10 @@ const layer = Layer.effect(
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
       const rules = targetEnvironment.path
       // Never wake a cold/lazy sandbox just to stat the approval boundary before permission is granted.
-      const ready = yield* environments.ready(place.environment.id)
+      const ready = yield* reachable(place.environment.id, place.absolute)
+      // A Windows machine's resources use forward slashes, as this server's own do on Windows.
+      const resource = (value: string) =>
+        EnvironmentPath.format(place.environment.id, rules === path.win32 ? slash(value) : value)
       const type =
         kind ??
         (ready
@@ -282,13 +304,10 @@ const layer = Layer.effect(
       const directory = AbsolutePath.make(
         type === "directory" || narrowCold ? place.absolute : rules.dirname(place.absolute),
       )
-      const contents = EnvironmentPath.format(
-        place.environment.id,
-        narrowCold ? place.absolute : rules.join(directory, "*"),
-      )
+      const contents = resource(narrowCold ? place.absolute : rules.join(directory, "*"))
       return {
         absolute: place.absolute,
-        resource: EnvironmentPath.format(place.environment.id, place.absolute),
+        resource: resource(place.absolute),
         ...(insideWorkingDirectory
           ? {}
           : { externalDirectory: { action: "external_directory", directory, resource: contents, save: contents } }),

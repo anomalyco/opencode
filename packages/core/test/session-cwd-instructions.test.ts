@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
+import { Environments } from "@opencode/core/environment/environments"
 import { Global } from "@opencode/util/global"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
@@ -64,6 +65,8 @@ const layer = (options?: {
         Layer.succeed(Location.Service, Location.Service.of(options?.loc ?? location({ directory }))),
       ),
       Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
+      // The machines here are in-memory environments that stay connected; an offline one fails its reads instead.
+      Environments.node.replace(Layer.mock(Environments.Service, { ready: () => Effect.succeed(true) })),
       InstructionDiscovery.node.replace(
         Layer.mock(InstructionDiscovery.Service, {
           project: options?.project ?? true,

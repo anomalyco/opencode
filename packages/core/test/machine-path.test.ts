@@ -8,6 +8,7 @@ import { Database } from "@opencode/core/database/database"
 import { AppProcess } from "@opencode/util/process"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
+import { Environments } from "@opencode/core/environment/environments"
 import { FileAccess } from "@opencode/core/file-access"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
@@ -121,6 +122,7 @@ const graph = (fixture: Fixture, realPermissions = false) =>
       Agent.node,
       Bus.node,
       Database.node,
+      Environments.node,
       Permission.node,
       Tool.node,
       toolPlugins,
@@ -174,10 +176,10 @@ const graph = (fixture: Fixture, realPermissions = false) =>
 
 const fixture = (directory: string): Fixture => ({ directory, assertions: [], processes: [] })
 
-const connected = (machines: Machines.Interface, name: string) =>
+const connected = (machines: Machines.Interface, name: string, system?: Parameters<typeof makeWorker>[2]) =>
   Effect.gen(function* () {
     const id = yield* machines.add(name)
-    const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
+    const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) }, undefined, system)
     yield* worker.restore
     return { id, worker }
   })
@@ -278,6 +280,14 @@ describe("EnvironmentPath", () => {
     ["relative/a:b/c", undefined],
     [":only", undefined],
     ["todo:list.txt", undefined],
+    ["win:C:\\Users\\app", { environment: "win", path: "C:\\Users\\app" }],
+    ["win:C:/Users/app", { environment: "win", path: "C:/Users/app" }],
+    ["win:~/app", { environment: "win", path: "~/app" }],
+    ["win:C:relative", undefined],
+    ["win:\\\\server\\share", { environment: "win", path: "\\\\server\\share" }],
+    ["win:\\foo", { environment: "win", path: "\\foo" }],
+    ["wrk_box:C:\\x", undefined],
+    ["C:\\Users\\app", undefined],
   ]
 
   const plain = (parsed: ReturnType<typeof EnvironmentPath.parse>) =>
@@ -285,6 +295,23 @@ describe("EnvironmentPath", () => {
 
   for (const [input, expected] of environmentPaths)
     test(`parse ${JSON.stringify(input)}`, () => expect(plain(EnvironmentPath.parse(input))).toEqual(expected))
+
+  test("reads a drive path on this server as an environment path only on a Windows host", () =>
+    expect(plain(EnvironmentPath.parse("local:C:\\x"))).toEqual(
+      process.platform === "win32" ? { environment: "local", path: "C:\\x" } : undefined,
+    ))
+
+  test("types a bare Windows drive as a plain path, and a drive-relative machine path as not absolute", async () => {
+    const known = () => Effect.succeed(true)
+    expect(await Effect.runPromise(EnvironmentPath.typed("C:\\Users\\app", known))).toBeUndefined()
+    expect(plain(await Effect.runPromise(EnvironmentPath.typed("win:C:\\Users\\app", known)))).toEqual({
+      environment: "win",
+      path: "C:\\Users\\app",
+    })
+    expect(await Effect.runPromise(EnvironmentPath.typed("win:C:app", known).pipe(Effect.flip))).toBeInstanceOf(
+      EnvironmentPath.NotAbsolute,
+    )
+  })
 })
 
 off.effect("resolves a machine-shaped path exactly as a local path with the flag off", () =>
@@ -768,6 +795,141 @@ off.effect("resolves a directory a command names against its working directory",
   }),
 )
 
+const windows = { os: "win32", home: "C:\\Users\\worker", shell: "pwsh" } as const
+
+on.effect("counts a machine ready only while its worker is connected", () =>
+  withTempDir((tmp) =>
+    Effect.gen(function* () {
+      const machines = yield* Machines.Service
+      const environments = yield* Environments.Service
+      const id = yield* machines.add("gpu")
+      expect(yield* environments.ready(id)).toBe(false)
+      const worker = yield* makeWorker({ connect: (connection) => machines.connect(id, connection) })
+      yield* worker.restore
+      expect(yield* environments.ready(id)).toBe(true)
+      yield* worker.cut
+      expect(yield* environments.ready(id)).toBe(false)
+      expect(yield* environments.ready(Environment.ID.make("ghost"))).toBe(false)
+    }).pipe(Effect.provide(graph(fixture(tmp.path)))),
+  ),
+)
+
+on.effect("resolves a Windows machine's paths by its own rules, with forward-slash resources", () =>
+  withTempDir((tmp) => {
+    const tools = fixture(tmp.path)
+    return Effect.gen(function* () {
+      const machines = yield* Machines.Service
+      yield* connected(machines, "win", windows)
+      const access = yield* FileAccess.Service
+      for (const text of [
+        "win:~/app",
+        "win:~\\app",
+        "win:C:/Users/worker/app",
+        "win:C:\\Users\\worker\\app",
+        "win:C:\\Users\\worker\\sub\\..\\app",
+      ]) {
+        const target = yield* access.resolve({ path: text, kind: "directory" })
+        expect(`${target.absolute}`).toBe("C:\\Users\\worker\\app")
+        expect(target.resource).toBe("win:C:/Users/worker/app")
+        expect(target.externalDirectory).toMatchObject({
+          directory: "C:\\Users\\worker\\app",
+          resource: "win:C:/Users/worker/app/*",
+          save: "win:C:/Users/worker/app/*",
+        })
+      }
+      const file = yield* access.resolve({ path: "win:~/app/a.txt", kind: "file" })
+      expect(`${file.absolute}`).toBe("C:\\Users\\worker\\app\\a.txt")
+      expect(file.externalDirectory?.resource).toBe("win:C:/Users/worker/app/*")
+      // A path derived from a target on the machine follows its rules too.
+      const sibling = yield* access.resolve({ path: "..\\b.txt", base: file, kind: "file" })
+      expect(`${sibling.absolute}`).toBe("C:\\Users\\worker\\app\\b.txt")
+      expect(
+        Permission.evaluate("read", file.resource, [{ action: "read", resource: "win:C:\\Users\\*", effect: "allow" }])
+          .effect,
+      ).toBe("allow")
+    }).pipe(Effect.provide(graph(tools)))
+  }),
+)
+
+on.effect("expands a Windows home written with a backslash", () =>
+  withTempDir((tmp) =>
+    Effect.gen(function* () {
+      const machines = yield* Machines.Service
+      yield* connected(machines, "win", windows)
+      const access = yield* FileAccess.Service
+      expect(`${(yield* access.locate("win:~\\Documents")).absolute}`).toBe("C:\\Users\\worker\\Documents")
+      expect(`${(yield* access.locate("win:~\\Documents\\..\\notes.txt")).absolute}`).toBe(
+        "C:\\Users\\worker\\notes.txt",
+      )
+    }).pipe(Effect.provide(graph(fixture(tmp.path)))),
+  ),
+)
+
+on.effect("refuses a machine path that is not absolute by that machine's rules, sending nothing", () =>
+  withTempDir((tmp) => {
+    const tools = fixture(tmp.path)
+    return Effect.gen(function* () {
+      const machines = yield* Machines.Service
+      const gpu = yield* connected(machines, "gpu")
+      const win = yield* connected(machines, "win", windows)
+      const access = yield* FileAccess.Service
+      // A drive is relative on a POSIX machine, and `~\` is no home there: neither may resolve against this server's
+      // working directory.
+      for (const text of ["gpu:C:/x", "gpu:C:\\x", "gpu:~\\x"]) {
+        const refused = (yield* access.locate(text).pipe(Effect.flip)).cause
+        expect(refused).toBeInstanceOf(EnvironmentPath.NotAbsolute)
+        expect(String(refused)).toContain("write gpu:/… or gpu:~/…")
+      }
+      // A path without a drive on Windows would land on whatever drive the worker is on.
+      for (const text of ["win:/foo", "win:\\foo"]) {
+        const refused = (yield* access.resolve({ path: text, kind: "file" }).pipe(Effect.flip)).cause
+        expect(refused).toBeInstanceOf(EnvironmentPath.NotAbsolute)
+        expect(String(refused)).toContain("write win:C:\\… or win:~/…")
+      }
+      expect(yield* access.locate("win:\\\\server\\share\\x")).toMatchObject({ absolute: "\\\\server\\share\\x" })
+
+      const read = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:C:/x" }))
+      expect(read.status).toBe("error")
+      expect(read.error?.message).toBe(
+        "Machine paths are absolute or start with ~/: write gpu:/… or gpu:~/… (for a local folder with that name, start with ./)",
+      )
+      expect(tools.assertions).toEqual([])
+      expect([...gpu.worker.received, ...win.worker.received].filter((message) => message.type === "fs")).toEqual([])
+    }).pipe(Effect.provide(graph(tools)))
+  }),
+)
+
+on.effect("runs a command on a Windows machine under its PowerShell from a POSIX home", () =>
+  withTempDir((tmp) => {
+    const tools = fixture(tmp.path)
+    return Effect.gen(function* () {
+      const machines = yield* Machines.Service
+      const { id, worker } = yield* connected(machines, "win", windows)
+      const machine = yield* machines.get(id)
+      yield* machine.files.mkdir("C:\\work")
+      const registry = yield* Tool.Service
+      // The directory a PowerShell variable names is unknown here: this server's variables are not the machine's.
+      const command = "Set-Location sub; Set-Location $env:USERPROFILE"
+      const running = yield* Effect.forkChild(
+        executeTool(registry, call("shell", { command, workdir: "win:C:\\work" })),
+        { startImmediately: true },
+      )
+      while (worker.runs.length === 0) yield* Effect.yieldNow
+      yield* worker.runs[0].print("done\r\n")
+      yield* worker.runs[0].exit(0)
+
+      expect(yield* Fiber.join(running)).toMatchObject({ status: "completed", output: { exitCode: 0 } })
+      expect(worker.runs[0].argv).toEqual(["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command])
+      expect(worker.runs[0].cwd).toBe("C:\\work")
+      const external = tools.assertions.filter((entry) => entry.action === "external_directory")
+      expect(external.flatMap((entry) => entry.resources)).toEqual(["win:C:/work/*", "win:C:/work/sub/*"])
+      expect(tools.assertions.find((entry) => entry.action === "shell")?.resources).toEqual([
+        "Set-Location $env:USERPROFILE",
+      ])
+    }).pipe(Effect.provide(graph(tools)))
+  }),
+)
+
 on.effect("refuses unknown and removed machines with the list's message", () =>
   withTempDir((tmp) => {
     const tools = fixture(tmp.path)
@@ -792,12 +954,20 @@ on.effect("fails an offline machine with the driver's message and writes nothing
     return Effect.gen(function* () {
       const machines = yield* Machines.Service
       yield* machines.add("gpu")
+      // Neither located nor asked for: its path rules wait on its worker's next hello.
+      const access = yield* FileAccess.Service
+      expect((yield* access.resolve({ path: "gpu:/work/new.txt" }).pipe(Effect.flip)).cause).toBeInstanceOf(
+        Machine.NotSent,
+      )
       const result = yield* executeTool(
         yield* Tool.Service,
         call("write", { path: "gpu:/work/new.txt", content: "created\n" }),
       )
       expect(result.status).toBe("error")
       expect(result.error?.message).toContain("gpu is offline, command not sent")
+      const read = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:/work/new.txt" }))
+      expect(read.error?.message).toBe("gpu is offline, command not sent")
+      expect(tools.assertions).toEqual([])
       expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
   }),

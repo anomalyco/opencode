@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { posix, win32 } from "node:path"
 import { Deferred, Effect, Exit, Fiber, PlatformError, Queue, Scheduler, Schema, Scope, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
@@ -748,6 +749,48 @@ describe("machine wire", () => {
         Schema.decodeUnknownSync(Machine.FromWorker)({ type: "output", id: "p", offset: 0, data: "" }),
       ).toThrow()
       expect(() => Schema.decodeUnknownSync(Machine.Hello)({ ...hello(), protocol: 1 })).toThrow()
+    }),
+  )
+
+  it.effect("reads a Windows worker's hello, and a hello that names no shell as a POSIX sh", () =>
+    Effect.sync(() => {
+      const decode = Schema.decodeUnknownSync(Machine.Hello)
+      for (const home of ["C:\\Users\\worker", "C:/Users/worker", "\\\\server\\share\\worker"])
+        expect(decode({ ...hello(), os: "win32", home, shell: "pwsh" })).toMatchObject({ home, shell: "pwsh" })
+      for (const home of ["Users\\worker", "C:Users", "~/worker", ""])
+        expect(() => decode({ ...hello(), home })).toThrow()
+
+      const windows = Machine.rules(decode({ ...hello(), os: "win32", home: "C:\\Users\\worker", shell: "pwsh" }))
+      expect(windows.path).toBe(win32)
+      expect(windows.shell).toBe("pwsh")
+      const v3 = decode(hello())
+      expect(Object.hasOwn(v3, "shell")).toBe(false)
+      expect(Machine.rules(v3).path).toBe(posix)
+      expect(Machine.rules(v3).shell).toBe("sh")
+    }),
+  )
+
+  it.effect("takes its path rules and shell from each hello and keeps them while offline", () =>
+    Effect.gen(function* () {
+      const machine = Machine.make(Environment.ID.make("win"))
+      // Taken before the worker first connects, as a session's working directory may hold it.
+      const environment = machine.environment
+      expect([environment.path === posix, environment.shell]).toEqual([true, "sh"])
+      const serve = (served: Machine.Hello) =>
+        Effect.forkChild(machine.connect({ hello: served, send: () => {}, messages: Stream.never }), {
+          startImmediately: true,
+        })
+
+      const windows = yield* serve({ ...hello(), os: "win32", home: "C:\\Users\\worker", shell: "pwsh" })
+      expect([environment.path === win32, environment.shell]).toEqual([true, "pwsh"])
+      expect(yield* environment.home!).toBe("C:\\Users\\worker")
+      yield* Fiber.interrupt(windows)
+      expect([environment.path === win32, environment.shell]).toEqual([true, "pwsh"])
+      expect(yield* environment.home!.pipe(Effect.flip)).toBeInstanceOf(Machine.NotSent)
+
+      const linux = yield* serve(hello())
+      expect([environment.path === posix, environment.shell]).toEqual([true, "sh"])
+      yield* Fiber.interrupt(linux)
     }),
   )
 
