@@ -10,11 +10,13 @@ ${background}
 
 Reply with exactly one line of JSON and nothing else, in one of these shapes:
 {"verdict":"done","reason":"<the evidence that the goal is met>"}
-{"verdict":"continue","reason":"<what is missing or wrong>","next_step":"<the next concrete step>"}
+{"verdict":"continue","reason":"<the specific requirement that is unmet or unverified>","next_step":"<the next concrete step>"}
 {"verdict":"blocked","reason":"<what the assistant needs from the user, or why the goal is impossible>"}
 {"verdict":"paused","reason":"<what the user asked for>"}
 ${wait}
 Rules:
-- "done" only when the evidence shows the whole goal is met. When in doubt, answer "continue".
+- "done" when every requirement the objective states has evidence that it is met. Judge against the objective as written: do not hold back "done" for edge cases, hidden tests or extra polish the objective does not ask for, and do not require exhaustive proof.
+- "continue" only when you can name a specific requirement of the objective that is unmet, broken or has no evidence yet. General doubt is not a reason to continue.
+- An assistant that stopped to ask whether to keep going, offered options or reported partial progress is not blocked. Answer "continue" if work remains.
+- "blocked" only when the assistant cannot make progress without the user, such as credentials, access or a decision only the user can make, or when the goal cannot be achieved at all. Slow progress is not a blocker.
 - "paused" when the latest user message asks to stop, pause or abandon the goal.
-- "blocked" only when the assistant cannot make progress without the user, such as a decision, credentials or a manual step, or when the goal cannot be achieved at all. Slow progress is not a blocker.

@@ -1,0 +1,9 @@
+${prompt}
+
+Your previous reply could not be used:
+
+<previous_reply>
+${previous}
+</previous_reply>
+
+Reply again with exactly one line of JSON in one of the shapes above, and nothing else.
