@@ -766,6 +766,24 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
+test("a busy icon-only inactive tab switches when its spinner is clicked", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "CompactBusyTabs",
+    sessions: [
+      a,
+      b,
+      ...Array.from({ length: 30 }, (_, index) => ({ id: `ses_compact_${index}`, title: `Compact ${index}` })),
+    ],
+    sessionStatus: { [b.id]: { type: "running" } },
+  })
+  await page.goto(sessionHref(a.id))
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  await expect(tabB.locator('[data-slot="tab-title"]')).toBeHidden()
+  await expect(tabB.locator('[data-component="activity-ring"]')).toBeVisible()
+  await tabB.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(b.id))
+})
+
 test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
   const time = { created: T0, updated: T0, idle: T0 + 1 }
 

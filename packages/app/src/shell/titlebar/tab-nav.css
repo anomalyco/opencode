@@ -463,6 +463,11 @@
 
   /* Icon-only tabs have no room on the right, so a busy one spins over its icon. */
   [data-titlebar-tab][data-status="busy"]:not([data-orientation="vertical"]):not([data-active="true"])
+    [data-slot="tab-close"] {
+    pointer-events: none;
+  }
+
+  [data-titlebar-tab][data-status="busy"]:not([data-orientation="vertical"]):not([data-active="true"])
     [data-slot="tab-close"]
     > button {
     visibility: hidden;
