@@ -369,7 +369,6 @@ const lowerTool = (tool: ToolDefinition): MistralTool => ({
   function: { name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false },
 })
 
-/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MistralOptions))(
     request.providerOptions ?? {},

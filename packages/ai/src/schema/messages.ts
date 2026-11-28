@@ -149,6 +149,9 @@ export const ToolCallPart = withStatics(
   }).annotate({ identifier: "LLM.Content.ToolCall" }),
   {
     make: (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input }),
+    /** The tool's path, such as `crm.lookup` for `lookup` in the `crm` namespace. */
+    path: (part: { readonly name: string; readonly namespace?: string }) =>
+      part.namespace === undefined ? part.name : `${part.namespace}.${part.name}`,
   },
 )
 export type ToolCallPart = Schema.Schema.Type<typeof ToolCallPart>
@@ -238,7 +241,10 @@ export const ContentPart = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
-/** Tools changed here: `add` appends or redefines tools by name, `remove` drops them by name. */
+/**
+ * Tools changed here: `add` appends or redefines tools by name, `remove` drops them by path (`crm.lookup`); removing a
+ * namespace's path drops the whole namespace.
+ */
 export const ToolChanges = Schema.Struct({
   add: Schema.Array(Schema.suspend((): Schema.Codec<ToolEntry> => ToolEntry)),
   remove: Schema.Array(Schema.String),
@@ -417,8 +423,22 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   ...toolDefinitionFields,
 }) {
   constructor(input: ToolDefinitionInput) {
-    super({ ...input, type: "tool" })
+    super({ ...input, type: "tool", name: toolName(input.name) })
   }
+}
+
+const TOOL_NAME = /^[a-zA-Z0-9_-]+$/
+
+/**
+ * A tool or namespace name is one segment of characters every provider accepts; length limits differ by provider and
+ * are left to them. Group tools with a namespace rather than a
+ * dotted name; the dot is reserved for paths such as `crm.lookup`.
+ */
+export const toolName = (name: string) => {
+  if (TOOL_NAME.test(name)) return name
+  throw new Error(
+    `Invalid tool name "${name}": use letters, digits, "_" or "-"${name.includes(".") ? ", and group tools with a namespace instead of a dotted name" : ""}`,
+  )
 }
 
 export namespace ToolDefinition {
@@ -448,7 +468,8 @@ export type ToolNamespace = {
 }
 
 export type ToolNamespaceInput = Omit<ToolNamespace, "type" | "tools"> & {
-  readonly tools: ReadonlyArray<ToolEntryInput>
+  /** Definitions, nested namespaces, or tools built with `tool(...)`. */
+  readonly tools: ReadonlyArray<ToolEntryInput | { readonly name: string; readonly _definition: ToolDefinition }>
 }
 export type ToolNamespaceEntryInput = ToolNamespaceInput & { readonly type: "namespace" }
 
@@ -465,7 +486,8 @@ export const ToolNamespace: Schema.Codec<ToolNamespace> & {
     make: (input: ToolNamespace | ToolNamespaceInput): ToolNamespace => ({
       ...input,
       type: "namespace",
-      tools: input.tools.map(ToolEntry.make),
+      name: toolName(input.name),
+      tools: input.tools.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))),
     }),
   },
 )
@@ -493,11 +515,17 @@ export class ToolChoice extends Schema.Class<ToolChoice>("LLM.ToolChoice")({
 
 export namespace ToolChoice {
   export type Mode = Exclude<ToolChoice["type"], "tool">
-  export type Input = ToolChoice | ConstructorParameters<typeof ToolChoice>[0] | ToolDefinition | string
+  /** A mode, a tool's path (`crm.lookup`), or the tool or definition itself. */
+  export type Input =
+    | ToolChoice
+    | ConstructorParameters<typeof ToolChoice>[0]
+    | ToolDefinition
+    | { readonly _definition: ToolDefinition }
+    | string
 
   const isMode = (value: string): value is Mode => value === "auto" || value === "none" || value === "required"
 
-  /** Select a specific named tool. */
+  /** Select a specific tool by its path, such as `crm.lookup`. */
   export const named = (value: string) => new ToolChoice({ type: "tool", name: value })
 
   /** Normalize ergonomic tool-choice inputs into the canonical `ToolChoice` class. */
@@ -505,6 +533,7 @@ export namespace ToolChoice {
     if (input instanceof ToolChoice) return input
     if (input instanceof ToolDefinition) return named(input.name)
     if (typeof input === "string") return isMode(input) ? new ToolChoice({ type: input }) : named(input)
+    if ("_definition" in input) return named(input._definition.name)
     return new ToolChoice(input)
   }
 }

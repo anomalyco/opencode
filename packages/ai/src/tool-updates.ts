@@ -2,9 +2,15 @@
 // ordered list of declarations, that leading one and then each marker in message order. Folding the whole list
 // gives the tools a route without in-place changes sends. A protocol that can send some changes in place keeps
 // them where they are, so the leading declaration, and the prompt cache behind it, stays fixed.
-import { Message, SystemMessage, type LLMRequest, type ToolChanges, type ToolEntry } from "./schema/messages.js"
+import {
+  Message,
+  SystemMessage,
+  type LLMRequest,
+  type ToolChanges,
+  type ToolDefinition,
+  type ToolEntry,
+} from "./schema/messages.js"
 import type { Capabilities } from "./schema/options.js"
-import { flattenTools } from "./protocols/shared.js"
 
 export type ToolUpdate = NonNullable<NonNullable<Capabilities["tools"]>["updates"]>[number]
 
@@ -30,14 +36,24 @@ export const toolUpdateKinds = (request: LLMRequest) => {
   return (request.model.capabilities?.tools?.updates ?? []).filter((kind) => encoding?.kinds.includes(kind))
 }
 
-/** Apply one change: removals first, then additions replace a same-named tool in place or append. */
-export const foldTools = <Item extends { readonly name: string }>(
+/** A tool or namespace, whose `tools` are its members when it is a namespace. */
+export type FoldableTool = {
+  readonly name: string
+  readonly type?: string
+  readonly tools?: ReadonlyArray<FoldableTool>
+}
+
+/**
+ * Apply one change: removals first, by path (`crm.lookup`, or `crm` for a whole namespace), then additions replace a
+ * same-named tool in place or append.
+ */
+export const foldTools = <Item extends FoldableTool>(
   tools: ReadonlyArray<Item>,
   add: ReadonlyArray<Item>,
   remove: ReadonlyArray<string>,
 ): ReadonlyArray<Item> => {
   const added = new Map(add.map((tool) => [tool.name, tool]))
-  const kept = tools.filter((tool) => !remove.includes(tool.name)).map((tool) => added.get(tool.name) ?? tool)
+  const kept = removePaths(tools, remove).map((tool) => added.get(tool.name) ?? tool)
   const names = new Set(kept.map((tool) => tool.name))
   return [...kept, ...[...added.values()].filter((tool) => !names.has(tool.name))]
 }
@@ -69,7 +85,9 @@ const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMReq
   }>(
     (state, change) => {
       const added = change.add.map((tool) => tool.name)
-      const removed = state.tools.filter((tool) => change.remove.includes(tool.name) && !added.includes(tool.name))
+      const removed = change.remove.filter(
+        (path) => !added.includes(path.split(".")[0]!) && entriesAt(state.tools, path).length > 0,
+      )
       const tools = foldTools(state.tools, change.add, change.remove)
       const kinds = [
         ...(removed.length > 0 || withdrawnTools(state.tools, tools).length > 0 ? ["remove" as const] : []),
@@ -79,13 +97,13 @@ const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMReq
         firstTurn !== -1 &&
         change.index > firstTurn &&
         kinds.every((kind) => supported.includes(kind)) &&
-        [...change.add, ...removed].every(declarable) &&
+        [...change.add, ...removed.flatMap((path) => entriesAt(state.tools, path))].every(declarable) &&
         (encoding?.placeable?.(request, change.index) ?? true)
       const step = {
         index: change.index,
         native,
         tools,
-        changes: { add: change.add, remove: removed.map((tool) => tool.name) },
+        changes: { add: change.add, remove: removed },
       }
       return { tools, declared: new Set([...state.declared, ...added]), steps: [...state.steps, step] }
     },
@@ -114,13 +132,47 @@ interface PlanStep {
   readonly changes: ToolChanges
 }
 
-/** Flattened names of the tools in `before` that `after` no longer has, including tools a redefined namespace drops. */
+/** Paths of the tools in `before` that `after` no longer has, including tools a redefined namespace drops. */
 export const withdrawnTools = (before: ReadonlyArray<ToolEntry>, after: ReadonlyArray<ToolEntry>) => {
-  const kept = new Set(toolNames(after))
-  return toolNames(before).filter((name) => !kept.has(name))
+  const kept = new Set(toolLeaves(after).map((leaf) => leaf.path.join(".")))
+  return toolLeaves(before)
+    .map((leaf) => leaf.path.join("."))
+    .filter((path) => !kept.has(path))
 }
 
-const toolNames = (tools: ReadonlyArray<ToolEntry>) => flattenTools(tools).map((tool) => tool.name)
+/** Every tool definition in `tools`, with the namespace path that leads to it and its own name last. */
+export const toolLeaves = (
+  tools: ReadonlyArray<ToolEntry>,
+  path: ReadonlyArray<string> = [],
+): ReadonlyArray<{ readonly path: ReadonlyArray<string>; readonly definition: ToolDefinition }> =>
+  tools.flatMap((tool) =>
+    tool.type === "namespace"
+      ? toolLeaves(tool.tools, [...path, tool.name])
+      : [{ path: [...path, tool.name], definition: tool }],
+  )
+
+// The tools a path names: a top-level tool or namespace, or one inside a namespace.
+const entriesAt = (tools: ReadonlyArray<ToolEntry>, path: string): ReadonlyArray<ToolEntry> => {
+  const dot = path.indexOf(".")
+  if (dot === -1) return tools.filter((tool) => tool.name === path)
+  return tools.flatMap((tool) =>
+    tool.type === "namespace" && tool.name === path.slice(0, dot) ? entriesAt(tool.tools, path.slice(dot + 1)) : [],
+  )
+}
+
+const removePaths = <Item extends FoldableTool>(tools: ReadonlyArray<Item>, paths: ReadonlyArray<string>) =>
+  paths.length === 0
+    ? tools
+    : tools.flatMap((tool): ReadonlyArray<Item> => {
+        if (paths.includes(tool.name)) return []
+        const inner = paths.flatMap((path) =>
+          path.startsWith(`${tool.name}.`) ? [path.slice(tool.name.length + 1)] : [],
+        )
+        if (inner.length === 0 || tool.type !== "namespace" || tool.tools === undefined) return [tool]
+        const members = removePaths(tool.tools, inner)
+        // A namespace whose last member is removed goes too, as if removed by its own path.
+        return members.length === 0 ? [] : [{ ...tool, tools: members }]
+      })
 
 /** Rewrite the tools each marker adds, keeping the request identity when there are no markers. */
 export const mapToolUpdates = (

@@ -11,6 +11,7 @@ import {
   Message,
   ToolCallPart,
   ToolDefinition,
+  ToolNamespace,
   Usage,
 } from "../../src/effect.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -66,12 +67,15 @@ describe("OpenAI Chat route", () => {
   it.effect("replaces characters providers reject in replayed names of undeclared tool calls", () =>
     Effect.gen(function* () {
       const invented = ToolCallPart.make({ id: "call_1", name: "opencode.session.search", input: {} })
-      const declared = ToolCallPart.make({ id: "call_2", name: "weather.get", input: {} })
+      const declared = ToolCallPart.make({ id: "call_2", name: "get", namespace: "weather", input: {} })
       const prepared = yield* compileRequest(
         ai.request({
           model,
           tools: [
-            ToolDefinition.make({ name: "weather.get", description: "Weather", inputSchema: { type: "object" } }),
+            ToolNamespace.make({
+              name: "weather",
+              tools: [ToolDefinition.make({ name: "get", description: "Weather", inputSchema: { type: "object" } })],
+            }),
           ],
           messages: [
             Message.assistant([invented, declared]),
@@ -81,12 +85,12 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      // A declared name stays as declared, for providers that accept it.
+      // A declared tool's call goes out under the name its definition does.
       expect(prepared.body.messages[0]).toMatchObject({
         role: "assistant",
         tool_calls: [
           { id: "call_1", function: { name: "opencode_session_search" } },
-          { id: "call_2", function: { name: "weather.get" } },
+          { id: "call_2", function: { name: "weather_get" } },
         ],
       })
     }),

@@ -36,7 +36,7 @@ import {
   type ToolEntryInput,
   withPartial,
 } from "./schema/index.js"
-import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
+import { tool, type ExecutableTool, type Tool, type ToolGroup, type ToolSchema } from "./tool.js"
 import { runTools } from "./tool-runtime.js"
 import { addUsage, nextRequest, pendingCalls } from "./loop.js"
 import { foldTools } from "./tool-updates.js"
@@ -55,10 +55,10 @@ interface TextRequestFields<Model extends LanguageModel>
   readonly id?: string
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   /**
-   * Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. The same as a
-   * `Message.tools({ add: tools })` leading the history.
+   * Sent in array order. Pass `tool(...)` values, `namespace(...)` groups, or wire entries such as hosted provider
+   * tools. The same as a `Message.tools({ add: tools })` leading the history.
    */
-  readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
+  readonly tools?: ReadonlyArray<Tool | ToolGroup | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
@@ -129,7 +129,7 @@ export function stream(input: Input, options?: StreamOptions) {
 
 export type LLMLoopInput<Model extends LanguageModel = LanguageModel> = Omit<TextRequestFields<Model>, "tools"> &
   PromptOrMessages & {
-    readonly tools: ReadonlyArray<ExecutableTool>
+    readonly tools: ReadonlyArray<ExecutableTool | ToolGroup<ExecutableTool>>
     /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
     readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
   }
@@ -167,20 +167,21 @@ export function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, o
 }
 
 // Tools that `Message.tools(...)` adds run like top-level ones; a later change with the same name replaces or removes them.
-const runnableTools = (tools: ReadonlyArray<Tool>, messages: ReadonlyArray<Message | Message.Input>) =>
-  messages
-    .reduce<ReadonlyArray<Tool | ToolEntryInput>>(
-      (current, message) =>
-        message.role === "system" && message.tools !== undefined
-          ? foldTools(
-              current,
-              message.tools.add ?? [],
-              (message.tools.remove ?? []).map((item) => (typeof item === "string" ? item : item.name)),
-            )
-          : current,
-      tools,
-    )
-    .filter((item): item is Tool => "_definition" in item)
+const runnableTools = (
+  tools: ReadonlyArray<Tool | ToolGroup>,
+  messages: ReadonlyArray<Message | Message.Input>,
+): ReadonlyArray<Tool | ToolGroup | ToolEntryInput> =>
+  messages.reduce<ReadonlyArray<Tool | ToolGroup | ToolEntryInput>>(
+    (current, message) =>
+      message.role === "system" && message.tools !== undefined
+        ? foldTools(
+            current,
+            message.tools.add ?? [],
+            (message.tools.remove ?? []).map((item) => (typeof item === "string" ? item : item.name)),
+          )
+        : current,
+    tools,
+  )
 
 export { collect, type Collected, type CollectResult } from "./loop.js"
 
@@ -237,7 +238,7 @@ const finishStep = (
 }
 
 interface LoopContext {
-  readonly tools: ReadonlyArray<Tool>
+  readonly tools: ReadonlyArray<Tool | ToolGroup | ToolEntryInput>
   readonly until: LLMLoopInput["until"]
   readonly output: Tool | undefined
   readonly options: StreamOptions | undefined

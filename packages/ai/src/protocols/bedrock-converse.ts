@@ -312,7 +312,7 @@ const removeEmptyToolInputKeys = (input: unknown): unknown => {
 const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string): BedrockToolUseBlock => ({
   toolUse: {
     toolUseId: normalizeID(part.id),
-    // Converse rejects replayed names over 64 characters; flattenRequest already fixed invalid characters.
+    // Converse rejects replayed names over 64 characters; ToolNames.lower already fixed invalid characters.
     name: part.name.slice(0, 64),
     input: removeEmptyToolInputKeys(part.input),
   },

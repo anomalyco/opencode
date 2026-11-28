@@ -869,7 +869,6 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   }
 }
 
-/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   request: LLMRequest,
   options: LoweringOptions = {},

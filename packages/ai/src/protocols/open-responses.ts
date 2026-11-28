@@ -896,7 +896,6 @@ export const allowedToolChoice = (
   }
 }
 
-/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
@@ -915,7 +914,6 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   }
 })
 
-/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================

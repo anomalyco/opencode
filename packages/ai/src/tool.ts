@@ -10,6 +10,7 @@ import {
   ToolDefinition,
   ToolFailure,
   ToolOutput,
+  toolName,
   type ToolDefinitionInput,
   type ToolEntryInput,
 } from "./schema/index.js"
@@ -89,7 +90,7 @@ export type FreeformOption<Input extends ToolInput> =
  * `ToolDefinition` so callers do not rebuild them per invocation.
  */
 export interface Tool<Input extends ToolInput = any, Success extends ToolSchema<any> = any> {
-  /** The tool name the model sees and calls. */
+  /** The tool's name: one segment of letters, digits, `_` or `-`. Group tools with `namespace(...)`. */
   readonly name: string
   readonly description: string
   readonly input: Input
@@ -110,9 +111,30 @@ export interface Tool<Input extends ToolInput = any, Success extends ToolSchema<
   readonly _definition: ToolDefinitionClass
 }
 
-/** Tool changes for `Message.tools`: `add` takes what a request's `tools` takes, `remove` the same tools or their names. */
+/** Tools grouped under a namespace; the model calls them as `name.tool`, and `ai.loop` runs the executable ones. */
+export interface ToolGroup<Item extends Tool = Tool> {
+  readonly type: "namespace"
+  readonly name: string
+  readonly description?: string
+  readonly tools: ReadonlyArray<Item | ToolGroup<Item> | ToolEntryInput>
+}
+
+/**
+ * Groups tools under a namespace. Pass it wherever tools go; a call to `lookup` in `namespace("crm", {}, [lookup])`
+ * arrives as `{ namespace: "crm", name: "lookup" }` on every provider.
+ */
+export const namespace = <Item extends Tool>(
+  name: string,
+  options: { readonly description?: string },
+  tools: ReadonlyArray<Item | ToolGroup<Item> | ToolEntryInput>,
+): ToolGroup<Item> => ({ type: "namespace", name: toolName(name), description: options.description, tools })
+
+/**
+ * Tool changes for `Message.tools`: `add` takes what a request's `tools` takes, `remove` the same tools or their
+ * paths, such as `crm.lookup`, or `crm` for the whole namespace.
+ */
 export interface ToolChangesInput {
-  readonly add?: ReadonlyArray<Tool | ToolEntryInput>
+  readonly add?: ReadonlyArray<Tool | ToolGroup | ToolEntryInput>
   readonly remove?: ReadonlyArray<Tool | ToolEntryInput | string>
 }
 

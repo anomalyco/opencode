@@ -232,16 +232,20 @@ describe("request option precedence", () => {
               ToolNamespace.make({
                 name: "crm",
                 description: "CRM tools",
-                tools: [ToolDefinition.make({ name: "customer.lookup", description: "Look up", inputSchema: {} })],
+                tools: [
+                  ToolNamespace.make({
+                    name: "customer",
+                    tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+                  }),
+                ],
               }),
             ],
             toolChoice: name,
           }),
         ).pipe(Effect.map((prepared) => prepared.body.tool_choice))
-      // A dotted leaf flattens as flattenTools names it.
       expect(yield* choose("crm.customer.lookup")).toEqual({
         type: "function",
-        function: { name: "crm_customer.lookup" },
+        function: { name: "crm_customer_lookup" },
       })
       // A dotted name that isn't a namespaced tool is left for the provider to reject, not matched to foo_bar.
       expect(yield* choose("foo.bar")).toEqual({ type: "function", function: { name: "foo.bar" } })
@@ -275,9 +279,9 @@ describe("request option precedence", () => {
     }),
   )
 
-  it.effect("flattens namespaces when a flat protocol's body is built directly", () =>
+  it.effect("flattens namespaced history and a forced choice on flat protocols", () =>
     Effect.gen(function* () {
-      const body = yield* OpenAIChat.protocol.body.from(
+      const body = (yield* compileRequest(
         ai.request({
           model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
           tools: [
@@ -293,13 +297,14 @@ describe("request option precedence", () => {
           ],
           toolChoice: "crm.lookup",
         }),
-      )
+      )).body
       const json = JSON.stringify(body)
       expect(json).toContain("crm_lookup")
       expect(json).not.toContain("crm.lookup")
       expect(body.messages).toMatchObject([
         { role: "user" },
         { role: "assistant", tool_calls: [{ function: { name: "crm_lookup" } }] },
+        { role: "tool", tool_call_id: "call_1" },
       ])
     }),
   )

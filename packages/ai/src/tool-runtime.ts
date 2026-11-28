@@ -1,14 +1,15 @@
 import { Effect } from "effect"
 import {
   LLMEvent,
-  type ToolCallPart,
+  ToolCallPart,
+  type ToolEntryInput,
   ToolFailure,
   ToolOutput,
   ToolResultValue,
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
 } from "./schema/index.js"
-import { type Tool } from "./tool.js"
+import { type Tool, type ToolGroup } from "./tool.js"
 
 export interface ToolSettlement {
   readonly result: ToolResultValueType
@@ -19,10 +20,13 @@ export interface DispatchResult extends ToolSettlement {
   readonly events: ReadonlyArray<LLMEvent>
 }
 
-/** Execute one canonical tool call without owning provider IO or continuation. */
-export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect.Effect<DispatchResult> => {
-  const name = call.namespace === undefined ? call.name : `${call.namespace}.${call.name}`
-  const tool = tools.find((item) => item.name === name)
+/** Execute one canonical tool call, finding its tool by path, without owning provider IO or continuation. */
+export const dispatch = (
+  tools: ReadonlyArray<Tool | ToolGroup | ToolEntryInput>,
+  call: ToolCallPart,
+): Effect.Effect<DispatchResult> => {
+  const name = ToolCallPart.path(call)
+  const tool = toolAt(tools, name)
   if (!tool)
     return Effect.succeed(
       result(call, {
@@ -46,7 +50,7 @@ export interface PendingCall {
 }
 
 /** Run a step's tool calls concurrently, with results in call order. */
-export const runTools = (tools: ReadonlyArray<Tool>, calls: ReadonlyArray<PendingCall>) =>
+export const runTools = (tools: ReadonlyArray<Tool | ToolGroup | ToolEntryInput>, calls: ReadonlyArray<PendingCall>) =>
   Effect.forEach(
     calls,
     (item) =>
@@ -55,6 +59,20 @@ export const runTools = (tools: ReadonlyArray<Tool>, calls: ReadonlyArray<Pendin
         : Effect.succeed(result(item.call, { type: "error", value: item.error })),
     { concurrency: "unbounded" },
   )
+
+// The tool `tool(...)` built at a path, inside the namespaces it names.
+const toolAt = (
+  tools: ReadonlyArray<Tool | ToolGroup | ToolEntryInput | { readonly name: string; readonly _definition: unknown }>,
+  path: string,
+): Tool | undefined => {
+  const dot = path.indexOf(".")
+  if (dot === -1) return tools.find((item): item is Tool => "_definition" in item && item.name === path)
+  const head = path.slice(0, dot)
+  return tools
+    .filter((item) => "type" in item && item.type === "namespace" && item.name === head)
+    .flatMap((item) => ("tools" in item ? [toolAt(item.tools, path.slice(dot + 1))] : []))
+    .find((item) => item !== undefined)
+}
 
 const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
