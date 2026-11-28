@@ -79,6 +79,8 @@ describe("X25519", () => {
       hex("e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800"),
       hex("5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157"),
       hex("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+      hex("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+      hex("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
     ])
       expect(X25519.scalarMult(new Uint8Array(randomBytes(32)), point)).toEqual(new Uint8Array(32))
   })

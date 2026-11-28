@@ -82,7 +82,8 @@ describe("Noise in workerd", () => {
     expect(ok(initiator.read(await receive()))).toEqual(new Uint8Array(0))
     socket.send(ok(initiator.write(new Uint8Array(0))))
     const transport = ok(initiator.split())
-    expect(ok(transport.receive.decrypt(await receive()))).toEqual(initiator.hash ?? new Uint8Array(1))
+    expect(initiator.hash).toBeDefined()
+    expect(ok(transport.receive.decrypt(await receive()))).toEqual(initiator.hash!)
 
     for (const plaintext of [new Uint8Array(0), text("hello"), text("rekey"), new Uint8Array(0), text("after rekey")]) {
       socket.send(ok(transport.send.encrypt(plaintext)))

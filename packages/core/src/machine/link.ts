@@ -122,13 +122,17 @@ const authenticateMachine =
     )
 
 /**
- * Logs why this side refused a handshake, then fails with the bare `Refused`: the peer still learns nothing, but a
- * defect such as a runtime's crypto failing shows in this side's logs instead of passing for a refused peer.
+ * Logs why this side refused a handshake, then fails with the bare `Refused`: the peer still learns nothing. Defects
+ * (such as an unexpected crypto crash) warn; ordinary refusals (bad key, timeout, closed peer) stay at debug so an
+ * unauthenticated peer cannot spam warnings.
  */
 const refuse = (step: string) => (cause: Cause.Cause<unknown>) =>
-  (Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning(`${step} refused the link`, { cause })).pipe(
-    Effect.andThen(Effect.fail(new Refused())),
-  )
+  (Cause.hasInterruptsOnly(cause)
+    ? Effect.void
+    : Cause.hasDies(cause)
+      ? Effect.logWarning(`${step} refused the link`, cause)
+      : Effect.logDebug(`${step} refused the link`, cause)
+  ).pipe(Effect.andThen(Effect.fail(new Refused())))
 
 /**
  * The home's side, called with the carrier of a connection it received.
