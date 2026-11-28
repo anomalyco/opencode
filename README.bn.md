@@ -74,7 +74,7 @@ OpenCode ডেস্কটপ অ্যাপ্লিকেশন হিসে
 | Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
 
 ```bash
-# macOS (Homebrew)
+# Linux and macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

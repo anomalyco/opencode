@@ -74,7 +74,7 @@ O OpenCode também está disponível como aplicativo desktop. Baixe em [opencode
 | Linux                 | `.deb`, `.rpm` ou AppImage         |
 
 ```bash
-# macOS (Homebrew)
+# Linux e macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

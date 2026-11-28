@@ -74,7 +74,7 @@ OpenCode cũng có sẵn dưới dạng ứng dụng desktop. Tải từ [openco
 | Linux                 | `.deb`, `.rpm`, hoặc AppImage      |
 
 ```bash
-# macOS (Homebrew)
+# Linux và macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

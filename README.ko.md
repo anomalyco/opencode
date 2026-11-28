@@ -74,7 +74,7 @@ OpenCode 는 데스크톱 앱으로도 제공됩니다. [opencode.ai/download](h
 | Linux                 | `.deb`, `.rpm`, 또는 AppImage      |
 
 ```bash
-# macOS (Homebrew)
+# Linux 및 macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 
