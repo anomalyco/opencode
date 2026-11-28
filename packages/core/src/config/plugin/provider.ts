@@ -198,6 +198,10 @@ function overlayProvider(
     if (item.package !== undefined) provider.package = item.package
     if (item.compatibility !== undefined) provider.compatibility = { ...provider.compatibility, ...item.compatibility }
     if (item.settings !== undefined) provider.settings = Provider.mergeOverlay(provider.settings, item.settings)
+    // An encoding inherited from the source targets the source's upstream; a connection that replaces the URL
+    // only uses an encoding it asks for.
+    if (integrationID !== undefined && item.settings?.baseURL !== undefined && item.settings.encoding === undefined)
+      delete provider.settings?.encoding
     if (item.headers !== undefined) provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
     if (item.body !== undefined) provider.body = Provider.mergeOverlay(provider.body, item.body)
   })

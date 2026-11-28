@@ -2705,6 +2705,57 @@ describe("OpencodePlugin with a Console config", () => {
       (server) => Effect.promise(() => server.stop(true)),
     ),
   )
+
+  it.live("drops an inherited encoding when a Console connection replaces the base URL", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+            const origin = new URL(request.url).origin
+            return Response.json({
+              providers: {
+                openai: { settings: { baseURL: `${origin}/inference/custom/conn_openai` } },
+                conn_openai: {
+                  canonical: "openai",
+                  settings: { baseURL: `${origin}/inference/custom/conn_clone` },
+                },
+                explicit: {
+                  canonical: "openai",
+                  settings: { baseURL: `${origin}/inference/custom/conn_explicit`, encoding: "gzip" },
+                },
+              },
+            })
+          },
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const providers = yield* Provider.Service
+          const credentials = yield* Credential.Service
+          // The ChatGPT sign-in sets zstd for the Codex backend; Console then points the same provider at its gateway.
+          yield* providers.transform((editor) => {
+            editor.update(Provider.ID.openai, (provider) => {
+              provider.settings = { ...provider.settings, encoding: "zstd" }
+            })
+          })
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin()
+
+          for (const id of ["openai", "conn_openai"]) {
+            const provider = required(yield* providers.get(Provider.ID.make(id)))
+            expect(provider.settings?.baseURL).toContain("/inference/custom/")
+            expect(provider.settings?.encoding).toBeUndefined()
+          }
+          expect(required(yield* providers.get(Provider.ID.make("explicit"))).settings?.encoding).toBe("gzip")
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
 })
 
 for (const key of [undefined, "secret"]) {
