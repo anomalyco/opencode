@@ -1593,4 +1593,31 @@ export const dict = {
   "usage.signedOut.body": "Подключите OpenCode Console, чтобы видеть бюджеты рабочего пространства и использование Go.",
   "usage.error": "Не удалось загрузить лимиты использования.",
   "usage.retry": "Повторить",
+
+  "dialog.directory.breadcrumbs": "Путь к папке",
+  "dialog.directory.moreProjects": "Другие проекты",
+  "session.new.project.other.search": "Поиск других проектов",
+  "project.start.reconnect": "Подключиться снова",
+  "session.new.workspace.useMainCheckout": "Использовать основное рабочее дерево",
+  "settings.helpFeedback": "Помощь и обратная связь",
+  "project.browse.title": "Обзор проектов",
+  "project.browse.history": "История сессий…",
+  "project.browse.back": "Назад к проектам",
+  "project.browse.newSession": "Новая сессия здесь",
+  "project.browse.partial": "Не удалось загрузить некоторые сессии",
+  "settings.providers.account.remove.title": "Удалить {{account}}?",
+  "settings.providers.account.remove.description": "{{provider}} больше не будет использовать этот аккаунт.",
+  "settings.providers.account.remove.finalDescription":
+    "Это ваш единственный аккаунт {{provider}}, поэтому {{provider}} будет отключён.",
+  "settings.providers.disconnect.title": "Отключить {{provider}}?",
+  "settings.providers.disconnect.description":
+    "Сохранённые учётные данные будут удалены, а модели этого провайдера станут недоступны.",
+  "settings.providers.disconnect.consoleDescription.one":
+    "Ваш вход будет удалён, а {{count}} провайдер из {{workspace}} станет недоступен.",
+  "settings.providers.disconnect.consoleDescription.few":
+    "Ваш вход будет удалён, а {{count}} провайдера из {{workspace}} станут недоступны.",
+  "settings.providers.disconnect.consoleDescription.many":
+    "Ваш вход будет удалён, а {{count}} провайдеров из {{workspace}} станут недоступны.",
+  "settings.providers.disconnect.consoleDescription.other":
+    "Ваш вход будет удалён, а {{count}} провайдера из {{workspace}} станут недоступны.",
 }
