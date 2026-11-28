@@ -27,6 +27,14 @@ export const ListQuery = Schema.Struct({
 }).annotate({ identifier: "Job.ListQuery" })
 export type ListQuery = typeof ListQuery.Type
 
+export const CancelShellsInput = Schema.Struct({
+  sessionID: Session.ID.annotate({ description: "Stop running background shell jobs owned by this session." }),
+  descendants: Schema.optional(Schema.Boolean).annotate({
+    description: "Also stop background shell jobs owned by child and nested subagent sessions. Defaults to false.",
+  }),
+}).annotate({ identifier: "Job.CancelShellsInput" })
+export type CancelShellsInput = typeof CancelShellsInput.Type
+
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const JobEndpoints = [
   HttpApiEndpoint.get("job.list", "/api/experimental/job", {
@@ -51,6 +59,19 @@ export const JobEndpoints = [
       summary: "Cancel background job",
       description:
         "Cancel a running background job, interrupting the work it started. Cancelling a job that already finished does nothing. Experimental: may change without compatibility guarantees.",
+      transform: (operation) => ({ ...operation, tags: ["experimental"] }),
+    }),
+  ),
+  HttpApiEndpoint.post("job.cancelShells", "/api/experimental/job/cancel-shells", {
+    payload: CancelShellsInput,
+    success: HttpApiSchema.NoContent,
+    error: SessionNotFoundError,
+  }).annotateMerge(
+    OpenApi.annotations({
+      identifier: "experimental.job.cancelShells",
+      summary: "Cancel a session's background shell jobs",
+      description:
+        "Cancel the running background shell jobs owned by a session, optionally including its descendants. Experimental: may change without compatibility guarantees.",
       transform: (operation) => ({ ...operation, tags: ["experimental"] }),
     }),
   ),

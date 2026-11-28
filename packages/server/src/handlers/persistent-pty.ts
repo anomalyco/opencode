@@ -50,6 +50,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handleRaw("browser.tunnel", (ctx) => browserTunnel(ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))
+      .handle("job.cancelShells", (ctx) => job.cancelShells(ctx.payload))
       .handleRaw("machine.link", (ctx) => machineLink(ctx.request))
       .handle("machine.list", () => machine.list())
       .handle("machine.add", (ctx) => machine.add(ctx.payload))

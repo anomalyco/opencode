@@ -1,7 +1,7 @@
 import { Job } from "@opencode/core/job"
 import { Session } from "@opencode/core/session"
 import { SessionBackground } from "@opencode/core/session/background"
-import type { ListQuery } from "@opencode/protocol/groups/job"
+import type { CancelShellsInput, ListQuery } from "@opencode/protocol/groups/job"
 import { Effect, Option } from "effect"
 import { missingSession } from "./session-error"
 
@@ -24,6 +24,11 @@ export const makeJob = Effect.gen(function* () {
     }),
     cancel: Effect.fn("JobHandler.cancel")(function* (id: string) {
       yield* jobs.cancel(id)
+    }),
+    cancelShells: Effect.fn("JobHandler.cancelShells")(function* (input: CancelShellsInput) {
+      yield* sessions.get(input.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+      const running = yield* SessionBackground.list(jobs, lookup, { ...input, kind: "shell", status: "running" })
+      yield* Effect.forEach(running, (job) => jobs.cancel(job.id), { discard: true })
     }),
   }
 })

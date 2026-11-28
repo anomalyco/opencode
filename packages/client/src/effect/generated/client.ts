@@ -276,6 +276,8 @@ import type {
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
   ExperimentalJobCancelOutput,
+  ExperimentalJobCancelShellsInput,
+  ExperimentalJobCancelShellsOutput,
   ExperimentalMachineListOutput,
   ExperimentalMachineAddInput,
   ExperimentalMachineAddOutput,
@@ -1795,6 +1797,14 @@ const EndpointExperimentalJobCancel = (raw: RawClient["server.experimental"]) =>
     raw["job.cancel"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalJobCancelShells =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalJobCancelShellsInput) =>
+    preserveEffect<ExperimentalJobCancelShellsOutput>()(
+      raw["job.cancelShells"]({ payload: { sessionID: input["sessionID"], descendants: input["descendants"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
 const EndpointExperimentalMachineList = (raw: RawClient["server.experimental"]) => () =>
   preserveEffect<ExperimentalMachineListOutput>()(
     raw["machine.list"]({}).pipe(
@@ -1970,7 +1980,11 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     update: EndpointExperimentalArtifactsUpdate(raw),
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
-  job: { list: EndpointExperimentalJobList(raw), cancel: EndpointExperimentalJobCancel(raw) },
+  job: {
+    list: EndpointExperimentalJobList(raw),
+    cancel: EndpointExperimentalJobCancel(raw),
+    cancelShells: EndpointExperimentalJobCancelShells(raw),
+  },
   machine: {
     list: EndpointExperimentalMachineList(raw),
     add: EndpointExperimentalMachineAdd(raw),
