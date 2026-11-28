@@ -143,6 +143,50 @@ describe("provider error classification", () => {
     ).toEqual(["Authentication", "QuotaExceeded", "RateLimit", "InvalidRequest", "ProviderInternal"])
   })
 
+  test("waits out the retry Google schedules for a per-minute quota, but not a per-day one", () => {
+    const body = (quotaId: string) =>
+      JSON.stringify({
+        error: {
+          code: 429,
+          message:
+            "You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 10, model: gemini-2.5-flash\nPlease retry in 38.601658672s.",
+          status: "RESOURCE_EXHAUSTED",
+          details: [
+            {
+              "@type": "type.googleapis.com/google.rpc.Help",
+              links: [{ description: "Learn more", url: "https://ai.google.dev/gemini-api/docs/rate-limits" }],
+            },
+            {
+              "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+              violations: [
+                { quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests", quotaId },
+              ],
+            },
+            { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "38.601s" },
+          ],
+        },
+      })
+    const classify = (quotaId: string, retryAfterMs?: number) =>
+      new AIError({
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body(quotaId)) ?? "",
+          status: 429,
+          rawBody: body(quotaId),
+          retryAfterMs,
+        }),
+      })
+
+    const minute = classify("GenerateRequestsPerMinutePerProjectPerModel-FreeTier")
+    expect(minute.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 38601 })
+    expect(isRetryable(minute)).toBe(true)
+    // A Retry-After header still wins.
+    expect(classify("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", 4000).retryAfterMs).toBe(4000)
+
+    const day = classify("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+    expect(day.reason._tag).toBe("QuotaExceeded")
+    expect(isRetryable(day)).toBe(false)
+  })
+
   test("classifies Azure content filter rejections by their structured codes", () => {
     const message = "The response was filtered"
     const azure = {
