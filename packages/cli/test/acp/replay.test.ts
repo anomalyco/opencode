@@ -54,7 +54,7 @@ describe("acp session replay over the wire", () => {
       toolCallId: "call_running",
       status: "in_progress",
       title: "pwd",
-      locations: [{ path: "/workspace" }],
+      locations: [],
     })
     expect(updates[10]?.update).toMatchObject({
       toolCallId: "call_failed",

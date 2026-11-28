@@ -1,3 +1,4 @@
+import { statSync } from "node:fs"
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 import type { Tool } from "@opencode/schema/tool"
@@ -38,10 +39,9 @@ function toToolKind(toolName: string): ToolKind {
   }
 }
 
+// Clients such as Zed open a buffer for every location, so only files are reported.
 export function toLocations(toolName: string, input: ToolInput, cwd: string): ToolCallLocation[] {
   switch (canonicalName(toolName)) {
-    case "shell":
-      return locationFrom(cwd, stringValue(input.workdir) ?? stringValue(input.cwd) ?? cwd)
     case "read":
     case "edit":
     case "write":
@@ -54,7 +54,6 @@ export function toLocations(toolName: string, input: ToolInput, cwd: string): To
     case "external_directory":
       return locationFrom(cwd, input.filepath)
     case "grep":
-    case "glob":
     case "context":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
@@ -171,11 +170,18 @@ function isShell(toolName: string) {
   return canonicalName(toolName) === "shell"
 }
 
-function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
+export function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
   return Array.from(
     new Set(values.flatMap((value) => (typeof value === "string" && value ? [absolutePath(value, cwd)] : []))),
-    (path) => ({ path }),
   )
+    .filter((path) => !isDirectory(path))
+    .map((path) => ({ path }))
+}
+
+// A path that can't be inspected, such as a file a tool is about to create, is still reported.
+function isDirectory(path: string) {
+  const stat = Result.try(() => statSync(path))
+  return Result.isSuccess(stat) && stat.success.isDirectory()
 }
 
 const V1Aliases = new Map([
