@@ -6,6 +6,7 @@ import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { CodeModeAgents } from "../../codemode/agents.js"
+import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
@@ -295,11 +296,15 @@ const layer = Layer.effect(
             })),
           )
         const activeCwd = yield* cwd.current(sessionID)
+        const subagentWakeup =
+          Config.latest(yield* config.entries(), "subagent_wakeup") ?? true
         const endsTurnTool =
-          (yield* flags.enabled("codemode_agents")) &&
-          CodeModeAgents.sessionMarker(loaded.session.id, loaded.session.metadata)?.structured === true
-            ? CodeModeAgents.OUTPUT_TOOL
-            : undefined
+          subagentWakeup === false
+            ? "subagent"
+            : (yield* flags.enabled("codemode_agents")) &&
+                CodeModeAgents.sessionMarker(loaded.session.id, loaded.session.metadata)?.structured === true
+              ? CodeModeAgents.OUTPUT_TOOL
+              : undefined
         const outcome = yield* steps
           .attempt({
             isLocationClosed: lifecycle.isClosed,

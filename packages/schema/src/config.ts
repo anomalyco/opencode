@@ -1,6 +1,6 @@
 export * as Config from "./config.js"
 
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { Permission } from "./permission.js"
 import { AbsolutePath, optional } from "./schema.js"
@@ -116,6 +116,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
   }),
+  subagent_wakeup: Schema.Boolean.pipe(optional).annotate({
+    description: "Let the subagent running in the background wake up the parent as the subagent starts.",
+  }).pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
   experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
