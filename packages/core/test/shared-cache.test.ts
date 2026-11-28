@@ -9,10 +9,10 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(AppNodeBuilder.build(SharedCache.node))
 
 const request = HttpClientRequest.get("https://models.example/v1")
-const status = (code: number) =>
+const status = (code: number, headers?: Record<string, string>) =>
   HttpClient.filterStatusOk(
     HttpClient.make((request) =>
-      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: code }))),
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: code, headers }))),
     ),
   )
     .execute(request)
@@ -58,7 +58,7 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("retries transient failures, then keeps the last list or the failure until the next interval", () =>
+  it.effect("retries cold transient failures, skips retries on warm refresh, and keeps the last list", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
       const remote = { results: [] as unknown[], loads: 0 }
@@ -80,19 +80,112 @@ describe("SharedCache", () => {
       expect(yield* Effect.flip(get())).toBe(401)
       remote.results = [timeout, timeout, "list"]
       const flaky = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1 second")))
-      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2 seconds")))
+      // Jittered exponential backoff: up to 1.2s, then up to 2.4s.
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1200 millis")))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2400 millis")))
       expect(yield* Fiber.join(flaky)).toBe("list")
       expect(remote.loads).toBe(4)
 
-      remote.results = [401, timeout, timeout, timeout, timeout]
+      // A warm refresh does not retry transient failures in-flight, avoiding retry storms during stalls.
+      remote.results = [401, timeout]
       expect(yield* get(true)).toBe("list")
-      const outage = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
-      for (const wait of ["1 second", "2 seconds", "4 seconds"] as const)
-        yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust(wait)))
-      expect(yield* Fiber.join(outage)).toBe("list")
+      expect(yield* get(true)).toBe("list")
       expect(yield* get()).toBe("list")
-      expect(remote.loads).toBe(9)
+      expect(remote.loads).toBe(6)
+    }),
+  )
+
+  it.effect("backs off across consecutive transient failures, resets on success, and measures from completion", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const remote = { outcome: "ok" as "ok" | "slow-timeout", loads: 0 }
+      const get = () =>
+        cache.get({
+          key: "config",
+          interval: "5 minutes",
+          load: Effect.suspend(() => {
+            remote.loads++
+            if (remote.outcome === "ok") return Effect.succeed(`v${remote.loads}`)
+            return Effect.sleep("5 seconds").pipe(Effect.andThen(Effect.fail(new Cause.TimeoutError())))
+          }),
+        })
+
+      expect(yield* get()).toBe("v1")
+      remote.outcome = "slow-timeout"
+
+      // 1st transient failure on warm refresh: 1 attempt, cooldown 5 minutes from completion.
+      yield* TestClock.adjust("5 minutes")
+      const fail1 = yield* get().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("5 seconds")))
+      expect(yield* Fiber.join(fail1)).toBe("v1")
+      expect(remote.loads).toBe(2)
+
+      // Still inside 5-minute cooldown measured from completion (not start).
+      yield* TestClock.adjust("298 seconds")
+      expect(yield* get()).toBe("v1")
+      expect(remote.loads).toBe(2)
+
+      // 2nd consecutive transient failure: backs off to 10 minutes.
+      yield* TestClock.adjust("2 seconds")
+      const fail2 = yield* get().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("5 seconds")))
+      expect(yield* Fiber.join(fail2)).toBe("v1")
+      expect(remote.loads).toBe(3)
+
+      yield* TestClock.adjust("9 minutes")
+      expect(yield* get()).toBe("v1")
+      expect(remote.loads).toBe(3)
+
+      // 3rd consecutive transient failure: backs off to 20 minutes.
+      yield* TestClock.adjust("1 minute")
+      const fail3 = yield* get().pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("5 seconds")))
+      expect(yield* Fiber.join(fail3)).toBe("v1")
+      expect(remote.loads).toBe(4)
+
+      yield* TestClock.adjust("19 minutes")
+      expect(yield* get()).toBe("v1")
+      expect(remote.loads).toBe(4)
+
+      // Recovery resets backoff back to the normal 5-minute interval.
+      remote.outcome = "ok"
+      yield* TestClock.adjust("1 minute")
+      expect(yield* get()).toBe("v5")
+      expect(remote.loads).toBe(5)
+      yield* TestClock.adjust("5 minutes")
+      expect(yield* get()).toBe("v6")
+      expect(remote.loads).toBe(6)
+    }),
+  )
+
+  it.effect("honors Retry-After without fast-retrying, even for callers with a shorter interval", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const limited = yield* status(429, { "retry-after": "60" })
+      const remote = { fail: true, loads: 0 }
+      const get = (interval: Duration.Input) =>
+        cache.get({
+          key: "rate-limited",
+          interval,
+          load: Effect.suspend(() => {
+            remote.loads++
+            return remote.fail ? Effect.fail(limited) : Effect.succeed("ok")
+          }),
+        })
+
+      // Cold 429 with Retry-After does not immediately retry 1s later.
+      expect(yield* Effect.flip(get("30 seconds"))).toBe(limited)
+      expect(remote.loads).toBe(1)
+
+      // Even after the caller's 30s interval passes, Retry-After (60s) still holds.
+      yield* TestClock.adjust("45 seconds")
+      expect(yield* Effect.flip(get("30 seconds"))).toBe(limited)
+      expect(remote.loads).toBe(1)
+
+      remote.fail = false
+      yield* TestClock.adjust("15 seconds")
+      expect(yield* get("30 seconds")).toBe("ok")
+      expect(remote.loads).toBe(2)
     }),
   )
 
