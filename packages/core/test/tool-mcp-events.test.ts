@@ -29,7 +29,7 @@ const setup = Effect.fnUntraced(function* () {
   ])
   const connection = yield* McpClient.connect({
     server: "jobs",
-    config: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
+    target: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
     directory: import.meta.dir,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))

@@ -145,7 +145,7 @@ const connect = Effect.fnUntraced(function* (directory: string) {
   const producer = yield* eventProducer(types)
   const connection = yield* McpClient.connect({
     server: "ci",
-    config: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
+    target: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
     directory,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))

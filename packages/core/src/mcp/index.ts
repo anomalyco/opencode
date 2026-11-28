@@ -18,6 +18,7 @@ import {
   Latch,
   Layer,
   Queue,
+  Result,
   Schedule,
   Schema,
   Scope,
@@ -44,7 +45,9 @@ import type { McpClient } from "./client.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
 import { canonicalJson } from "../util/canonical-json.js"
 import { McpConnection } from "./connection.js"
+import type { McpError } from "./errors.js"
 import { McpPool } from "./pool.js"
+import { McpTarget } from "./target.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -133,6 +136,7 @@ type Transition =
 
 type ServerEntry = {
   readonly config: Mcp.ServerConfig
+  readonly target: Result.Result<McpTarget.Target, McpError.InvalidConfigError>
   phase: Phase
   readonly startup: Latch.Latch
   readonly connection: McpConnection.Connection
@@ -142,6 +146,10 @@ type ServerEntry = {
   integrationID?: Integration.ID
   registration?: State.Registration
 }
+
+// Only a remote server whose config parsed can sign in.
+const remoteTarget = (entry: ServerEntry) =>
+  Result.isSuccess(entry.target) && entry.target.success.type === "remote" ? entry.target.success : undefined
 
 const next = (phase: Phase, transition: Transition): Phase => {
   switch (transition._tag) {
@@ -633,14 +641,14 @@ export const layer = (options?: Options) =>
       // Register every remote server as an OAuth integration so credentials live in the global store
       // rather than in committed config. Servers that connect anonymously simply never use the method.
       const register = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
-        if (entry.config.type !== "remote" || entry.config.oauth === false) return
-        const remote = entry.config
+        const target = remoteTarget(entry)
+        if (!target || target.config.oauth === false) return
         // Key identity on name + url, not url alone: two configs for the same url under different names are
         // distinct logical servers that may hold different accounts, so they must not share a credential row.
         const suffix =
           "mcp_" +
           createHash("sha1")
-            .update(name + "\u0000" + remote.url)
+            .update(name + "\u0000" + target.config.url)
             .digest("hex")
             .slice(0, 16)
         const integrationID = Integration.ID.make(suffix)
@@ -663,7 +671,7 @@ export const layer = (options?: Options) =>
               authorize: () =>
                 Effect.gen(function* () {
                   const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-                  return yield* McpOAuth.authorize({ name, config: remote, integrationID, methodID }).pipe(
+                  return yield* McpOAuth.authorize({ name, target, integrationID, methodID }).pipe(
                     Effect.provideService(Credential.Service, credentials),
                     Effect.provideService(FetchHttpClient.Fetch, fetch),
                   )
@@ -695,9 +703,10 @@ export const layer = (options?: Options) =>
         entry: ServerEntry,
         credential: Credential.Info | undefined,
       ) {
-        if (entry.config.type !== "remote" || !entry.integrationID) return undefined
+        const target = remoteTarget(entry)
+        if (!target || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ server: name, config: entry.config, credential }).pipe(
+        return yield* McpOAuth.connectProvider({ server: name, target, credential }).pipe(
           Effect.provideService(Credential.Service, credentials),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
@@ -785,14 +794,7 @@ export const layer = (options?: Options) =>
           config.pool === true &&
           config.protocol !== "legacy" &&
           (config.type === "remote" || environment.local === true)
-        const base: Omit<McpConnection.Input, "endpointLoads" | "shared"> = {
-          spec: {
-            name,
-            config,
-            directory: location.directory,
-            clientInfo: options?.clientInfo,
-            skills,
-          },
+        const base: Omit<McpConnection.Input, "endpointLoads" | "shared" | "spec"> = {
           authProvider: Effect.suspend(() =>
             selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
           ),
@@ -843,18 +845,16 @@ export const layer = (options?: Options) =>
             changed: (kind) => bus.publish(changes[kind], { server: name }),
           },
         }
-        const entry: ServerEntry = {
-          config,
-          phase: { _tag: "Starting", started, settled: Latch.makeUnsafe() },
-          startup: Latch.makeUnsafe(),
-          connection: pooled
+        const connection = (spec: McpConnection.Spec) =>
+          pooled
             ? pool.connection({
                 ...base,
+                spec,
                 select: Effect.gen(function* () {
-                  if (base.spec.config.type === "remote") {
+                  if (spec.target.type === "remote") {
                     const credential = yield* selectCredential(entry)
                     return {
-                      key: McpPool.key({ ...base.spec, config: base.spec.config, credential: credential?.id }),
+                      key: McpPool.key({ ...spec, config: spec.target.config, credential: credential?.id }),
                       authProvider: connectProvider(name, entry, credential),
                     }
                   }
@@ -862,15 +862,30 @@ export const layer = (options?: Options) =>
                   const { McpStdio } = yield* Effect.promise(() => import("./stdio.js"))
                   return {
                     key: McpPool.key({
-                      ...base.spec,
-                      config: base.spec.config,
-                      cwd: McpStdio.resolveCwd(base.spec.directory, base.spec.config.cwd),
+                      ...spec,
+                      config: spec.target.config,
+                      cwd: McpStdio.resolveCwd(spec.directory, spec.target.config.cwd),
                     }),
                     authProvider: base.authProvider,
                   }
                 }),
               })
-            : McpConnection.make({ ...base, endpointLoads: pool.endpointLoads }),
+            : McpConnection.make({ ...base, spec, endpointLoads: pool.endpointLoads })
+        const target = McpTarget.parse(name, config)
+        const entry: ServerEntry = {
+          config,
+          target,
+          phase: { _tag: "Starting", started, settled: Latch.makeUnsafe() },
+          startup: Latch.makeUnsafe(),
+          connection: Result.isFailure(target)
+            ? McpConnection.invalid(base.events, target.failure)
+            : connection({
+                name,
+                target: target.success,
+                directory: location.directory,
+                clientInfo: options?.clientInfo,
+                skills,
+              }),
         }
         return entry
       }
@@ -997,7 +1012,7 @@ export const layer = (options?: Options) =>
         let closed = false
         const result = yield* McpClient.connect({
           server: name,
-          config: { type: "attached", transport },
+          target: { type: "attached", transport },
           directory: location.directory,
           elicitation,
           clientInfo: options?.clientInfo,

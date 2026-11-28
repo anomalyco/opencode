@@ -96,7 +96,7 @@ const eventServer = Effect.fnUntraced(function* (
     )
   const connection = yield* McpClient.connect({
     server: "jobs",
-    config: { type: "attached", transport: client, protocol: input.protocol ?? "2026-07-28" },
+    target: { type: "attached", transport: client, protocol: input.protocol ?? "2026-07-28" },
     directory: import.meta.dir,
     events: input.declares ?? true,
   })
