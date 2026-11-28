@@ -40,9 +40,11 @@ platform:
 | macOS, Linux, and WSL | 49374        |
 | Windows               | 28894        |
 
-Windows reserves ports from 49152 up, and WSL mirrored networking reserves
-another block below that. Print the current address with
-`opencode service status`:
+Windows can also reserve port ranges below 49152, for example for Hyper-V or
+WinNAT, so a port outside the default dynamic range can still be unavailable.
+When a configured port falls in such a range, the service reports the excluded
+range instead of claiming another process holds the port. Print the current
+address with `opencode service status`:
 
 ```bash
 $ opencode service status
