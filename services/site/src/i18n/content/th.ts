@@ -657,7 +657,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "ติดตั้งแอป",
-        body: "ติดตั้ง OpenCode รุ่นเบต้าบน iPhone ผ่าน TestFlight หรือติดตั้งแอปบนโทรศัพท์ Android",
+        body: "ติดตั้ง OpenCode บน iPhone จาก App Store หรือบนโทรศัพท์ Android จาก Google Play",
       },
       "run-this-on-your-computer": {
         title: "รันคำสั่งนี้บนคอมพิวเตอร์",

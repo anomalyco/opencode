@@ -707,7 +707,7 @@ export const content = {
     steps: {
       "get-the-app": {
         title: "アプリを入手",
-        body: "iPhone では TestFlight から OpenCode のベータ版を、Android スマートフォンでは OpenCode アプリをインストールしてください。",
+        body: "iPhone では App Store から、Android スマートフォンでは Google Play から OpenCode をインストールしてください。",
       },
       "run-this-on-your-computer": {
         title: "コンピューターで実行",

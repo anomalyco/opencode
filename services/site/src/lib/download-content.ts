@@ -164,8 +164,8 @@ export function pairContent() {
       {
         title: "Get the app",
         body: androidSoon
-          ? "Install the OpenCode beta on your iPhone from TestFlight. The Android app is coming soon."
-          : "Install the OpenCode beta on your iPhone from TestFlight, or the app on your Android phone.",
+          ? "Install OpenCode on your iPhone from the App Store. The Android app is coming soon."
+          : "Install OpenCode on your iPhone from the App Store, or on your Android phone from Google Play.",
       },
       {
         title: "Run this on your computer",
