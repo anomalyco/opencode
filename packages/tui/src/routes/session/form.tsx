@@ -185,6 +185,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     return "Type your answer"
   })
   const other = createMemo(() => custom() && store.selected === rows().length)
+  // While typing a custom answer the row is an input, so it keeps the raised surface.
+  const customFill = createMemo(() => other() && !store.editing)
   const input = createMemo(() => store.custom[answerField()?.key ?? ""] ?? "")
   const customPicked = createMemo(() => {
     const value = input()
@@ -931,15 +933,19 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       >
                         <box flexDirection="row">
                           <box
-                            backgroundColor={theme.background.raised.base}
+                            backgroundColor={
+                              active() ? theme.background.action.primary.focused : theme.background.raised.base
+                            }
                             paddingRight={1}
                           >
                             <text
-                              fg={active() ? theme.text.formfield.focused : theme.text.muted}
+                              fg={active() ? theme.text.action.primary.focused : theme.text.muted}
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
-                            backgroundColor={theme.background.raised.base}
+                            backgroundColor={
+                              active() ? theme.background.action.primary.focused : theme.background.raised.base
+                            }
                             flexDirection="row"
                           >
                             <Show when={multi()}>
@@ -948,7 +954,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                 flexShrink={0}
                                 fg={
                                   active()
-                                    ? theme.text.formfield.focused
+                                    ? theme.text.action.primary.focused
                                     : picked()
                                       ? theme.text.formfield.selected
                                       : theme.text.muted
@@ -957,7 +963,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                 [{picked() ? "✓" : " "}]
                               </text>
                             </Show>
-                            <text fg={active() ? theme.text.formfield.focused : theme.text.formfield.base}>
+                            <text fg={active() ? theme.text.action.primary.focused : theme.text.formfield.base}>
                               {row.label}
                             </text>
                           </box>
@@ -985,28 +991,42 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   >
                     <box flexDirection="row">
                       <box
-                        backgroundColor={theme.background.raised.base}
+                        backgroundColor={
+                          customFill() ? theme.background.action.primary.focused : theme.background.raised.base
+                        }
                         paddingRight={1}
                       >
-                        <text fg={other() ? theme.text.formfield.focused : theme.text.muted}>
+                        <text
+                          fg={
+                            customFill()
+                              ? theme.text.action.primary.focused
+                              : other()
+                                ? theme.text.formfield.focused
+                                : theme.text.muted
+                          }
+                        >
                           {`${rows().length + 1}.`}
                         </text>
                       </box>
                       <box
                         flexDirection="row"
-                        flexGrow={1}
-                        backgroundColor={theme.background.raised.base}
+                        flexGrow={store.editing ? 1 : 0}
+                        backgroundColor={
+                          customFill() ? theme.background.action.primary.focused : theme.background.raised.base
+                        }
                       >
                         <Show when={multi()}>
                           <text
                             width={4}
                             flexShrink={0}
                             fg={
-                              other()
-                                ? theme.text.formfield.focused
-                                : customChecked()
-                                  ? theme.text.formfield.selected
-                                  : theme.text.muted
+                              customFill()
+                                ? theme.text.action.primary.focused
+                                : other()
+                                  ? theme.text.formfield.focused
+                                  : customChecked()
+                                    ? theme.text.formfield.selected
+                                    : theme.text.muted
                             }
                           >
                             [{customChecked() ? "✓" : " "}]
@@ -1016,7 +1036,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                           when={store.editing}
                           fallback={
                             <>
-                              <text fg={other() ? theme.text.formfield.focused : theme.text.formfield.base}>
+                              <text fg={other() ? theme.text.action.primary.focused : theme.text.formfield.base}>
                                 {input() || "Type your own answer"}
                               </text>
                               <Show when={!multi() && customPicked()}>
