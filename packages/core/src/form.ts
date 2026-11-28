@@ -235,7 +235,9 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node]
 export function validateAnswer(form: ReadonlyArray<Form.Field>, answer: Answer) {
   const fields = new Map(form.map((field) => [field.key, field] as const))
   for (const key of Object.keys(answer)) {
-    if (!fields.has(key)) return `Unknown form field: ${key}`
+    if (!fields.has(key)) {
+      return `Unknown form field: ${key}. Available fields: ${form.map((field) => field.key).join(", ")}`
+    }
   }
   for (const field of form) {
     const value = answer[field.key]

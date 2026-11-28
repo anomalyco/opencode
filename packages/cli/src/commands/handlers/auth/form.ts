@@ -19,7 +19,10 @@ export const answerForm = Effect.fn("cli.auth.form")(function* (
     if (separator < 1) return yield* Effect.fail(new Error("Expected --answer key=value"))
     const key = item.slice(0, separator)
     if (!fields?.some((field) => field.key === key)) {
-      return yield* Effect.fail(new Error(`Unknown form field: ${key}`))
+      const available = fields?.map((field) => field.key).join(", ")
+      return yield* Effect.fail(
+        new Error(`Unknown form field: ${key}${available ? `. Available fields: ${available}` : ""}`),
+      )
     }
     supplied.set(key, item.slice(separator + 1))
   }
