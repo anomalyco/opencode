@@ -17,5 +17,14 @@
       "database_id": "2c010a96-811f-43d5-804d-7188534e5858"
     }
   ],
+  "kv_namespaces": [
+    {
+      "binding": "MANIFESTS",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+    }
+  ],
+  "vars": {
+    "MANIFEST_READS": "d1"
+  },
   "observability": { "enabled": true }
 }

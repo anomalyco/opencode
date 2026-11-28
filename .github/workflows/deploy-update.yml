@@ -9,7 +9,7 @@ name: deploy-update
 #   token from the token issuer. It checks out only .github/release/, verifies
 #   the artifact against that digest, installs the wrangler CLI pinned in
 #   .github/release/wrangler, and runs only .github/release/deploy-update.sh.
-#   The Worker's name, routes, custom domain, D1 database and Pipelines stream
+#   The Worker's name, routes, custom domain, D1 database, KV namespace, vars and Pipelines stream
 #   are the complete pinned wrangler.json in .github/release/targets/update/.
 on:
   push:

@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["@cloudflare/workers-types", "bun"]
   },
-  "include": ["src"]
+  "include": ["src", "script"]
 }
