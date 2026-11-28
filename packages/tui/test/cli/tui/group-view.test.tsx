@@ -322,6 +322,7 @@ function mount(input: {
                 anchors: input.anchors,
                 groupExpanded: input.expanded,
                 setGroupExpanded: input.setExpanded,
+                groups: { register: () => () => {} },
                 thinkingMode: () => "hide",
                 markdownMode: () => "rendered",
                 groupExploration: () => true,

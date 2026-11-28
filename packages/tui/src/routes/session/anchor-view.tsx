@@ -36,7 +36,12 @@ export function EntryAnchor(props: { entry: SessionEntry; children: JSX.Element;
   )
 }
 
-export function GroupAnchor(props: { groupID: string | undefined; active: boolean; children: JSX.Element }) {
+export function GroupAnchor(props: {
+  groupID: string | undefined
+  active: boolean
+  children: JSX.Element
+  onNode?: (node: BoxRenderable | undefined) => void
+}) {
   const ctx = use()
   const [node, setNode] = createSignal<BoxRenderable>()
   createEffect(() => {
@@ -46,7 +51,14 @@ export function GroupAnchor(props: { groupID: string | undefined; active: boolea
     onCleanup(ctx.anchors.register({ target: { type: "group", groupID }, node: target }))
   })
   return (
-    <box ref={setNode} flexDirection="column" flexShrink={0}>
+    <box
+      ref={(value) => {
+        setNode(value)
+        props.onNode?.(value)
+      }}
+      flexDirection="column"
+      flexShrink={0}
+    >
       {props.children}
     </box>
   )

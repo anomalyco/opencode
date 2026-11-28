@@ -33,6 +33,7 @@ test("markdown table grid lines use the theme border color", async () => {
                 anchors: createTimelineAnchors(),
                 groupExpanded: () => false,
                 setGroupExpanded: () => {},
+                groups: { register: () => () => {} },
                 thinkingMode: () => "show",
                 markdownMode: () => "rendered",
                 groupExploration: () => true,
