@@ -118,5 +118,10 @@ export class Info extends Schema.Class<Info>("Config.Provider")({
   // Defaults for every model of this provider; model compatibility overrides individual fields.
   compatibility: ProviderCompatibility.pipe(optional),
   ...Overlays,
-  models: Schema.Record(Schema.String, ModelConfig).pipe(optional),
+  models: Schema.Record(Schema.String, ModelConfig)
+    .annotate({
+      description:
+        "Model overrides keyed by ID or wildcard pattern (* and ?). Matching patterns apply in declaration order before literal IDs in each document; later documents take precedence. Patterns only match existing or explicitly declared models.",
+    })
+    .pipe(optional),
 }) {}

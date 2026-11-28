@@ -3,6 +3,7 @@ import { Money } from "@opencode/schema/money"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { Effect, Schema } from "effect"
 import { Config } from "@opencode/core/config"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Integration } from "@opencode/core/integration"
@@ -35,6 +36,134 @@ function required<T>(value: T | undefined): T {
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  for (const reverse of [false, true]) {
+    it.effect(`applies wildcard defaults before literal aliases (reverse=${reverse})`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const providerID = Provider.ID.make("proxy")
+        yield* providers.transform((editor) => {
+          editor.update(providerID, (provider) => {
+            provider.package = "@opencode/ai/providers/openai/chat"
+          })
+          editor.models.update(providerID, Model.ID.make("base"), (model) => {
+            model.name = "Catalog base"
+            model.enabled = false
+            model.limit = { context: 1000, output: 100 }
+          })
+        })
+        const entries = [
+          ["*", { disabled: true, settings: { temperature: 0.2 } }],
+          ["curated-*", { settings: { temperature: 0.4 } }],
+          ["curated-?", { settings: { temperature: 0.6 } }],
+          ["missing-*", { disabled: false }],
+          ["curated-a", { modelID: "base", disabled: false, settings: { topP: 0.9 } }],
+        ] as const
+        yield* addPlugin([
+          new Document({
+            type: "document",
+            info: decode({
+              providers: {
+                proxy: { models: Object.fromEntries(reverse ? [entries[4], ...entries.slice(0, 4)] : entries) },
+              },
+            }),
+          }),
+        ])
+        expect(required(yield* models.get(providerID, Model.ID.make("base"))).enabled).toBe(false)
+        const alias = required(yield* models.get(providerID, Model.ID.make("curated-a")))
+        expect(alias.modelID).toBe(Model.ID.make("base"))
+        expect(alias.name).toBe("Catalog base")
+        expect(alias.limit).toEqual({ context: 1000, output: 100 })
+        expect(alias.settings).toMatchObject({ temperature: 0.6, topP: 0.9 })
+        expect((yield* models.available()).map((model) => model.id)).toEqual([Model.ID.make("curated-a")])
+        expect((yield* models.all()).map((model) => model.id).sort()).toEqual([
+          Model.ID.make("base"),
+          Model.ID.make("curated-a"),
+        ])
+      }),
+    )
+  }
+
+  it.effect("lets later document wildcards override earlier literal entries and match discovered models", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              proxy: {
+                package: "@opencode/ai/providers/openai/chat",
+                models: { base: { disabled: false } },
+              },
+            },
+          }),
+        }),
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              proxy: {
+                models: { "*": { disabled: true, limit: { output: 10 } } },
+              },
+            },
+          }),
+        }),
+      ])
+      yield* providers.transform((editor) => {
+        expect(editor.get(Provider.ID.make("proxy"))?.models.get(Model.ID.make("base"))?.limit.output).toBe(10)
+        editor.models.update(Provider.ID.make("proxy"), Model.ID.make("discovered"), () => {})
+      })
+      expect(required(yield* models.get(Provider.ID.make("proxy"), Model.ID.make("base"))).enabled).toBe(false)
+      expect(required(yield* models.get(Provider.ID.make("proxy"), Model.ID.make("discovered"))).enabled).toBe(false)
+    }),
+  )
+
+  it.effect("applies wildcard overlays to integration catalogs without creating pattern IDs", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin, "test")
+      yield* host.provider.transform((editor) => {
+        editor.update("proxy", (provider) => {
+          provider.package = "@opencode/ai/providers/openai/chat"
+        })
+        editor.models.update("proxy", "base", (model) => {
+          model.enabled = false
+          model.name = "Catalog base"
+        })
+        ConfigProviderPlugin.integrate(
+          editor,
+          new ConfigIntegration.Document({
+            type: "document",
+            integrationID: Integration.ID.make("test"),
+            connection: { type: "env", name: "TEST_API_KEY" },
+            info: decode({
+              providers: {
+                proxy: {
+                  models: {
+                    curated: { modelID: "base", disabled: false },
+                    "*": { disabled: true, settings: { temperature: 0.2 } },
+                    "missing-?": { disabled: false },
+                  },
+                },
+              },
+            }),
+          }),
+        )
+        const catalog = required(editor.get("proxy"))
+        expect([...catalog.models.keys()].sort()).toEqual(["base", "curated"])
+        expect(catalog.models.get("base")?.enabled).toBe(false)
+        expect(catalog.models.get("curated")).toMatchObject({
+          modelID: "base",
+          enabled: true,
+          name: "Catalog base",
+          settings: { temperature: 0.2 },
+        })
+      })
+    }),
+  )
+
   it.effect("inherits the provider compaction setting with model overrides and rejects unsupported routes", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service

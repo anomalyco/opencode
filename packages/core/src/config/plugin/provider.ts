@@ -7,6 +7,7 @@ import { Document, type Entry } from "@opencode/schema/config"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Money } from "@opencode/schema/money"
 import { Effect } from "effect"
+import { Wildcard } from "../../util/wildcard.js"
 import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
@@ -60,7 +61,7 @@ export const Plugin = define({
         const providerID = id
         const { current, source, changed } = overlayProvider(providers, providerID, item)
         const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
-        for (const [id, config] of Object.entries(item.models ?? {})) {
+        for (const [id, config] of literalModels(item)) {
           const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
           const inherit = changed || !current?.models.has(id)
           // Bind the source at this point in the provider fold. Later source edits/removal
@@ -83,11 +84,13 @@ export const Plugin = define({
         next.set(item, { providerID, models: definitions })
       }
       for (const [item, definition] of next) {
-        for (const [id, config] of Object.entries(item.models ?? {})) {
-          if (config.limit === undefined) continue
-          providers.models.update(definition.providerID, id, (model) => {
-            model.limit = { ...model.limit, ...config.limit }
-          })
+        for (const [id, configs] of modelOverlays(item, providers.get(definition.providerID)?.models.keys() ?? [])) {
+          for (const config of configs) {
+            if (config.limit === undefined) continue
+            providers.models.update(definition.providerID, id, (model) => {
+              model.limit = { ...model.limit, ...config.limit }
+            })
+          }
         }
       }
       sources.defaultModel = Config.latest(loaded.entries, "model")
@@ -101,20 +104,24 @@ export const Plugin = define({
       if (configuredDefault !== undefined) models.default.set(configuredDefault.providerID, configuredDefault.model)
       for (const [item, definition] of sources.models) {
         const providerID = definition.providerID
-        for (const [id, config] of Object.entries(item.models ?? {})) {
+        for (const [id, configs] of modelOverlays(
+          item,
+          models.list(providerID).map((model) => model.id),
+        )) {
           const source = definition.models.get(id)
           const existing = models.get(providerID, id)
           const hadVariants = (existing?.variants.length ?? 0) > 0
           const inherit = source?.inherit || !existing
-          overlay(
-            models,
-            models.provider.get(providerID)?.provider.package,
-            item,
-            providerID,
-            id,
-            config,
-            inherit && source?.base ? { base: source.base } : undefined,
-          )
+          for (const [index, config] of configs.entries())
+            overlay(
+              models,
+              models.provider.get(providerID)?.provider.package,
+              item,
+              providerID,
+              id,
+              config,
+              index === 0 && inherit && source?.base ? { base: source.base } : undefined,
+            )
           // Inherited variants are spelled for the base model's package, so a package override needs fresh ones.
           // A base without variants has no reasoning support to respell.
           const repackaged =
@@ -122,8 +129,7 @@ export const Plugin = define({
             source.base.variants.length > 0 &&
             models.get(providerID, id)?.package !== source.base.package
           if (
-            config.variants === undefined &&
-            config.capabilities?.reasoning === undefined &&
+            !configs.some((config) => config.variants !== undefined || config.capabilities?.reasoning !== undefined) &&
             // Custom models start without variants, so non-empty variants here came from an earlier transform.
             ((!source?.base && !hadVariants) || repackaged)
           )
@@ -159,10 +165,18 @@ export function integrate(providers: ProviderEditor, document: ConfigIntegration
     const { source } = overlayProvider(providers, providerID, item, document.integrationID)
     // An integration lists the models it routes: each starts again from the catalog and takes the provider's
     // package and URL. Its models are complete here, so later model transforms and config apply on top.
-    for (const [id, config] of Object.entries(item.models ?? {})) {
-      overlay(providers.models, providers.get(providerID)?.provider.package, item, providerID, id, config, {
-        base: source?.models.get(config.modelID ?? id) ?? source?.models.get(id),
-      })
+    for (const [id, configs] of modelOverlays(item, providers.get(providerID)?.models.keys() ?? [])) {
+      const literal = item.models?.[id]
+      for (const [index, config] of configs.entries())
+        overlay(
+          providers.models,
+          providers.get(providerID)?.provider.package,
+          item,
+          providerID,
+          id,
+          config,
+          index === 0 ? { base: source?.models.get(literal?.modelID ?? id) ?? source?.models.get(id) } : undefined,
+        )
     }
     const configured = providers.get(providerID)
     // Bound to the connection so its providers disappear as soon as the account changes or signs out.
@@ -271,4 +285,22 @@ function overlay(
     }
     if (config.disabled !== undefined) model.enabled = !config.disabled
   })
+}
+
+function literalModels(item: ConfigProvider.Info) {
+  return Object.entries(item.models ?? {}).filter(([id]) => !/[*?]/.test(id))
+}
+
+/** Expand only against known IDs; patterns never introduce models. */
+function modelOverlays(item: ConfigProvider.Info, known: Iterable<string>) {
+  const literals = literalModels(item)
+  const patterns = Object.entries(item.models ?? {}).filter(([id]) => /[*?]/.test(id))
+  return new Map(
+    [...new Set([...known, ...literals.map(([id]) => id)])].flatMap((id) => {
+      const configs = patterns.filter(([pattern]) => Wildcard.match(id, pattern)).map(([, config]) => config)
+      const literal = item.models?.[id]
+      if (literal) configs.push(literal)
+      return configs.length ? [[id, configs] as const] : []
+    }),
+  )
 }
