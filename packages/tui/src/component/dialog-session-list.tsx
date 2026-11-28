@@ -54,8 +54,9 @@ export function DialogSessionList() {
       query: search().trim(),
       allProjects: allProjects(),
       location: pickerLocation(),
+      historyDays: config.session_history_days,
     }),
-    async ({ query, allProjects, location }) => {
+    async ({ query, allProjects, location, historyDays }) => {
       try {
         if (!data.location.info(location)) await data.location.sync(location)
         const current = data.location.info(location)
@@ -70,7 +71,8 @@ export function DialogSessionList() {
                   subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
                 }),
           ...(query ? { search: query } : {}),
-          limit: 50,
+          // ponytail: one oversized page instead of paging until the history cutoff; switch to cursor pages if 1000 is not enough.
+          limit: historyDays ? 1000 : 50,
           order: "desc",
           parentID: null,
           archived: false,
@@ -110,6 +112,12 @@ export function DialogSessionList() {
     if (result?.query !== query || result.allProjects !== allProjects() || result.error) return local
     return result.sessions
   })
+  const visibleSessions = createMemo(() => {
+    const days = config.session_history_days
+    if (days === undefined) return sessions()
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+    return sessions().filter((session) => (session.time.updated ?? session.time.created) >= cutoff)
+  })
   const searchState = createMemo(() => {
     const query = filter().trim()
     if (query !== search().trim() || searchResults.loading)
@@ -144,7 +152,7 @@ export function DialogSessionList() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     const sessionMap = new Map(
-      sessions()
+      visibleSessions()
         .filter((session) => !session.parentID)
         .map((session) => [session.id, session]),
     )
@@ -184,7 +192,7 @@ export function DialogSessionList() {
       }
     }
 
-    const remaining = sessions()
+    const remaining = visibleSessions()
       .filter((session) => !session.parentID && !pinnedSet.has(session.id))
       .map((session) => {
         const date = new Date(session.time.updated).toDateString()

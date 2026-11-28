@@ -47,6 +47,12 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
 
+test("validates the session history window", () => {
+  expect(decodeInfo({ session_history_days: 60 })).toEqual({ session_history_days: 60 })
+  expect(() => decodeInfo({ session_history_days: 0 })).toThrow()
+  expect(() => decodeInfo({ session_history_days: 1.5 })).toThrow()
+})
+
 test("resolves nested config and keybind defaults", () => {
   const config = resolve(
     {

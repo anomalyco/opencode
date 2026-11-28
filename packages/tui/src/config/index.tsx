@@ -186,6 +186,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
+  session_history_days: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+    description: "Only list sessions updated within this many days in the session list",
+  }),
   tabs: Schema.optional(
     Schema.Struct({
       mode: Schema.optional(Schema.Literals(["auto", "on", "off"])).annotate({
