@@ -40,6 +40,8 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
 
   const projectButton = projects.getByRole("button", { name: /HomeFocus/ })
 
+  const automations = projects.getByRole("button", { name: "Automations", exact: true })
+
   const settings = projects.getByRole("button", { name: "Settings", exact: true })
 
   const help = projects.getByRole("button", { name: "Help", exact: true })
@@ -58,9 +60,12 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
     )
     .toBe("solid")
 
-  // The two project row actions come before the utility buttons.
+  // The two project row actions come before the utility buttons, which start with Automations.
   await page.keyboard.press("Tab")
   await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await expect(automations).toBeFocused()
+  await expect(automations).toHaveCSS("outline-style", "solid")
   await page.keyboard.press("Tab")
   await expect(settings).toBeFocused()
   await expect(settings).toHaveCSS("outline-style", "solid")
