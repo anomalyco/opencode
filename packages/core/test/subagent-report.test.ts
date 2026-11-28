@@ -4,6 +4,7 @@ import { AIError, TransportError } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Automation } from "@opencode/schema/automation"
 import { Bus } from "@opencode/core/bus"
+import { CodeModeAgents } from "@opencode/core/codemode/agents"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Instance } from "@opencode/core/instance/service"
@@ -27,6 +28,7 @@ import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Layer, Schema, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -557,7 +559,13 @@ describe("SubagentReport outbox", () => {
           output: "Outbox report",
           recovery: {
             outstanding: [
-              { kind: "subagent", sessionID: child, childSessionID: grandchild, agent: "explore", description: "Check logs" },
+              {
+                kind: "subagent",
+                sessionID: child,
+                childSessionID: grandchild,
+                agent: "explore",
+                description: "Check logs",
+              },
             ],
           },
         },
@@ -701,6 +709,607 @@ describe("SubagentReport outbox", () => {
   )
 })
 
+describe("SubagentReport wake coalescing", () => {
+  it.effect("coalesces completed wakes for a nested parent until the last running sibling settles", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_coalesce_root")
+      const mid = sessionID("ses_coalesce_mid")
+      const leaf1 = sessionID("ses_coalesce_leaf1")
+      const leaf2 = sessionID("ses_coalesce_leaf2")
+      const leaf3 = sessionID("ses_coalesce_leaf3")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general", title: "Coordinator" })
+      yield* seedSessions(database, [leaf1, leaf2, leaf3], { parent_id: mid, agent: "explore", title: "Worker" })
+      yield* seedAssistant(database, leaf1, 100, "Leaf 1 result")
+      yield* seedAssistant(database, leaf2, 100, "Leaf 2 result")
+      yield* seedAssistant(database, leaf3, 100, "Leaf 3 result")
+
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.succeed(new Set()),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      for (const leaf of [leaf1, leaf2, leaf3]) {
+        yield* store.claim(leaf)
+        yield* jobs.start({
+          id: leaf,
+          type: "subagent",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: mid,
+            childSessionID: leaf,
+            agent: "explore",
+            description: leaf,
+          },
+          background: true,
+          run: Effect.never,
+        })
+        const generation = (yield* jobs.currentGeneration(leaf))?.generation
+        report.started(leaf, { startedSeq: 0, boundGeneration: generation })
+      }
+
+      // First two siblings finish while leaf3 is still running: their reports are durably
+      // admitted to mid's inbox, but mid is not woken yet.
+      for (const leaf of [leaf1, leaf2]) {
+        const settlement = yield* report.prepare(leaf, { type: "succeeded" })
+        yield* settlement.commit()
+        yield* settlement.deliver
+      }
+      expect(wakes).toEqual([])
+      expect(yield* SessionInbox.list(database.db, mid)).toHaveLength(2)
+
+      // Final sibling finishes: mid wakes once with all three reports in its inbox.
+      const finalSettlement = yield* report.prepare(leaf3, { type: "succeeded" })
+      yield* finalSettlement.commit()
+      yield* finalSettlement.deliver
+      expect(wakes).toEqual([mid])
+      const reports = yield* SessionInbox.list(database.db, mid)
+      expect(reports).toHaveLength(3)
+      expect(reports.map(text)).toEqual([
+        expect.stringContaining("Leaf 1 result"),
+        expect.stringContaining("Leaf 2 result"),
+        expect.stringContaining("Leaf 3 result"),
+      ])
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.effect(
+    "wakes a nested parent immediately on single child, error, or cancellation, and never defers top-level parents",
+    () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const jobs = yield* Job.Service
+        const inbox = yield* SessionInbox.Service
+        const root = sessionID("ses_immediate_root")
+        const mid = sessionID("ses_immediate_mid")
+        const topChild1 = sessionID("ses_immediate_top1")
+        const topChild2 = sessionID("ses_immediate_top2")
+        const soloLeaf = sessionID("ses_immediate_solo")
+        const okLeaf = sessionID("ses_immediate_ok")
+        const failLeaf = sessionID("ses_immediate_fail")
+        const cancelLeaf = sessionID("ses_immediate_cancel")
+        const slowLeaf = sessionID("ses_immediate_slow")
+        yield* seedSessions(database, [root])
+        yield* seedSessions(database, [mid, topChild1, topChild2], { parent_id: root, agent: "explore" })
+        yield* seedSessions(database, [soloLeaf, okLeaf, failLeaf, cancelLeaf, slowLeaf], {
+          parent_id: mid,
+          agent: "explore",
+        })
+        yield* seedAssistant(database, topChild1, 100, "Top 1 done")
+        yield* seedAssistant(database, soloLeaf, 100, "Solo done")
+        yield* seedAssistant(database, okLeaf, 100, "Ok done")
+        yield* seedAssistant(database, slowLeaf, 100, "Slow done")
+
+        const wakes: SessionID[] = []
+        const report = SubagentReport.make({
+          store,
+          jobs,
+          inbox,
+          draining: Effect.succeed(new Set()),
+          wake: (id) => Effect.sync(() => void wakes.push(id)),
+        })
+
+        const startJob = (parentSessionID: SessionID, childSessionID: SessionID) =>
+          Effect.gen(function* () {
+            yield* store.claim(childSessionID)
+            yield* jobs.start({
+              id: childSessionID,
+              type: "subagent",
+              recovery: {
+                kind: "subagent",
+                parentSessionID,
+                childSessionID,
+                agent: "explore",
+                description: childSessionID,
+              },
+              background: true,
+              run: Effect.never,
+            })
+            const generation = (yield* jobs.currentGeneration(childSessionID))?.generation
+            report.started(childSessionID, { startedSeq: 0, boundGeneration: generation })
+          })
+
+        // 1. Top-level parent wakes immediately even while a sibling is still running.
+        yield* startJob(root, topChild1)
+        yield* startJob(root, topChild2)
+        const top1 = yield* report.prepare(topChild1, { type: "succeeded" })
+        yield* top1.commit()
+        yield* top1.deliver
+        expect(wakes).toEqual([root])
+        const top2 = yield* report.prepare(topChild2, { type: "succeeded" })
+        yield* top2.commit()
+        yield* top2.deliver
+
+        // 2. Nested parent with a single child wakes immediately.
+        wakes.length = 0
+        yield* startJob(mid, soloLeaf)
+        const solo = yield* report.prepare(soloLeaf, { type: "succeeded" })
+        yield* solo.commit()
+        yield* solo.deliver
+        expect(wakes).toEqual([mid])
+
+        // 3. Error and cancellation wake a nested parent immediately even while slowLeaf still runs.
+        wakes.length = 0
+        yield* startJob(mid, okLeaf)
+        yield* startJob(mid, failLeaf)
+        yield* startJob(mid, cancelLeaf)
+        yield* startJob(mid, slowLeaf)
+
+        const ok = yield* report.prepare(okLeaf, { type: "succeeded" })
+        yield* ok.commit()
+        yield* ok.deliver
+        expect(wakes).toEqual([])
+
+        const failed = yield* report.prepare(failLeaf, { type: "failed", error: { message: "boom" } })
+        yield* failed.commit()
+        yield* failed.deliver
+        expect(wakes).toEqual([mid])
+
+        const cancelled = yield* report.prepare(cancelLeaf, { type: "interrupted", reason: "user" })
+        yield* cancelled.commit()
+        yield* cancelled.deliver
+        expect(wakes).toEqual([mid, mid])
+
+        const slow = yield* report.prepare(slowLeaf, { type: "succeeded" })
+        yield* slow.commit()
+        yield* slow.deliver
+        expect(wakes).toEqual([mid, mid, mid])
+        expect(yield* jobs.pendingBackground).toEqual([])
+      }),
+  )
+
+  it.effect("flushes a deferred wake without deadlock when the last sibling settles with no report", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_flush_root")
+      const mid = sessionID("ses_flush_mid")
+      const leaf = sessionID("ses_flush_leaf")
+      const emptySibling = sessionID("ses_flush_empty")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+      yield* seedSessions(database, [leaf, emptySibling], { parent_id: mid, agent: "explore" })
+      yield* seedAssistant(database, leaf, 100, "Leaf done")
+
+      const draining = new Set<SessionID>([emptySibling])
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.sync(() => new Set(draining)),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      yield* store.claim(leaf)
+      yield* jobs.start({
+        id: leaf,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: leaf,
+          agent: "explore",
+          description: "Leaf",
+        },
+        background: true,
+        run: Effect.never,
+      })
+      const generation = (yield* jobs.currentGeneration(leaf))?.generation
+      report.started(leaf, { startedSeq: 0, boundGeneration: generation })
+
+      // leaf completes while directly-driven emptySibling is still draining -> wake deferred.
+      const leafSettlement = yield* report.prepare(leaf, { type: "succeeded" })
+      yield* leafSettlement.commit()
+      yield* leafSettlement.deliver
+      expect(wakes).toEqual([])
+      expect(yield* SessionInbox.list(database.db, mid)).toHaveLength(1)
+
+      // emptySibling finishes an empty/control-only period (no assistant message, no Job) ->
+      // produces no report itself, but flushes mid's deferred wake so leaf's report is never stranded.
+      draining.delete(emptySibling)
+      yield* store.claim(emptySibling)
+      report.started(emptySibling, { startedSeq: 0 })
+      const emptySettlement = yield* report.prepare(emptySibling, { type: "succeeded" })
+      yield* emptySettlement.commit()
+      yield* emptySettlement.deliver
+      expect(wakes).toEqual([mid])
+      expect(yield* SessionInbox.list(database.db, mid)).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not defer a nested parent wake for a deeper grandchild running under the settling child", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_depth_root")
+      const mid = sessionID("ses_depth_mid")
+      const leaf = sessionID("ses_depth_leaf")
+      const greatGrandchild = sessionID("ses_depth_ggc")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+      yield* seedSessions(database, [leaf], { parent_id: mid, agent: "explore" })
+      yield* seedSessions(database, [greatGrandchild], { parent_id: leaf, agent: "explore" })
+      yield* seedAssistant(database, leaf, 100, "Leaf launched great-grandchild")
+
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.succeed(new Set([greatGrandchild])),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      yield* store.claim(leaf)
+      yield* jobs.start({
+        id: leaf,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: leaf,
+          agent: "explore",
+          description: "Leaf",
+        },
+        background: true,
+        run: Effect.never,
+      })
+      const generation = (yield* jobs.currentGeneration(leaf))?.generation
+      report.started(leaf, { startedSeq: 0, boundGeneration: generation })
+
+      const settlement = yield* report.prepare(leaf, { type: "succeeded" })
+      yield* settlement.commit()
+      yield* settlement.deliver
+      expect(wakes).toEqual([mid])
+      expect(text((yield* SessionInbox.list(database.db, mid))[0])).toContain(greatGrandchild)
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.effect(
+    "wakes a nested parent once the bounded coalesce hold expires even if a slow sibling is still running",
+    () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const jobs = yield* Job.Service
+        const inbox = yield* SessionInbox.Service
+        const root = sessionID("ses_timeout_root")
+        const mid = sessionID("ses_timeout_mid")
+        const fast = sessionID("ses_timeout_fast")
+        const slow = sessionID("ses_timeout_slow")
+        yield* seedSessions(database, [root])
+        yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+        yield* seedSessions(database, [fast, slow], { parent_id: mid, agent: "explore" })
+        yield* seedAssistant(database, fast, 100, "Fast done")
+
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const wakes: SessionID[] = []
+        const report = SubagentReport.make({
+          store,
+          jobs,
+          inbox,
+          scope,
+          maxCoalesceDelay: "5 seconds",
+          draining: Effect.succeed(new Set([slow])),
+          wake: (id) => Effect.sync(() => void wakes.push(id)),
+        })
+
+        yield* store.claim(fast)
+        yield* jobs.start({
+          id: fast,
+          type: "subagent",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: mid,
+            childSessionID: fast,
+            agent: "explore",
+            description: "Fast",
+          },
+          background: true,
+          run: Effect.never,
+        })
+        const generation = (yield* jobs.currentGeneration(fast))?.generation
+        report.started(fast, { startedSeq: 0, boundGeneration: generation })
+
+        const settlement = yield* report.prepare(fast, { type: "succeeded" })
+        yield* settlement.commit()
+        yield* settlement.deliver
+        expect(wakes).toEqual([])
+
+        yield* TestClock.adjust("4 seconds")
+        expect(wakes).toEqual([])
+
+        yield* TestClock.adjust("1 second")
+        expect(wakes).toEqual([mid])
+        expect(yield* SessionInbox.list(database.db, mid)).toHaveLength(1)
+      }),
+  )
+
+  it.effect("ignores Code Mode agent() children when checking for running siblings", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_cm_root")
+      const mid = sessionID("ses_cm_mid")
+      const leaf = sessionID("ses_cm_leaf")
+      const cmChild = sessionID("ses_cm_child")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+      yield* seedSessions(database, [leaf], { parent_id: mid, agent: "explore" })
+      yield* seedSessions(database, [cmChild], {
+        parent_id: mid,
+        agent: "explore",
+        metadata: { [CodeModeAgents.METADATA_KEY]: { childID: cmChild, structured: false } },
+      })
+      yield* seedAssistant(database, leaf, 100, "Leaf done")
+
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.succeed(new Set([cmChild])),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      yield* store.claim(leaf)
+      yield* jobs.start({
+        id: leaf,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: leaf,
+          agent: "explore",
+          description: "Leaf",
+        },
+        background: true,
+        run: Effect.never,
+      })
+      const generation = (yield* jobs.currentGeneration(leaf))?.generation
+      report.started(leaf, { startedSeq: 0, boundGeneration: generation })
+
+      const settlement = yield* report.prepare(leaf, { type: "succeeded" })
+      yield* settlement.commit()
+      yield* settlement.deliver
+      expect(wakes).toEqual([mid])
+    }),
+  )
+
+  it.effect("flushes a deferred wake when the last sibling hits an inbox LifecycleConflict", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_cflush_root")
+      const mid = sessionID("ses_cflush_mid")
+      const okLeaf = sessionID("ses_cflush_ok")
+      const conflictLeaf = sessionID("ses_cflush_conflict")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+      yield* seedSessions(database, [okLeaf, conflictLeaf], { parent_id: mid, agent: "explore" })
+      yield* seedAssistant(database, okLeaf, 100, "Ok leaf done")
+      yield* seedAssistant(database, conflictLeaf, 100, "Conflict leaf done")
+
+      const conflictID = SessionMessage.ID.create()
+      yield* inbox.admit({
+        id: conflictID,
+        sessionID: mid,
+        item: { type: "user", payload: { text: "Existing user item" }, delivery: "steer" },
+      })
+
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.succeed(new Set()),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      yield* store.claim(okLeaf)
+      yield* jobs.start({
+        id: okLeaf,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: okLeaf,
+          agent: "explore",
+          description: "Ok",
+        },
+        background: true,
+        run: Effect.never,
+      })
+      yield* store.claim(conflictLeaf)
+      yield* jobs.start({
+        id: conflictLeaf,
+        type: "subagent",
+        notificationID: conflictID,
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: conflictLeaf,
+          agent: "explore",
+          description: "Conflict",
+        },
+        background: true,
+        run: Effect.never,
+      })
+
+      const okSettlement = yield* report.prepare(okLeaf, { type: "succeeded" })
+      yield* okSettlement.commit()
+      yield* okSettlement.deliver
+      expect(wakes).toEqual([])
+
+      const conflictSettlement = yield* report.prepare(conflictLeaf, { type: "succeeded" })
+      yield* conflictSettlement.commit()
+      yield* conflictSettlement.deliver
+      expect(wakes).toEqual([mid])
+      yield* jobs.completeBackground(conflictID)
+    }),
+  )
+
+  it.effect("clears a deferred wake without waking when the parent has a staged revert", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_revdefer_root")
+      const mid = sessionID("ses_revdefer_mid")
+      const leaf1 = sessionID("ses_revdefer_leaf1")
+      const leaf2 = sessionID("ses_revdefer_leaf2")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+      yield* seedSessions(database, [leaf1, leaf2], { parent_id: mid, agent: "explore" })
+      yield* seedAssistant(database, leaf1, 100, "Leaf 1 done")
+
+      const draining = new Set<SessionID>([leaf2])
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.sync(() => new Set(draining)),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      yield* store.claim(leaf1)
+      yield* jobs.start({
+        id: leaf1,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: leaf1,
+          agent: "explore",
+          description: "Leaf 1",
+        },
+        background: true,
+        run: Effect.never,
+      })
+
+      const first = yield* report.prepare(leaf1, { type: "succeeded" })
+      yield* first.commit()
+      yield* first.deliver
+      expect(wakes).toEqual([])
+
+      // Parent stages a revert before the last sibling finishes without a report.
+      yield* database.db
+        .update(SessionTable)
+        .set({ revert: { messageID: SessionMessage.ID.create() } })
+        .where(eq(SessionTable.id, mid))
+        .run()
+        .pipe(Effect.orDie)
+      draining.delete(leaf2)
+      yield* store.claim(leaf2)
+      const second = yield* report.prepare(leaf2, { type: "succeeded" })
+      yield* second.commit()
+      yield* second.deliver
+      expect(wakes).toEqual([])
+    }),
+  )
+
+  it.effect("wakes the parent without deadlock when siblings settle concurrently", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const jobs = yield* Job.Service
+      const inbox = yield* SessionInbox.Service
+      const root = sessionID("ses_conc_root")
+      const mid = sessionID("ses_conc_mid")
+      const leaf1 = sessionID("ses_conc_leaf1")
+      const leaf2 = sessionID("ses_conc_leaf2")
+      yield* seedSessions(database, [root])
+      yield* seedSessions(database, [mid], { parent_id: root, agent: "general" })
+      yield* seedSessions(database, [leaf1, leaf2], { parent_id: mid, agent: "explore" })
+      yield* seedAssistant(database, leaf1, 100, "Concurrent leaf 1")
+
+      const draining = new Set<SessionID>([leaf1, leaf2])
+      const wakes: SessionID[] = []
+      const report = SubagentReport.make({
+        store,
+        jobs,
+        inbox,
+        draining: Effect.sync(() => new Set(draining)),
+        wake: (id) => Effect.sync(() => void wakes.push(id)),
+      })
+
+      yield* store.claim(leaf1)
+      yield* store.claim(leaf2)
+      yield* jobs.start({
+        id: leaf1,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: mid,
+          childSessionID: leaf1,
+          agent: "explore",
+          description: "Leaf 1",
+        },
+        background: true,
+        run: Effect.never,
+      })
+
+      const settle = (id: SessionID) =>
+        Effect.gen(function* () {
+          draining.delete(id)
+          const settlement = yield* report.prepare(id, { type: "succeeded" })
+          yield* settlement.commit()
+          yield* settlement.deliver
+        })
+
+      // leaf1 produces a report while leaf2 settles empty concurrently.
+      yield* Effect.all([settle(leaf1), settle(leaf2)], { concurrency: "unbounded", discard: true })
+      expect(wakes.length).toBeGreaterThanOrEqual(1)
+      expect(wakes.every((id) => id === mid)).toBe(true)
+      expect(yield* SessionInbox.list(database.db, mid)).toHaveLength(1)
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
+})
+
 function sessionID(value: string): SessionID {
   return SessionSchema.ID.make(value)
 }
@@ -750,7 +1359,10 @@ function buildExecution(scope: Scope.Scope, drain: Drain) {
 }
 
 type SeedValues = Partial<
-  Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "title" | "revert">
+  Pick<
+    typeof SessionTable.$inferInsert,
+    "time_suspended" | "resume_attempts" | "parent_id" | "title" | "revert" | "metadata"
+  >
 > & { readonly agent?: string }
 
 function seedSessions(

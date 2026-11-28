@@ -1,7 +1,8 @@
 export * as SubagentReport from "./subagent-report.js"
 
 import { Automation } from "@opencode/schema/automation"
-import { Effect, Result } from "effect"
+import { Duration, Effect, Fiber, Result, type Scope } from "effect"
+import { CodeModeAgents } from "../../codemode/agents.js"
 import type { Job } from "../../job.js"
 import { SessionBackground } from "../background.js"
 import { SessionInbox } from "../inbox.js"
@@ -9,6 +10,9 @@ import { SessionMessage } from "../message.js"
 import type { SessionSchema } from "../schema.js"
 import type { SessionStore } from "../store.js"
 import { SubagentCompletion } from "../subagent-completion.js"
+
+/** Maximum time a nested parent's completed-child wake is held waiting for running siblings. */
+export const DEFAULT_MAX_COALESCE_DELAY = Duration.seconds(60)
 
 export type Outcome =
   | { readonly type: "succeeded" }
@@ -26,6 +30,8 @@ export type Deps = {
   readonly inbox: Inbox
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly draining: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  readonly scope?: Scope.Scope
+  readonly maxCoalesceDelay?: Duration.Input
 }
 
 /** Narrow inbox admission so delivery does not depend on the full lifecycle service shape. */
@@ -42,8 +48,14 @@ type PostCommit =
   | { readonly type: "cleanup"; readonly notificationID: SessionMessage.ID }
   | { readonly type: "deliver"; readonly report: Job.SubagentOutboxReport }
 
+type PendingWake = {
+  timer?: Fiber.Fiber<void>
+}
+
 export const make = (deps: Deps) => {
   const periods = new Map<SessionSchema.ID, Period>()
+  const pendingWakes = new Map<SessionSchema.ID, PendingWake>()
+  const maxCoalesceDelay = deps.maxCoalesceDelay ?? DEFAULT_MAX_COALESCE_DELAY
 
   const started = (sessionID: SessionSchema.ID, period: Period) => {
     periods.set(sessionID, period)
@@ -52,6 +64,78 @@ export const make = (deps: Deps) => {
   const clear = (sessionID: SessionSchema.ID) => {
     periods.delete(sessionID)
   }
+
+  const clearPendingWake = (parentID: SessionSchema.ID) =>
+    Effect.suspend(() => {
+      const entry = pendingWakes.get(parentID)
+      if (!entry) return Effect.succeed(false)
+      pendingWakes.delete(parentID)
+      return (entry.timer ? Fiber.interrupt(entry.timer) : Effect.void).pipe(Effect.as(true))
+    })
+
+  // Checks whether `parentID` still has another direct subagent child actively running.
+  // Only direct children are considered because deeper descendants report to their own parent.
+  // Code Mode `agent()` children are excluded: their parent awaits them directly inside `execute`.
+  const hasRunningSibling = Effect.fnUntraced(function* (parentID: SessionSchema.ID, excludeChildID: SessionSchema.ID) {
+    const running = yield* deps.jobs.runningBackground
+    for (const recovery of running) {
+      if (
+        recovery.kind === "subagent" &&
+        recovery.parentSessionID === parentID &&
+        recovery.childSessionID !== excludeChildID
+      ) {
+        return true
+      }
+    }
+    const draining = yield* deps.draining
+    for (const activeID of draining) {
+      if (activeID === excludeChildID || activeID === parentID || Automation.isRunSession(activeID)) continue
+      const tracked = yield* deps.jobs.get(activeID)
+      if (tracked?.status === "cancelled") continue
+      const info = yield* deps.store.get(activeID)
+      if (info?.parentID === parentID && CodeModeAgents.sessionMarker(activeID, info.metadata) === undefined) {
+        return true
+      }
+    }
+    return false
+  })
+
+  const armCoalesceTimer = Effect.fnUntraced(function* (parentID: SessionSchema.ID, entry: PendingWake) {
+    if (!deps.scope || pendingWakes.get(parentID) !== entry || entry.timer !== undefined) return
+    const fiber = yield* Effect.sleep(maxCoalesceDelay).pipe(
+      Effect.andThen(
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            if (pendingWakes.get(parentID) !== entry) return
+            pendingWakes.delete(parentID)
+            const currentParent = yield* deps.store.get(parentID)
+            if (!currentParent || currentParent.revert) return
+            yield* Effect.logDebug("Subagent report coalesce hold expired; waking parent", { parentID })
+            yield* deps.wake(parentID)
+          }),
+        ),
+      ),
+      Effect.forkIn(deps.scope),
+    )
+    if (pendingWakes.get(parentID) === entry && entry.timer === undefined) {
+      entry.timer = fiber
+      return
+    }
+    yield* Fiber.interrupt(fiber)
+  })
+
+  // Flushes a previously deferred parent wake when a sibling settles without delivering a report
+  // (e.g. an empty/control-only period, deleted child, or inbox conflict) so admitted reports
+  // are never stranded in the parent's inbox.
+  const flushPendingWake = Effect.fnUntraced(function* (parentID: SessionSchema.ID, excludeChildID: SessionSchema.ID) {
+    if (!pendingWakes.has(parentID)) return
+    if (yield* hasRunningSibling(parentID, excludeChildID)) return
+    const parent = yield* deps.store.get(parentID)
+    if (!(yield* clearPendingWake(parentID))) return
+    if (!parent || parent.revert) return
+    yield* Effect.logDebug("Flushing deferred nested parent wake", { parentID, childSessionID: excludeChildID })
+    yield* deps.wake(parentID)
+  })
 
   const resolveBody = Effect.fnUntraced(function* (
     sessionID: SessionSchema.ID,
@@ -75,6 +159,7 @@ export const make = (deps: Deps) => {
   const deliverReport = Effect.fnUntraced(function* (report: Job.SubagentOutboxReport) {
     const parentID = report.recovery.parentSessionID
     if (!(yield* deps.store.get(parentID))) {
+      yield* clearPendingWake(parentID)
       yield* deps.jobs.completeBackground(report.notificationID)
       return
     }
@@ -123,9 +208,35 @@ export const make = (deps: Deps) => {
           ),
       ),
     )
-    if (!delivered) return
+    if (!delivered) {
+      yield* flushPendingWake(parentID, report.recovery.childSessionID)
+      return
+    }
     const parent = yield* deps.store.get(parentID)
-    if (parent && !parent.revert) yield* deps.wake(parentID)
+    if (!parent || parent.revert) {
+      yield* clearPendingWake(parentID)
+      return
+    }
+    // Coalesce completed wakes for nested subagent parents while sibling subagents are still
+    // running, avoiding one parent turn (and cascading grandparent report) per finishing sibling.
+    // Top-level parents face the user directly, so every completion still wakes them immediately;
+    // errors and cancellations always wake immediately at every depth.
+    if (report.status === "completed" && parent.parentID !== undefined) {
+      // Mark before checking siblings so a sibling settling concurrently with no report
+      // still sees the deferred wake and flushes it once no siblings remain.
+      const entry = pendingWakes.get(parentID) ?? {}
+      pendingWakes.set(parentID, entry)
+      if (yield* hasRunningSibling(parentID, report.recovery.childSessionID)) {
+        yield* Effect.logDebug("Deferring nested parent wake while sibling subagents are still running", {
+          parentID,
+          childSessionID: report.recovery.childSessionID,
+        })
+        yield* armCoalesceTimer(parentID, entry)
+        return
+      }
+    }
+    yield* clearPendingWake(parentID)
+    yield* deps.wake(parentID)
   })
 
   const prepare = Effect.fnUntraced(function* (
@@ -140,7 +251,9 @@ export const make = (deps: Deps) => {
     if ((!initial?.parentID || Automation.isRunSession(sessionID)) && jobState.mode === "none") {
       return {
         commit: () => deps.store.release(sessionID),
-        deliver: Effect.void,
+        deliver: initial?.parentID
+          ? Effect.uninterruptible(flushPendingWake(initial.parentID, sessionID))
+          : Effect.void,
       }
     }
     const running = initial?.parentID
@@ -187,11 +300,19 @@ export const make = (deps: Deps) => {
         box.postCommit = { type: "deliver", report }
       })
 
+    const fallbackParentID = jobState.mode === "background" ? jobState.recovery.parentSessionID : initial?.parentID
+
     const deliver = Effect.uninterruptible(
       Effect.suspend(() => {
         const current = box.postCommit
-        if (current.type === "none") return Effect.void
-        if (current.type === "cleanup") return deps.jobs.completeBackground(current.notificationID)
+        if (current.type === "none") {
+          return fallbackParentID ? flushPendingWake(fallbackParentID, sessionID) : Effect.void
+        }
+        if (current.type === "cleanup") {
+          return deps.jobs
+            .completeBackground(current.notificationID)
+            .pipe(Effect.andThen(fallbackParentID ? flushPendingWake(fallbackParentID, sessionID) : Effect.void))
+        }
         return deliverReport(current.report)
       }),
     )

@@ -1928,6 +1928,58 @@ describe("SessionRestart background recovery", () => {
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
   )
+
+  it.effect("wakes an idle nested parent with a deferred subagent report in its inbox on restart", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const inbox = yield* SessionInbox.Service
+      const root = Session.ID.make("ses_restart_deferred_root")
+      const mid = Session.ID.make("ses_restart_deferred_mid")
+      const leaf = Session.ID.make("ses_restart_deferred_leaf")
+      const topIdle = Session.ID.make("ses_restart_deferred_top_idle")
+      const reverted = Session.ID.make("ses_restart_deferred_reverted")
+      yield* seedSessions(database, [root, topIdle])
+      yield* seedSessions(database, [mid], { parent_id: root })
+      yield* seedSessions(database, [reverted], {
+        parent_id: root,
+        revert: { messageID: SessionMessage.ID.create() },
+      })
+      yield* seedSessions(database, [leaf], { parent_id: mid })
+
+      // Simulate reports already admitted before a crash while another sibling was running.
+      for (const target of [mid, topIdle, reverted]) {
+        yield* inbox.admit({
+          id: SessionMessage.ID.create(),
+          sessionID: target,
+          item: {
+            type: "synthetic",
+            payload: SessionInbox.SyntheticPayload.make({
+              text: '<background-result kind="subagent">Leaf done</background-result>',
+              metadata: { source: "subagent", childID: leaf, agent: "explore", state: "completed" },
+            }),
+            delivery: "steer",
+          },
+        })
+      }
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+        undefined,
+        restarted,
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Effect.forEach([mid, topIdle, reverted], execution.awaitIdle, { discard: true })
+
+      // Only the idle nested parent without a staged revert is woken on boot.
+      expect(drained).toEqual([mid])
+    }),
+  )
 })
 
 describe("SessionExecution interrupt continuation", () => {
@@ -2123,7 +2175,9 @@ function seedInbox(
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
+  values: Partial<
+    Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "revert">
+  > = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
