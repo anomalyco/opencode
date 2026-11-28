@@ -51,8 +51,16 @@ import { isRecord } from "@opencode/util/record"
 import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
+import { ConnectError, NeedsAuthError, SessionExpiredError, SkillMismatchError } from "./errors.js"
 
-export { EventStreamRejectedError, EventStreamTerminatedError }
+export {
+  ConnectError,
+  EventStreamRejectedError,
+  EventStreamTerminatedError,
+  NeedsAuthError,
+  SessionExpiredError,
+  SkillMismatchError,
+}
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -191,27 +199,6 @@ export interface Tool {
   readonly _meta?: Record<string, unknown>
 }
 
-export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
-  server: Schema.String,
-  message: Schema.String,
-}) {}
-
-export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
-  server: Schema.String,
-  message: Schema.String,
-  /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
-  answered: Schema.optional(Schema.Boolean),
-}) {}
-
-/** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
-export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()("MCP.SessionExpiredError", {
-  server: Schema.String,
-}) {
-  override get message() {
-    return `MCP server session expired: ${this.server}`
-  }
-}
-
 export type CallToolContent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "media"; readonly data: string; readonly mimeType: string; readonly uri?: string }
@@ -319,13 +306,6 @@ export interface Events {
     readonly maxAgeMs?: number
   }) => Stream.Stream<EventMessage, Error>
 }
-
-/** A skill file the server served doesn't match its entry: not listed, or a different size, digest or frontmatter. */
-export class SkillMismatchError extends Schema.TaggedError<SkillMismatchError>()("McpClient.SkillMismatchError", {
-  uri: Schema.String,
-  check: Schema.Literals(["unlisted", "size", "digest", "frontmatter"]),
-  message: Schema.String,
-}) {}
 
 /** Experimental: MCP Skills is a beta extension; may change without compatibility guarantees. */
 export interface Skills {
