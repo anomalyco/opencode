@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { SyntaxStyle } from "@opentui/core"
+import { MouseEvent, SyntaxStyle, type CliRenderer } from "@opentui/core"
 import { ManualClock } from "@opentui/core/testing"
 import { testRender, useRenderer } from "@opentui/solid"
 import { onCleanup } from "solid-js"
@@ -46,6 +46,7 @@ test("plain clicks on any row of a wrapped Markdown link resolve the full URL", 
     await app.mockMouse.click(0, head)
     await app.mockMouse.click(x, head, 0, { modifiers: { ctrl: true } })
     await app.mockMouse.click(x, head, 0, { modifiers: { shift: true } })
+    await app.mockMouse.click(x, head, 0, { modifiers: { alt: true } })
     await app.mockMouse.click(x, head, 2)
     await app.mockMouse.drag(0, head, x + 2, head)
     await app.mockMouse.drag(0, 0, x + 2, head)
@@ -57,4 +58,24 @@ test("plain clicks on any row of a wrapped Markdown link resolve the full URL", 
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("clicks with any reported modifier never resolve a link", () => {
+  // clickedLink only reads these two renderer methods; keep the guard test independent of renderer state.
+  const renderer = {
+    getSelection: () => ({ isStart: true, behavior: "cell" }),
+    getLinkAt: () => url,
+  } as unknown as CliRenderer
+  const click = (modifiers: MouseEvent["modifiers"]) =>
+    new MouseEvent(null, { type: "up", button: 0, x: 0, y: 0, modifiers, isDragging: true })
+
+  expect(clickedLink(renderer, click({ shift: false, alt: false, ctrl: false }))).toBe(url)
+  expect(clickedLink(renderer, click({ shift: true, alt: false, ctrl: false }))).toBeUndefined()
+  expect(clickedLink(renderer, click({ shift: false, alt: true, ctrl: false }))).toBeUndefined()
+  expect(clickedLink(renderer, click({ shift: false, alt: false, ctrl: true }))).toBeUndefined()
+  // The pinned OpenTUI MouseEvent type does not declare meta yet, but terminals that report
+  // Cmd/Super send it at runtime and it must not fall through to the local-file opener.
+  expect(
+    clickedLink(renderer, click({ shift: false, alt: false, ctrl: false, meta: true } as MouseEvent["modifiers"])),
+  ).toBeUndefined()
 })
