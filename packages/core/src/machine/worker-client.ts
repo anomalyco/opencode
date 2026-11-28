@@ -93,11 +93,8 @@ export const fromConnection = Effect.fn("WorkerClient.fromConnection")(function*
   return {
     spawner: machine.environment.spawner,
     overrides: machine.environment.files,
-    options: {
-      path: machine.environment.path,
-      shell: machine.environment.shell,
-      home: machine.environment.home,
-    },
+    // The machine this connection's hello describes. Home follows the machine's newest connection, failing offline.
+    options: { ...Machine.rules(connection.hello), home: machine.environment.home },
   } satisfies Environment.Driver
 })
 

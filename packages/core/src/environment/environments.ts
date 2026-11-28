@@ -22,7 +22,10 @@ export interface Interface {
   readonly lookup: (id: Environment.ID) => Effect.Effect<Environment.Interface, Machines.NotFound | Workspace.NotFound>
   /** Whether an environment prefix is known (local, any workspace ID, or a registered paired machine). */
   readonly has: (id: Environment.ID) => Effect.Effect<boolean>
-  /** Whether an environment is currently reachable in memory without waking a cold/lazy sandbox. */
+  /**
+   * Whether an environment is currently reachable in memory without waking a cold/lazy sandbox: a machine only while
+   * its worker is connected.
+   */
   readonly ready: (id: Environment.ID) => Effect.Effect<boolean>
 }
 
@@ -63,7 +66,7 @@ const layer = Layer.effect(
       ready: Effect.fn("Environments.ready")(function* (id: Environment.ID) {
         if (id === Environment.localID) return true
         if (Workspace.isID(id)) return yield* workspaces.connected(id)
-        return true
+        return (yield* machines.list()).some((info) => info.id === id && info.online)
       }),
     })
   }),

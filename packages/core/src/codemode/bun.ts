@@ -226,7 +226,7 @@ const put = (
         if (
           type === undefined &&
           !options.parents &&
-          (yield* typeOf(target.environment.files, path.dirname(target.absolute))) === undefined
+          (yield* typeOf(target.environment.files, target.environment.path.dirname(target.absolute))) === undefined
         )
           return yield* new Environment.NotFound({ path: target.absolute })
         const after = options.diff ? text(bytes) : undefined

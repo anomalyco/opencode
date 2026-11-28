@@ -7,15 +7,18 @@ import { Environment } from "./index.js"
 
 export interface Parsed {
   readonly environment: Environment.ID
-  /** The rest as written, `/...` or `~...`: locating a path owner normalizes it. */
+  /** The rest as written, `/...`, `~...`, or a drive or backslash path: locating a path owner checks and normalizes it. */
   readonly path: string
 }
 
 export class NotAbsolute extends Schema.TaggedError<NotAbsolute>()("Machine.NotAbsolute", {
   machine: Environment.ID,
+  /** The machine runs Windows, where an absolute path starts at a drive. */
+  windows: Schema.optionalKey(Schema.Boolean),
 }) {
   override get message() {
-    return `Machine paths are absolute or start with ~/: write ${this.machine}:/… or ${this.machine}:~/… (for a local folder with that name, start with ./)`
+    const absolute = this.windows ? `${this.machine}:C:\\…` : `${this.machine}:/…`
+    return `Machine paths are absolute or start with ~/: write ${absolute} or ${this.machine}:~/… (for a local folder with that name, start with ./)`
   }
 }
 
@@ -31,16 +34,18 @@ const split = (text: string): Parsed | undefined => {
   return { environment: Environment.ID.make(environment), path: text.slice(colon + 1) }
 }
 
-// On a Windows host a drive path is rooted too, so `local:C:\…` reaches its files. Other environments and hosts
-// resolve one as relative, so it stays refused there.
+// A machine may be Windows, so a drive or backslash path there (`win:C:\…`, `win:\\server\…`) is read as its own
+// and locating it checks it by the machine's rules. On a Windows host a drive path is rooted too (`local:C:\…`). A
+// workspace sandbox and any other host resolve one as relative, so it stays refused there.
 const rooted = (named: Parsed) =>
   named.path.startsWith("/") ||
   named.path.startsWith("~") ||
+  (Schema.is(Machines.Name)(named.environment) && /^(?:[A-Za-z]:[\\/]|\\)/.test(named.path)) ||
   (named.environment === Environment.localID && process.platform === "win32" && /^[A-Za-z]:[\\/]/.test(named.path))
 
 /**
- * Splits `local:/a`, `gpu:/work/a`, `gpu:~/a`, or `wrk_...:/workspace` into an environment and the rest.
- * A Windows drive or any URL (`skill://`, `https://`) is not an environment path.
+ * Splits `local:/a`, `gpu:/work/a`, `gpu:~/a`, `win:C:\a`, or `wrk_...:/workspace` into an environment and the rest.
+ * A bare Windows drive (`C:\a`) or any URL (`skill://`, `https://`) is not an environment path.
  */
 export const parse = (text: string): Parsed | undefined => {
   const named = split(text)

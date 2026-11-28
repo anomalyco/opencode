@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { PermissionTable } from "@opencode/core/permission/sql"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -405,6 +406,26 @@ describe("Permission", () => {
     )
     expect(Wildcard.match(".OPENCODE/x", ".opencode/*", true)).toBe(true)
     expect(Wildcard.match(".OPENCODE/x", ".opencode/*")).toBe(process.platform === "win32")
+  })
+
+  test("matches a Windows machine's file rules without case on any server", () => {
+    const rules: Permission.Ruleset = [
+      { action: "*", resource: "*", effect: "allow" },
+      { action: "read", resource: "win:C:/Windows/*", effect: "deny" },
+      { action: "read", resource: "win://server/share/*", effect: "deny" },
+      { action: "read", resource: "gpu:/work/*", effect: "deny" },
+    ]
+    expect(Permission.evaluate("read", "win:c:/windows/win.ini", rules).effect).toBe("deny")
+    expect(Permission.evaluate("read", "win://SERVER/Share/x", rules).effect).toBe("deny")
+    // A POSIX machine's paths keep their case where this server's files do.
+    expect(Permission.evaluate("read", "gpu:/WORK/a", rules).effect).toBe(
+      process.platform === "darwin" || process.platform === "win32" ? "deny" : "allow",
+    )
+    // A deny that floats above every other layer reads Windows paths the same way.
+    const restricted = PermissionPolicy.restrict(PermissionPolicy.fromRules([rules[0]]), [
+      { action: "edit", resource: "win:C:/Windows/*" },
+    ])
+    expect(PermissionPolicy.evaluate(restricted, "edit", "win:c:/WINDOWS/system.ini").effect).toBe("deny")
   })
 
   for (const action of ["read", "edit", "external_directory"]) {

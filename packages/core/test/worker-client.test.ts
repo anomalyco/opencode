@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { randomBytes } from "node:crypto"
+import { posix, win32 } from "node:path"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue, Result, Schema, Scope, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
@@ -8,7 +9,7 @@ import { KV } from "@opencode/core/kv"
 import { Frames } from "@opencode/core/machine/frames"
 import { Identity } from "@opencode/core/machine/identity"
 import { Link } from "@opencode/core/machine/link"
-import { FromWorker, ToWorker } from "@opencode/core/machine/wire"
+import { FromWorker, type Hello, Instance, ToWorker } from "@opencode/core/machine/wire"
 import { WorkerClient } from "@opencode/core/machine/worker-client"
 import { Workspace } from "@opencode/core/workspace"
 import { makeWorker } from "./fixture/machine-worker"
@@ -60,6 +61,35 @@ const makeCarrierPair = Effect.gen(function* () {
     } satisfies Link.Carrier,
     hangUp,
   }
+})
+
+describe("WorkerClient.fromConnection", () => {
+  it.effect("gives a Windows worker Windows path rules and its shell, and any other worker a POSIX sh", () =>
+    Effect.gen(function* () {
+      const serve = (system: Pick<Hello, "os" | "home" | "shell">) =>
+        WorkerClient.fromConnection(Environment.ID.make("box"), {
+          hello: {
+            type: "hello",
+            protocol: 3,
+            arch: "x64",
+            instance: Instance.make(crypto.randomUUID()),
+            processes: [],
+            ...system,
+          },
+          send: () => {},
+          messages: Stream.never,
+        })
+
+      const windows = yield* serve({ os: "win32", home: "C:\\Users\\worker", shell: "pwsh" })
+      expect(windows.options.path).toBe(win32)
+      expect(windows.options.shell).toBe("pwsh")
+      expect(yield* windows.options.home!).toBe("C:\\Users\\worker")
+
+      const linux = yield* serve({ os: "linux", home: "/home/worker" })
+      expect(linux.options.path).toBe(posix)
+      expect(linux.options.shell).toBe("sh")
+    }),
+  )
 })
 
 describe("EnvironmentDriver.lazy", () => {
