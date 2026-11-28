@@ -351,9 +351,10 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     const index = items.findIndex((provider) => provider.id === store.active)
     const next = index < 0 ? (direction > 0 ? 0 : items.length - 1) : (index + direction + items.length) % items.length
     setStore("active", items[next].id)
-    picker
-      ?.querySelector<HTMLElement>(`[data-provider-id="${CSS.escape(items[next].id)}"]`)
-      ?.focus({ preventScroll: true })
+
+    const element = picker?.querySelector<HTMLElement>(`[data-provider-id="${CSS.escape(items[next].id)}"]`)
+    element?.focus({ preventScroll: true })
+    element?.scrollIntoView({ block: "nearest" })
     event.preventDefault()
   }
 
@@ -384,7 +385,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         />
       </div>
       <div class="relative flex min-h-0 flex-1 flex-col">
-        <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div class="flex min-h-0 flex-1 scroll-pb-8 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <For each={groups()}>
             {(group) => (
               <Show when={group.items().length > 0}>
