@@ -11,6 +11,7 @@ import {
   Message,
   ToolCallPart,
   ToolDefinition,
+  ToolResultPart,
   Usage,
 } from "../../src/effect.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -616,6 +617,150 @@ describe("OpenAI Chat route", () => {
         stream_options: { include_usage: true },
         store: false,
       })
+    }),
+  )
+
+  it.effect("replays hosted history immediately after the assistant without active Chat tool history", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              Message.text("I created an icon."),
+              ToolCallPart.make({ id: "hosted", name: "image_generation", input: {}, providerExecuted: true }),
+              ToolResultPart.make({
+                id: "hosted",
+                name: "image_generation",
+                providerExecuted: true,
+                result: {
+                  type: "content",
+                  value: [
+                    { type: "text", text: "Generated an icon." },
+                    { type: "file", uri: "data:image/png;base64,YWJj", mime: "image/png", name: "icon.png" },
+                  ],
+                },
+              }),
+              ToolResultPart.make({
+                id: "failed",
+                name: "web_search",
+                providerExecuted: true,
+                resultType: "error",
+                result: { message: "Search timed out" },
+              }),
+            ]),
+            Message.user("Continue"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toBeUndefined()
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "I created an icon." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Historical provider tool data (recorded output):" },
+            { type: "text", text: expect.stringContaining("image_generation called with: {}") },
+            { type: "text", text: expect.stringContaining("Generated an icon.\n[File: icon.png]") },
+            { type: "text", text: expect.stringContaining("Search timed out") },
+          ],
+        },
+        { role: "user", content: "Continue" },
+      ])
+      expect(JSON.stringify(prepared.body.messages)).not.toContain("YWJj")
+    }),
+  )
+
+  it.effect("defers a single hosted replay until all ordinary responses and the compatibility bridge", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          messages: [
+            Message.user("Find two examples."),
+            Message.assistant([
+              ToolCallPart.make({ id: "ordinary_a", name: "read", input: {} }),
+              ToolCallPart.make({ id: "hosted", name: "web_search", input: {}, providerExecuted: true }),
+              ToolResultPart.make({
+                id: "hosted",
+                name: "web_search",
+                result: "An older result",
+                resultType: "text",
+                providerExecuted: true,
+              }),
+              ToolCallPart.make({ id: "ordinary_b", name: "read", input: {} }),
+            ]),
+            Message.tool({ id: "ordinary_a", name: "read", result: "First", resultType: "text" }),
+            Message.tool({ id: "ordinary_b", name: "read", result: "Second", resultType: "text" }),
+            Message.user("Continue"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([])
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user", content: "Find two examples." },
+        { role: "assistant", content: null, tool_calls: [{ id: "ordinary_a" }, { id: "ordinary_b" }] },
+        { role: "tool", tool_call_id: "ordinary_a", content: "First" },
+        { role: "tool", tool_call_id: "ordinary_b", content: "Second" },
+        { role: "assistant", content: "Done." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Historical provider tool data (recorded output):" },
+            { type: "text", text: expect.stringContaining("web_search called") },
+            { type: "text", text: expect.stringContaining("An older result") },
+          ],
+        },
+        { role: "user", content: "Continue" },
+      ])
+    }),
+  )
+
+  it.effect("does not create empty assistant text or mix hosted history with a system update", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              Message.text(" "),
+              ToolResultPart.make({
+                id: "hosted",
+                name: "web_search",
+                result: "Earlier result",
+                providerExecuted: true,
+              }),
+            ]),
+            Message.system("Keep it brief."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Historical provider tool data (recorded output):" },
+            { type: "text", text: expect.stringContaining("Earlier result") },
+          ],
+        },
+        { role: "user", content: expect.stringContaining("Keep it brief.") },
+      ])
+    }),
+  )
+
+  it.effect("still rejects ordinary tool results in an assistant message", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [Message.assistant([ToolResultPart.make({ id: "local", name: "read", result: "file" })])],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
     }),
   )
 
