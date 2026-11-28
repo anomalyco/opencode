@@ -2385,6 +2385,20 @@ export function createData(config: CreateDataInput) {
       },
     },
     shell: {
+      // Observe already collected shells across locations without starting another location runtime.
+      activeSessions() {
+        return [
+          ...new Set(
+            Object.values(store.location).flatMap((data) =>
+              Object.values(data.shell ?? {}).flatMap((shell) =>
+                shell.status === "running" && typeof shell.metadata.sessionID === "string"
+                  ? [shell.metadata.sessionID]
+                  : [],
+              ),
+            ),
+          ),
+        ]
+      },
       list(location?: LocationRef) {
         return Object.values(shells.list(location) ?? {})
       },
