@@ -5,6 +5,7 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
+import { useEditorContext } from "../../context/editor"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
 import { usePlugin } from "../../plugin/context"
@@ -12,14 +13,7 @@ import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } f
 import { useSessionLinks } from "../../ui/session-link"
 import { useToast } from "../../ui/toast"
 import { getScrollAcceleration } from "../../util/scroll"
-
-// session.generate exposes the session's tools but runs no tool loop, so a
-// tool call would surface as an empty answer.
-const instructions = [
-  "The user is asking a quick side question about the conversation so far.",
-  "Answer directly and concisely in markdown from what you already know.",
-  "Do not call any tools and do not take any actions.",
-].join(" ")
+import { btwPrompt } from "./btw-prompt"
 
 export default Plugin.define({
   id: "opencode.btw",
@@ -46,6 +40,7 @@ export default Plugin.define({
         const toast = useToast()
         // Dialogs render beside PluginProvider, so Answer cannot call usePlugin().
         const plugins = usePlugin()
+        const editor = useEditorContext()
         context.keymap.layer(() => ({
           mode: "global",
           commands: [
@@ -65,9 +60,12 @@ export default Plugin.define({
                 const question =
                   input?.trim() || (await context.ui.dialog.prompt({ title: "/btw", placeholder: "Ask anything" }))
                 if (!question) return
+                // `/btw` never enters the session, so the selection attached to the composer
+                // has to be part of this one-shot prompt or the model never sees it.
+                const selection = editor.pendingSelection()
                 setPending((count) => count + 1)
                 await context.client.session
-                  .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
+                  .generate({ sessionID: route.sessionID, prompt: btwPrompt(question, selection) })
                   .then((result) => {
                     context.ui.dialog.show(() => (
                       <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
