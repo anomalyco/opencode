@@ -90,6 +90,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // the mark.
     const cancelledTabs = new Set<string>()
     const scrollAnchors = new Map<string, ScrollAnchor>()
+    // The message navigation base, kept with the scroll anchor so a remounted tab
+    // resumes previous/next from the message the reader was on.
+    const navigationMessages = new Map<string, string>()
     const [expandedGroups, setExpandedGroups] = createStore<Record<string, Record<string, boolean> | undefined>>({})
 
     const onFocus = () => setFocused(true)
@@ -360,6 +363,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       cancelledTabs.add(target)
       family(target).forEach((id) => {
         scrollAnchors.delete(id)
+        navigationMessages.delete(id)
         setExpandedGroups(id, undefined)
       })
       const known = currentTab()
@@ -417,6 +421,19 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (current && anchorKey(current.target) === anchorKey(anchor.target) && current.screenY === anchor.screenY)
           return
         scrollAnchors.set(sessionID, anchor)
+      },
+      navigationMessage(sessionID: string) {
+        const target = root(sessionID)
+        if (!state().tabs.some((tab) => tab.sessionID === target)) return
+        return navigationMessages.get(sessionID)
+      },
+      setNavigationMessage(sessionID: string, messageID: string | undefined) {
+        const target = root(sessionID)
+        if (messageID === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
+          navigationMessages.delete(sessionID)
+          return
+        }
+        navigationMessages.set(sessionID, messageID)
       },
       groupExpanded(sessionID: string, groupID: string) {
         return expandedGroups[sessionID]?.[groupID]
