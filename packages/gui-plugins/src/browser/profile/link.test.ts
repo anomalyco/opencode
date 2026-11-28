@@ -70,6 +70,12 @@ function createStore(initial: readonly Electron.Cookie[] = []) {
     if (cookies.delete(place(item))) report(item, "explicit", true)
   }
 
+  // A `Set-Cookie` with `Max-Age=0` or a past `Expires`: Chromium reports the removal as an expired overwrite, and no
+  // insert follows.
+  const expire = (item: Electron.Cookie) => {
+    if (cookies.delete(place(item))) report(item, "expired-overwrite", true)
+  }
+
   const session: MirroredSession = {
     cookies: {
       async get(filter) {
@@ -130,7 +136,7 @@ function createStore(initial: readonly Electron.Cookie[] = []) {
     calls,
     gate,
     /** A page of the store writes a cookie, or signs out. */
-    page: { set: put, remove: drop, report },
+    page: { set: put, remove: drop, expire, report },
     size: () => cookies.size,
     value: (site: number, path = "/") => cookies.get(place(cookie(site, "", { path })))?.value,
     listening: () => listeners.size,
@@ -229,6 +235,21 @@ test.each([10, 3_000])("a page changes one of %i sign-ins: each store is asked f
   expect(profile.value(7)).toBeUndefined()
   expect(profile.calls).toEqual({ ...before.profile, sites: 2, removes: 1 })
   expect(other.calls).toEqual({ ...before.other, sites: 2, sets: before.other.sets + 1 })
+  await mirror.stop(false)
+})
+
+test("a page that signs out by expiring its cookie signs the other store out too", async () => {
+  const profile = createStore([cookie(1, "v1"), cookie(2, "v1")])
+  const other = createStore([cookie(1, "v1"), cookie(2, "v1")])
+  const { mirror } = mirrored(profile, other)
+  await mirror.started
+  await settled(profile, other)
+  other.page.expire(cookie(1, "v1"))
+  profile.page.expire(cookie(2, "v1"))
+  await settled(profile, other)
+
+  expect([profile.value(1), other.value(1), profile.value(2), other.value(2)]).toEqual([undefined, undefined, undefined, undefined])
+  expect(profile.calls.removes + other.calls.removes).toBe(2)
   await mirror.stop(false)
 })
 
