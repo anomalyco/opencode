@@ -75,6 +75,29 @@ describe("RequestExecutor", () => {
     }),
   )
 
+  it.effect("ignores invalid retry-after-ms values and preserves valid retry delays", () =>
+    Effect.sync(() => {
+      const cases: ReadonlyArray<[Record<string, string>, number | undefined]> = [
+        [{ "retry-after-ms": "", "retry-after": "60" }, 60_000],
+        [{ "retry-after-ms": "   ", "retry-after": "60" }, 60_000],
+        [{ "retry-after-ms": "-1", "retry-after": "60" }, 60_000],
+        [{ "retry-after-ms": "invalid", "retry-after": "60" }, 60_000],
+        [{ "retry-after-ms": "0", "retry-after": "60" }, 0],
+        [{ "retry-after-ms": "1250", "retry-after": "60" }, 1250],
+        [{ "retry-after": "-1" }, undefined],
+        [{ "retry-after": "   " }, undefined],
+      ]
+      for (const [headers, expected] of cases) {
+        const error = RequestExecutor.httpFailure({
+          message: "Rate limited",
+          status: 429,
+          responseHeaders: headers,
+        })
+        expect(error.retryAfterMs).toBe(expected)
+      }
+    }),
+  )
+
   it.effect("classifies AWS modeled errors from every restJson1 identity location", () =>
     Effect.sync(() => {
       const cases = [
