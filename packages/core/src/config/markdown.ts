@@ -1,15 +1,31 @@
 export * as ConfigMarkdown from "./markdown.js"
 
 import matter from "gray-matter"
+
+// gray-matter ships a JavaScript engine that evals `---javascript` and
+// `---js` frontmatter blocks. Agent, command, and skill files are read from
+// disk, including cloned repos, so refuse them: parsing such a block throws
+// instead of executing code.
+function rejectJavascript(): object {
+  throw new Error("javascript frontmatter is not supported")
+}
+
+const options = {
+  engines: {
+    javascript: rejectJavascript,
+    js: rejectJavascript,
+  },
+}
+
 export function parse(content: string) {
   // Passing options bypasses gray-matter's module-global content cache, which
   // it populates before parsing: a failed YAML parse poisons the entry and
   // every later parse of the same content replays it without throwing, so the
   // sanitize fallback below never runs. Upstream: jonschlinkert/gray-matter#166.
   try {
-    return matter(content, {})
+    return matter(content, options)
   } catch {
-    return matter(sanitize(content), {})
+    return matter(sanitize(content), options)
   }
 }
 
@@ -61,7 +77,7 @@ export function sanitize(content: string) {
 
 function isValidYaml(line: string) {
   try {
-    matter(`---\n${line}\n---`, {})
+    matter(`---\n${line}\n---`, options)
     return true
   } catch {
     return false
