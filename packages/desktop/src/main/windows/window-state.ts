@@ -124,7 +124,9 @@ export type ManagedWindow = Pick<
 // Tracks the window until it closes and writes the final state then. Bounds are recorded while
 // the window is in its normal state so a maximized window restores to its previous size.
 export function manageWindowState(win: ManagedWindow, file: string, initial: WindowState, displays: Displays) {
-  const state = { ...initial }
+  // On Windows, a frameless titleBarOverlay window has no caption buttons in fullscreen, so never boot into it.
+  const state =
+    process.platform === "win32" && initial.isFullScreen ? { ...initial, isFullScreen: false } : { ...initial }
 
   if (state.isMaximized) win.maximize()
 
@@ -156,7 +158,7 @@ export function manageWindowState(win: ManagedWindow, file: string, initial: Win
     }
 
     state.isMaximized = win.isMaximized()
-    state.isFullScreen = win.isFullScreen()
+    state.isFullScreen = process.platform === "win32" ? false : win.isFullScreen()
     state.displayBounds = displays.matching(bounds)
   }
 

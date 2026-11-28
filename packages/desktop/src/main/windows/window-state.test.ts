@@ -171,4 +171,52 @@ describe("window state", () => {
     const written: unknown = JSON.parse(readFileSync(file, "utf8"))
     expect(written).toEqual(expected.displayBounds ? expected : { ...expected, displayBounds: second })
   })
+
+  test.each([
+    { platform: "win32" as const, expectedRestore: false, expectedSaved: false },
+    { platform: "darwin" as const, expectedRestore: true, expectedSaved: true },
+  ])(
+    "on $platform fullscreen state is restored=$expectedRestore and saved=$expectedSaved",
+    ({ platform, expectedRestore, expectedSaved }) => {
+      Object.defineProperty(process, "platform", { value: platform })
+      const dir = mkdtempSync(path.join(tmpdir(), "opencode-window-state-"))
+      const file = path.join(dir, "window-state-a.json")
+      const events = new EventEmitter()
+      let restoredFullScreen = false
+
+      const fake: ManagedWindow = {
+        maximize: () => {},
+        setFullScreen: (value) => {
+          restoredFullScreen = value
+        },
+        isDestroyed: () => false,
+        isMaximized: () => false,
+        isMinimized: () => false,
+        isFullScreen: () => true,
+        getBounds: () => primary,
+        getNormalBounds: () => ({ x: 100, y: 100, width: 1000, height: 600 }),
+        on: (event, listener) => events.on(event, listener),
+        off: (event, listener) => events.off(event, listener),
+      }
+
+      const initial = { x: 100, y: 100, width: 1000, height: 600, isFullScreen: true, displayBounds: primary }
+
+      manageWindowState(fake, file, initial, displays)
+      expect(restoredFullScreen).toBe(expectedRestore)
+
+      events.emit("close")
+      events.emit("closed")
+
+      const written: unknown = JSON.parse(readFileSync(file, "utf8"))
+      expect(written).toEqual({
+        x: 100,
+        y: 100,
+        width: 1000,
+        height: 600,
+        isMaximized: false,
+        isFullScreen: expectedSaved,
+        displayBounds: primary,
+      })
+    },
+  )
 })
