@@ -3,11 +3,12 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
 
-const model = (packageName: string, modelID: string, output?: number, providerID = "test") => {
+const model = (packageName: string, modelID: string, output?: number, providerID = "test", family?: string) => {
   const result = Model.Info.default(Provider.ID.make(providerID), Model.ID.make(modelID)) as Model.MutableInfo
   result.package = packageName
   result.modelID = Model.ID.make(modelID)
   if (output !== undefined) result.limit = { ...result.limit, output }
+  if (family !== undefined) result.family = Model.Family.make(family)
   return Model.Info.make(result)
 }
 
@@ -297,6 +298,27 @@ test("spells Bedrock Converse effort for Grok and Nova", () => {
     {
       id: "xhigh",
       body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "xhigh" } } },
+    },
+  ])
+})
+
+test("spells Claude variants for a Bedrock application inference profile ARN", () => {
+  const arn = "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123"
+  // The ARN carries no Anthropic marker, so model.family detects Claude; the ARN carries no
+  // Claude version either, so the effort spelling is adaptive rather than budget thinking.
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock", arn, undefined, "test", "claude-sonnet"), [
+      { type: "effort", values: ["low"] },
+    ]),
+  ).toEqual([
+    {
+      id: "low",
+      body: {
+        additionalModelRequestFields: {
+          thinking: { type: "adaptive", display: "summarized" },
+          output_config: { effort: "low" },
+        },
+      },
     },
   ])
 })

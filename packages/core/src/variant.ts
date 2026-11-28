@@ -448,7 +448,12 @@ const openrouter: Protocol = (model, support) => {
 
 const bedrockConverse: Protocol = (model, support) => {
   const id = modelID(model)
-  const claude = id.includes("anthropic")
+  // An application inference profile ARN carries no Anthropic marker and no Claude version,
+  // so model.family only detects Claude here; the family's version is never parsed.
+  const claude =
+    id.includes("anthropic") ||
+    claudeInfo(model).family !== undefined ||
+    Boolean(model.family?.toLowerCase().includes("claude"))
   const fields = (fields: Record<string, unknown>): Overlay => ({ body: { additionalModelRequestFields: fields } })
   switch (support.type) {
     case "effort":
