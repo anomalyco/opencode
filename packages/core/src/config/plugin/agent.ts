@@ -7,6 +7,7 @@ import path from "path"
 import { Effect, Result, SchemaIssue, SchemaParser } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import { ConfigManaged } from "../managed.js"
 import { ConfigMarkdown } from "../markdown.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -43,9 +44,10 @@ export const Plugin = define({
       if (entry.type === "document") return [entry]
       if (entry.type !== "directory") return []
       const files = yield* discover(fs, entry.path)
+      const managed = entry instanceof ConfigManaged.Directory
       return yield* Effect.forEach(files, (file) =>
         fs.readFileStringSafe(file.filepath).pipe(
-          Effect.flatMap((content) => (content ? decode(file, content) : Effect.succeed(undefined))),
+          Effect.flatMap((content) => (content ? decode(file, content, managed) : Effect.succeed(undefined))),
           Effect.orElseSucceed(() => undefined),
         ),
       ).pipe(Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)))
@@ -61,47 +63,58 @@ export const Plugin = define({
       reload: ctx.agent.reload(),
     })
     yield* ctx.agent.transform((editor) => {
-      const permissions = expandPermissions(
-        loaded.documents.flatMap((document) => document.info.permissions ?? []),
-        global.home,
-      )
       const configuredDefault = Config.latest(loaded.documents, "default_agent")
       if (configuredDefault !== undefined) editor.default(Agent.ID.make(configuredDefault))
-      for (const current of editor.list()) {
-        editor.update(current.id, (agent) => agent.permissions.push(...permissions))
-      }
+      // Managed documents form a final layer: their top-level rules land after every other document's agent rules, so a
+      // project's `agents.<name>.permissions` cannot override managed permissions.
+      const layers = [
+        loaded.documents.filter((document) => !(document instanceof ConfigManaged.Document)),
+        loaded.documents.filter((document) => document instanceof ConfigManaged.Document),
+      ]
+      // Top-level rules from this and every earlier layer, for an agent a layer creates.
+      const inherited: Permission.Rule[] = []
+      for (const layer of layers) {
+        const permissions = expandPermissions(
+          layer.flatMap((document) => document.info.permissions ?? []),
+          global.home,
+        )
+        inherited.push(...permissions)
+        for (const current of editor.list()) {
+          editor.update(current.id, (agent) => agent.permissions.push(...permissions))
+        }
 
-      for (const document of loaded.documents) {
-        for (const [id, item] of Object.entries(document.info.agents ?? {})) {
-          const agentID = Agent.ID.make(id)
-          if (item.disabled) {
-            editor.remove(agentID)
-            continue
-          }
+        for (const document of layer) {
+          for (const [id, item] of Object.entries(document.info.agents ?? {})) {
+            const agentID = Agent.ID.make(id)
+            if (item.disabled) {
+              editor.remove(agentID)
+              continue
+            }
 
-          const exists = editor.get(agentID) !== undefined
-          editor.update(agentID, (agent) => {
-            if (!exists) agent.permissions.push(...permissions)
-            if (item.model !== undefined)
-              agent.model = {
-                id: item.model.model,
-                providerID: item.model.providerID,
-                ...(item.model.variant === undefined ? {} : { variant: item.model.variant }),
+            const exists = editor.get(agentID) !== undefined
+            editor.update(agentID, (agent) => {
+              if (!exists) agent.permissions.push(...inherited)
+              if (item.model !== undefined)
+                agent.model = {
+                  id: item.model.model,
+                  providerID: item.model.providerID,
+                  ...(item.model.variant === undefined ? {} : { variant: item.model.variant }),
+                }
+              if (item.request !== undefined) {
+                Object.assign(agent.request.headers, item.request.headers ?? {})
+                Object.assign(agent.request.body, item.request.body ?? {})
               }
-            if (item.request !== undefined) {
-              Object.assign(agent.request.headers, item.request.headers ?? {})
-              Object.assign(agent.request.body, item.request.body ?? {})
-            }
-            if (item.system !== undefined) agent.system = item.system
-            if (item.description !== undefined) agent.description = item.description
-            if (item.mode !== undefined) agent.mode = item.mode
-            if (item.hidden !== undefined) agent.hidden = item.hidden
-            if (item.color !== undefined) agent.color = item.color
-            if (item.steps !== undefined) agent.steps = item.steps
-            if (item.permissions !== undefined) {
-              agent.permissions.push(...expandPermissions(item.permissions, global.home))
-            }
-          })
+              if (item.system !== undefined) agent.system = item.system
+              if (item.description !== undefined) agent.description = item.description
+              if (item.mode !== undefined) agent.mode = item.mode
+              if (item.hidden !== undefined) agent.hidden = item.hidden
+              if (item.color !== undefined) agent.color = item.color
+              if (item.steps !== undefined) agent.steps = item.steps
+              if (item.permissions !== undefined) {
+                agent.permissions.push(...expandPermissions(item.permissions, global.home))
+              }
+            })
+          }
         }
       }
     })
@@ -147,6 +160,7 @@ function discover(fs: FSUtil.Interface, directory: string) {
 const decode = Effect.fnUntraced(function* (
   file: { directory: string; filepath: string; primary: boolean },
   content: string,
+  managed: boolean,
 ) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) {
@@ -188,5 +202,6 @@ const decode = Effect.fnUntraced(function* (
   const info = Info.make({
     agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
   })
-  return new Document({ type: "document", path: AbsolutePath.make(file.filepath), info })
+  const document = { type: "document" as const, path: AbsolutePath.make(file.filepath), info }
+  return managed ? new ConfigManaged.Document(document) : new Document(document)
 })

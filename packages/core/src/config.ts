@@ -349,7 +349,7 @@ export const layer = (options?: Options) =>
         const managedSettings = managed.map((entry) =>
           entry.type === "document"
             ? new ConfigManaged.Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
-            : entry,
+            : new ConfigManaged.Directory(entry),
         )
         // Integration documents load right after managed policies: every remote, user, and project layer overrides
         // their settings, and since policies evaluate earliest-loaded first, only managed policies outrank theirs.
