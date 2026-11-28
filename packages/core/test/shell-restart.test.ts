@@ -6,6 +6,7 @@ import { Context, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import type { ChildProcess } from "effect/process"
 import { LanguageModel, LLMClient } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
+import { Auth } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
@@ -42,11 +43,20 @@ const model = SessionRunnerModel.node.replace(
     select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
     resolve: () =>
       Effect.succeed(
-        SessionRunnerModel.resolved(LanguageModel.make({ id: "restart", provider: "test", route: OpenAIChat.route }), {
-          capabilities: { tools: true, input: ["text"], output: ["text"] },
-          cost: [],
-          limit: { context: 200_000, output: 32_000 },
-        }),
+        SessionRunnerModel.resolved(
+          LanguageModel.make({
+            id: "restart",
+            provider: "test",
+            api: OpenAIChat.api,
+            baseURL: OpenAIChat.DEFAULT_BASE_URL,
+            auth: Auth.none,
+          }),
+          {
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
+            cost: [],
+            limit: { context: 200_000, output: 32_000 },
+          },
+        ),
       ),
   }),
 )

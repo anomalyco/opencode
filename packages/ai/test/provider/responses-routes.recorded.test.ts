@@ -21,21 +21,19 @@ for (const item of [
   {
     provider: "openrouter",
     env: "OPENROUTER_API_KEY",
-    model: OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).responses(
-      "openai/gpt-5.4-mini",
-    ),
+    model: OpenRouter.responsesModel("openai/gpt-5.4-mini", { apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }),
   },
   {
     provider: "digitalocean",
     env: "DIGITAL_OCEAN_OFFICIAL_API_KEY",
-    model: DigitalOcean.configure({ apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture" }).responses(
-      "openai-gpt-5.4-mini",
-    ),
+    model: DigitalOcean.responsesModel("openai-gpt-5.4-mini", {
+      apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture",
+    }),
   },
   {
     provider: "venice",
     env: "VENICE_API_KEY",
-    model: Venice.configure({ apiKey: process.env.VENICE_API_KEY ?? "fixture" }).responses("openai-gpt-54-mini"),
+    model: Venice.responsesModel("openai-gpt-54-mini", { apiKey: process.env.VENICE_API_KEY ?? "fixture" }),
   },
 ]) {
   const recorded = recordedTests({

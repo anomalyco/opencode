@@ -9,7 +9,7 @@ import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
-const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
+const xai = XAI.media({ apiKey: "test", baseURL: "https://xai.test/v1" })
 const model = xai.video("grok-imagine-video-1.5")
 const done = { status: "done", video: { url: "https://vidgen.x.ai/out.mp4" } }
 

@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, CacheHint, LanguageModel, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, CacheHint, Message, ToolCallPart } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
+import { Auth } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
-const bedrock = AmazonBedrock.configure({ apiKey: "fixture" })
+const bedrock = AmazonBedrock.amazonBedrock.with({ auth: Auth.bearer("fixture") })
 
 describe("Bedrock Converse cache policy", () => {
   for (const id of [
@@ -97,7 +98,9 @@ describe("Bedrock Converse cache policy", () => {
               tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
               prompt: "Question",
               cache:
-                ttlRequest === undefined ? undefined : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
+                ttlRequest === undefined
+                  ? undefined
+                  : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
             }),
           )
           const marker = {
@@ -126,7 +129,7 @@ describe("Bedrock Converse cache policy", () => {
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
             ai.request({
-              model: LanguageModel.update(bedrock.model(arn), { compatibility: { cacheFormat: "anthropic" } }),
+              model: bedrock.model(arn, { capabilities: { cache: { format: "anthropic" } } }),
               system: [
                 { type: "text", text: "Agent" },
                 { type: "text", text: "Project" },
@@ -134,7 +137,9 @@ describe("Bedrock Converse cache policy", () => {
               tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
               prompt: "Question",
               cache:
-                ttlRequest === undefined ? undefined : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
+                ttlRequest === undefined
+                  ? undefined
+                  : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
             }),
           )
           const marker = { cachePoint: ttlRequest === undefined ? { type: "default" } : { type: "default", ttl: "1h" } }
@@ -155,7 +160,7 @@ describe("Bedrock Converse cache policy", () => {
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({
-            model: LanguageModel.update(bedrock.model(id), { compatibility: { cacheFormat: "alibaba" } }),
+            model: bedrock.model(id, { capabilities: { cache: { format: "alibaba" } } }),
             system: "System prefix",
             prompt: "Question",
           }),

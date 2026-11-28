@@ -1,12 +1,8 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
-import {
-  AIError,
-  LLMEvent,
-  type LanguageModelCompatibility,
-  type LLMRequest,
-  type Capabilities,
-} from "../schema/index.js"
+import { AIError, LLMEvent, type LLMRequest } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -329,12 +325,6 @@ const onHalt = Effect.fn("VeniceChat.onHalt")(function* (state: State) {
   })
 })
 
-export const compatibility = {
-  maxTokensField: "max_completion_tokens",
-} satisfies LanguageModelCompatibility
-
-export const capabilities = { promptCacheKey: true } satisfies Capabilities
-
 export const protocol = Protocol.make({
   id: "venice-chat",
   body: { schema: Body, from: fromRequest },
@@ -351,6 +341,19 @@ export const protocol = Protocol.make({
     terminal: (event) => event === "[DONE]",
     onHalt,
   },
+})
+
+export const api = Api.make({
+  name: "chat-completions",
+  id: "venice-chat",
+  short: "chat",
+  protocol,
+  path: OpenAIChat.PATH,
+  framing: OpenAIChat.framing,
+  capabilities: Capabilities.defaults<Capabilities.ChatCompletions>({
+    output: { maxTokensField: "max_completion_tokens" },
+    cache: { promptCacheKey: true },
+  }),
 })
 
 export * as VeniceChat from "./venice-chat.js"

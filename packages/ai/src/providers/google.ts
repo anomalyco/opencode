@@ -1,7 +1,7 @@
-import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import { Auth } from "../route/auth.js"
 import { MediaRoute } from "../route/media.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { Provider } from "../provider.js"
 import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import {
@@ -14,6 +14,7 @@ import { GoogleInteractionsVideo } from "../protocols/google-interactions-video.
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleTranscription } from "../protocols/google-transcription.js"
+import { shared, type ConnectionSettings } from "./google/shared.js"
 import { toConfig } from "./settings.js"
 
 export type { OptionsInput as GoogleEmbeddingOptions } from "../protocols/google-embed-content.js"
@@ -28,37 +29,23 @@ export type GoogleDecisionsOptionsInput = GoogleDecisions.OptionsInput
 
 export const id = ProviderID.make("google")
 
-export const routes = [Gemini.route, GoogleInteractions.route]
-
+/** Connection settings for Google's media models. Language models come from `google`. */
 export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: Gemini.ProviderOptionsInput & GoogleInteractions.ProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings &
-  Gemini.ProviderOptionsInput & {
-    readonly apiKey?: string | false
-    readonly baseURL?: string
-  }
+export type Settings = ConnectionSettings & Gemini.ProviderOptionsInput
+
+export const google = Provider.make({ ...shared, apis: [Gemini.api, GoogleInteractions.api] })
+
+export const model = Provider.entrypoint<Settings, Gemini.ProviderOptionsInput>(google)
 
 const auth = (options: ProviderAuthOption<"optional">) =>
   AuthOptions.apiKey(options, "GOOGLE_GENERATIVE_AI_API_KEY", Auth.header("x-goog-api-key"))
 
-const configuredRoute = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
-  return Gemini.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
-}
-
-const interactionsRoute = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
-  return GoogleInteractions.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
-}
-
-export const configure = (input: Config = {}) => {
-  const route = configuredRoute(input)
+export const media = (input: Config = {}) => {
   const media = MediaRoute.deployment(input, auth(input))
-  const gemini = (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID })
   const embeddingRoute = GoogleEmbedContent.route.with({
     provider: id,
     endpoint: { baseURL: input.baseURL },
@@ -67,10 +54,6 @@ export const configure = (input: Config = {}) => {
   })
   return {
     id,
-    model: gemini,
-    gemini,
-    interactions: (modelID: string | ModelID) =>
-      interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       GoogleImages.model({ ...media, id: modelID, providerOptions }),
     video: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -87,35 +70,31 @@ export const configure = (input: Config = {}) => {
           ...media.transport,
         })
         .model<GoogleDecisions.OptionsInput>({ id: modelID, providerOptions }),
-    configure,
   }
 }
 
-export const provider = configure()
-export const model: ProviderPackage.Model<Settings, Gemini.ProviderOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).model(modelID)
+const defaultMedia = media()
+
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).image(modelID, input.providerOptions)
+  return media(input).image(modelID, input.providerOptions)
 }
 export const videoModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).video(modelID, input.providerOptions)
+  return media(input).video(modelID, input.providerOptions)
 }
 export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).embedding(modelID, input.providerOptions)
+  return media(input).embedding(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).decision(modelID, input.providerOptions)
+  return media(input).decision(modelID, input.providerOptions)
 }
 
-export const image = provider.image
-export const video = provider.video
-export const embedding = provider.embedding
-export const gemini = provider.gemini
-export const interactions = provider.interactions
-export const speech = provider.speech
-export const transcription = provider.transcription
-export const decision = provider.decision
+export const image = defaultMedia.image
+export const video = defaultMedia.video
+export const embedding = defaultMedia.embedding
+export const speech = defaultMedia.speech
+export const transcription = defaultMedia.transcription
+export const decision = defaultMedia.decision

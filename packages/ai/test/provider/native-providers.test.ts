@@ -37,63 +37,56 @@ describe("native OpenAI-compatible providers", () => {
   test("assigns provider-owned metadata namespaces across native routes", () => {
     const vertex = { project: "project", accessToken: "token" }
     const providers = [
-      [OpenAI.configure({ apiKey: "test" }).chat("model"), "openai"],
-      [OpenAI.configure({ apiKey: "test" }).responses("model"), "openai"],
-      [Azure.configure({ resourceName: "resource", apiKey: "test" }).chat("model"), "azure"],
-      [Azure.configure({ resourceName: "resource", apiKey: "test" }).responses("model"), "azure"],
-      [AmazonBedrock.configure({ apiKey: "test" }).model("model"), "bedrock"],
-      [AmazonBedrockMantle.configure({ apiKey: "test" }).chat("model"), "mantle"],
-      [AmazonBedrockMantle.configure({ apiKey: "test" }).messages("model"), "mantle"],
-      [AmazonBedrockMantle.configure({ apiKey: "test" }).responses("model"), "mantle"],
-      [Google.configure({ apiKey: "test" }).model("model"), "google"],
-      [GoogleVertex.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexChat.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexResponses.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexMessages.configure(vertex).model("model"), "vertex"],
-      [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic"],
-      [
-        AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "minimax" }).model("model"),
-        "minimax",
-      ],
-      [OpenAICompatible.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"), "custom"],
-      [
-        OpenAICompatibleResponses.configure({ baseURL: "https://example.test/v1", provider: "custom" }).model("model"),
-        "custom",
-      ],
-      [Cerebras.configure({ apiKey: "test" }).model("model"), "cerebras"],
-      [Baseten.configure({ apiKey: "test" }).model("model"), "baseten"],
-      [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek"],
-      [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks"],
-      [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
-      [Groq.configure({ apiKey: "test" }).model("model"), "groq"],
-      [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai"],
-      [CloudflareAIGateway.configure({ accountId: "account" }).model("model"), "cloudflare-ai-gateway"],
-      [CloudflareWorkersAI.configure({ accountId: "account" }).model("model"), "cloudflare-workers-ai"],
-      [OpenRouter.configure({ apiKey: "test" }).model("model"), "openrouter"],
-      [XAI.configure({ apiKey: "test" }).chat("model"), "xai"],
-      [XAI.configure({ apiKey: "test" }).responses("model"), "xai"],
+      [OpenAI.openai.with({ apiKey: "test" }).model("model", { api: "chat-completions" }), "openai"],
+      [OpenAI.openai.with({ apiKey: "test" }).model("model"), "openai"],
+      [Azure.chatModel("model", { resourceName: "resource", apiKey: "test" }), "azure"],
+      [Azure.model("model", { resourceName: "resource", apiKey: "test" }), "azure"],
+      [AmazonBedrock.model("model", { apiKey: "test" }), "bedrock"],
+      [AmazonBedrockMantle.chatModel("model", { apiKey: "test" }), "mantle"],
+      [AmazonBedrockMantle.messagesModel("model", { apiKey: "test" }), "mantle"],
+      [AmazonBedrockMantle.model("model", { apiKey: "test" }), "mantle"],
+      [Google.model("model", { apiKey: "test" }), "google"],
+      [GoogleVertex.model("model", vertex), "vertex"],
+      [GoogleVertexChat.model("model", vertex), "vertex"],
+      [GoogleVertexResponses.model("model", vertex), "vertex"],
+      [GoogleVertexMessages.model("model", vertex), "vertex"],
+      [Anthropic.model("model", { apiKey: "test" }), "anthropic"],
+      [AnthropicCompatible.model("model", { baseURL: "https://example.test/v1", provider: "minimax" }), "minimax"],
+      [OpenAICompatible.model("model", { baseURL: "https://example.test/v1", provider: "custom" }), "custom"],
+      [OpenAICompatibleResponses.model("model", { baseURL: "https://example.test/v1", provider: "custom" }), "custom"],
+      [Cerebras.model("model", { apiKey: "test" }), "cerebras"],
+      [Baseten.model("model", { apiKey: "test" }), "baseten"],
+      [DeepSeek.model("model", { apiKey: "test" }), "deepseek"],
+      [Fireworks.model("model", { apiKey: "test" }), "fireworks"],
+      [DeepInfra.model("model", { apiKey: "test" }), "deepinfra"],
+      [Groq.model("model", { apiKey: "test" }), "groq"],
+      [TogetherAI.model("model", { apiKey: "test" }), "togetherai"],
+      [CloudflareAIGateway.model("model", { accountId: "account" }), "cloudflare-ai-gateway"],
+      [CloudflareWorkersAI.model("model", { accountId: "account" }), "cloudflare-workers-ai"],
+      [OpenRouter.model("model", { apiKey: "test" }), "openrouter"],
+      [XAI.xai.with({ apiKey: "test" }).model("model", { api: "chat-completions" }), "xai"],
+      [XAI.model("model", { apiKey: "test" }), "xai"],
     ] as const
 
-    for (const [model, key] of providers) expect(model.route.providerMetadataKey).toBe(key)
+    for (const [model, key] of providers) expect(model.metadataKey).toBe(key)
   })
 
   test("preserves native Together AI and Cerebras provider and route identities", () => {
-    const together = TogetherAI.configure({ apiKey: "fixture" }).model("meta-llama/Llama-3.3-70B")
-    const cerebras = Cerebras.configure({ apiKey: "fixture" }).model("qwen-3-235b-a22b")
+    const together = TogetherAI.model("meta-llama/Llama-3.3-70B", { apiKey: "fixture" })
+    const cerebras = Cerebras.model("qwen-3-235b-a22b", { apiKey: "fixture" })
 
     expect(together).toMatchObject({
       provider: "togetherai",
-      compatibility: { maxTokensField: "max_tokens" },
-      capabilities: { tools: { strict: false } },
-      route: { id: "togetherai-chat", protocol: "openai-chat" },
+      baseURL: "https://api.together.xyz/v1",
+      capabilities: { output: { maxTokensField: "max_tokens" }, tools: { strict: false } },
+      api: { id: "togetherai-chat", protocol: { id: "openai-chat" } },
     })
-    expect(together.route.endpoint.baseURL).toBe("https://api.together.xyz/v1")
     expect(cerebras).toMatchObject({
       provider: "cerebras",
-      compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning" },
-      route: { id: "cerebras-chat", protocol: "openai-chat" },
+      baseURL: "https://api.cerebras.ai/v1",
+      capabilities: { output: { maxTokensField: "max_tokens" }, reasoning: { field: "reasoning" } },
+      api: { id: "cerebras-chat", protocol: { id: "openai-chat" } },
     })
-    expect(cerebras.route.endpoint.baseURL).toBe("https://api.cerebras.ai/v1")
   })
 
   it.effect("preserves extracted providers' Chat requests and identity through custom endpoints", () =>
@@ -104,11 +97,10 @@ describe("native OpenAI-compatible providers", () => {
           baseURL: "https://gateway.example/v1",
           reasoningEffort: "high",
         }
-        const selected = provider.configure(settings).model("test-model")
-        expect(selected.provider).toBe(provider.id)
-        expect(selected.route.id).toBe(`${provider.id}-chat`)
-        expect(selected.route.protocol).toBe("openai-chat")
-        expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
+        const selected = provider.model("test-model", settings)
+        expect(selected.api.id).toBe(`${selected.provider}-chat`)
+        expect(selected.api.protocol.id).toBe("openai-chat")
+        expect(selected.baseURL).toBe(settings.baseURL)
         const input = {
           prompt: "Use a tool.",
           maxTokens: 48,
@@ -118,7 +110,7 @@ describe("native OpenAI-compatible providers", () => {
         const generic = yield* compileRequest(
           ai.request({
             ...input,
-            model: OpenAICompatible.configure({ ...settings, provider: provider.id }).model("test-model"),
+            model: OpenAICompatible.model("test-model", { ...settings, provider: selected.provider }),
           }),
         )
         expect(native.body).toEqual(generic.body)
@@ -127,20 +119,20 @@ describe("native OpenAI-compatible providers", () => {
   )
 
   test("preserves native DeepInfra provider and route identity", () => {
-    const deepinfra = DeepInfra.configure({ apiKey: "fixture" }).model("google/gemma-3-27b-it")
+    const deepinfra = DeepInfra.model("google/gemma-3-27b-it", { apiKey: "fixture" })
     expect(deepinfra).toMatchObject({
       provider: "deepinfra",
-      compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning_content" },
-      route: { id: "deepinfra-chat", protocol: "openai-chat" },
+      baseURL: "https://api.deepinfra.com/v1/openai",
+      capabilities: { output: { maxTokensField: "max_tokens" }, reasoning: { field: "reasoning_content" } },
+      api: { id: "deepinfra-chat", protocol: { id: "openai-chat" } },
     })
-    expect(deepinfra.route.endpoint.baseURL).toBe("https://api.deepinfra.com/v1/openai")
   })
 
   it.effect("applies native provider request defaults even with a custom gateway URL", () =>
     Effect.gen(function* () {
       const together = yield* compileRequest(
         ai.request({
-          model: TogetherAI.configure({ apiKey: "fixture", baseURL: "https://gateway.example/v1" }).model("llama"),
+          model: TogetherAI.model("llama", { apiKey: "fixture", baseURL: "https://gateway.example/v1" }),
           prompt: "Use a tool.",
           maxTokens: 32,
           tools: [
@@ -161,7 +153,7 @@ describe("native OpenAI-compatible providers", () => {
 
       const cerebras = yield* compileRequest(
         ai.request({
-          model: Cerebras.configure({ apiKey: "fixture", baseURL: "https://gateway.example/v1" }).model("qwen"),
+          model: Cerebras.model("qwen", { apiKey: "fixture", baseURL: "https://gateway.example/v1" }),
           maxTokens: 48,
           messages: [
             Message.user("Think first."),
@@ -196,9 +188,7 @@ describe("native OpenAI-compatible providers", () => {
       "https://gateway.example/v1/openai",
       "https://gateway.example/v1/openai/",
     ]) {
-      expect(DeepInfra.configure({ apiKey: "fixture", baseURL }).model("gemma").route.endpoint.baseURL).toBe(
-        "https://gateway.example/v1/openai",
-      )
+      expect(DeepInfra.model("gemma", { apiKey: "fixture", baseURL }).baseURL).toBe("https://gateway.example/v1/openai")
     }
   })
 
@@ -212,7 +202,7 @@ describe("native OpenAI-compatible providers", () => {
         reasoningEffort: "high",
       })
 
-      expect(selected.route.endpoint.baseURL).toBe("https://gateway.example/v1")
+      expect(selected.baseURL).toBe("https://gateway.example/v1")
       expect(selected.options?.headers).toEqual({ "x-application": "opencode" })
       expect(selected.options?.http?.body).toEqual({ service_tier: "priority" })
       expect(selected.options?.providerOptions).toEqual({ reasoningEffort: "high" })
@@ -223,49 +213,49 @@ describe("native OpenAI-compatible providers", () => {
     Effect.gen(function* () {
       const scenarios = [
         {
-          model: Baseten.configure().model("model"),
+          model: Baseten.model("model"),
           env: { BASETEN_API_KEY: "baseten-secret" },
           token: "baseten-secret",
           url: "https://inference.baseten.co/v1/chat/completions",
         },
         {
-          model: DeepSeek.configure().model("deepseek-chat"),
+          model: DeepSeek.model("deepseek-chat"),
           env: { DEEPSEEK_API_KEY: "deepseek-secret" },
           token: "deepseek-secret",
           url: "https://api.deepseek.com/v1/chat/completions",
         },
         {
-          model: Fireworks.configure().model("model"),
+          model: Fireworks.model("model"),
           env: { FIREWORKS_API_KEY: "fireworks-secret" },
           token: "fireworks-secret",
           url: "https://api.fireworks.ai/inference/v1/chat/completions",
         },
         {
-          model: TogetherAI.configure().model("llama"),
+          model: TogetherAI.model("llama"),
           env: { TOGETHER_API_KEY: "together-primary", TOGETHER_AI_API_KEY: "together-legacy" },
           token: "together-primary",
           url: "https://api.together.xyz/v1/chat/completions",
         },
         {
-          model: TogetherAI.configure().model("llama"),
+          model: TogetherAI.model("llama"),
           env: { TOGETHER_AI_API_KEY: "together-legacy" },
           token: "together-legacy",
           url: "https://api.together.xyz/v1/chat/completions",
         },
         {
-          model: Cerebras.configure().model("qwen"),
+          model: Cerebras.model("qwen"),
           env: { CEREBRAS_API_KEY: "cerebras-secret" },
           token: "cerebras-secret",
           url: "https://api.cerebras.ai/v1/chat/completions",
         },
         {
-          model: DeepInfra.configure().model("gemma"),
+          model: DeepInfra.model("gemma"),
           env: { DEEPINFRA_API_KEY: "deepinfra-secret" },
           token: "deepinfra-secret",
           url: "https://api.deepinfra.com/v1/openai/chat/completions",
         },
         {
-          model: Groq.configure().model("llama"),
+          model: Groq.model("llama"),
           env: { GROQ_API_KEY: "groq-secret" },
           token: "groq-secret",
           url: "https://api.groq.com/openai/v1/chat/completions",

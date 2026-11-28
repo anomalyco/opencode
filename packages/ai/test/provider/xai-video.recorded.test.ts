@@ -5,7 +5,7 @@ import { XAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const model = XAI.configure({
+const model = XAI.media({
   apiKey: process.env.XAI_API_KEY ?? "fixture",
 }).video("grok-imagine-video-1.5")
 

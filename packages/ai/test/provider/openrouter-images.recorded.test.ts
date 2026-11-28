@@ -5,7 +5,7 @@ import { OpenRouter } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const openrouter = OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
+const openrouter = OpenRouter.media({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "openrouter-images",

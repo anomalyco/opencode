@@ -12,22 +12,25 @@ import {
   ToolDefinition,
   Usage,
 } from "../../src/effect.js"
-import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
-import { compileRequest } from "../../src/route/client.js"
+import { Auth, LLMClient } from "../../src/route.js"
+import { compileRequest, prepareTransport } from "../../src/route/client.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
+import { Provider } from "../../src/provider.js"
 import { GoogleVertexMessages, Meta } from "../../src/providers.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents, sseNamedEvent, sseRaw } from "../lib/sse.js"
 
-const model = AnthropicMessages.route
-  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-  .model({ id: "claude-sonnet-4-5" })
+const messages = (
+  provider: string,
+  baseURL = "https://api.anthropic.test/v1/",
+  api = AnthropicMessages.api.configure({ metadataKey: "anthropic" }),
+) => Provider.make({ id: provider, baseURL, auth: Provider.custom(Auth.header("x-api-key", "test")), apis: [api] })
 
-const opus48 = AnthropicMessages.route
-  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-  .model({ id: "claude-opus-4-8" })
+const model = messages("anthropic").model("claude-sonnet-4-5")
+
+const opus48 = messages("anthropic").model("claude-opus-4-8")
 
 const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
   compileRequest(
@@ -38,11 +41,11 @@ const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
     }),
   )
 
-const vertexOpus48 = GoogleVertexMessages.configure({
+const vertexOpus48 = GoogleVertexMessages.model("claude-opus-4-8", {
   accessToken: "test",
   location: "global",
   project: "test",
-}).model("claude-opus-4-8")
+})
 
 const request = ai.request({
   id: "req_1",
@@ -236,7 +239,7 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const fast = { ...request, providerOptions: { speed: "fast" } }
       const compiled = yield* compileRequest(fast)
-      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, fast)
+      const prepared = yield* prepareTransport(compiled.body, fast)
 
       expect(compiled.body.speed).toBe("fast")
       expect(prepared.request.headers["anthropic-beta"]).toBe("interleaved-thinking-2025-05-14,fast-mode-2026-02-01")
@@ -321,9 +324,7 @@ describe("Anthropic Messages route", () => {
       const prepared = yield* Effect.forEach(ids, (id) =>
         compileRequest(
           ai.request({
-            model: AnthropicMessages.route
-              .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-              .model({ id }),
+            model: messages("anthropic").model(id),
             messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
             cache: "none",
           }),
@@ -374,18 +375,18 @@ describe("Anthropic Messages route", () => {
       const prepared = yield* Effect.forEach(ids, (id) =>
         compileRequest(
           ai.request({
-            model: AnthropicMessages.route
-              .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-              .model({ id }),
+            model: messages("anthropic").model(id),
             messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
             cache: "none",
           }),
         ),
       )
 
-      expect(prepared.map((item) => item.body.messages.some((message) => message.role === "system"))).toEqual(
-        ids.map(() => false),
-      )
+      expect(
+        prepared.map((item) =>
+          item.body.messages.some((message: { readonly role: string }) => message.role === "system"),
+        ),
+      ).toEqual(ids.map(() => false))
     }),
   )
 
@@ -902,9 +903,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  const video = { type: "video", source: { type: "base64", media_type: "video/mp4", data: "AAECAw==" } }
+  const video = { type: "video", source: { type: "base64", media_type: "video/mp4", data: "AAECAw==" } } as const
   const videoFile = { type: "file" as const, uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" }
-  const customModel = AnthropicMessages.route.with({ provider: "custom" }).model({ id: "video-model" })
+  const customModel = messages("custom", "https://api.anthropic.com/v1").model("video-model")
 
   it.effect("serializes Messages video inputs", () =>
     Effect.gen(function* () {
@@ -949,7 +950,7 @@ describe("Anthropic Messages route", () => {
 
       const native = yield* compileRequest(
         ai.request({
-          model: AnthropicMessages.route.model({ id: "video-model" }),
+          model: messages("anthropic", "https://api.anthropic.com/v1").model("video-model"),
           prompt: Message.media(Media.base64("AAECAw==", "video/mp4")),
           cache: "none",
         }),
@@ -961,7 +962,7 @@ describe("Anthropic Messages route", () => {
   it.effect("moves Meta tool result videos after consecutive results", () =>
     Effect.gen(function* () {
       const meta = ai.request({
-        model: Meta.configure({ apiKey: "test" }).messages("video-model"),
+        model: Meta.messagesModel("video-model", { apiKey: "test" }),
         messages: [
           Message.assistant([
             ToolCallPart.make({ id: "first", name: "read", input: {} }),
@@ -1075,25 +1076,18 @@ describe("Anthropic Messages route", () => {
 
   it.effect("infers empty-signature compatibility across Kimi providers", () =>
     Effect.gen(function* () {
-      const coding = AnthropicMessages.route.with({
-        provider: "kimi-for-coding",
-        endpoint: { baseURL: "https://compatible.test/v1/" },
-        auth: Auth.header("x-api-key", "test"),
-      })
-      const moonshot = AnthropicMessages.route
-        .with({
-          provider: "moonshotai",
-          endpoint: { baseURL: "https://api.moonshot.ai/anthropic" },
-          auth: Auth.bearer("test"),
-        })
-        .model({ id: "kimi-k2.6" })
-      const codingPrepared = yield* compileUnsignedReasoning(coding.model({ id: "k3" }))
+      const moonshot = messages("moonshotai", "https://api.moonshot.ai/anthropic")
+        .with({ auth: Auth.bearer("test") })
+        .model("kimi-k2.6")
+      const codingPrepared = yield* compileUnsignedReasoning(
+        messages("kimi-for-coding", "https://compatible.test/v1/").model("k3"),
+      )
       const moonshotPrepared = yield* compileUnsignedReasoning(moonshot)
       const qwenPrepared = yield* compileUnsignedReasoning(
-        coding.with({ provider: "opencode" }).model({ id: "qwen3.8-flash" }),
+        messages("opencode", "https://compatible.test/v1/").model("qwen3.8-flash"),
       )
       const minimaxPrepared = yield* compileUnsignedReasoning(
-        coding.with({ provider: "opencode-go" }).model({ id: "minimax-m3" }),
+        messages("opencode-go", "https://compatible.test/v1/").model("minimax-m3"),
       )
 
       for (const prepared of [codingPrepared, moonshotPrepared, qwenPrepared, minimaxPrepared]) {
@@ -1109,13 +1103,9 @@ describe("Anthropic Messages route", () => {
 
   it.effect("lets an explicit signature requirement override inference", () =>
     Effect.gen(function* () {
-      const compatible = AnthropicMessages.route
-        .with({
-          provider: "kimi-for-coding",
-          endpoint: { baseURL: "https://api.kimi.com/coding/v1/" },
-          auth: Auth.header("x-api-key", "test"),
-        })
-        .model({ id: "k3", compatibility: { requireSignature: true } })
+      const compatible = messages("kimi-for-coding", "https://api.kimi.com/coding/v1/").model("k3", {
+        capabilities: { reasoning: { signature: true } },
+      })
       const prepared = yield* compileUnsignedReasoning(compatible)
 
       expect(prepared.body.messages).toEqual([])
@@ -1152,14 +1142,9 @@ describe("Anthropic Messages route", () => {
 
   it.effect("round-trips compatible provider metadata in its own namespace", () =>
     Effect.gen(function* () {
-      const compatible = Route.make({
-        id: "custom-anthropic-messages",
-        provider: "custom-anthropic",
-        protocol: AnthropicMessages.protocol,
-        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
-        auth: Auth.header("x-api-key", "test"),
-        framing: AnthropicMessages.framing,
-      }).model({ id: "custom-model" })
+      const compatible = messages("custom-anthropic", "https://compatible.test/v1", AnthropicMessages.api).model(
+        "custom-model",
+      )
       const result = [
         {
           type: "web_search_result",
@@ -1245,14 +1230,9 @@ describe("Anthropic Messages route", () => {
 
   it.effect("preserves a reasoning signature when message_stop closes the block", () =>
     Effect.gen(function* () {
-      const compatible = Route.make({
-        id: "custom-anthropic-messages",
-        provider: "custom-anthropic",
-        protocol: AnthropicMessages.protocol,
-        endpoint: Endpoint.path("/messages", { baseURL: "https://compatible.test/v1" }),
-        auth: Auth.header("x-api-key", "test"),
-        framing: AnthropicMessages.framing,
-      }).model({ id: "custom-model" })
+      const compatible = messages("custom-anthropic", "https://compatible.test/v1", AnthropicMessages.api).model(
+        "custom-model",
+      )
       const body = sseEvents(
         { type: "message_start", message: { usage: { input_tokens: 5 } } },
         {

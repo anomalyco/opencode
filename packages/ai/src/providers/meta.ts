@@ -1,26 +1,18 @@
-import type { ProviderPackage } from "../provider-package.js"
-import { OpenAIChat } from "../protocols/openai-chat.js"
-import { AnthropicMessages } from "../protocols/anthropic-messages.js"
-import { MetaResponses } from "../protocols/meta-responses.js"
-import { MetaMessages } from "../protocols/meta-messages.js"
 import { MetaImages } from "../protocols/meta-images.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, ToolDefinition, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
+import { ToolDefinition, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
+import { Provider } from "../provider.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { bearerRouteDefaults, toConfig } from "./settings.js"
+import { chatCompletions } from "./meta/chat.js"
+import { messages, type OptionsInput as MessagesOptionsInput } from "./meta/messages.js"
+import { responses } from "./meta/responses.js"
+import { shared, type ProviderOptionsInput, type Settings } from "./meta/shared.js"
+import { toConfig } from "./settings.js"
 
-export const id = ProviderID.make("meta")
-const baseURL = "https://api.meta.ai/v1"
+export type { OptionsInput as MessagesOptionsInput } from "./meta/messages.js"
 
-export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
-  Pick<AnthropicMessages.OptionsInput, "thinking" | "effort">
-export type MessagesOptionsInput = Pick<
-  AnthropicMessages.OptionsInput,
-  "thinking" | "effort" | "outputConfig" | "output_config" | "serviceTier" | "service_tier" | "metadata"
-> & { readonly [key: string]: unknown }
+export type { ProviderOptionsInput, Settings } from "./meta/shared.js"
 export type ImageOptions = MetaImages.ImageOptions
 
 export interface WebSearchOptions {
@@ -75,87 +67,26 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
+/** Connection settings for Meta's media models. Language models come from `meta`. */
 export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings &
-  ProviderOptionsInput & {
-    readonly apiKey?: string | false
-    readonly baseURL?: string
-  }
+export const meta = Provider.make({ ...shared, apis: [responses, chatCompletions, messages] })
 
-const responsesRoute = Route.make({
-  id: "meta-responses",
-  provider: id,
-  providerMetadataKey: "meta",
-  protocol: MetaResponses.protocol,
-  endpoint: Endpoint.path("/responses", { baseURL }),
-  // Meta Responses does not support WebSocket upgrades; always use HTTP/SSE.
-  transport: MetaResponses.httpTransport,
-  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
-})
+export const model = Provider.entrypoint<Settings, OpenResponsesProviderOptionsInput>(meta)
+export const chatModel = Provider.entrypoint<Settings, OpenResponsesProviderOptionsInput>(meta, "chat-completions")
+export const messagesModel = Provider.entrypoint<Settings, MessagesOptionsInput>(meta, "messages")
 
-const chatRoute = Route.make({
-  id: "meta-chat",
-  provider: id,
-  providerMetadataKey: "meta",
-  protocol: OpenAIChat.protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL }),
-  framing: OpenAIChat.framing,
-})
-
-const messagesRoute = Route.make({
-  id: "meta-messages",
-  provider: id,
-  providerMetadataKey: "meta",
-  protocol: MetaMessages.protocol,
-  endpoint: Endpoint.path("/messages", { baseURL }),
-  framing: AnthropicMessages.framing,
-  options: { providerOptions: { thinking: { type: "adaptive", display: "omitted" } } },
-})
-
-export const routes = [responsesRoute, chatRoute, messagesRoute]
-
-export const configure = (input: Config = {}) => {
-  const options = bearerRouteDefaults(input, "META_API_KEY", baseURL)
-  const configuredResponses = responsesRoute.with(options)
-  const configuredChat = chatRoute.with(options)
-  const configuredMessages = messagesRoute.with(options)
-  const responses = (modelID: string | ModelID) =>
-    configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID })
-  const chat = (modelID: string | ModelID) =>
-    configuredChat.model<OpenResponsesProviderOptionsInput>({
-      id: modelID,
-      compatibility: { maxTokensField: "max_completion_tokens" },
-      capabilities: { promptCacheKey: true },
-    })
-  const messages = (modelID: string | ModelID) =>
-    configuredMessages.model<MessagesOptionsInput>({
-      id: modelID,
-    })
-  const media = MediaRoute.deployment(input, options.auth)
-  const image = (modelID: string | ModelID) => MetaImages.model({ ...media, id: modelID })
-  return { id, model: responses, responses, chat, messages, image, configure }
+export const media = (input: Config = {}) => {
+  const deployment = MediaRoute.deployment(input, AuthOptions.bearer(input, "META_API_KEY"))
+  return { image: (modelID: string | ModelID) => MetaImages.model({ ...deployment, id: modelID }) }
 }
 
-export const provider = configure()
-export const responses = provider.responses
-export const chat = provider.chat
-export const messages = provider.messages
-export const image = provider.image
+export const image = media().image
 
-export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).responses(modelID)
-
-export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).chat(modelID)
-
-export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).messages(modelID)
-
-export const imageModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).image(modelID)
+export const imageModel = (modelID: string, settings?: Settings) => media(toConfig(settings)).image(modelID)
 
 export * as Meta from "./meta.js"

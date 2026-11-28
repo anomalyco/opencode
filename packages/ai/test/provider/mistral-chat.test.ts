@@ -10,7 +10,7 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = Mistral.configure({ apiKey: "fixture" }).model("mistral-large-latest")
+const model = Mistral.model("mistral-large-latest", { apiKey: "fixture" })
 const request = ai.request({ model, prompt: "Hello" })
 const chunk = (delta: object, finishReason: string | null = null, usage?: object) => ({
   choices: [{ delta, finish_reason: finishReason }],
@@ -21,17 +21,13 @@ describe("Mistral Chat", () => {
   test("exposes native provider and protocol identities", async () => {
     const entrypoint = await import("@opencode/ai/providers/mistral")
 
-    expect(Mistral.id).toBe("mistral")
     expect(MistralChat.protocol.id).toBe("mistral-chat")
-    expect(Mistral.route).toMatchObject({
-      id: "mistral-chat",
+    expect(MistralChat.api).toMatchObject({ name: "mistral-chat", id: "mistral-chat", path: "/chat/completions" })
+    expect(model).toMatchObject({
       provider: "mistral",
-      providerMetadataKey: "mistral",
-      protocol: "mistral-chat",
-    })
-    expect(Mistral.route.endpoint).toMatchObject({
+      metadataKey: "mistral",
       baseURL: "https://api.mistral.ai/v1",
-      path: "/chat/completions",
+      api: { id: "mistral-chat" },
     })
     expect(entrypoint.model).toBeFunction()
   })
@@ -129,7 +125,7 @@ describe("Mistral Chat", () => {
       expect(assistant?.role).toBe("assistant")
       expect(toolResult?.role).toBe("tool")
       if (assistant?.role !== "assistant" || toolResult?.role !== "tool") return
-      const ids = assistant.tool_calls?.map((tool) => tool.id) ?? []
+      const ids = assistant.tool_calls?.map((tool: { readonly id: string }) => tool.id) ?? []
       expect(ids).toHaveLength(2)
       expect(ids[0]).toMatch(/^[A-Za-z0-9]{9}$/)
       expect(ids[1]).toMatch(/^[A-Za-z0-9]{9}$/)
@@ -203,7 +199,7 @@ describe("Mistral Chat", () => {
 
       const unsupported = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { capabilities: { promptCacheKey: false } }),
+          model: LanguageModel.update(model, { capabilities: { cache: { promptCacheKey: false } } }),
           prompt: "Hello",
           promptCacheKey: "common-key",
           providerOptions: { promptCacheKey: "native-key" },

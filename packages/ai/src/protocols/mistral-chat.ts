@@ -1,7 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Auth } from "../route/auth.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
@@ -28,7 +26,6 @@ import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "mistral-chat"
 const DONE = "[DONE]" as const
-export const DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
 export const PATH = "/chat/completions"
 
 const MistralTextContent = Schema.Struct({
@@ -755,13 +752,11 @@ export const protocol = Protocol.make({
 export const framing = Framing.sseWithDone
 export const httpTransport = HttpTransport.sseJson.with<MistralBody>().with({ framing })
 
-export const route = Route.make({
+export const api = Api.make({
+  name: "mistral-chat",
   id: ADAPTER,
-  provider: "mistral",
-  providerMetadataKey: "mistral",
   protocol,
-  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.none,
+  path: PATH,
   transport: httpTransport,
 })
 

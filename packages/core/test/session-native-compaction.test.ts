@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai/effect"
+import { Capabilities, LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -139,11 +139,11 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
         void server.stop(true)
       }),
   )
-  const native = OpenAI.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("gpt-5.4-mini")
+  const native = OpenAI.model("gpt-5.4-mini", { apiKey: "fixture", baseURL: server.url.toString() })
   const model = SessionRunnerModel.resolved(
     endpoint
       ? LanguageModel.update(native, {
-          route: native.route.with({ compact: { endpoint: native.route.compact.endpoint } }),
+          capabilities: Capabilities.merge(native.capabilities, { compaction: { trigger: false } }),
         })
       : native,
     {
@@ -402,7 +402,7 @@ it.live("compaction hooks supply the summary instead of provider compaction", ()
 )
 
 test("retained user budget counts attachments and drops whole oldest messages", () => {
-  const model = SessionRunnerModel.resolved(OpenAI.responses("gpt-5.4-mini"), {
+  const model = SessionRunnerModel.resolved(OpenAI.model("gpt-5.4-mini"), {
     capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
     cost: [],
     limit: { context: 200_000, output: 32_000 },

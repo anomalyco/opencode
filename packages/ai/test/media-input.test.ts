@@ -60,7 +60,7 @@ describe("Media.make", () => {
 describe("plain file input", () => {
   test("request media parts accept plain data", () => {
     const request = ai.request({
-      model: OpenAI.configure({ apiKey: "test" }).chat("gpt-4o-mini"),
+      model: OpenAI.openai.with({ apiKey: "test" }).model("gpt-4o-mini", { api: "chat-completions" }),
       prompt: [
         { type: "text", text: "Describe these" },
         { type: "media", media: PNG, filename: "a.png" },
@@ -76,7 +76,7 @@ describe("plain file input", () => {
 
   test("image edit inputs accept plain data", () => {
     const request = ai.image.request({
-      model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"),
+      model: OpenAI.media({ apiKey: "test" }).image("gpt-image-2"),
       prompt: "Make it blue",
       images: [PNG, `data:image/png;base64,${PNG_BASE64}`, "https://example.test/a.png"],
     })

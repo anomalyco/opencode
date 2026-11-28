@@ -9,6 +9,7 @@ import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
+import { apiModel } from "./lib/model.js"
 
 type OpenAIChatBody = {
   readonly tool_choice?: unknown
@@ -19,9 +20,10 @@ type OpenAIChatBody = {
   }>
 }
 
-const model = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4o-mini" })
+const model = apiModel(OpenAIChat.api, "gpt-4o-mini", {
+  baseURL: "https://api.openai.test/v1/",
+  auth: Auth.bearer("test"),
+})
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)

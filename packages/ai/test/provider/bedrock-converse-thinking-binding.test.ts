@@ -93,12 +93,14 @@ describe("Bedrock Converse thinking block binding", () => {
       const arn = "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123"
       expect(yield* fields(bedrock(arn))).toBeUndefined()
       expect(
-        yield* fields(LanguageModel.update(bedrock(arn), { compatibility: { supportsThinkingBlockBinding: true } })),
+        yield* fields(
+          LanguageModel.update(bedrock(arn), { capabilities: { reasoning: { thinkingBlockBinding: true } } }),
+        ),
       ).toEqual({ thinking: { type: "adaptive", block_binding: binding }, anthropic_beta: beta })
       expect(
         yield* fields(
           LanguageModel.update(bedrock("global.anthropic.claude-fable-5-1"), {
-            compatibility: { supportsThinkingBlockBinding: false },
+            capabilities: { reasoning: { thinkingBlockBinding: false } },
           }),
         ),
       ).toBeUndefined()

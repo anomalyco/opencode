@@ -42,7 +42,7 @@ ai.video.start({
 })
 ai.video.start({ model: custom, prompt: "A kitten", duration: "1 second", aspect: "auto", resolution: "2k" })
 
-const xai = XAI.configure({ apiKey: "test" }).video("grok-imagine-video-1.5")
+const xai = XAI.media({ apiKey: "test" }).video("grok-imagine-video-1.5")
 ai.video.start({
   model: xai,
   prompt: "Waves",
@@ -62,9 +62,9 @@ ai.video.start({ model: xai, prompt: "Waves", providerOptions: { reference_audio
 ai.video.start({ model: custom, prompt: "A kitten", providerOptions: { personGeneration: "everyone" } })
 
 // @ts-expect-error Language models cannot be used for video requests.
-ai.video.start({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A kitten" })
+ai.video.start({ model: Anthropic.model("claude-sonnet-4-5", { apiKey: "test" }), prompt: "A kitten" })
 // @ts-expect-error Image models cannot be used for video requests.
-ai.video.start({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
+ai.video.start({ model: OpenAI.media({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
 
 // @ts-expect-error Start and end frames are images; a plain asset of any kind needs `Media.image(...)`.
 ai.video.start({ model: xai, prompt: "A kitten", start: Media.bytes(Uint8Array.from([1]), "video/mp4") })

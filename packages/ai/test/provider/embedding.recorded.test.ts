@@ -36,19 +36,19 @@ const vertex = recordedTests({
   requires: ["GOOGLE_VERTEX_API_KEY"],
 })
 
-const vertexProvider = GoogleVertex.configure({ apiKey: process.env.GOOGLE_VERTEX_API_KEY ?? "fixture" })
+const vertexProvider = GoogleVertex.media({ apiKey: process.env.GOOGLE_VERTEX_API_KEY ?? "fixture" })
 
-const googleProvider = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
+const googleProvider = Google.media({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 
 describe("Embedding recorded", () => {
   openai.effect("embeds text with requested dimensions", () =>
     assertEmbedding(
-      OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).embedding("text-embedding-3-small"),
+      OpenAI.media({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).embedding("text-embedding-3-small"),
     ),
   )
 
   cohere.effect("embeds text through the compatibility API", () =>
-    assertEmbedding(Cohere.configure({ apiKey: process.env.COHERE_API_KEY ?? "fixture" }).embedding("embed-v4.0")),
+    assertEmbedding(Cohere.media({ apiKey: process.env.COHERE_API_KEY ?? "fixture" }).embedding("embed-v4.0")),
   )
 
   google.effect("embeds text through batchEmbedContents", () =>

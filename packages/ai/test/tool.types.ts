@@ -3,9 +3,13 @@ import { ai, type ExecutableTool, toDefinitions, tool, ToolRuntime } from "../sr
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { AI } from "../src/index.js"
+import { apiModel } from "./lib/model.js"
 
 const request = ai.request({
-  model: OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" }),
+  model: apiModel(OpenAIChat.api, "gpt-4o-mini", {
+    baseURL: "https://api.openai.com/v1",
+    auth: Auth.bearer("fixture"),
+  }),
   prompt: "Use the tool.",
 })
 

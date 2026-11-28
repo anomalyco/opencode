@@ -1,3 +1,4 @@
+import { Capabilities } from "../../capabilities.js"
 import { Schema } from "effect"
 import { CacheTTL, type CacheHint, type LLMRequest } from "../../schema/index.js"
 import { newBreakpoints, take } from "./cache.js"
@@ -37,7 +38,7 @@ export const breakpoints = (model: LLMRequest["model"]) => {
     // Assume modern Claude releases retain caching support; older generations need an explicit exception.
     // Other model families use implicit caching where available.
     supported:
-      model.compatibility?.cacheFormat === "anthropic" ||
+      Capabilities.cache(model.capabilities)?.format === "anthropic" ||
       (model.id.includes("anthropic.claude-") && (short || !LEGACY_CLAUDE.some((id) => model.id.includes(id)))),
     ttl1h: !short,
   }

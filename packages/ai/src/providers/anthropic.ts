@@ -1,23 +1,11 @@
-import { Auth } from "../route/auth.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { Provider } from "../provider.js"
 import { AnthropicCompatible } from "./anthropic-compatible.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
 export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
-
-export const id = ProviderID.make("anthropic")
-
-export const routes = [AnthropicMessages.route]
-
-export type Config = RequestOptions &
-  ProviderAuthOption<"optional"> & {
-    readonly baseURL?: string
-    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
-  }
 
 export type Settings = ProviderPackage.Settings &
   AnthropicMessages.ProviderOptionsInput &
@@ -28,39 +16,22 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
   }
 
-const auth = (options: ProviderAuthOption<"optional">) =>
-  AuthOptions.apiKey(options, "ANTHROPIC_API_KEY", Auth.header("x-api-key"))
+export const anthropic = Provider.make({
+  id: "anthropic",
+  baseURL: "https://api.anthropic.com/v1",
+  auth: AnthropicCompatible.shared.auth(["ANTHROPIC_API_KEY"]),
+  apis: [AnthropicCompatible.shared.api],
+  settings: AnthropicCompatible.shared.settings,
+})
 
-export const configure = (input: Config = {}) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
-  const compatible = AnthropicCompatible.configure({
-    ...rest,
-    auth: auth(input),
-    baseURL: baseURL ?? AnthropicMessages.DEFAULT_BASE_URL,
-    provider: id,
-  })
-  return {
-    id,
-    model: (modelID: string | ModelID) => compatible.model(modelID),
-    configure,
-  }
-}
+const entrypoint = Provider.entrypoint<Settings, AnthropicMessages.ProviderOptionsInput, undefined>(anthropic)
 
-export const provider = configure()
-export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
+export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput, undefined> = (
   modelID,
-  { apiKey, authToken, baseURL, body, headers, ...providerOptions }: Settings = {},
+  settings = {},
 ) => {
-  if (apiKey !== undefined && authToken !== undefined)
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "Anthropic apiKey cannot be combined with authToken",
-    })
-  return configure({
-    ...(authToken === undefined ? { apiKey: apiKey } : { auth: Auth.bearer(authToken) }),
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+  AnthropicCompatible.requireOneCredential(anthropic.id, settings, "Anthropic")
+  return entrypoint(modelID, settings)
 }
+
+export * as Anthropic from "./anthropic.js"

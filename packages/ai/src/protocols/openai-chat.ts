@@ -1,8 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
-import { Route } from "../route/client.js"
-import { Auth } from "../route/auth.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Framing } from "../route/framing.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
@@ -664,16 +663,16 @@ const lowerMessages = Effect.fnUntraced(function* (
   const messages = [...system]
   const modelID = request.model.id.toLowerCase()
   const requireReasoning =
-    request.model.compatibility?.requireReasoning ??
-    (request.model.compatibility?.reasoningField !== undefined ||
+    request.model.capabilities?.reasoning?.required ??
+    (request.model.capabilities?.reasoning?.field !== undefined ||
       request.model.provider === "deepseek" ||
-      request.model.route.endpoint.baseURL?.toLowerCase().includes("deepseek.com") ||
+      request.model.baseURL?.toLowerCase().includes("deepseek.com") ||
       modelID.includes("deepseek"))
-  const reasoningField = request.model.compatibility?.reasoningField
+  const reasoningField = request.model.capabilities?.reasoning?.field
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   const lowering = {
     ...options,
-    providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+    providerMetadataKey: request.model.metadataKey,
     toolCallID: (id: string) => {
       if (mistral)
         return id
@@ -686,7 +685,7 @@ const lowerMessages = Effect.fnUntraced(function* (
       return id
     },
   }
-  const requireAssistantAfterTool = request.model.compatibility?.requireAssistantAfterTool ?? mistral
+  const requireAssistantAfterTool = request.model.capabilities?.messages?.requireAssistantAfterTool ?? mistral
   const bridgeTools = () => {
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
@@ -854,7 +853,9 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   // the key where compatibility explicitly allows it. Header-based affinity
   // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
   const cacheKey =
-    (request.model.capabilities?.promptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
+    (Capabilities.cache(request.model.capabilities)?.promptCacheKey ?? false)
+      ? ProviderShared.promptCacheKey(request)
+      : undefined
   return {
     ...(supportsStore ? { store: options.store ?? false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
@@ -876,20 +877,20 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 ) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
-  const reasoningField = request.model.compatibility?.reasoningField
+  const reasoningField = request.model.capabilities?.reasoning?.field
   if (reasoningField && RESERVED_REASONING_FIELDS.has(reasoningField))
     return yield* ProviderShared.invalidRequest(
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
   const definitions = ProviderShared.flattenTools(request.tools)
   const provider = request.model.provider
-  const baseURL = request.model.route.endpoint.baseURL
+  const baseURL = request.model.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
-  const maxTokensField = request.model.compatibility?.maxTokensField ?? detectedMaxTokensField
+  const maxTokensField = request.model.capabilities?.output?.maxTokensField ?? detectedMaxTokensField
   const supportsStore = request.model.capabilities?.store ?? detectSupportsStore(provider, baseURL)
   const supportsStrictMode = request.model.capabilities?.tools?.strict ?? detectSupportsStrictMode(provider, baseURL)
   const zaiToolStream =
-    request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
+    request.model.capabilities?.tools?.stream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = definitions.length > 0
   const custom = OpenAIFreeform.tools(request)
@@ -905,7 +906,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         : definitions.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice, custom) : undefined,
     stream: true as const,
-    ...((request.model.capabilities?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
+    ...((request.model.capabilities?.output?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),
     ...(maxTokensField === "max_completion_tokens"
       ? { max_completion_tokens: request.maxTokens }
@@ -922,7 +923,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 
 // Provider wrappers that pass their own marker writer keep it; otherwise a declared cache format adds one.
 const declaredCacheControl = (request: LLMRequest) =>
-  request.model.compatibility?.cacheFormat === undefined ? undefined : Cache.cacheControl()
+  Capabilities.cache(request.model.capabilities)?.format === undefined ? undefined : Cache.cacheControl()
 
 // =============================================================================
 // Stream Parsing
@@ -1398,20 +1399,20 @@ export const protocol = Protocol.make({
   stream: {
     event: OpenAIChatStreamEvent,
     initial: (request) => ({
-      providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      providerMetadataKey: request.model.metadataKey,
       tools: ToolStream.empty<number>(),
       custom: OpenAIFreeform.tools(request),
       customCalls: new Set<number>(),
       pendingTools: {},
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
-      reasoningField: request.model.compatibility?.reasoningField,
+      reasoningField: request.model.capabilities?.reasoning?.field,
       reasoningTextObserved: false,
       reasoningDetails: [],
       reasoningDetailsObserved: false,
       reasoningEmitted: false,
       nextToolIndex: 0,
-      requireFinishReason: request.model.compatibility?.requireFinishReason ?? true,
+      requireFinishReason: request.model.capabilities?.output?.requireFinishReason ?? true,
     }),
     step: (state: ParserState, event) => (event === DONE ? Effect.succeed([state, []] as const) : step(state, event)),
     terminal: (event) => event === DONE,
@@ -1422,14 +1423,15 @@ export const protocol = Protocol.make({
 export const framing = Framing.sseWithDone
 export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>().with({ framing })
 
-export const route = Route.make({
+/** OpenAI Chat Completions, the format most OpenAI-compatible hosts serve. */
+export const api = Api.make({
+  name: "chat-completions",
   id: ADAPTER,
-  provider: "openai",
-  providerMetadataKey: "openai",
+  short: "chat",
   protocol,
-  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.none,
+  path: PATH,
   transport: httpTransport,
+  capabilities: Capabilities.defaults<Capabilities.ChatCompletions>(),
 })
 
 export * as OpenAIChat from "./openai-chat.js"

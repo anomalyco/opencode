@@ -8,9 +8,16 @@ import { dynamicResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 import { isRetryable } from "../../src/provider-error.js"
 
+const models = (settings: VercelAIGateway.Settings = {}) => ({
+  model: (id: string) => VercelAIGateway.model(id, settings),
+  messages: (id: string) => VercelAIGateway.messagesModel(id, settings),
+  responses: (id: string) => VercelAIGateway.responsesModel(id, settings),
+  chat: (id: string) => VercelAIGateway.chatModel(id, settings),
+})
+
 it.effect("Gateway defaults preserve full model IDs and select the requested families", () =>
   Effect.gen(function* () {
-    const gateway = VercelAIGateway.configure({ apiKey: "fixture" })
+    const gateway = models({ apiKey: "fixture" })
     for (const [id, path] of [
       ["openai/gpt-6.1", "/responses"],
       ["meta/muse-spark-1.3", "/chat/completions"],
@@ -25,7 +32,7 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
       const model = gateway.model(id)
       expect(model.id).toBe(id)
       expect(model.provider).toBe("vercel-ai-gateway")
-      expect(model.route.endpoint.path).toBe(path)
+      expect(model.api.path).toBe(path)
       const compiled = yield* compileRequest(ai.request({ model, prompt: "Hello" }))
       expect(compiled.body.model).toBe(id)
       expect(compiled.body.providerOptions).toBeUndefined()
@@ -35,7 +42,7 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
 
 it.effect("Gateway Messages applies inline cache markers only for Anthropic and Qwen models", () =>
   Effect.gen(function* () {
-    const gateway = VercelAIGateway.configure({ apiKey: "fixture" })
+    const gateway = models({ apiKey: "fixture" })
     const input = {
       system: "System prompt",
       tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
@@ -64,7 +71,7 @@ it.effect("Gateway keeps distinct system blocks, cache hints, and upstream-scope
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
       ai.request({
-        model: VercelAIGateway.configure({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-5.5"),
+        model: models({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-5.5"),
         system: [
           { type: "text", text: "Stable", cache: new CacheHint({ type: "ephemeral" }) },
           { type: "text", text: "Project" },
@@ -94,7 +101,7 @@ it.effect("Gateway keeps distinct system blocks, cache hints, and upstream-scope
 
 it.effect("Gateway effort settings lower to the selected API", () =>
   Effect.gen(function* () {
-    const gateway = VercelAIGateway.configure({ apiKey: "fixture", providerOptions: { reasoningEffort: "high" } })
+    const gateway = models({ apiKey: "fixture", reasoningEffort: "high" })
     const messages = yield* compileRequest(
       ai.request({ model: gateway.messages("anthropic/claude-sonnet-5.5"), prompt: "Hello" }),
     )
@@ -116,7 +123,7 @@ it.effect("Gateway Responses keeps cache-key and cache controls out of upstream 
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
       ai.request({
-        model: VercelAIGateway.configure({ apiKey: "fixture" }).responses("openai/gpt-6-luna"),
+        model: models({ apiKey: "fixture" }).responses("openai/gpt-6-luna"),
         prompt: "Hello",
         promptCacheKey: "opaque-session",
         providerOptions: { cacheTTL: "1h", cacheAnchorItems: 1 },
@@ -129,7 +136,7 @@ it.effect("Gateway Responses keeps cache-key and cache controls out of upstream 
 
 it.effect("Gateway Messages preserves signatures and billing metadata through tool continuation", () =>
   Effect.gen(function* () {
-    const model = VercelAIGateway.configure({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-5.5")
+    const model = models({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-5.5")
     const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         dynamicResponse((input) =>
@@ -195,7 +202,7 @@ it.effect("Gateway Messages preserves signatures and billing metadata through to
 
 it.effect("Gateway Responses replays encrypted reasoning alongside tool calls", () =>
   Effect.gen(function* () {
-    const model = VercelAIGateway.configure({ apiKey: "fixture" }).responses("openai/gpt-6-luna")
+    const model = models({ apiKey: "fixture" }).responses("openai/gpt-6-luna")
     const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         dynamicResponse((input) =>
@@ -250,7 +257,7 @@ it.effect("Gateway 401 and 403 failures are terminal and retain HTTP context", (
     for (const status of [401, 403]) {
       const error = yield* LLMClient.generate(
         ai.request({
-          model: VercelAIGateway.configure({ apiKey: "fixture" }).chat("openai/gpt-6-luna"),
+          model: models({ apiKey: "fixture" }).chat("openai/gpt-6-luna"),
           prompt: "Hello",
         }),
       ).pipe(
@@ -277,7 +284,7 @@ it.effect("Gateway authentication supports OIDC fallback and affinity without re
     for (const api of ["messages", "responses", "chat"] as const) {
       yield* LLMClient.generate(
         ai.request({
-          model: VercelAIGateway.configure()[api]("openai/gpt-6-luna"),
+          model: models()[api]("openai/gpt-6-luna"),
           prompt: "Hello",
           promptCacheKey: "opaque-session",
         }),

@@ -10,8 +10,9 @@ import {
   type HttpMiddleware,
   type WebSocketChannelExecutor,
 } from "../src/route.js"
-import { route } from "../src/protocols/openai-chat.js"
-import { configure } from "../src/providers/openai.js"
+import { OpenAIChat } from "../src/protocols/openai-chat.js"
+import { OpenAI } from "../src/providers.js"
+import { apiModel } from "./lib/model.js"
 import { dynamicResponse, fixedResponse, handlerLayer, systemError, truncatedStream } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
@@ -788,7 +789,7 @@ describe("RequestExecutor", () => {
   it.effect("does not re-execute after a successful response reaches stream parsing", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      const model = route.with({ endpoint: { baseURL: "https://api.openai.test/v1" } }).model({ id: "gpt-4o-mini" })
+      const model = apiModel(OpenAIChat.api, "gpt-4o-mini", { baseURL: "https://api.openai.test/v1" })
       const error = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -819,7 +820,7 @@ describe("RequestExecutor", () => {
 })
 
 describe("WebSocket channel execution", () => {
-  const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
+  const model = OpenAI.openai.with({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-4.1-mini")
   const request = ai.request({ model, prompt: "Say hello." })
   const frames = [
     JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_1" } }),

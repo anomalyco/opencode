@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai } from "../../src/effect.js"
-import { MiniMax } from "../../src/providers.js"
+import { MiniMax } from "../../src/providers/minimax.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { Auth } from "../../src/route/auth.js"
@@ -12,27 +12,28 @@ import { it } from "../lib/effect.js"
 
 describe("MiniMax provider", () => {
   test("composes the baseline Messages and Responses protocols", () => {
-    const minimax = MiniMax.configure()
-    expect(minimax.model).toBe(minimax.messages)
-    expect(minimax.model("MiniMax-M3").route.body).toBe(AnthropicMessages.protocol.body)
-    expect(minimax.responses("MiniMax-M3").route.body).toBe(OpenResponses.protocol.body)
+    expect(MiniMax.model("MiniMax-M3").api.name).toBe("messages")
+    expect(MiniMax.model("MiniMax-M3").api.protocol.body).toBe(AnthropicMessages.protocol.body)
+    expect(MiniMax.responsesModel("MiniMax-M3").api.protocol.body).toBe(OpenResponses.protocol.body)
   })
 
   it.effect("owns API endpoints, provider identity and environment bearer authentication", () =>
     Effect.gen(function* () {
-      const minimax = MiniMax.configure()
       for (const item of [
-        { model: minimax.model("MiniMax-M3"), path: "/anthropic/v1/messages" },
-        { model: minimax.chat("MiniMax-M3"), path: "/v1/chat/completions" },
-        { model: minimax.responses("MiniMax-M3"), path: "/v1/responses" },
+        { model: MiniMax.model("MiniMax-M3"), path: "/anthropic/v1/messages" },
+        { model: MiniMax.chatModel("MiniMax-M3"), path: "/v1/chat/completions" },
+        { model: MiniMax.responsesModel("MiniMax-M3"), path: "/v1/responses" },
       ]) {
         const request = ai.request({ model: item.model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
-        expect(item.model.provider).toBe("minimax")
-        expect(item.model.route.providerMetadataKey).toBe("minimax")
-        const url = Endpoint.render(item.model.route.endpoint, { request, body: compiled.body }).toString()
+        expect(item.model.provider as string).toBe("minimax")
+        expect(item.model.metadataKey).toBe("minimax")
+        const url = Endpoint.render(
+          { baseURL: item.model.baseURL, path: item.model.api.path, query: item.model.query },
+          { request, body: compiled.body },
+        ).toString()
         expect(url).toBe(`https://api.minimax.io${item.path}`)
-        const headers = yield* item.model.route.auth.apply({
+        const headers = yield* item.model.auth.apply({
           request,
           method: "POST",
           url,
@@ -47,17 +48,19 @@ describe("MiniMax provider", () => {
 
   it.effect("honors explicit auth and custom API bases", () =>
     Effect.gen(function* () {
-      const model = MiniMax.configure({
-        baseURL: "https://gateway.example/anthropic/v1",
-        auth: Auth.header("x-api-key", "gateway-key"),
-      }).model("custom-model")
+      const model = MiniMax.minimax
+        .with({ baseURL: "https://gateway.example/anthropic/v1", auth: Auth.header("x-api-key", "gateway-key") })
+        .model("custom-model")
       const request = ai.request({ model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
-      expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
-        "https://gateway.example/anthropic/v1/messages",
-      )
-      expect(model.route.headers?.({ request })).toEqual({ "anthropic-version": "2023-06-01" })
-      const headers = yield* model.route.auth.apply({
+      expect(
+        Endpoint.render(
+          { baseURL: model.baseURL, path: model.api.path, query: model.query },
+          { request, body: compiled.body },
+        ).toString(),
+      ).toBe("https://gateway.example/anthropic/v1/messages")
+      expect(model.api.headers?.({ request })).toEqual({ "anthropic-version": "2023-06-01" })
+      const headers = yield* model.auth.apply({
         request,
         method: "POST",
         url: "https://gateway.example/anthropic/v1/messages",
@@ -71,10 +74,9 @@ describe("MiniMax provider", () => {
 
   it.effect("keeps thinking controls native to the selected API", () =>
     Effect.gen(function* () {
-      const minimax = MiniMax.configure({ apiKey: "fixture" })
       const messages = yield* compileRequest(
         ai.request({
-          model: minimax.model("MiniMax-M3"),
+          model: MiniMax.model("MiniMax-M3", { apiKey: "fixture" }),
           prompt: "Hello",
           providerOptions: { thinking: { type: "adaptive" } },
         }),
@@ -83,7 +85,7 @@ describe("MiniMax provider", () => {
       expect(messages.body.output_config).toBeUndefined()
       const chat = yield* compileRequest(
         ai.request({
-          model: minimax.chat("MiniMax-M3"),
+          model: MiniMax.chatModel("MiniMax-M3", { apiKey: "fixture" }),
           prompt: "Hello",
           maxTokens: 128,
           providerOptions: { thinking: { type: "disabled" }, reasoningSplit: false },
@@ -98,7 +100,7 @@ describe("MiniMax provider", () => {
       expect(chat.body.store).toBeUndefined()
       const responses = yield* compileRequest(
         ai.request({
-          model: minimax.responses("MiniMax-M3"),
+          model: MiniMax.responsesModel("MiniMax-M3", { apiKey: "fixture" }),
           prompt: "Hello",
           providerOptions: { reasoningEffort: "minimal" },
         }),

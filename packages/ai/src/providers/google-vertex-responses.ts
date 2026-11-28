@@ -1,20 +1,8 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenResponses } from "../protocols/open-responses.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
+import { Provider } from "../provider.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-
-export const id = ProviderID.make("google-vertex")
-
-export type Config = RequestOptions &
-  GoogleVertexShared.OAuthOptions & {
-    readonly baseURL?: string
-    readonly location?: string
-    readonly project?: string
-    readonly providerOptions?: OpenResponsesProviderOptionsInput
-  }
 
 export type Settings = ProviderPackage.Settings &
   OpenResponsesProviderOptionsInput & {
@@ -25,40 +13,18 @@ export type Settings = ProviderPackage.Settings &
     readonly project?: string
   }
 
-const route = Route.make({
-  id: "google-vertex-responses",
-  provider: id,
-  providerMetadataKey: "vertex",
-  protocol: OpenResponses.protocol,
-  endpoint: Endpoint.path(OpenResponses.PATH),
-  transport: OpenResponses.httpTransport,
-  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
-})
+export const responses = OpenResponses.statelessApi
+  .extend({ id: "google-vertex-responses" })
+  .configure({ metadataKey: "vertex" })
 
-export const routes = [route]
-
-const configuredRoute = (input: Config) =>
-  GoogleVertexShared.oauthRoute(
-    route,
+export const googleVertexResponses = Provider.make({
+  ...GoogleVertexShared.shared,
+  apis: [responses],
+  settings: GoogleVertexShared.oauthSettings(
     "Responses",
-    input,
     (project, location) =>
       `https://aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/endpoints/openapi`,
-  )
+  ),
+})
 
-export const configure = (input: Config = {}) => {
-  const route = configuredRoute(input)
-  return {
-    id,
-    model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
-    configure,
-  }
-}
-
-export const provider = {
-  id,
-  configure,
-}
-
-export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings = {}) =>
-  configure(GoogleVertexShared.oauthSettings<OpenResponsesProviderOptionsInput>("Responses", settings)).model(modelID)
+export const model = Provider.entrypoint<Settings, OpenResponsesProviderOptionsInput>(googleVertexResponses)

@@ -3,10 +3,10 @@
 // gives the tools a route without in-place changes sends. A protocol that can send some changes in place keeps
 // them where they are, so the leading declaration, and the prompt cache behind it, stays fixed.
 import { Message, SystemMessage, type LLMRequest, type ToolChanges, type ToolEntry } from "./schema/messages.js"
-import type { Capabilities } from "./schema/options.js"
+import type { Capabilities } from "./capabilities.js"
 import { flattenTools } from "./protocols/shared.js"
 
-export type ToolUpdate = NonNullable<NonNullable<Capabilities["tools"]>["updates"]>[number]
+export type ToolUpdate = NonNullable<NonNullable<Capabilities.Any["tools"]>["updates"]>[number]
 
 /** What a protocol can send in place of a `Message.tools(...)` marker; the model's `tools.updates` narrows it. */
 export interface ToolUpdateEncoding {
@@ -26,7 +26,7 @@ export const addsTools = (request: LLMRequest) =>
 
 /** The changes this route sends in place: the model's `tools.updates` that the protocol's encoding covers. */
 export const toolUpdateKinds = (request: LLMRequest) => {
-  const encoding = request.model.route.toolUpdates
+  const encoding = request.model.api.protocol.toolUpdates
   return (request.model.capabilities?.tools?.updates ?? []).filter((kind) => encoding?.kinds.includes(kind))
 }
 
@@ -59,7 +59,7 @@ const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMReq
     message.role === "system" && message.tools !== undefined ? [{ index, ...message.tools }] : [],
   )
   if (changes.length === 0) return request
-  const encoding = request.model.route.toolUpdates
+  const encoding = request.model.api.protocol.toolUpdates
   const declarable = (tool: ToolEntry) => encoding?.declarable?.(tool) ?? true
   const firstTurn = request.messages.findIndex((message) => message.role !== "system")
   const steps = changes.reduce<{

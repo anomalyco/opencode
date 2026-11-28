@@ -18,8 +18,8 @@ const response = sseEvents(
 )
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("deployment"),
+  OpenAI.openai.with({ apiKey: "test" }).model("gpt-5.3-codex"),
+  Azure.model("deployment", { apiKey: "test", resourceName: "test" }),
 ]) {
   testEffect(
     dynamicResponse(({ text, respond }) =>
@@ -47,7 +47,7 @@ for (const model of [
       yield* LLMClient.generate({ ...request, messages: [...request.messages, message, Message.user("continue")] })
       const rejected = yield* LLMClient.generate({
         ...request,
-        model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+        model: XAI.model("grok-4.6", { apiKey: "test" }),
         providerOptions: {},
         messages: [message],
       }).pipe(Effect.flip)
@@ -61,7 +61,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.completed", response: { out
   () =>
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
-        ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+        ai.request({ model: OpenAI.openai.with({ apiKey: "test" }).model("gpt-5.3-codex"), prompt: "hello" }),
       )
       expect(result.message.content).toHaveLength(1)
       expect(result.message.content[0]?.type).toBe("compaction")
@@ -73,7 +73,7 @@ testEffect(
 ).effect("rejects incomplete compaction payloads without publishing a checkpoint", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.generate(
-      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+      ai.request({ model: OpenAI.openai.with({ apiKey: "test" }).model("gpt-5.3-codex"), prompt: "hello" }),
     ).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("cmp_bad")
@@ -102,7 +102,7 @@ for (const completed of [false, true]) {
   ).effect(completed ? "keeps streamed checkpoints before later text" : "rejects order-unsafe terminal recovery", () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: OpenAI.openai.with({ apiKey: "test" }).model("fixture"),
         prompt: "hello",
       })
       if (completed) {
@@ -129,7 +129,7 @@ testEffect(
 ).effect("mints an id for terminal checkpoints that omit one", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
+      ai.request({ model: OpenAI.openai.with({ apiKey: "test" }).model("fixture"), prompt: "hello" }),
     )
     const part = response.message.content[0]
     expect(part?.type).toBe("compaction")
@@ -141,7 +141,7 @@ testEffect(
 
 // /compact must send the same history and tools as the steps before it, so it reads the prefix they cached.
 const flatRequest = ai.request({
-  model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+  model: XAI.model("grok-4.6", { apiKey: "test" }),
   tools: [
     ToolNamespace.make({
       name: "crm",
@@ -155,7 +155,10 @@ const flatRequest = ai.request({
     Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: { output: "found" } }),
   ],
 })
-const names = (body: { input: ReadonlyArray<Record<string, unknown>>; tools?: ReadonlyArray<Record<string, unknown>> }) => ({
+const names = (body: {
+  input: ReadonlyArray<Record<string, unknown>>
+  tools?: ReadonlyArray<Record<string, unknown>>
+}) => ({
   calls: body.input.flatMap((item) => (item.type === "function_call" ? [item.name] : [])),
   tools: (body.tools ?? []).map((tool) => tool.name),
 })

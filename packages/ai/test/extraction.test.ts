@@ -5,7 +5,7 @@ import { CloudflareWorkersAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json } from "./lib/http.js"
 
-const model = CloudflareWorkersAI.configure({
+const model = CloudflareWorkersAI.media({
   accountId: "test-account",
   apiKey: "cloudflare-key",
 }).experimental.extraction("@cf/cloudflare/clairic")

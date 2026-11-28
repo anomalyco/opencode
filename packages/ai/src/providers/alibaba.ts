@@ -1,158 +1,79 @@
 import { Struct } from "effect"
-import type { ProviderPackage } from "../provider-package.js"
-import { AlibabaChat } from "../protocols/alibaba-chat.js"
+import type { AlibabaChat } from "../protocols/alibaba-chat.js"
 import { AlibabaImages } from "../protocols/alibaba-images.js"
 import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
-import { AlibabaMessages } from "../protocols/alibaba-messages.js"
-import { AlibabaResponses } from "../protocols/alibaba-responses.js"
-import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
+import { Provider } from "../provider.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import {
   mergeTransport,
-  ProviderConfigurationError,
-  ProviderID,
   ToolDefinition,
   type ModelID,
   type ProviderOptions,
   type RequestOptions,
 } from "../schema/index.js"
+import { chatCompletions, type Settings as ChatSettings } from "./alibaba/chat.js"
+import { messages } from "./alibaba/messages.js"
+import { responses } from "./alibaba/responses.js"
+import { auth, baseURL, env, id, paths, type Location, type Settings as LocatedSettings } from "./alibaba/shared.js"
 
-export const id = ProviderID.make("alibaba")
-
-export type Region =
-  | "ap-southeast-1"
-  | "cn-beijing"
-  | "cn-hongkong"
-  | "us-east-1"
-  | "eu-central-1"
-  | "ap-northeast-1"
-  | (string & {})
-export type ChatOptionsInput = AlibabaChat.OptionsInput
-export type MessagesOptionsInput = AlibabaMessages.OptionsInput
-export type ResponsesOptionsInput = AlibabaResponses.OptionsInput
+export type { Location, Region } from "./alibaba/shared.js"
+export type { OptionsInput as ChatOptionsInput } from "../protocols/alibaba-chat.js"
+export type { OptionsInput as MessagesOptionsInput } from "../protocols/alibaba-messages.js"
+export type { OptionsInput as ResponsesOptionsInput } from "../protocols/alibaba-responses.js"
 export type { AlibabaImageOptions } from "../protocols/alibaba-images.js"
+export { model } from "./alibaba/chat.js"
+export { model as messagesModel } from "./alibaba/messages.js"
+export { model as responsesModel } from "./alibaba/responses.js"
 
-type Location = AtLeastOne<{
-  readonly region: Region
-  /** Overrides the selected API's complete base URL, including its version prefix. */
-  readonly baseURL: string
-}> & { readonly workspaceID?: string }
+export type Settings<Options = AlibabaChat.OptionsInput> = LocatedSettings<Options>
 
+/** Alibaba Model Studio in one region. Each API is served from its own path on the region's host. */
+export const alibaba = (location: Location) =>
+  Provider.make({
+    id,
+    auth,
+    apis: [
+      chatCompletions.configure({ baseURL: baseURL(location, paths.compatible) }),
+      messages.configure({ baseURL: baseURL(location, paths.anthropic) }),
+      responses.configure({ baseURL: baseURL(location, paths.compatible) }),
+    ],
+  })
+
+/** Connection settings for Alibaba's image and embedding models. Language models come from `alibaba`. */
 export type Config = Location &
   Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
-    readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
-  }
-export type Settings<Options = ChatOptionsInput> = Location &
-  ProviderPackage.Settings &
-  Options & {
-    readonly apiKey?: string | false
+    readonly providerOptions?: ProviderOptions
   }
 
-const hosts = new Map<string, string>([
-  ["ap-southeast-1", "dashscope-intl.aliyuncs.com"],
-  ["cn-beijing", "dashscope.aliyuncs.com"],
-  ["cn-hongkong", "cn-hongkong.dashscope.aliyuncs.com"],
-  ["us-east-1", "dashscope-us.aliyuncs.com"],
-])
-const chatRoute = Route.make({
-  id: "alibaba-chat",
-  provider: id,
-  providerMetadataKey: "alibaba",
-  protocol: AlibabaChat.protocol,
-  endpoint: Endpoint.path("/chat/completions"),
-  framing: Framing.sse,
-})
-const messagesRoute = Route.make({
-  id: "alibaba-messages",
-  provider: id,
-  providerMetadataKey: "alibaba",
-  protocol: AlibabaMessages.protocol,
-  endpoint: Endpoint.path("/messages"),
-  framing: Framing.sse,
-  headers: () => ({ "anthropic-version": "2023-06-01" }),
-})
-const responsesRoute = Route.make({
-  id: "alibaba-responses",
-  provider: id,
-  providerMetadataKey: "alibaba",
-  protocol: AlibabaResponses.protocol,
-  endpoint: Endpoint.path("/responses"),
-  framing: Framing.sse,
-})
-
-export const routes = [chatRoute, messagesRoute, responsesRoute]
-
-export const configure = (input: Config) => {
-  const { apiKey: _key, auth: _auth, region, workspaceID, baseURL, ...rest } = input
-  const host =
-    region === undefined
-      ? undefined
-      : workspaceID === undefined
-        ? hosts.get(region)
-        : `${workspaceID}.${region}.maas.aliyuncs.com`
-  if (baseURL === undefined) {
-    if (region === undefined)
-      throw new ProviderConfigurationError({ provider: id, message: "Alibaba requires region or baseURL" })
-    if (host === undefined)
-      throw new ProviderConfigurationError({
-        provider: id,
-        message: `Alibaba region ${region} requires workspaceID or baseURL`,
-      })
-  }
-  const opts = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
-  const common = { ...opts, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }
-  const chat = (id: string | ModelID) =>
-    chatRoute
-      .with(common)
-      .model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility, capabilities: AlibabaChat.capabilities })
-  const messages = (id: string | ModelID) =>
-    messagesRoute
-      .with({
-        ...opts,
-        endpoint: { baseURL: baseURL ?? `https://${host}/apps/anthropic/v1` },
-      })
-      .model<MessagesOptionsInput>({ id, compatibility: { requireSignature: false } })
-  const responses = (id: string | ModelID) => responsesRoute.with(common).model<ResponsesOptionsInput>({ id })
-  const media = MediaRoute.deployment({ ...input, baseURL: baseURL ?? `https://${host}/api/v1` }, opts.auth)
-  const image = (id: string | ModelID, providerOptions?: ProviderOptions) =>
-    AlibabaImages.model({ ...media, id, providerOptions })
+export const media = (input: Config) => {
+  const credential = AuthOptions.bearer(input, env)
+  const deployment = MediaRoute.deployment({ ...input, baseURL: baseURL(input, paths.media) }, credential)
   const embeddingRoute = OpenAIEmbeddings.route.with({
     provider: id,
-    endpoint: common.endpoint,
-    auth: opts.auth,
+    endpoint: { baseURL: baseURL(input, paths.compatible) },
+    auth: credential,
     ...mergeTransport(input),
   })
-  const embedding = (id: string | ModelID, providerOptions?: ProviderOptions) =>
-    embeddingRoute.model({ id, providerOptions })
-  return { id, model: chat, chat, messages, responses, image, embedding, configure }
+  return {
+    image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      AlibabaImages.model({ ...deployment, id: modelID, providerOptions }),
+    embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      embeddingRoute.model({ id: modelID, providerOptions }),
+  }
 }
 
-export const provider = { id, configure }
-
-export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (id, input) => configure(config(input)).chat(id)
-export const messagesModel: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (id, input) =>
-  configure(config(input)).messages(id)
-export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInput>, ResponsesOptionsInput> = (
-  id,
-  input,
-) => configure(config(input)).responses(id)
-export const chat = model
-export const messages = messagesModel
-export const responses = responsesModel
-export const imageModel = (id: string, settings: Settings) => {
+export const imageModel = (modelID: string, settings: ChatSettings) => {
   const input = config(settings)
-  return configure(input).image(id, input.providerOptions)
+  return media(input).image(modelID, input.providerOptions)
 }
-export const embeddingModel = (id: string, settings: Settings) => {
+export const embeddingModel = (modelID: string, settings: ChatSettings) => {
   const input = config(settings)
-  return configure(input).embedding(id, input.providerOptions)
+  return media(input).embedding(modelID, input.providerOptions)
 }
 
-function config(input: Settings<Config["providerOptions"]>) {
+function config(input: ChatSettings) {
   const { body, ...rest } = input
   return {
     ...rest,

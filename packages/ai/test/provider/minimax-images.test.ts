@@ -3,11 +3,11 @@ import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, ImageClient, Media } from "../../src/effect.js"
 import type { ImageRequestInput } from "../../src/image.js"
-import { MiniMax } from "../../src/providers.js"
+import { MiniMax } from "../../src/providers/minimax.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 
-const minimax = MiniMax.configure({ apiKey: "test" })
+const minimax = MiniMax.media({ apiKey: "test" })
 const imageResponse = JSON.stringify({ data: { image_urls: ["https://cdn.minimax.test/a.jpeg"] } })
 
 /** The JSON body MiniMax receives for a request. */
@@ -52,7 +52,7 @@ describe("MiniMax Images", () => {
   it.effect("generates through the MiniMax image API", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: MiniMax.configure({
+        model: MiniMax.media({
           apiKey: "test",
           baseURL: "https://api.minimax.test/v1",
           headers: { "x-default": "yes" },

@@ -1,4 +1,5 @@
 import { HttpRecorder } from "@opencode/http-recorder"
+import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { Auth, LLMClient, type LLMClientService, RequestExecutor } from "@opencode/ai/route"
 import { Model } from "@opencode/core/model"
@@ -57,14 +58,15 @@ const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDire
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
 const permission = permissionLayer()
-const model = OpenAIChat.route
-  .with({
-    endpoint: { baseURL: "https://api.openai.com/v1" },
-    auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
-    maxTokens: 20,
-    temperature: 0,
-  })
-  .model({ id: "gpt-4o-mini", capabilities: { promptCacheKey: true } })
+const model = LanguageModel.make({
+  id: "gpt-4o-mini",
+  provider: "openai",
+  api: OpenAIChat.api,
+  baseURL: "https://api.openai.com/v1",
+  auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
+  options: { maxTokens: 20, temperature: 0 },
+  capabilities: { cache: { promptCacheKey: true } },
+})
 const models = Layer.mock(SessionRunnerModel.Service)({
   select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
   resolve: () =>

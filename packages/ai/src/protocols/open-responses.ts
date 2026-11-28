@@ -1,5 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import type { Content } from "@opencode/schema/tool"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
@@ -990,7 +992,7 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
-export const metadataKey = (model: LLMRequest["model"]) => model.route.providerMetadataKey ?? "openresponses"
+export const metadataKey = (model: LLMRequest["model"]) => model.metadataKey
 
 export const providerMetadata = (state: ParserState, metadata: Record<string, unknown>): ProviderMetadata => ({
   [state.providerMetadataKey]: metadata,
@@ -1645,5 +1647,21 @@ export const protocol = Protocol.make({
 })
 
 export const httpTransport = HttpTransport.sseJson.with<OpenResponsesBody>()
+
+/** The provider-neutral Responses baseline that Responses-compatible hosts serve. */
+export const api = Api.make({
+  name: "responses",
+  id: "open-responses",
+  protocol,
+  path: PATH,
+  transport: httpTransport,
+  capabilities: Capabilities.defaults<Capabilities.Responses>(),
+})
+
+/** `api` with the stateless defaults OpenAI-style hosts expect: no storage, encrypted reasoning returned. */
+export const statelessApi = api.extend({
+  id: "open-responses",
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
 
 export * as OpenResponses from "./open-responses.js"

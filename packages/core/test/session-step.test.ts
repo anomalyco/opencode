@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
+import { Auth } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -72,7 +73,13 @@ for (const fixture of [
         .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
         .run()
       const model = SessionRunnerModel.resolved(
-        LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+        LanguageModel.make({
+          id: "test-model",
+          provider: "test",
+          api: OpenAIChat.api,
+          baseURL: OpenAIChat.DEFAULT_BASE_URL,
+          auth: Auth.none,
+        }),
         {
           capabilities: { tools: true, input: ["text"], output: ["text"] },
           limit: { context: 100_000, output: 1_000 },
@@ -184,7 +191,13 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
       .run()
     const model = SessionRunnerModel.resolved(
-      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+      LanguageModel.make({
+        id: "test-model",
+        provider: "test",
+        api: OpenAIChat.api,
+        baseURL: OpenAIChat.DEFAULT_BASE_URL,
+        auth: Auth.none,
+      }),
       {
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         limit: { context: 100_000, output: 1_000 },
@@ -262,7 +275,13 @@ const stopTwoTools = (how: {
       .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
       .run()
     const model = SessionRunnerModel.resolved(
-      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+      LanguageModel.make({
+        id: "test-model",
+        provider: "test",
+        api: OpenAIChat.api,
+        baseURL: OpenAIChat.DEFAULT_BASE_URL,
+        auth: Auth.none,
+      }),
       {
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         limit: { context: 100_000, output: 1_000 },

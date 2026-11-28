@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { ai, Message, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
-import { compileRequest } from "../src/route/client.js"
+import { compileRequest, prepareTransport } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
@@ -21,16 +21,22 @@ import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
+import { apiModel } from "./lib/model.js"
 
 const anthropic = (id: string, updates?: boolean) =>
-  AnthropicMessages.route
-    .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-    .model({ id, capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
+  apiModel(AnthropicMessages.api, id, {
+    provider: "anthropic",
+    baseURL: "https://api.anthropic.test/v1/",
+    auth: Auth.header("x-api-key", "test"),
+    capabilities: updates === undefined ? undefined : { reasoning: { updates } },
+  })
 
 const openai = (id: string, updates?: boolean) =>
-  OpenAIResponses.route
-    .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-    .model({ id, capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
+  apiModel(OpenAIResponses.api, id, {
+    baseURL: "https://api.openai.test/v1/",
+    auth: Auth.bearer("test"),
+    capabilities: updates === undefined ? undefined : { reasoning: { updates } },
+  })
 
 const opus5 = anthropic("claude-opus-5")
 const astra = openai("gpt-6-astra")
@@ -55,12 +61,11 @@ describe("applyEffortUpdates", () => {
 
   it.effect("compiles markers away for protocols without per-message effort", () =>
     Effect.gen(function* () {
-      const model = Gemini.route
-        .with({
-          endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
-          auth: Auth.header("x-goog-api-key", "test"),
-        })
-        .model({ id: "gemini-3.5-flash" })
+      const model = apiModel(Gemini.api, "gemini-3.5-flash", {
+        baseURL: "https://generativelanguage.test/v1beta/",
+        provider: "google",
+        auth: Auth.header("x-goog-api-key", "test"),
+      })
       const withMarkers = yield* compileRequest(ai.request({ model, messages: conversation }))
       const withoutMarkers = yield* compileRequest(
         ai.request({ model, messages: [Message.user("Before."), Message.user("After.")] }),
@@ -148,7 +153,7 @@ describe("Anthropic Messages effort updates", () => {
           headers: { "anthropic-beta": "existing-beta" },
         })
         const compiled = yield* compileRequest(request)
-        const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
+        const prepared = yield* prepareTransport(compiled.body, request)
         const betas = prepared.request.headers["anthropic-beta"]!.split(",")
         expect(betas).toContain("existing-beta")
         expect(betas.includes("mid-conversation-output-config-2026-07-01")).toBe(expected)
@@ -296,17 +301,17 @@ describe("Anthropic Messages effort updates", () => {
 
   it.effect("strips markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
     Effect.gen(function* () {
-      const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
+      const mantleSettings = { apiKey: "test", region: "us-east-1" }
       const opus50 = yield* compileRequest(
         ai.request({
-          model: mantle.messages("anthropic.claude-opus-5"),
+          model: AmazonBedrockMantle.messagesModel("anthropic.claude-opus-5", mantleSettings),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
       const opus55 = yield* compileRequest(
         ai.request({
-          model: mantle.messages("anthropic.claude-opus-5-5"),
+          model: AmazonBedrockMantle.messagesModel("anthropic.claude-opus-5-5", mantleSettings),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
@@ -321,17 +326,17 @@ describe("Anthropic Messages effort updates", () => {
 
   it.effect("lowers markers on the Vertex Anthropic route for models that support them", () =>
     Effect.gen(function* () {
-      const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
+      const vertexSettings = { accessToken: "test", location: "global", project: "test" }
       const opus5 = yield* compileRequest(
         ai.request({
-          model: vertex.model("claude-opus-5"),
+          model: GoogleVertexMessages.model("claude-opus-5", vertexSettings),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
       const opus48 = yield* compileRequest(
         ai.request({
-          model: vertex.model("claude-opus-4-8"),
+          model: GoogleVertexMessages.model("claude-opus-4-8", vertexSettings),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
@@ -446,9 +451,7 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } }).responses(
-            "gpt-6-sol",
-          ),
+          model: OpenAI.openai.with({ apiKey: "fixture", body: { reasoning: { mode: "pro" } } }).model("gpt-6-sol"),
           messages: conversation,
           providerOptions: { reasoningEffort: "low" },
         }),
@@ -463,7 +466,7 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-6-sol"),
+          model: OpenAI.openai.with({ apiKey: "fixture" }).model("gpt-6-sol"),
           messages: conversation,
           providerOptions: { reasoningEffort: "low", reasoningMode: "pro" },
         }),
@@ -536,7 +539,7 @@ describe("OpenAI Responses effort updates", () => {
 
   const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
   const compactRequest = ai.request({
-    model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-6-astra"),
+    model: OpenAI.openai.with({ apiKey: "fixture" }).model("gpt-6-astra"),
     messages: conversation,
     providerOptions: { reasoningEffort: "low" },
   })
@@ -585,13 +588,12 @@ describe("OpenAI Responses effort updates", () => {
 
 describe("Open Responses effort updates", () => {
   const compatible = (updates?: boolean) =>
-    OpenAICompatibleResponses.route
-      .with({
-        provider: "github-copilot",
-        endpoint: { baseURL: "https://api.githubcopilot.test" },
-        auth: Auth.bearer("test"),
-      })
-      .model({ id: "gpt-6.2-sol", capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
+    apiModel(OpenAICompatibleResponses.api, "gpt-6.2-sol", {
+      provider: "github-copilot",
+      baseURL: "https://api.githubcopilot.test",
+      auth: Auth.bearer("test"),
+      capabilities: updates === undefined ? undefined : { reasoning: { updates } },
+    })
 
   it.effect("lowers markers to configuration_update items and freezes reasoning.effort for opted-in models", () =>
     Effect.gen(function* () {
@@ -620,37 +622,39 @@ describe("Open Responses effort updates", () => {
   )
 })
 
-describe("Routes built on the Anthropic Messages and Open Responses formats", () => {
-  // Each of these routes makes its own protocol from a shared body; the effort update support must come along.
+describe("APIs built on the Anthropic Messages and Open Responses formats", () => {
+  // Each of these APIs makes its own protocol from a shared body; the effort update support must come along.
   const wrapped = [
-    ...Alibaba.routes,
-    ...Meta.routes,
-    ...ZAICodingPlan.routes,
-    ...XAI.routes,
-    ...OpenRouter.routes,
-  ].filter((route) => route.id.endsWith("-messages") || route.id.endsWith("-responses"))
+    ...Alibaba.alibaba({ region: "ap-southeast-1" }).apis,
+    ...Meta.meta.apis,
+    ...ZAICodingPlan.zaiCodingPlan.apis,
+    ...XAI.xai.apis,
+    ...OpenRouter.openrouter.apis,
+  ].filter((api) => api.name === "messages" || api.name === "responses")
 
-  test("covers every wrapping route", () => {
-    expect(wrapped.map((route) => route.id).toSorted()).toEqual([
+  test("covers every wrapping API", () => {
+    expect(wrapped.map((api) => api.id).toSorted()).toEqual([
       "alibaba-messages",
       "alibaba-responses",
       "meta-messages",
       "meta-responses",
       "openrouter-responses",
       "xai-responses",
-      "zai-coding-messages",
       "zai-coding-responses",
+      "zai-messages",
     ])
   })
 
-  for (const route of wrapped) {
+  for (const api of wrapped) {
     const model = (updates?: boolean) =>
-      route
-        .with({ endpoint: { baseURL: "https://api.example.test/v1" }, auth: Auth.bearer("test") })
-        .model({ id: "test-model", capabilities: updates === undefined ? undefined : { reasoning: { updates } } })
-    const messages = route.id.endsWith("-messages")
+      apiModel(api, "test-model", {
+        baseURL: "https://api.example.test/v1",
+        auth: Auth.bearer("test"),
+        capabilities: updates === undefined ? undefined : { reasoning: { updates } },
+      })
+    const messages = api.name === "messages"
 
-    it.effect(`${route.id} sends effort updates only for models that opt in`, () =>
+    it.effect(`${api.id} sends effort updates only for models that opt in`, () =>
       Effect.gen(function* () {
         const send = (updates?: boolean) =>
           compileRequest(

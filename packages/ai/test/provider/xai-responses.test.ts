@@ -18,7 +18,7 @@ import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.6")
+const model = XAI.model("grok-4.6", { apiKey: "test", baseURL: "https://api.x.ai/v1" })
 
 /** Runs a request through the WebSocket transport and hands back its channel driver; the HTTP fallback answers. */
 const channelDriver = (request: ReturnType<typeof ai.request>) =>
@@ -56,9 +56,9 @@ describe("xAI Responses route", () => {
       expect(XAIResponses.protocol.body).not.toBe(OpenAIResponses.protocol.body)
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Hello" }))
-      expect(prepared.route).toBe("xai-responses")
+      expect(prepared.api).toBe("xai-responses")
       expect(prepared.protocol).toBe("xai-responses")
-      expect(prepared.model.route.providerMetadataKey).toBe("xai")
+      expect(prepared.model.metadataKey).toBe("xai")
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
     }),
@@ -330,10 +330,13 @@ describe("xAI Responses route", () => {
 it.effect("names the xAI Chat route separately from its OpenAI Chat protocol", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
-      ai.request({ model: XAI.configure({ apiKey: "test" }).chat("grok-4.6"), prompt: "Hello" }),
+      ai.request({
+        model: XAI.xai.with({ apiKey: "test" }).model("grok-4.6", { api: "chat-completions" }),
+        prompt: "Hello",
+      }),
     )
-    expect(prepared.route).toBe("xai-chat")
+    expect(prepared.api).toBe("xai-chat")
     expect(prepared.protocol).toBe("openai-chat")
-    expect(prepared.model.route.providerMetadataKey).toBe("xai")
+    expect(prepared.model.metadataKey).toBe("xai")
   }),
 )

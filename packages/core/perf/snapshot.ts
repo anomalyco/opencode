@@ -237,6 +237,7 @@ export async function session(snapshots: "on" | "off", ttft: number) {
   // APIs differ, and the first session call (a warmup run) pays for the import.
   const { ai, LanguageModel } = await import("@opencode/ai/effect")
   const { OpenAIChat } = await import("@opencode/ai/protocols/openai-chat")
+  const { Auth } = await import("@opencode/ai/route")
   const { TestLLM } = await import("@opencode/ai/testing")
   const { LayerNode } = await import("@opencode/util/effect/layer-node")
   const { Money } = await import("@opencode/schema/money")
@@ -254,7 +255,13 @@ export async function session(snapshots: "on" | "off", ttft: number) {
   const { ToolOutput } = await import("../src/tool-output")
 
   const model = SessionRunnerModel.resolved(
-    LanguageModel.make({ id: "bench-model", provider: "test", route: OpenAIChat.route }),
+    LanguageModel.make({
+      id: "bench-model",
+      provider: "test",
+      api: OpenAIChat.api,
+      baseURL: OpenAIChat.DEFAULT_BASE_URL,
+      auth: Auth.none,
+    }),
     {
       capabilities: { tools: true, input: ["text"], output: ["text"] },
       limit: { context: 100_000, output: 1_000 },

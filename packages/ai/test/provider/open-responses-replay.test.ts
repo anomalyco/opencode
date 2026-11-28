@@ -1,19 +1,28 @@
+import type { ProviderOptions } from "../../src/schema/index.js"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message } from "../../src/effect.js"
 import { Meta, OpenAI } from "../../src/providers.js"
-import { configure } from "../../src/providers/openai-compatible-responses.js"
+import { openAICompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
+const compatible = (
+  id: string,
+  settings: { apiKey?: string; baseURL: string; provider?: string; providerOptions?: ProviderOptions },
+) =>
+  openAICompatibleResponses(settings.provider)
+    .with({ apiKey: settings.apiKey, baseURL: settings.baseURL, providerOptions: settings.providerOptions })
+    .model(id)
+
 for (const model of [
-  OpenAI.configure({ apiKey: "test-key" }).responses("example-model"),
-  configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+  OpenAI.model("example-model", { apiKey: "test-key" }),
+  compatible("example-model", { apiKey: "test-key", baseURL: "https://responses.example.test/v1" }),
 ]) {
-  describe(`${model.route.protocol} message replay`, () => {
-    const key = model.route.providerMetadataKey ?? "openresponses"
+  describe(`${model.api.protocol.id} message replay`, () => {
+    const key = model.metadataKey
 
     it.effect("marks assistant text completed regardless of stored status", () =>
       Effect.gen(function* () {
@@ -120,7 +129,7 @@ for (const model of [
 }
 
 describe("Responses replay of commentary after a tool call in the same turn", () => {
-  const compatible = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" })
+  const settings = { apiKey: "test-key", baseURL: "https://responses.example.test/v1" }
   const call = (key: string, id: string, input: Record<string, unknown>) => ({
     type: "tool-call" as const,
     id,
@@ -135,15 +144,15 @@ describe("Responses replay of commentary after a tool call in the same turn", ()
   })
 
   for (const [model, keepsPhase] of [
-    [Meta.configure({ apiKey: "test-key" }).responses("muse-ember-1.0"), false],
-    [OpenAI.configure({ apiKey: "test-key" }).responses("muse-ember-1.0"), false],
-    [compatible.model("meta/muse-spark-1.3"), false],
-    [OpenAI.configure({ apiKey: "test-key" }).responses("gpt-6.1"), true],
-    [compatible.model("example-model"), true],
+    [Meta.model("muse-ember-1.0", { apiKey: "test-key" }), false],
+    [OpenAI.model("muse-ember-1.0", { apiKey: "test-key" }), false],
+    [compatible("meta/muse-spark-1.3", settings), false],
+    [OpenAI.model("gpt-6.1", { apiKey: "test-key" }), true],
+    [compatible("example-model", settings), true],
   ] as const) {
-    it.effect(`${keepsPhase ? "keeps" : "drops"} the phase for ${model.route.protocol} ${model.id}`, () =>
+    it.effect(`${keepsPhase ? "keeps" : "drops"} the phase for ${model.api.protocol.id} ${model.id}`, () =>
       Effect.gen(function* () {
-        const key = model.route.providerMetadataKey ?? "openresponses"
+        const key = model.metadataKey
         const prepared = yield* compileRequest(
           ai.request({
             model,

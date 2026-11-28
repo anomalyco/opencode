@@ -1,4 +1,6 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import { CacheTTL, type LLMRequest } from "../schema/index.js"
 import { AnthropicMessages } from "./anthropic-messages.js"
@@ -58,12 +60,22 @@ const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LL
   }
 })
 
-export const protocol = Protocol.make({
+const protocol = Protocol.make({
   id: "meta-messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
   supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
   toolUpdates: AnthropicMessages.protocol.toolUpdates,
+})
+
+/** Meta's Messages dialect: native web search, and no version header. */
+export const api = Api.make({
+  name: "messages",
+  id: "meta-messages",
+  protocol,
+  path: AnthropicMessages.PATH,
+  framing: AnthropicMessages.framing,
+  capabilities: Capabilities.defaults<Capabilities.Messages>({ cache: { markers: true } }),
 })
 
 export * as MetaMessages from "./meta-messages.js"

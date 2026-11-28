@@ -6,7 +6,12 @@ import { RequestExecutor } from "../src/route.js"
 import { handlerLayer } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
-const openai = OpenAI.configure({
+const openai = OpenAI.openai.with({
+  apiKey: "test",
+  baseURL: "https://openai.test/v1",
+  headers: { "x-shared": "provider" },
+})
+const openaiMedia = OpenAI.media({
   apiKey: "test",
   baseURL: "https://openai.test/v1",
   headers: { "x-shared": "provider" },
@@ -37,7 +42,7 @@ describe("request transport fields", () => {
     const recorder = recording(() => new Response(chatBody, { headers: { "content-type": "text/event-stream" } }))
 
     const response = await ai.generate({
-      model: openai.chat("gpt-4o-mini"),
+      model: openai.model("gpt-4o-mini", { api: "chat-completions" }),
       prompt: "Say hello.",
       fetch: recorder.fetch,
       headers: { "x-shared": "call" },
@@ -60,7 +65,7 @@ describe("request transport fields", () => {
     )
 
     const response = await ai.image.generate({
-      model: openai.image("gpt-image-1"),
+      model: openaiMedia.image("gpt-image-1"),
       prompt: "A lighthouse",
       fetch: recorder.fetch,
       headers: { "x-call": "yes" },

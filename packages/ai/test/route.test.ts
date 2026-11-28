@@ -1,60 +1,18 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { ai, AIError, HttpContext, InvalidProviderOutputError } from "../src/effect.js"
 import { Anthropic } from "../src/providers.js"
-import { Auth, Framing, HttpTransport, LLMClient, Route } from "../src/route.js"
+import { Api } from "../src/api.js"
+import { Framing, HttpTransport, LLMClient } from "../src/route.js"
 import { fixedResponse, truncatedStream } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
-
-describe("Route.with", () => {
-  test("merges endpoint query and header defaults while replacing auth and id", () => {
-    const auth = Auth.headers({ "x-auth": "new" })
-    const route = OpenAIChat.route
-      .with({
-        id: "base-chat",
-        endpoint: {
-          baseURL: "https://api.example.test/v1",
-          query: { keep: "base", base: "1" },
-        },
-        headers: { "x-base": "base", "x-override": "base" },
-        auth: Auth.headers({ "x-auth": "old" }),
-      })
-      .with({
-        id: "patched-chat",
-        endpoint: { query: { keep: "patch", patch: "1" } },
-        headers: { "x-override": "patch", "x-patch": "patch" },
-        auth,
-      })
-
-    expect(route.id).toBe("patched-chat")
-    expect(route.auth).toBe(auth)
-    expect(route.endpoint).toMatchObject({
-      baseURL: "https://api.example.test/v1",
-      path: "/chat/completions",
-      query: { keep: "patch", base: "1", patch: "1" },
-    })
-    expect(route.options?.headers).toEqual({
-      "x-base": "base",
-      "x-override": "patch",
-      "x-patch": "patch",
-    })
-  })
-
-  test("assigns metadata ownership to a replacement provider and preserves explicit overrides", () => {
-    const route = OpenAIChat.route.with({ provider: "azure" })
-    const overridden = route.with({ providerMetadataKey: "custom-azure" }).with({ headers: { "x-test": "value" } })
-
-    expect(route.providerMetadataKey).toBe("azure")
-    expect(overridden.providerMetadataKey).toBe("custom-azure")
-    expect(overridden.options).not.toHaveProperty("providerMetadataKey")
-  })
-})
+import { apiModel } from "./lib/model.js"
 
 describe("Route diagnostics", () => {
-  const route = OpenAIChat.route.with({ endpoint: { baseURL: "https://provider.test/v1" } })
-  const request = ai.request({ model: route.model({ id: "test" }), prompt: "Hello" })
+  const baseURL = "https://provider.test/v1"
+  const request = ai.request({ model: apiModel(OpenAIChat.api, "test", { baseURL }), prompt: "Hello" })
   const headers = { "content-type": "text/event-stream", "x-request-id": "req_stream" }
 
   it.effect("retains an entire invalid event and its validation cause", () =>
@@ -100,10 +58,9 @@ describe("Route diagnostics", () => {
           headers: { "x-trace": "precise" },
         })
         const frame = '{ "type": "failure", "debug": "not in schema" }'
-        const failing = Route.make({
-          id: "diagnostics",
-          provider: "test",
-          endpoint: route.endpoint,
+        const failing = Api.make({
+          name: "diagnostics",
+          path: OpenAIChat.PATH,
           framing: Framing.sse,
           protocol: {
             ...OpenAIChat.protocol,
@@ -125,7 +82,7 @@ describe("Route diagnostics", () => {
           },
         })
         const error = yield* LLMClient.generate(
-          ai.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
+          ai.request({ model: apiModel(failing, "test", { provider: "test", baseURL }), prompt: "Hello" }),
         ).pipe(Effect.provide(fixedResponse(sseEvents(frame), { headers })), Effect.flip)
 
         expect(error.message).toBe("Parser failed")
@@ -141,7 +98,7 @@ describe("Route diagnostics", () => {
       const body = '{"query": BROKEN}'
       const error = yield* LLMClient.generate(
         ai.request({
-          model: Anthropic.configure({ apiKey: "test", baseURL: "https://provider.test" }).model("claude"),
+          model: Anthropic.model("claude", { apiKey: "test", baseURL: "https://provider.test" }),
           prompt: "Hello",
         }),
       ).pipe(
@@ -186,11 +143,14 @@ describe("Route diagnostics", () => {
           cause,
         }),
       })
-      const failing = route.with({
+      const failing = Api.make({
+        name: "chat-completions",
+        protocol: OpenAIChat.protocol,
+        path: OpenAIChat.PATH,
         transport: HttpTransport.httpJson({ framing: { id: "failure", frame: () => Stream.fail(failure) } }),
       })
       const error = yield* LLMClient.generate(
-        ai.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
+        ai.request({ model: apiModel(failing, "test", { baseURL }), prompt: "Hello" }),
       ).pipe(Effect.provide(fixedResponse("wire bytes", { headers })), Effect.flip)
 
       expect(error.reason.body).toBe(failure.reason.body)

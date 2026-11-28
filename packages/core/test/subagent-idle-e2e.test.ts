@@ -3,6 +3,7 @@ import path from "path"
 import { LanguageModel } from "@opencode/ai/effect"
 import type { LLMClientService } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -101,7 +102,13 @@ const modelLayer = Layer.succeed(
     resolve: (_session, _available, request) =>
       Effect.succeed(
         SessionRunnerModel.resolved(
-          LanguageModel.make({ id: request.agent, provider: "test", route: OpenAIChat.route }),
+          LanguageModel.make({
+            id: request.agent,
+            provider: "test",
+            api: OpenAIChat.api,
+            baseURL: OpenAIChat.DEFAULT_BASE_URL,
+            auth: Auth.none,
+          }),
           {
             capabilities: { tools: true, input: ["text"], output: ["text"] },
             cost: [],

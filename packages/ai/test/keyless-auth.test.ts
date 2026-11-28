@@ -58,18 +58,18 @@ describe("apiKey: false", () => {
   })
 
   test("custom headers are the only auth sent", async () => {
-    const model = OpenAICompatible.configure({
+    const model = OpenAICompatible.model("local", {
       apiKey: false,
       baseURL: baseURL(),
       headers: { "x-gateway-token": "t" },
-    }).model("local")
+    })
     await ai.generate({ model, prompt: "hi" })
     expect(lastHeaders().get("authorization")).toBeNull()
     expect(lastHeaders().get("x-gateway-token")).toBe("t")
   })
 
   test("image models share the keyless auth", async () => {
-    const model = OpenAICompatible.configure({ apiKey: false, baseURL: baseURL() }).image("gpt-image-2")
+    const model = OpenAICompatible.media({ apiKey: false, baseURL: baseURL() }).image("gpt-image-2")
     const response = await ai.image.generate({ model, prompt: "a lighthouse" })
     expect(response.images).toHaveLength(1)
     expect(lastHeaders().get("authorization")).toBeNull()

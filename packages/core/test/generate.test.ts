@@ -11,7 +11,7 @@ import {
   RateLimitError,
   TransportError,
 } from "@opencode/ai/effect"
-import { RequestExecutor } from "@opencode/ai/route"
+import { RequestExecutor, Auth } from "@opencode/ai/route"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
@@ -35,7 +35,13 @@ const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
   package: Provider.aisdk("@ai-sdk/perplexity"),
 })
-const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
+const runtime = LanguageModel.make({
+  id: "gemini",
+  provider: "test-provider",
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
+})
 const reference = Ref.make({ providerID: selected.providerID, id: selected.id })
 
 const providers = Layer.mock(Provider.Service, {
@@ -323,7 +329,7 @@ describe("image and decision generation", () => {
         Provider.Info.make({
           ...Provider.Info.empty(providerID),
           activation: "enabled",
-          settings: 
+          settings:
             // A local host like LM Studio is enabled with no key.
             providerID === "lmstudio"
               ? { baseURL: "http://127.0.0.1:1234/v1", provider: "lmstudio", apiKey: "" }

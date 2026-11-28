@@ -1,16 +1,16 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Provider } from "../provider.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { bearerRouteDefaults, toConfig } from "./settings.js"
+import { toConfig } from "./settings.js"
 
-export const id = ProviderID.make("deepinfra")
+const id = ProviderID.make("deepinfra")
 const baseURL = "https://api.deepinfra.com/v1/openai"
 
+/** Connection settings for DeepInfra's embedding models. Language models come from `deepinfra`. */
 export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
@@ -23,54 +23,50 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
   }
 
-export const route = Route.make({
-  id: "deepinfra-chat",
-  provider: id,
-  providerMetadataKey: "deepinfra",
-  protocol: OpenAIChat.protocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL }),
-  framing: OpenAIChat.framing,
+export const deepinfra = Provider.make({
+  id,
+  baseURL,
+  auth: Provider.apiKey("DEEPINFRA_API_KEY"),
+  apis: [
+    OpenAIChat.api.configure({
+      capabilities: {
+        output: { maxTokensField: "max_tokens" },
+        reasoning: { field: "reasoning_content" },
+        cache: { promptCacheKey: true },
+      },
+    }),
+  ],
 })
 
-export const routes = [route]
-
-export const configure = (input: Config = {}) => {
-  const root = input.baseURL?.replace(/\/+$/, "")
-  const options = {
-    ...bearerRouteDefaults(input, "DEEPINFRA_API_KEY"),
-    endpoint: {
-      baseURL: root === undefined ? baseURL : root.endsWith("/openai") ? root : `${root}/openai`,
-    },
-  }
-  const configured = route.with(options)
+export const media = (input: Config = {}) => {
   const embeddingRoute = OpenAIEmbeddings.route.with({
     provider: id,
-    endpoint: options.endpoint,
-    auth: options.auth,
+    endpoint: { baseURL: openAIRoot(input.baseURL) ?? baseURL },
+    auth: AuthOptions.bearer(input, "DEEPINFRA_API_KEY"),
     ...mergeTransport(input),
   })
   return {
     id,
-    model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({
-        id: modelID,
-        compatibility: {
-          maxTokensField: "max_tokens",
-          reasoningField: "reasoning_content",
-        },
-        capabilities: { promptCacheKey: true },
-      }),
     embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       embeddingRoute.model({ id: modelID, providerOptions }),
-    configure,
   }
 }
 
-export const provider = configure()
+const entrypoint = Provider.entrypoint<Settings, OpenAIProviderOptionsInput>(deepinfra)
 
-export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(toConfig(settings)).model(modelID)
+/** A DeepInfra root URL serves the OpenAI-compatible API under `/openai`. */
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings = {}) =>
+  entrypoint(modelID, { ...settings, baseURL: openAIRoot(settings.baseURL) })
+
 export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
-  return configure(input).embedding(modelID, input.providerOptions)
+  return media(input).embedding(modelID, input.providerOptions)
 }
+
+const openAIRoot = (value: string | undefined) => {
+  const root = value?.replace(/\/+$/, "")
+  if (root === undefined) return undefined
+  return root.endsWith("/openai") ? root : `${root}/openai`
+}
+
+export * as DeepInfra from "./deepinfra.js"

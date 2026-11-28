@@ -22,11 +22,14 @@ const deltaChunk = (delta: object, finishReason: string | null = null) => ({
 describe("Cloudflare", () => {
   it.effect("selects native AI Gateway protocols by model ID", () =>
     Effect.gen(function* () {
-      const gateway = CloudflareAIGateway.configure({
-        accountId: "test-account",
-        gatewayId: "test-gateway",
-        apiKey: "test-token",
-      })
+      const gateway = {
+        model: (id: string) =>
+          CloudflareAIGateway.model(id, {
+            accountId: "test-account",
+            gatewayId: "test-gateway",
+            apiKey: "test-token",
+          }),
+      }
       const responses = yield* compileRequest(
         ai.request({ model: gateway.model("openai/gpt-5.4"), prompt: "Say hello." }),
       )
@@ -38,20 +41,16 @@ describe("Cloudflare", () => {
         ai.request({ model: gateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
       )
 
-      expect(responses.route).toBe("cloudflare-ai-gateway-responses")
-      expect(responses.model.route.endpoint.baseURL).toBe(
-        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai",
-      )
+      expect(responses.api).toBe("cloudflare-ai-gateway-responses")
+      expect(responses.model.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai")
       expect(responses.body).toMatchObject({ model: "gpt-5.4", stream: true })
-      expect(messages.route).toBe("cloudflare-ai-gateway-messages")
-      expect(messages.model.route.endpoint.baseURL).toBe(
-        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/anthropic/v1",
-      )
+      expect(messages.api).toBe("cloudflare-ai-gateway-messages")
+      expect(messages.model.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/anthropic/v1")
       expect(messages.body).toMatchObject({ model: "claude-haiku-4-5" })
-      expect(chat.model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
-      expect(chat.route).toBe("cloudflare-ai-gateway-chat")
+      expect(chat.model.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
+      expect(chat.api).toBe("cloudflare-ai-gateway-chat")
       expect(chat.body).toMatchObject({ model: "xai/grok-4.6", stream: true })
-      expect(workers.route).toBe("cloudflare-ai-gateway-chat")
+      expect(workers.api).toBe("cloudflare-ai-gateway-chat")
       expect(workers.body).toMatchObject({
         model: "@cf/meta/llama-3.3-70b-instruct",
         messages: [{ role: "user", content: "Say hello." }],
@@ -65,7 +64,7 @@ describe("Cloudflare", () => {
       const response = yield* ai
         .generate(
           ai.request({
-            model: CloudflareAIGateway.configure({
+            model: CloudflareAIGateway.model("xai/grok-4.6", {
               accountId: "test-account",
               gatewayId: "test-gateway",
               apiKey: "test-token",
@@ -74,7 +73,7 @@ describe("Cloudflare", () => {
               collectLog: false,
               metadata: { invoked_by: "test" },
               skipCache: true,
-            }).model("xai/grok-4.6"),
+            }),
             prompt: "Say hello.",
           }),
         )
@@ -113,7 +112,10 @@ describe("Cloudflare", () => {
 
   it.effect("posts Claude and OpenAI models to the provider-native gateway endpoints", () =>
     Effect.gen(function* () {
-      const gateway = CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token", cacheTtl: 300 })
+      const gateway = {
+        model: (id: string) =>
+          CloudflareAIGateway.model(id, { accountId: "test-account", apiKey: "test-token", cacheTtl: 300 }),
+      }
       const requests: Array<Request> = []
       const capture = dynamicResponse((input) =>
         Effect.gen(function* () {
@@ -146,9 +148,10 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token" }).model(
-            "workers-ai/@cf/meta/llama-3.3-70b-instruct",
-          ),
+          model: CloudflareAIGateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct", {
+            accountId: "test-account",
+            apiKey: "test-token",
+          }),
           prompt: "Say hello.",
         }),
       )
@@ -159,11 +162,11 @@ describe("Cloudflare", () => {
 
   it.effect("preserves reasoning details for AI Gateway continuation", () =>
     Effect.gen(function* () {
-      const model = CloudflareAIGateway.configure({
+      const model = CloudflareAIGateway.model("xai/grok-4.6", {
         accountId: "test-account",
         gatewayId: "test-gateway",
         apiKey: "test-token",
-      }).model("xai/grok-4.6")
+      })
       const details = [
         { type: "reasoning.text", text: "Think", format: "anthropic-claude-v1", index: 0 },
         { type: "reasoning.text", text: "ing", format: "anthropic-claude-v1", index: 0 },
@@ -216,36 +219,36 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: CloudflareAIGateway.configure({
+          model: CloudflareAIGateway.model("anthropic/claude-sonnet-4.6", {
             baseURL: "https://gateway.proxy.test/v1",
             apiKey: "test-token",
-          }).model("anthropic/claude-sonnet-4.6"),
+          }),
           prompt: "Say hello.",
         }),
       )
 
-      expect(prepared.model.route.endpoint.baseURL).toBe("https://gateway.proxy.test/v1")
+      expect(prepared.model.baseURL).toBe("https://gateway.proxy.test/v1")
       expect(prepared.body).toMatchObject({ model: "anthropic/claude-sonnet-4.6" })
     }),
   )
 
   it.effect("prepares direct Workers AI models through the OpenAI-compatible Chat protocol", () =>
     Effect.gen(function* () {
-      const model = CloudflareWorkersAI.configure({
+      const model = CloudflareWorkersAI.model("@cf/meta/llama-3.1-8b-instruct", {
         accountId: "test-account",
         apiKey: "test-token",
-      }).model("@cf/meta/llama-3.1-8b-instruct")
+      })
 
       expect(model).toMatchObject({
         id: "@cf/meta/llama-3.1-8b-instruct",
         provider: "cloudflare-workers-ai",
-        route: { id: "cloudflare-workers-ai" },
+        api: { id: "cloudflare-workers-ai-chat" },
       })
-      expect(model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
+      expect(model.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello." }))
 
-      expect(prepared.route).toBe("cloudflare-workers-ai")
+      expect(prepared.api).toBe("cloudflare-workers-ai-chat")
       expect(prepared.body).toMatchObject({
         model: "@cf/meta/llama-3.1-8b-instruct",
         messages: [{ role: "user", content: "Say hello." }],
@@ -259,10 +262,10 @@ describe("Cloudflare", () => {
       const response = yield* ai
         .generate(
           ai.request({
-            model: CloudflareWorkersAI.configure({
+            model: CloudflareWorkersAI.model("@cf/meta/llama-3.1-8b-instruct", {
               accountId: "test-account",
               apiKey: "test-token",
-            }).model("@cf/meta/llama-3.1-8b-instruct"),
+            }),
             prompt: "Say hello.",
           }),
         )
@@ -299,9 +302,9 @@ describe("Cloudflare", () => {
         ai
           .generate(
             ai.request({
-              model: CloudflareWorkersAI.configure({
+              model: CloudflareWorkersAI.model("@cf/meta/llama-3.1-8b-instruct", {
                 accountId: "test-account",
-              }).model("@cf/meta/llama-3.1-8b-instruct"),
+              }),
               prompt: "Say hello.",
             }),
           )

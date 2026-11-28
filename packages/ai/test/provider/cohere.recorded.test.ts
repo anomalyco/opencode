@@ -7,7 +7,7 @@ import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop
 import { recordedTests } from "../recorded-test.js"
 
 const recorded = recordedTests({ prefix: "cohere", provider: "cohere", requires: ["COHERE_API_KEY"] })
-const cohere = Cohere.configure({ apiKey: process.env.COHERE_API_KEY ?? "fixture" })
+const cohere = Cohere.cohere.with({ apiKey: process.env.COHERE_API_KEY ?? "fixture" })
 
 recorded.effect(
   "streams native text and usage",
@@ -21,10 +21,10 @@ recorded.effect(
         }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
-      expect(response.usage.inputTokens).toBeGreaterThan(0)
-      expect(response.usage.outputTokens).toBeGreaterThan(0)
+      expect(response.usage?.inputTokens).toBeGreaterThan(0)
+      expect(response.usage?.outputTokens).toBeGreaterThan(0)
       expect(response.events.find(LLMEvent.is.finish)?.reason).toEqual({ normalized: "stop", raw: "COMPLETE" })
-      expect(response.usage.providerMetadata?.cohere?.billed_units).toBeDefined()
+      expect(response.usage?.providerMetadata?.cohere?.billed_units).toBeDefined()
     }),
   60_000,
 )
@@ -43,8 +43,8 @@ recorded.effect(
       )
       expect(response.reasoning.length).toBeGreaterThan(0)
       expect(response.text).toContain("391")
-      expect(response.usage.reasoningTokens).toBeGreaterThan(0)
-      expect(response.usage.reasoningTokens).toBeLessThanOrEqual(128)
+      expect(response.usage?.reasoningTokens).toBeGreaterThan(0)
+      expect(response.usage?.reasoningTokens).toBeLessThanOrEqual(128)
       expect(response.events.filter(LLMEvent.is.finish)).toHaveLength(1)
     }),
   60_000,
@@ -78,7 +78,7 @@ recorded.effect(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: cohere.chat("command-a-reasoning-08-2025"),
+          model: cohere.model("command-a-reasoning-08-2025", { api: "chat-completions" }),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { reasoningEffort: "high" },
           maxTokens: 2048,
@@ -87,8 +87,8 @@ recorded.effect(
       expect(response.reasoning.length).toBeGreaterThan(0)
       expect(response.text).toContain("391")
       expect(response.events.find(LLMEvent.is.finish)?.reason.normalized).toBe("stop")
-      expect(response.usage.inputTokens).toBeGreaterThan(0)
-      expect(response.usage.reasoningTokens).toBeGreaterThan(0)
+      expect(response.usage?.inputTokens).toBeGreaterThan(0)
+      expect(response.usage?.reasoningTokens).toBeGreaterThan(0)
     }),
   60_000,
 )

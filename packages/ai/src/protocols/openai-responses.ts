@@ -1,9 +1,8 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import { Headers } from "effect/http"
-import { Route } from "../route/client.js"
-import { Auth } from "../route/auth.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import type { LLMRequest, ToolChanges, ToolDefinition, ToolEntry } from "../schema/index.js"
@@ -412,9 +411,6 @@ export const protocol = Protocol.make({
   namespaces: true,
 })
 
-const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })
-const auth = Auth.none
-
 export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
 export const channelTransport = OpenResponsesChannel.transport<OpenAIResponsesBody>
 export const transport = channelTransport({
@@ -424,22 +420,24 @@ export const transport = channelTransport({
   headers: (headers) => Headers.set(headers, "openai-beta", headers["openai-beta"] ?? WEBSOCKET_PROTOCOL_HEADER),
 })
 
-export const route = Route.make({
-  compact: {
-    endpoint: ResponsesCompaction.make(adapter, (request) => {
-      const custom = OpenAIFreeform.tools(request)
-      return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
-    }),
-    trigger: ResponsesCheckpoint.make(checkpointBody),
-  },
+const compact = {
+  endpoint: ResponsesCompaction.make(adapter, (request) => {
+    const custom = OpenAIFreeform.tools(request)
+    return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
+  }),
+  trigger: ResponsesCheckpoint.make(checkpointBody),
+}
+
+/** OpenAI Responses. */
+export const api = Api.make({
+  name: "responses",
   id: ADAPTER,
-  provider: "openai",
-  providerMetadataKey: "openai",
   protocol,
-  endpoint,
-  auth,
+  path: PATH,
   transport,
   options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  capabilities: Capabilities.defaults<Capabilities.Responses>(),
+  compact,
 })
 
 export * as OpenAIResponses from "./openai-responses.js"

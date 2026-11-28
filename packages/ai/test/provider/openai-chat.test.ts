@@ -25,14 +25,16 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse, systemError, truncatedStream } from "../lib/http.js"
 import { deltaChunk, usageChunk } from "../lib/openai-chunks.js"
 import { sseEvents } from "../lib/sse.js"
+import { apiModel } from "../lib/model.js"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)
 const decodeJson = Schema.decodeUnknownSync(TargetJson)
 
-const model = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4o-mini" })
+const model = apiModel(OpenAIChat.api, "gpt-4o-mini", {
+  baseURL: "https://api.openai.test/v1/",
+  auth: Auth.bearer("test"),
+})
 
 const request = ai.request({
   id: "req_1",
@@ -96,7 +98,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { capabilities: { streamUsage: false } }),
+          model: LanguageModel.update(model, { capabilities: { output: { streamUsage: false } } }),
           prompt: "Hello",
         }),
       )
@@ -107,7 +109,10 @@ describe("OpenAI Chat route", () => {
 
   it.effect("sends store only to OpenAI and Azure unless compatibility opts in", () =>
     Effect.gen(function* () {
-      const compatible = OpenAICompatible.configure({ baseURL: "https://api.compatible.test/v1", apiKey: "test" })
+      const compatible = OpenAICompatible.openAICompatible.with({
+        baseURL: "https://api.compatible.test/v1",
+        apiKey: "test",
+      })
       const omitted = yield* compileRequest(
         ai.request({
           model: compatible.model("compatible-model"),
@@ -125,17 +130,16 @@ describe("OpenAI Chat route", () => {
       )
       const openaiHost = yield* compileRequest(
         ai.request({
-          model: OpenAICompatible.configure({ baseURL: "https://api.openai.com/v1", apiKey: "test" }).model(
-            "gpt-4o-mini",
-          ),
+          model: OpenAICompatible.model("gpt-4o-mini", { baseURL: "https://api.openai.com/v1", apiKey: "test" }),
           prompt: "Hello",
         }),
       )
       const azure = yield* compileRequest(
         ai.request({
-          model: Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat(
-            "gpt-4o-mini",
-          ),
+          model: Azure.chatModel("gpt-4o-mini", {
+            baseURL: "https://opencode-test.openai.azure.com/openai/",
+            apiKey: "test",
+          }),
           prompt: "Hello",
         }),
       )
@@ -232,7 +236,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
+          model: LanguageModel.update(model, { capabilities: { reasoning: { field: "vendor_reasoning" } } }),
           messages: [
             Message.assistant([
               {
@@ -258,7 +262,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { requireReasoning: true } }),
+          model: LanguageModel.update(model, { capabilities: { reasoning: { required: true } } }),
           messages: [
             Message.assistant([
               {
@@ -285,7 +289,7 @@ describe("OpenAI Chat route", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model: LanguageModel.update(model, {
-            compatibility: { reasoningField: "reasoning_text", requireReasoning: false },
+            capabilities: { reasoning: { field: "reasoning_text", required: false } },
           }),
           messages: [
             Message.assistant([
@@ -308,7 +312,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const error = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { reasoningField: "content" } }),
+          model: LanguageModel.update(model, { capabilities: { reasoning: { field: "content" } } }),
           messages: [Message.assistant([{ type: "reasoning", text: "thinking" }])],
         }),
       ).pipe(Effect.flip)
@@ -321,7 +325,9 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
+          model: OpenAI.openai
+            .with({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+            .model("gpt-4o-mini", { api: "chat-completions" }),
           prompt: "think",
           providerOptions: { reasoningEffort: "max" },
         }),
@@ -336,7 +342,9 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
+          model: OpenAI.openai
+            .with({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+            .model("gpt-4o-mini", { api: "chat-completions" }),
           prompt: "think",
           providerOptions: { store: true, reasoningEffort: "max", topLogprobs: 25 },
         }),
@@ -351,7 +359,9 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-5-nano"),
+          model: OpenAI.openai
+            .with({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+            .model("gpt-5-nano", { api: "chat-completions" }),
           prompt: "Hello",
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
           providerOptions: {
@@ -405,9 +415,11 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAIChat.route
-            .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
-            .model({ id: "compatible-model", capabilities: { promptCacheKey: true } }),
+          model: apiModel(OpenAIChat.api, "compatible-model", {
+            baseURL: "https://api.compatible.test/v1",
+            auth: Auth.bearer("test"),
+            capabilities: { cache: { promptCacheKey: true } },
+          }),
           prompt: "Hello",
           promptCacheKey: "session_123",
         }),
@@ -421,9 +433,10 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAICompatible.configure({ baseURL: "https://api.compatible.test/v1", apiKey: "test" }).model(
-            "compatible-model",
-          ),
+          model: OpenAICompatible.model("compatible-model", {
+            baseURL: "https://api.compatible.test/v1",
+            apiKey: "test",
+          }),
           prompt: "Hello",
           cache: { ttl: "1h" },
         }),
@@ -437,10 +450,10 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAICompatible.configure({
+          model: OpenAICompatible.model("compatible-model", {
             baseURL: "https://api.compatible.test/v1",
             apiKey: "test",
-          }).model("compatible-model"),
+          }),
           prompt: "Hello",
           promptCacheKey: "session_123",
         }),
@@ -468,7 +481,9 @@ describe("OpenAI Chat route", () => {
   it.effect("maps the xAI Chat prompt cache key to conversation affinity header only", () =>
     LLMClient.generate(
       ai.request({
-        model: XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).chat("grok-4.5"),
+        model: XAI.xai
+          .with({ apiKey: "test", baseURL: "https://api.x.ai/v1" })
+          .model("grok-4.5", { api: "chat-completions" }),
         prompt: "Hello",
         promptCacheKey: "session_123",
       }),
@@ -507,9 +522,7 @@ describe("OpenAI Chat route", () => {
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate({
       ...request,
-      model: LanguageModel.update(model, {
-        route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
-      }),
+      model: LanguageModel.update(model, { query: { "api-version": "v1" } }),
     }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
@@ -528,11 +541,11 @@ describe("OpenAI Chat route", () => {
   it.effect("uses Azure api-key header for static OpenAI Chat keys", () =>
     LLMClient.generate({
       ...request,
-      model: Azure.configure({
+      model: Azure.chatModel("gpt-4o-mini", {
         baseURL: "https://opencode-test.openai.azure.com/openai/",
         apiKey: "azure-key",
         headers: { authorization: "Bearer stale" },
-      }).chat("gpt-4o-mini"),
+      }),
     }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
@@ -553,9 +566,10 @@ describe("OpenAI Chat route", () => {
   it.effect("applies serializable HTTP overlays after payload lowering", () =>
     LLMClient.generate({
       ...request,
-      model: model.route
-        .with({ auth: Auth.bearer("fresh-key"), headers: { authorization: "Bearer stale" } })
-        .model({ id: model.id }),
+      model: LanguageModel.update(model, {
+        auth: Auth.bearer("fresh-key"),
+        options: { headers: { authorization: "Bearer stale" } },
+      }),
       headers: { authorization: "Bearer request", "x-custom": "yes" },
       http: { body: { metadata: { source: "test" } }, query: { debug: "1" } },
     }).pipe(
@@ -663,7 +677,7 @@ describe("OpenAI Chat route", () => {
       const id = `call_${"a".repeat(48)}`
       const models = [
         model,
-        Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat("gpt-4o"),
+        Azure.chatModel("gpt-4o", { baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }),
       ]
 
       yield* Effect.forEach(models, (selected) =>
@@ -756,7 +770,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          model: LanguageModel.update(model, { capabilities: { messages: { requireAssistantAfterTool: true } } }),
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
             Message.tool({
@@ -1285,7 +1299,7 @@ describe("OpenAI Chat route", () => {
       ]
       const replay = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_content" } }),
+          model: LanguageModel.update(model, { capabilities: { reasoning: { field: "reasoning_content" } } }),
           messages: [
             Message.assistant([
               {
@@ -1310,7 +1324,7 @@ describe("OpenAI Chat route", () => {
       ]
       const replay = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_details" } }),
+          model: LanguageModel.update(model, { capabilities: { reasoning: { field: "reasoning_details" } } }),
           messages: [
             Message.assistant([
               {
@@ -1429,9 +1443,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("uses the configured provider metadata namespace for reasoning and usage", () =>
     Effect.gen(function* () {
-      const selected = LanguageModel.update(model, {
-        route: { ...model.route, providerMetadataKey: "vendor" },
-      })
+      const selected = LanguageModel.update(model, { metadataKey: "vendor" })
       const details = [{ type: "reasoning.text", text: "thinking", signature: "signed" }]
       const response = yield* LLMClient.generate({ ...request, model: selected }).pipe(
         Effect.provide(
@@ -1462,9 +1474,10 @@ describe("OpenAI Chat route", () => {
 
   it.effect("falls back to the selected provider for the metadata namespace", () =>
     Effect.gen(function* () {
-      const compatible = model.route.with({ provider: "deepseek" }).model({ id: "deepseek-chat" })
-      const selected = LanguageModel.update(compatible, {
-        route: { ...compatible.route, providerMetadataKey: undefined },
+      const selected = apiModel(OpenAIChat.api, "deepseek-chat", {
+        provider: "deepseek",
+        baseURL: "https://api.openai.test/v1/",
+        auth: Auth.bearer("test"),
       })
       const response = yield* LLMClient.generate({ ...request, model: selected }).pipe(
         Effect.provide(
@@ -1493,7 +1506,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("parses and replays a configured custom reasoning field", () =>
     Effect.gen(function* () {
-      const custom = LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } })
+      const custom = LanguageModel.update(model, { capabilities: { reasoning: { field: "vendor_reasoning" } } })
       const response = yield* LLMClient.generate({ ...request, model: custom }).pipe(
         Effect.provide(
           fixedResponse(
@@ -2379,7 +2392,7 @@ describe("OpenAI Chat route", () => {
       )
       const input = {
         ...request,
-        model: LanguageModel.update(model, { compatibility: { requireFinishReason: false } }),
+        model: LanguageModel.update(model, { capabilities: { output: { requireFinishReason: false } } }),
         tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
       }
       const response = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)))

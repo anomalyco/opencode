@@ -4,10 +4,12 @@ import { ai, type LLMRequest, Message, ToolCallPart, ToolDefinition } from "../s
 import { OpenAIChat } from "../src/protocols.js"
 import { Auth } from "../src/route.js"
 import { sanitizeSurrogates } from "../src/utils/sanitize.js"
+import { apiModel } from "./lib/model.js"
 
-const model = OpenAIChat.route
-  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-  .model({ id: "gpt-4o-mini" })
+const model = apiModel(OpenAIChat.api, "gpt-4o-mini", {
+  baseURL: "https://api.openai.test/v1/",
+  auth: Auth.bearer("test"),
+})
 
 const tool = new ToolDefinition({
   name: "lookup",

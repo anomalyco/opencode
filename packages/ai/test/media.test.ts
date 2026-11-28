@@ -42,7 +42,7 @@ describe("Media", () => {
 
   it.effect("rejects local file references as request errors without breaking construction or decoding", () =>
     Effect.gen(function* () {
-      const model = OpenAI.configure({ apiKey: "test" }).responses("video-model")
+      const model = OpenAI.openai.with({ apiKey: "test" }).model("video-model")
       const restored = yield* Schema.decodeUnknownEffect(Media.AssetSchema)({
         source: { type: "url", url: " FILE:/C:/clips/video.mp4", mediaType: "video/mp4" },
       })

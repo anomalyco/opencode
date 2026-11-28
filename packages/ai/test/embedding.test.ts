@@ -9,13 +9,13 @@ import { dynamicResponse, json, type Handler } from "./lib/http.js"
 const client = (handler: Handler) => EmbeddingClient.layer.pipe(Layer.provide(dynamicResponse(handler)))
 const offline = client(() => Effect.die("an invalid embedding request reached the network"))
 
-const openai = OpenAI.configure({ apiKey: "openai-key" })
+const openaiMedia = OpenAI.media({ apiKey: "openai-key" })
 
 describe("Embedding", () => {
   it.effect("sends text values to OpenAI and returns vectors in value order", () =>
     ai.embedding
       .generate({
-        model: openai.embedding("text-embedding-3-small"),
+        model: openaiMedia.embedding("text-embedding-3-small"),
         values: ["first", "second"],
         dimensions: 2,
         inputType: "query",
@@ -64,7 +64,7 @@ describe("Embedding", () => {
   it.effect("sends host fields through a custom OpenAI-compatible endpoint and decodes base64 vectors", () =>
     ai.embedding
       .generate({
-        model: OpenAICompatible.configure({
+        model: OpenAICompatible.media({
           provider: "nvidia",
           apiKey: "nvidia-key",
           baseURL: "https://integrate.api.nvidia.test/v1/",
@@ -103,7 +103,7 @@ describe("Embedding", () => {
     Effect.gen(function* () {
       const error = yield* ai.embedding
         .generate({
-          model: openai.embedding("text-embedding-3-small"),
+          model: openaiMedia.embedding("text-embedding-3-small"),
           values: ["caption", Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
         })
         .pipe(Effect.flip)
@@ -115,7 +115,7 @@ describe("Embedding", () => {
   it.effect("rejects an empty value list", () =>
     Effect.gen(function* () {
       const error = yield* ai.embedding
-        .generate({ model: openai.embedding("text-embedding-3-small"), values: [] })
+        .generate({ model: openaiMedia.embedding("text-embedding-3-small"), values: [] })
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("Embedding values must not be empty")
@@ -125,7 +125,7 @@ describe("Embedding", () => {
   it.effect("fails when the host returns a different number of vectors", () =>
     Effect.gen(function* () {
       const error = yield* ai.embedding
-        .generate({ model: openai.embedding("text-embedding-3-small"), values: ["one", "two"] })
+        .generate({ model: openaiMedia.embedding("text-embedding-3-small"), values: ["one", "two"] })
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       expect(error.message).toContain("Expected 2 embeddings, got 1")
@@ -135,7 +135,7 @@ describe("Embedding", () => {
   it.effect("batches Google values as one content each and maps inputType to taskType", () =>
     ai.embedding
       .generate({
-        model: Google.configure({ apiKey: "google-key" }).embedding("gemini-embedding-2"),
+        model: Google.media({ apiKey: "google-key" }).embedding("gemini-embedding-2"),
         values: ["a caption", Media.base64("iVBORw0KGgo=", "image/png")],
         dimensions: 256,
         inputType: "document",
@@ -223,7 +223,7 @@ describe("Embedding", () => {
       const sizes: Array<number> = []
       const response = yield* ai.embedding
         .generate({
-          model: Google.configure({ apiKey: "google-key" }).embedding("gemini-embedding-2"),
+          model: Google.media({ apiKey: "google-key" }).embedding("gemini-embedding-2"),
           values: Array.from({ length: 105 }, (_, index) => `${index}`),
         })
         .pipe(
@@ -256,7 +256,7 @@ describe("Embedding", () => {
       const bodies: Array<unknown> = []
       const response = yield* ai.embedding
         .generate({
-          model: GoogleVertex.configure({ accessToken: "vertex-token", project: "proj", location: "us" }).embedding(
+          model: GoogleVertex.media({ accessToken: "vertex-token", project: "proj", location: "us" }).embedding(
             "gemini-embedding-2",
           ),
           values: ["first", Media.base64("JVBERi0=", "application/pdf")],
@@ -304,7 +304,7 @@ describe("Embedding", () => {
   )
 
   test("rejects Vertex Express Mode keys for embedContent", () => {
-    expect(() => GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("gemini-embedding-2")).toThrow(
+    expect(() => GoogleVertex.media({ apiKey: "vertex-key" }).embedding("gemini-embedding-2")).toThrow(
       "does not support Express Mode API keys",
     )
   })
@@ -312,7 +312,7 @@ describe("Embedding", () => {
   it.effect("sends Vertex text embedding models through :predict with instances and parameters", () =>
     ai.embedding
       .generate({
-        model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("text-embedding-005"),
+        model: GoogleVertex.media({ apiKey: "vertex-key" }).embedding("text-embedding-005"),
         values: ["first", "second"],
         dimensions: 256,
         inputType: "query",
@@ -366,7 +366,7 @@ describe("Embedding", () => {
       const sent: Array<string> = []
       const response = yield* ai.embedding
         .generate({
-          model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("gemini-embedding-001"),
+          model: GoogleVertex.media({ apiKey: "vertex-key" }).embedding("gemini-embedding-001"),
           values: ["0", "1", "2"],
           providerOptions: { taskType: "CLUSTERING" },
         })
@@ -397,7 +397,7 @@ describe("Embedding", () => {
       const sizes: Array<number> = []
       const response = yield* ai.embedding
         .generate({
-          model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("text-multilingual-embedding-002"),
+          model: GoogleVertex.media({ apiKey: "vertex-key" }).embedding("text-multilingual-embedding-002"),
           values: Array.from({ length: 251 }, (_, index) => `${index}`),
         })
         .pipe(
@@ -422,7 +422,7 @@ describe("Embedding", () => {
     Effect.gen(function* () {
       const error = yield* ai.embedding
         .generate({
-          model: GoogleVertex.configure({ apiKey: "vertex-key" }).embedding("text-embedding-005"),
+          model: GoogleVertex.media({ apiKey: "vertex-key" }).embedding("text-embedding-005"),
           values: [Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
         })
         .pipe(Effect.flip)
@@ -434,7 +434,7 @@ describe("Embedding", () => {
   it.effect("sends tuned Vertex embedding endpoints through :predict", () =>
     ai.embedding
       .generate({
-        model: GoogleVertex.configure({
+        model: GoogleVertex.media({
           accessToken: "vertex-token",
           project: "proj",
           location: "us-central1",

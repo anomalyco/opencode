@@ -9,7 +9,7 @@ import { dynamicResponse, json, observe, type Call, type HandlerInput } from "./
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
-const openrouter = OpenRouter.configure({ apiKey: "test", baseURL: "https://openrouter.test/api/v1" })
+const openrouter = OpenRouter.media({ apiKey: "test", baseURL: "https://openrouter.test/api/v1" })
 const model = openrouter.video("x-ai/grok-imagine-video-1.5-lite")
 const id = "gen-vid-1-abc"
 const started = (input: HandlerInput) =>

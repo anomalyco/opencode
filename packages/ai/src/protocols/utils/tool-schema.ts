@@ -86,8 +86,8 @@ const objectRoot = (schema: JsonSchema): JsonSchema => {
 const modelCompatibility = (schema: JsonSchema, model: LanguageModel): JsonSchema => {
   const root = objectRoot(schema)
   switch (
-    model.compatibility?.sanitizer ??
-    model.route.sanitizer ??
+    model.capabilities?.tools?.sanitizer ??
+    model.api.protocol.sanitizer ??
     MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]
   ) {
     case "gemini":

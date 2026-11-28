@@ -2,6 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
 import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -28,7 +29,9 @@ const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
-  route: OpenAIChat.route,
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
 })
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({

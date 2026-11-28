@@ -18,11 +18,11 @@ import type {
   SharedV3ProviderOptions,
 } from "@ai-sdk/provider"
 import {
+  Api,
   FinishReason,
   LLMEvent,
   AIError,
   LanguageModel,
-  ProviderID,
   ProviderMetadata,
   TransportError,
   ToolResultValue,
@@ -33,13 +33,21 @@ import {
   type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
-import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import {
+  Auth,
+  Protocol,
+  ProviderShared,
+  RequestExecutor,
+  type HttpMiddleware,
+  type StreamOptions,
+} from "@opencode/ai/route"
 import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
 import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
+import { ModelCapabilities } from "./model-capabilities.js"
 import { Provider } from "./provider.js"
 import { State } from "./state.js"
 import { stringify } from "./tool/runtime.js"
@@ -376,52 +384,69 @@ export const locationLayer = Layer.effect(
   }),
 )
 
+// Wrapping keeps finished events from reading as provider frames, which raw-event output would echo.
+class Finished {
+  constructor(readonly event: LLMEvent) {}
+}
+
 function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
   const providerID = info.canonical ?? info.providerID
   const optionKey = providerOptionKey(packageName, providerID)
-  const route: AnyRoute = {
-    compact: undefined,
+  // AI SDK providers build requests and parse streams themselves: the body is the AI SDK call options, and the
+  // transport runs the SDK and yields finished events, which pass through unchanged.
+  const api = Api.make({
+    name: "ai-sdk",
     id: `ai-sdk:${packageName}`,
-    provider: ProviderID.make(providerID),
-    providerMetadataKey: optionKey,
-    protocol: "ai-sdk",
-    // AI SDK providers convert tool schemas themselves, so model-family sanitizers stay off here.
-    sanitizer: "none",
-    endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
-    auth: Auth.none,
+    path: "/",
+    protocol: Protocol.make({
+      id: "ai-sdk",
+      // AI SDK providers convert tool schemas themselves, so model-family sanitizers stay off here.
+      sanitizer: "none",
+      namespaces: true,
+      body: {
+        schema: Schema.Unknown,
+        from: (request) =>
+          Effect.try({
+            try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
+            catch: (cause) =>
+              cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
+          }),
+      },
+      stream: {
+        event: Schema.Any,
+        initial: () => undefined,
+        step: (state, frame: Finished) => Effect.succeed([state, [frame.event]] as const),
+      },
+    }),
     transport: {
       id: "ai-sdk",
       prepare: (input) => Effect.succeed(input.body),
-      execute: () => Effect.succeed({ frames: Stream.empty }),
+      execute: (prepared, _request, _runtime, options) =>
+        Effect.succeed({
+          frames: streamLanguage(
+            language,
+            prepared as LanguageModelV3CallOptions,
+            (options as StreamOptions | undefined)?.http,
+          ).pipe(Stream.map((event) => new Finished(event))),
+        }),
     },
+  }).configure({ id: `ai-sdk:${packageName}` })
+
+  return LanguageModel.make({
+    id: info.modelID ?? info.id,
+    provider: providerID,
+    api,
+    baseURL: "https://ai-sdk.local",
+    auth: Auth.none,
+    metadataKey: optionKey,
     options: {
       headers: info.headers,
       http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
     },
-    body: {
-      schema: Schema.Unknown,
-      from: (request) =>
-        Effect.try({
-          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
-          catch: (cause) =>
-            cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
-        }),
-    },
-    with: () => route,
-    model: (input) =>
-      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
-    prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
-  }
-  return LanguageModel.make({
-    id: info.modelID ?? info.id,
-    provider: providerID,
-    route,
-    compatibility: info.compatibility,
+    capabilities: ModelCapabilities.fromCompatibility(info.compatibility),
   })
 }
 
@@ -907,7 +932,9 @@ function jsonObject(input: Record<string, unknown>) {
 function jsonValue(input: unknown): JSONValue {
   try {
     const encoded = JSON.stringify(input)
-    return encoded === undefined ? null : (Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(encoded) as JSONValue)
+    return encoded === undefined
+      ? null
+      : (Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(encoded) as JSONValue)
   } catch {
     return stringify(input)
   }

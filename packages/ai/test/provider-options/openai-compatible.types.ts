@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { OpenAICompatible } from "../../src/providers.js"
 
-const model = OpenAICompatible.configure({ baseURL: "https://compatible.example/v1" }).model("test-model")
+const model = OpenAICompatible.model("test-model", { baseURL: "https://compatible.example/v1" })
 
 ai.request({ model, prompt: "Hello", providerOptions: { store: false } })
 

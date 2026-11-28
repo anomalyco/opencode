@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { ai, LLMResponse } from "../src/effect.js"
-import { Route, Endpoint, LLMClient, Protocol, type Framing } from "../src/route.js"
+import { Api } from "../src/api.js"
+import { Provider } from "../src/provider.js"
+import { Auth, LLMClient, Protocol, type Framing } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { LanguageModel } from "../src/schema/index.js"
 import { testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
-
-const updateModel = (model: LanguageModel, patch: Partial<LanguageModel.Input>) => LanguageModel.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -68,28 +68,30 @@ const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
   },
 })
 
-const fake = Route.make({
-  id: "fake",
+const fake = Api.make({
+  name: "fake",
   protocol: fakeProtocol,
-  endpoint: Endpoint.path("/chat"),
+  path: "/chat",
   framing: fakeFraming,
 })
-const configuredFake = fake.with({ endpoint: { baseURL: "https://fake.local" } })
 
-const gemini = Route.make({
+const gemini = Api.make({
+  name: "fake",
   id: "gemini-fake",
+  short: "gemini",
   protocol: fakeProtocol,
-  endpoint: Endpoint.path("/chat"),
+  path: "/chat",
   framing: fakeFraming,
 })
-const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local" } })
 
 const request = ai.request({
   id: "req_1",
   model: LanguageModel.make({
     id: "fake-model",
     provider: "fake-provider",
-    route: configuredFake,
+    api: fake,
+    baseURL: "https://fake.local",
+    auth: Auth.none,
   }),
   prompt: "hello",
 })
@@ -110,8 +112,8 @@ const unterminated = testEffect(
   dynamicResponse(({ respond }) => Effect.succeed(respond(encodeJson([{ type: "text", text: "partial" }])))),
 )
 
-describe("llm route", () => {
-  it.effect("stream and generate use the route pipeline", () =>
+describe("llm api", () => {
+  it.effect("stream and generate use the api pipeline", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
@@ -138,29 +140,34 @@ describe("llm route", () => {
     }),
   )
 
-  it.effect("selects routes by model route value", () =>
+  it.effect("selects apis by model api value", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest({
         ...request,
-        model: updateModel(request.model, { route: configuredGemini }),
+        model: LanguageModel.make({ ...request.model, api: gemini }),
       })
 
-      expect(prepared.route).toBe("gemini-fake")
+      expect(prepared.api).toBe("fake-provider-gemini")
     }),
   )
 
-  test("builds models from configured routes", () => {
-    const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
+  test("builds models from providers", () => {
+    const configured = Provider.make({
+      id: "fake-provider",
+      baseURL: "https://fake.local",
+      auth: Provider.keyless,
+      apis: [fake],
+    })
 
-    expect(configured.model({ id: "fake-model" })).toMatchObject({
+    expect(configured.model("fake-model")).toMatchObject({
       provider: "fake-provider",
     })
   })
 
-  it.effect("does not register duplicate route ids globally", () =>
+  it.effect("does not register duplicate api ids globally", () =>
     Effect.gen(function* () {
-      const duplicate = Route.make({
-        id: "fake",
+      const duplicate = Api.make({
+        name: "fake",
         protocol: Protocol.make({
           ...fakeProtocol,
           body: {
@@ -168,11 +175,14 @@ describe("llm route", () => {
             from: () => Effect.succeed({ body: "late-default" }),
           },
         }),
-        endpoint: Endpoint.path("/chat", { baseURL: "https://fake.local" }),
+        path: "/chat",
         framing: fakeFraming,
       })
 
-      const prepared = yield* compileRequest({ ...request, model: updateModel(request.model, { route: duplicate }) })
+      const prepared = yield* compileRequest({
+        ...request,
+        model: LanguageModel.make({ ...request.model, api: duplicate }),
+      })
 
       expect(prepared.body).toEqual({ body: "late-default" })
     }),

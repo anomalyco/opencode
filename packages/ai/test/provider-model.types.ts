@@ -26,12 +26,7 @@ Anthropic.model("claude-sonnet-4-6", { apiKey: "key" })
 // @ts-expect-error OpenAI-compatible models still require a base URL.
 OpenAICompatible.model("model")
 
-const groqConfig: Groq.Config = { apiKey: "key" }
-const xaiConfig: XAI.Config = { apiKey: "key" }
-const gatewayConfig: VercelAIGateway.Config = { apiKey: "key" }
-const compatibleConfig: OpenAICompatible.Config = { baseURL: "https://example.com/v1" }
-
-Groq.configure(groqConfig)
-XAI.configure(xaiConfig)
-VercelAIGateway.configure(gatewayConfig)
-OpenAICompatible.configure(compatibleConfig)
+Groq.groq.with({ apiKey: "key" }).model("llama-3.3-70b-versatile")
+XAI.xai.with({ apiKey: "key" }).model("grok-4")
+VercelAIGateway.vercelAIGateway.with({ apiKey: "key" }).model("openai/gpt-5")
+OpenAICompatible.openAICompatible.with({ baseURL: "https://example.com/v1" }).model("model")

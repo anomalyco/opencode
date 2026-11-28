@@ -25,7 +25,7 @@ import {
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
@@ -151,8 +151,7 @@ it.effect("uses canonical names and metadata without merging connection cache pa
 
     const resolved = yield* aisdk.model(input)
     expect(resolved).toMatchObject({ id: "api-model", provider: "openai" })
-    expect(resolved.route).toMatchObject({ provider: "openai", providerMetadataKey: "openai" })
-    expect(resolved.route.model({ id: "another-model" })).toMatchObject({ provider: "openai" })
+    expect(resolved.metadataKey).toBe("openai")
     const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
     expect(prepared.body.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
   }),
@@ -438,6 +437,32 @@ it.effect("closes the open AI SDK reasoning part when the next one starts", () =
   }),
 )
 
+it.effect("does not echo AI SDK events as raw provider frames", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Hi" },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const events = yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hi", includeRaw: true })).pipe(
+      Stream.runCollect,
+      Effect.provide(client),
+    )
+
+    expect(Array.from(events).filter((event) => event.type === "raw")).toEqual([])
+    expect(Array.from(events).filter((event) => event.type === "text-delta")).toHaveLength(1)
+  }),
+)
+
 it.effect("normalizes repeated, reopened, and overlapping AI SDK fragment boundaries", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -497,7 +522,7 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
     })
 
     const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
-    expect(resolved.route.providerMetadataKey).toBe("anthropic")
+    expect(resolved.metadataKey).toBe("anthropic")
     const prepared = yield* compileRequest(
       ai.request({
         model: resolved,

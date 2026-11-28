@@ -5,7 +5,7 @@ import { Google } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = Google.configure({
+const model = Google.media({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",
 }).image("gemini-3.1-flash-image")
 

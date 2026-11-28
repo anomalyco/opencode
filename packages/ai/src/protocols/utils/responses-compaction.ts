@@ -88,7 +88,7 @@ export const make = (
   lowerTools: (request: LLMRequest) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, AIError>,
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
-    const route = request.model.route
+    const model = request.model
     // The standalone compaction endpoint rejects effort updates (`configuration_update`). Every tool goes in
     // top-level `tools`: after compacting a history whose tools were only in `additional_tools`, small models lost
     // track of them more often.
@@ -113,7 +113,10 @@ export const make = (
         request.http?.body,
       ),
     )
-    const url = Endpoint.render(route.endpoint, { request, body: native })
+    const url = Endpoint.render(
+      { baseURL: model.baseURL, path: model.api.path, query: model.query },
+      { request, body: native },
+    )
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
       request: {
@@ -122,7 +125,7 @@ export const make = (
       },
       body,
       endpoint: Endpoint.path(url.toString()),
-      auth: route.auth,
+      auth: model.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
     const response = yield* RequestExecutor.withTimeout(
@@ -141,7 +144,7 @@ export const make = (
     const invalid = (message: string, cause?: unknown) =>
       new AIError({
         reason: new InvalidProviderOutputError({
-          route: route.id,
+          route: model.api.id,
           message,
           body: text,
           cause,

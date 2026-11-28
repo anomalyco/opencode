@@ -5,7 +5,7 @@ import { OpenAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording } from "./transcription-recording.js"
 
-const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
+const openai = OpenAI.media({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "openai-transcription",

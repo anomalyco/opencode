@@ -21,18 +21,16 @@ const collect = <E, R>(stream: Stream.Stream<SpeechEvent, E, R>) =>
     Effect.map((events) => Array.from(events)),
   )
 
-const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).speech("gpt-4o-mini-tts")
+const openai = OpenAI.media({ apiKey: "test", baseURL: "https://openai.test/v1" }).speech("gpt-4o-mini-tts")
 const elevenlabs = ElevenLabs.configure({ apiKey: "test", baseURL: "https://elevenlabs.test" }).speech(
   "eleven_flash_v2_5",
 )
 const cartesia = Cartesia.configure({ apiKey: "test", baseURL: "https://cartesia.test" }).speech("sonic-3")
-const google = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
+const google = Google.media({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
   "gemini-2.5-flash-preview-tts",
 )
-const google38 = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
-  "gemini-3.8-flash-tts",
-)
-const google38Lite = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
+const google38 = Google.media({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech("gemini-3.8-flash-tts")
+const google38Lite = Google.media({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
   "gemini-3.8-flash-lite-tts",
 )
 const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).speech("aura-2-thalia-en")

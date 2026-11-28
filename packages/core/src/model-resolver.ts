@@ -2,6 +2,7 @@ export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import {
+  ai,
   DecisionModel,
   DecisionModelCompatibility,
   DecisionModelSchema,
@@ -18,9 +19,10 @@ import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
-import { Capabilities, Compatibility, ID, Info, Model, Ref, VariantID } from "./model.js"
+import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
 import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
+import { ModelCapabilities } from "./model-capabilities.js"
 import { Provider } from "./provider.js"
 
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
@@ -216,12 +218,12 @@ export const fromCatalogModel = (
       // Reject provider compaction policies up front so the misconfiguration surfaces before any step runs.
       if (
         model.settings?.compaction?.type !== "native" ||
-        resolved.route.compact?.trigger ||
-        resolved.route.compact?.endpoint
+        ai.canCompact(resolved, { mechanism: "trigger" }) ||
+        ai.canCompact(resolved)
       )
         return Effect.succeed(resolved)
       return Effect.fail(
-        new UnsupportedCompactionError({ providerID: model.providerID, modelID: model.id, route: resolved.route.id }),
+        new UnsupportedCompactionError({ providerID: model.providerID, modelID: model.id, route: resolved.api.id }),
       )
     }),
   )
@@ -251,16 +253,15 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       const timeouts = Provider.timeouts(configured)
-      const base = resolved.compatibility
-        ? capabilities(runtime.capabilities, resolved.compatibility)
-        : runtime.capabilities
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
-        // The catalog's freeform formats decide whether the AI package sends a tool as raw text, and with which grammar.
-        capabilities: { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform ?? [] } },
-        compatibility: resolved.compatibility
-          ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
-          : runtime.compatibility,
+        // Catalog and config facts win over the package's. The catalog's freeform formats decide whether the AI
+        // package sends a tool as raw text, and with which grammar.
+        capabilities: ModelCapabilities.resolve(
+          runtime.capabilities,
+          resolved.compatibility,
+          model.capabilities.freeform ?? [],
+        ),
         // Timeouts and body encoding are transport policy, so they land on the model's options instead of package settings.
         options: {
           ...runtime.options,
@@ -273,19 +274,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     },
     catch: (cause) => constructionError(resolved, cause),
   })
-})
-
-// Config `compatibility` keys the AI package reads as model capabilities.
-const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates", "supportsSystemUpdates"] as const
-
-const capabilities = (base: LanguageModel["capabilities"], compatibility: Compatibility) => ({
-  ...base,
-  ...("supportsPromptCacheKey" in compatibility ? { promptCacheKey: compatibility.supportsPromptCacheKey } : {}),
-  ...("streamUsage" in compatibility ? { streamUsage: compatibility.streamUsage } : {}),
-  ...("supportsEffortUpdates" in compatibility
-    ? { reasoning: { ...base?.reasoning, updates: compatibility.supportsEffortUpdates } }
-    : {}),
-  ...("supportsSystemUpdates" in compatibility ? { systemUpdates: compatibility.supportsSystemUpdates } : {}),
 })
 
 /** Settings and package loading shared by every model type: credentials, variables, canonical provider, overlays. */
@@ -374,9 +362,7 @@ function validateProviderVariables(
   model: RuntimeInfo,
   resolved: LanguageModel,
 ): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
-  const baseURL = resolved.route.endpoint.baseURL
-  if (typeof baseURL !== "string") return Effect.succeed(resolved)
-  const failure = unresolvedProviderVariables(model, baseURL)
+  const failure = unresolvedProviderVariables(model, resolved.baseURL)
   return failure ? Effect.fail(failure) : Effect.succeed(resolved)
 }
 
@@ -509,7 +495,7 @@ export const layer = Layer.effect(
         credential === undefined &&
         !hasConfiguredAuth(runtimeInfo) &&
         usesAPIKeyAuth(runtimeInfo.package)
-          ? LanguageModel.update(model, { route: model.route.with({ auth: Auth.none }) })
+          ? LanguageModel.update(model, { auth: Auth.none })
           : model
       return {
         model: runtime,

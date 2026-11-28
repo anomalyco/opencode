@@ -1,13 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, type LanguageModel, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
-import { MiniMax } from "../../src/providers.js"
+import { MiniMax } from "../../src/providers/minimax.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
 const apiKey = process.env.MINIMAX_API_KEY ?? "fixture"
-const minimax = MiniMax.configure({ apiKey })
 const weather = ToolDefinition.make({
   name: "get_weather",
   description: "Get the current weather in a city",
@@ -31,7 +30,7 @@ const textCases: ReadonlyArray<{
     name: "M3 streams text with thinking disabled",
     api: "messages",
     protocol: "anthropic-messages",
-    model: MiniMax.configure({ apiKey, providerOptions: { thinking: { type: "disabled" } } }).model("MiniMax-M3"),
+    model: MiniMax.model("MiniMax-M3", { apiKey, thinking: { type: "disabled" } }),
     reasoning: false,
     body: { thinking: { type: "disabled" } },
   },
@@ -39,7 +38,7 @@ const textCases: ReadonlyArray<{
     name: "M3 streams adaptive thinking",
     api: "messages",
     protocol: "anthropic-messages",
-    model: MiniMax.configure({ apiKey, providerOptions: { thinking: { type: "adaptive" } } }).messages("MiniMax-M3"),
+    model: MiniMax.model("MiniMax-M3", { apiKey, thinking: { type: "adaptive" } }),
     reasoning: true,
     body: { thinking: { type: "adaptive" } },
   },
@@ -47,7 +46,7 @@ const textCases: ReadonlyArray<{
     name: "M2.7 streams default thinking",
     api: "messages",
     protocol: "anthropic-messages",
-    model: minimax.model("MiniMax-M2.7"),
+    model: MiniMax.model("MiniMax-M2.7", { apiKey }),
     reasoning: true,
     body: {},
   },
@@ -55,7 +54,7 @@ const textCases: ReadonlyArray<{
     name: "M3 streams text with thinking disabled",
     api: "chat",
     protocol: "minimax-chat",
-    model: MiniMax.configure({ apiKey, providerOptions: { thinking: { type: "disabled" } } }).chat("MiniMax-M3"),
+    model: MiniMax.chatModel("MiniMax-M3", { apiKey, thinking: { type: "disabled" } }),
     reasoning: false,
     body: { thinking: { type: "disabled" }, reasoning_split: true },
   },
@@ -63,7 +62,7 @@ const textCases: ReadonlyArray<{
     name: "M3 streams text with effort none",
     api: "responses",
     protocol: "open-responses",
-    model: MiniMax.configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).responses("MiniMax-M3"),
+    model: MiniMax.responsesModel("MiniMax-M3", { apiKey, reasoningEffort: "none" }),
     reasoning: false,
     body: { reasoning: { effort: "none" } },
   },
@@ -118,7 +117,7 @@ describe("MiniMax recorded", () => {
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
           ai.request({
-            model: minimax.model("MiniMax-M3"),
+            model: MiniMax.model("MiniMax-M3", { apiKey }),
             prompt: "Use get_weather to look up the current weather in Paris.",
             tools: [weather],
             toolChoice: ToolChoice.named("get_weather"),
@@ -139,19 +138,19 @@ describe("MiniMax recorded", () => {
       api: "messages",
       protocol: "anthropic-messages",
       mode: "adaptive thinking",
-      model: MiniMax.configure({ apiKey, providerOptions: { thinking: { type: "adaptive" } } }).model("MiniMax-M3"),
+      model: MiniMax.model("MiniMax-M3", { apiKey, thinking: { type: "adaptive" } }),
     },
     {
       api: "chat",
       protocol: "minimax-chat",
       mode: "default thinking",
-      model: minimax.chat("MiniMax-M3"),
+      model: MiniMax.chatModel("MiniMax-M3", { apiKey }),
     },
     {
       api: "responses",
       protocol: "open-responses",
       mode: "effort minimal",
-      model: MiniMax.configure({ apiKey, providerOptions: { reasoningEffort: "minimal" } }).responses("MiniMax-M3"),
+      model: MiniMax.responsesModel("MiniMax-M3", { apiKey, reasoningEffort: "minimal" }),
     },
   ]
 

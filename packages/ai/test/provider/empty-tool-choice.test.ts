@@ -6,13 +6,12 @@ import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { Auth } from "../../src/route/auth.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
+import { apiModel } from "../lib/model.js"
 
 const tool = { name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }
 
-for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
-  const model = route
-    .with({ endpoint: { baseURL: "https://api.openai.test/v1" }, auth: Auth.bearer("test") })
-    .model({ id: "gpt-4.1-mini" })
+for (const api of [OpenAIChat.api, OpenAIResponses.api]) {
+  const model = apiModel(api, "gpt-4.1-mini", { baseURL: "https://api.openai.test/v1", auth: Auth.bearer("test") })
 
   for (const choice of [
     { type: "auto" },
@@ -20,7 +19,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
     { type: "required" },
     { type: "tool", name: "lookup" },
   ] as const) {
-    it.effect(`${route.id} omits ${choice.type} tool choice without active tools`, () =>
+    it.effect(`${api.id} omits ${choice.type} tool choice without active tools`, () =>
       Effect.gen(function* () {
         for (const messages of [
           [Message.user("Say OK.")],
@@ -38,7 +37,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
       }),
     )
 
-    it.effect(`${route.id} preserves ${choice.type} tool choice with active tools`, () =>
+    it.effect(`${api.id} preserves ${choice.type} tool choice with active tools`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({ model, prompt: "Look up the value.", tools: [tool], toolChoice: choice }),
@@ -46,7 +45,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
         expect(prepared.body.tool_choice).toEqual(
           choice.type !== "tool"
             ? choice.type
-            : route.id === "openai-chat"
+            : api.id === "openai-chat"
               ? { type: "function", function: { name: "lookup" } }
               : { type: "function", name: "lookup" },
         )
@@ -57,9 +56,10 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
 
 it.effect("OpenAI Responses omits allowed tool choice without tool definitions", () =>
   Effect.gen(function* () {
-    const model = OpenAIResponses.route
-      .with({ endpoint: { baseURL: "https://api.openai.test/v1" }, auth: Auth.bearer("test") })
-      .model({ id: "gpt-4.1-mini" })
+    const model = apiModel(OpenAIResponses.api, "gpt-4.1-mini", {
+      baseURL: "https://api.openai.test/v1",
+      auth: Auth.bearer("test"),
+    })
     for (const tools of [[], [tool]]) {
       const prepared = yield* compileRequest(
         ai.request({

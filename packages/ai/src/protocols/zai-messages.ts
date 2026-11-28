@@ -1,4 +1,6 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import type { LLMRequest } from "../schema/index.js"
 import { AnthropicMessages } from "./anthropic-messages.js"
@@ -25,12 +27,23 @@ const fromRequest = Effect.fn("ZAIMessages.fromRequest")(function* (request: LLM
   return { ...body, thinking: options.thinking }
 })
 
-export const protocol = Protocol.make({
+const protocol = Protocol.make({
   id: "zai-messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
   supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
   toolUpdates: AnthropicMessages.protocol.toolUpdates,
+})
+
+/** Z.AI's Messages dialect. */
+export const api = Api.make({
+  name: "messages",
+  id: "zai-messages",
+  protocol,
+  path: AnthropicMessages.PATH,
+  framing: AnthropicMessages.framing,
+  headers: () => ({ "anthropic-version": "2023-06-01" }),
+  capabilities: Capabilities.defaults<Capabilities.Messages>({ cache: { markers: true } }),
 })
 
 export * as ZAIMessages from "./zai-messages.js"

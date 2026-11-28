@@ -1,6 +1,9 @@
 import { Schema } from "effect"
 import { ModelID, ProviderID } from "./ids.js"
-import type { AnyRoute, CompactionOperations } from "../route/client.js"
+import type { AnyApi } from "../api.js"
+import type { Capabilities } from "../capabilities.js"
+import type { Auth } from "../route/auth.js"
+import type { CompactionOperations } from "../route/client.js"
 import { isRecord } from "../utils/record.js"
 
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
@@ -198,110 +201,6 @@ export const ReasoningEffort = Schema.declare<ReasoningEffort>(
   { title: "ReasoningEffort" },
 )
 
-/** Tool schema sanitizer for a model family. `none` opts out of the protocol and model-name defaults. */
-export const LanguageModelSanitizerCompatibility = Schema.Literals(["gemini", "moonshot", "none"])
-export type LanguageModelSanitizerCompatibility = Schema.Schema.Type<typeof LanguageModelSanitizerCompatibility>
-
-export const LanguageModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])
-export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
-  typeof LanguageModelMaxTokensFieldCompatibility
->
-
-export const LanguageModelCacheFormatCompatibility = Schema.Literals(["anthropic", "alibaba"])
-export type LanguageModelCacheFormatCompatibility = Schema.Schema.Type<typeof LanguageModelCacheFormatCompatibility>
-
-export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(
-  "LLM.LanguageModelCompatibility",
-)({
-  sanitizer: Schema.optional(LanguageModelSanitizerCompatibility),
-  reasoningField: Schema.optional(Schema.String),
-  /** Require every assistant message to include its reasoning field, even when empty. */
-  requireReasoning: Schema.optional(Schema.Boolean),
-  maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
-  requireFinishReason: Schema.optional(Schema.Boolean),
-  requireAssistantAfterTool: Schema.optional(Schema.Boolean),
-  /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
-  cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
-  zaiToolStream: Schema.optional(Schema.Boolean),
-  requireSignature: Schema.optional(Schema.Boolean),
-  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
-  supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
-}) {}
-
-export namespace LanguageModelCompatibility {
-  export type Input = LanguageModelCompatibility | ConstructorParameters<typeof LanguageModelCompatibility>[0]
-
-  /** Normalize model/upstream compatibility metadata without projecting requests. */
-  export const make = (input: Input) =>
-    input instanceof LanguageModelCompatibility ? input : new LanguageModelCompatibility(input)
-}
-
-/**
- * What the model accepts on its API: models.dev v2 `capabilities` in camelCase, with the API's own overrides merged in.
- * Unset fields keep the protocol default, which may still guess from the provider, base URL or model ID.
- */
-export interface Capabilities {
-  readonly tools?: {
-    readonly supported?: boolean
-    /** Accepts `strict` on function tools. OpenAI Chat detects it from the provider when unset. */
-    readonly strict?: boolean
-    readonly choice?: ReadonlyArray<"auto" | "none" | "required" | "tool">
-    readonly search?: boolean
-    /** Input formats accepted by custom (free-form) tools. Unset or empty: freeform tools go out as JSON tools. */
-    readonly freeform?: ReadonlyArray<"text" | "lark" | "regex">
-    /**
-     * Tool changes the model takes mid-conversation without changing the leading tool declaration, so the prompt
-     * cache holds. `add`: declares a tool not declared before. `remove`: withdraws a declared tool. `replace`:
-     * declares a tool under a name declared before (a redefinition, or re-adding a removed tool). Unset or empty:
-     * every change folds into the top-level tools. Anthropic Messages sends all three as native blocks. OpenAI
-     * Responses needs `add` for any of them: it declares every tool in `additional_tools` items with a short
-     * incremental-update hint before each later item, and announces a removal as developer text while the tool
-     * stays declared, so list `remove` only for models that follow that announcement.
-     */
-    readonly updates?: ReadonlyArray<"add" | "remove" | "replace">
-  }
-  readonly reasoning?: {
-    readonly supported?: boolean
-    readonly default?:
-      | { readonly type: "toggle"; readonly value: boolean }
-      | { readonly type: "effort"; readonly value: ReasoningEffort }
-      | { readonly type: "budget"; readonly value: number }
-    readonly toggle?: boolean
-    readonly effort?: ReadonlyArray<ReasoningEffort>
-    readonly budget?: { readonly min?: number; readonly max?: number }
-    /** Accepts per-message effort updates. Detected from the model ID when unset. */
-    readonly updates?: boolean
-  }
-  readonly cache?:
-    | false
-    | {
-        readonly implicit?: true | { readonly ttl?: ReadonlyArray<CacheTTL>; readonly minTokens?: number }
-        readonly explicit?:
-          | true
-          | {
-              readonly ttl?: ReadonlyArray<CacheTTL>
-              readonly maxBreakpoints?: number
-              readonly targets?: ReadonlyArray<"tools" | "system" | "messages">
-              readonly minTokens?: number
-            }
-      }
-  readonly structuredOutput?: boolean
-  readonly temperature?: boolean
-  readonly topP?: boolean
-  readonly topK?: boolean
-  /** Accepts mid-conversation system messages. Anthropic Messages detects it from the model ID when unset. */
-  readonly systemUpdates?: boolean
-  /** Accepts `store`. OpenAI Chat detects it from the provider when unset. */
-  readonly store?: boolean
-  /** Accepts `stream_options.include_usage`. OpenAI Chat defaults to true. */
-  readonly streamUsage?: boolean
-  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
-  // this is true; other protocols omit it only when this is false.
-  // Session-affinity headers still flow regardless.
-  readonly promptCacheKey?: boolean
-  readonly serviceTier?: ReadonlyArray<OpenString<"flex" | "priority" | "fast" | "ultrafast" | "standby">>
-}
-
 export class LanguageModel<
   Options extends ProviderOptions = ProviderOptions,
   Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
@@ -309,88 +208,78 @@ export class LanguageModel<
   declare protected readonly _ProviderOptions: Options
   readonly id: ModelID
   readonly provider: ProviderID
-  readonly route: AnyRoute<Compact>
+  /** The API the model is reached through, as its host configured it. */
+  readonly api: AnyApi & { readonly compact: Compact }
+  readonly baseURL: string
+  readonly query?: Record<string, string>
+  readonly auth: Auth.Definition
+  /** `providerMetadata` namespace this model emits and reads. */
+  readonly metadataKey: string
+  /** Request options applied under each request: the request wins. */
   readonly options?: RequestOptions
-  readonly capabilities?: Capabilities
-  readonly compatibility?: LanguageModelCompatibility
+  readonly capabilities?: Capabilities.Any
 
   constructor(input: LanguageModel.ConstructorInput<Compact>) {
     this.id = input.id
     this.provider = input.provider
-    this.route = input.route
+    this.api = input.api
+    this.baseURL = input.baseURL
+    this.query = input.query
+    this.auth = input.auth
+    this.metadataKey = input.metadataKey
     this.options = input.options
     this.capabilities = input.capabilities
-    this.compatibility = input.compatibility
   }
 
   static make<
     Options extends ProviderOptions = ProviderOptions,
     Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
   >(input: LanguageModel.Input<Compact>) {
+    const provider = ProviderID.make(input.provider)
+    // Errors and compiled requests name the host: `deepseek-chat`, not the shared `openai-chat`.
+    const id = input.api.host.id ?? hostID(provider, input.api.short)
     return new LanguageModel<Options, Compact>({
+      ...input,
+      api: input.api.id === id ? input.api : { ...input.api, id },
       id: ModelID.make(input.id),
-      provider: ProviderID.make(input.provider),
-      route: input.route,
-      // The route's options are a preset under the model's own.
-      options: mergeRequestOptions(input.route.options, input.options),
-      capabilities: input.capabilities,
-      compatibility:
-        input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
+      provider,
+      metadataKey: input.metadataKey ?? provider,
+      options: mergeRequestOptions(input.options),
     })
   }
 
-  static input<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
-    model: LanguageModel<Options, Compact>,
-  ): LanguageModel.ConstructorInput<Compact> {
-    return {
-      id: model.id,
-      provider: model.provider,
-      route: model.route,
-      options: model.options,
-      capabilities: model.capabilities,
-      compatibility: model.compatibility,
-    }
-  }
-
-  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
-    model: LanguageModel<Options>,
-    patch: Partial<LanguageModel.Input<Compact>> & { readonly route: AnyRoute<Compact> },
-  ): LanguageModel<Options, Compact>
   static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
     model: LanguageModel<Options, Compact>,
-    patch: Partial<Omit<LanguageModel.Input, "route">> & { readonly route?: undefined },
-  ): LanguageModel<Options, Compact>
-  static update<Options extends ProviderOptions>(
-    model: LanguageModel<Options>,
-    patch: Partial<LanguageModel.Input>,
-  ): LanguageModel<Options>
-  static update<Options extends ProviderOptions>(model: LanguageModel<Options>, patch: Partial<LanguageModel.Input>) {
+    patch: Partial<Omit<LanguageModel.Input<Compact>, "api">>,
+  ): LanguageModel<Options, Compact> {
     if (Object.keys(patch).length === 0) return model
-    return LanguageModel.make<Options>({
-      ...LanguageModel.input(model),
-      ...patch,
-      route: patch.route ?? model.route,
-    })
+    return LanguageModel.make<Options, Compact>({ ...model, ...patch })
   }
 }
+
+const hostID = (provider: string, short: string) =>
+  short === provider || short.startsWith(`${provider}-`) ? short : `${provider}-${short}`
 
 export namespace LanguageModel {
   export type ConstructorInput<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = {
     readonly id: ModelID
     readonly provider: ProviderID
-    readonly route: AnyRoute<Compact>
+    readonly api: AnyApi & { readonly compact: Compact }
+    readonly baseURL: string
+    readonly query?: Record<string, string>
+    readonly auth: Auth.Definition
+    readonly metadataKey: string
     readonly options?: RequestOptions
-    readonly capabilities?: Capabilities
-    readonly compatibility?: LanguageModelCompatibility
+    readonly capabilities?: Capabilities.Any
   }
 
   export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
     ConstructorInput<Compact>,
-    "id" | "provider" | "compatibility"
+    "id" | "provider" | "metadataKey"
   > & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly compatibility?: LanguageModelCompatibility.Input
+    readonly metadataKey?: string
   }
 }
 

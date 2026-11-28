@@ -22,10 +22,10 @@ for (const item of [
   { id: "anthropic-claude-haiku-4.5", name: "Haiku", maxTokens: 128, providerOptions: undefined },
   { id: "openai-gpt-5-nano", name: "GPT Nano", maxTokens: 1024, providerOptions: { reasoningEffort: "minimal" } },
 ] as const) {
-  const model = DigitalOcean.configure({
+  const model = DigitalOcean.model(item.id, {
     apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture",
-    providerOptions: item.providerOptions,
-  }).model(item.id)
+    ...item.providerOptions,
+  })
 
   describe(`DigitalOcean ${item.name} recorded`, () => {
     recorded.effect.with(
@@ -45,13 +45,13 @@ for (const item of [
 
           expect(first.text.trim()).toMatch(/^OK\.?$/)
           expect(second.text.trim()).toMatch(/^OK\.?$/)
-          expect(second.usage.cacheReadInputTokens).toBeGreaterThan(0)
+          expect(second.usage?.cacheReadInputTokens).toBeGreaterThan(0)
           for (const response of [first, second]) {
-            expect(response.usage.inputTokens).toBeGreaterThan(4096)
-            expect(response.usage.inputTokens).toBe(
-              (response.usage.nonCachedInputTokens ?? 0) +
-                (response.usage.cacheReadInputTokens ?? 0) +
-                (response.usage.cacheWriteInputTokens ?? 0),
+            expect(response.usage?.inputTokens).toBeGreaterThan(4096)
+            expect(response.usage?.inputTokens).toBe(
+              (response.usage?.nonCachedInputTokens ?? 0) +
+                (response.usage?.cacheReadInputTokens ?? 0) +
+                (response.usage?.cacheWriteInputTokens ?? 0),
             )
           }
         }),

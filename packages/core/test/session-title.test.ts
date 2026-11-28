@@ -11,6 +11,7 @@ import {
   type LLMRequest,
 } from "@opencode/ai/effect"
 import { OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -45,12 +46,16 @@ let selections: Array<Session.Info["model"]> = []
 const model = LanguageModel.make({
   id: "title-model",
   provider: "test",
-  route: OpenAIChat.route,
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
 })
 const smallModel = LanguageModel.make({
   id: "title-small",
   provider: "test",
-  route: OpenAIChat.route,
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
 })
 const cost = [
   {

@@ -11,7 +11,7 @@ describe("xAI Images", () => {
   it.effect("generates through the OpenAI-compatible Images API", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: XAI.configure({
+        model: XAI.media({
           apiKey: "test",
           baseURL: "https://api.xai.test/v1",
           headers: { "x-default": "yes" },
@@ -80,7 +80,7 @@ describe("xAI Images", () => {
   it.effect("supports request-level custom auth", () =>
     ai.image
       .generate({
-        model: XAI.configure({
+        model: XAI.media({
           baseURL: "https://api.xai.test/v1",
           auth: Auth.custom((input) =>
             Effect.succeed(Headers.set(input.headers, "x-custom-auth", new URL(input.url).hostname)),

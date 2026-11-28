@@ -4,7 +4,7 @@ import { ai, Media } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
-const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
+const alibaba = Alibaba.media({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "alibaba-images",

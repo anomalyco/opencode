@@ -1,15 +1,24 @@
+import type { ProviderOptions } from "../../src/schema/index.js"
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { ai, LLMEvent } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
-import { configure } from "../../src/providers/openai-compatible-responses.js"
+import { openAICompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
+const compatible = (
+  id: string,
+  settings: { apiKey?: string; baseURL: string; provider?: string; providerOptions?: ProviderOptions },
+) =>
+  openAICompatibleResponses(settings.provider)
+    .with({ apiKey: settings.apiKey, baseURL: settings.baseURL, providerOptions: settings.providerOptions })
+    .model(id)
+
 const request = ai.request({
-  model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+  model: compatible("example-model", { apiKey: "test-key", baseURL: "https://responses.example.test/v1" }),
   prompt: "Respond.",
 })
 const completed = { type: "response.completed", response: { id: "resp_1" } }

@@ -129,12 +129,12 @@ describe("Decision recorded", () => {
 
   openrouter.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).decision("typesafe/jev-1.13"),
+      OpenRouter.media({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).decision("typesafe/jev-1.13"),
     ),
   )
 
   openai.effect("decides choice score and predicate questions about JSON state", () =>
-    assertDecision(OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).decision("gpt-6-luna"), {
+    assertDecision(OpenAI.media({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).decision("gpt-6-luna"), {
       ticket,
       plan: "pro",
     }).pipe(
@@ -147,7 +147,7 @@ describe("Decision recorded", () => {
 
   google.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      Google.configure({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" }).decision("gemini-decision-1"),
+      Google.media({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" }).decision("gemini-decision-1"),
     ).pipe(
       Effect.map((response) => {
         expect(response.usage?.outputTokens).toBe(0)
@@ -158,7 +158,7 @@ describe("Decision recorded", () => {
 
   cloudflareWorkersAI.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      CloudflareWorkersAI.configure({
+      CloudflareWorkersAI.media({
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
         apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
       }).decision("@cf/cloudflare/clef"),
@@ -167,7 +167,7 @@ describe("Decision recorded", () => {
 
   cloudflareAIGateway.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      CloudflareAIGateway.configure({
+      CloudflareAIGateway.media({
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
         gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
       }).decision("typesafe/jev"),
@@ -176,7 +176,7 @@ describe("Decision recorded", () => {
 
   baseten.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      Baseten.configure({ apiKey: process.env.BASETEN_API_KEY ?? "fixture" }).decision(
+      Baseten.media({ apiKey: process.env.BASETEN_API_KEY ?? "fixture" }).decision(
         "decision-models/baseten-elephant-9b-latest",
       ),
     ),
@@ -184,7 +184,7 @@ describe("Decision recorded", () => {
 
   digitalocean.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      DigitalOcean.configure({ apiKey: process.env.DIGITALOCEAN_API_KEY ?? "fixture" }).decision("typesafe-jev-1.13.0"),
+      DigitalOcean.media({ apiKey: process.env.DIGITALOCEAN_API_KEY ?? "fixture" }).decision("typesafe-jev-1.13.0"),
     ),
   )
 })

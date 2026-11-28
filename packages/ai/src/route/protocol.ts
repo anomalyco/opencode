@@ -1,5 +1,6 @@
 import { Schema, type Effect } from "effect"
-import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
+import type { Capabilities } from "../capabilities.js"
+import type { AIError, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
 import { flattenRequest } from "../protocols/shared.js"
 import type { ToolUpdateEncoding } from "../tool-updates.js"
 
@@ -22,8 +23,7 @@ import type { ToolUpdateEncoding } from "../tool-updates.js"
  *
  * A `Protocol` is **not** a deployment. It does not know which URL, which
  * headers, or which auth scheme to use. Those are deployment concerns owned
- * by `Route.make(...)` along with the chosen `Endpoint`, `Auth`,
- * and `Framing`. This separation is what lets DeepSeek, TogetherAI, Cerebras,
+ * by the provider that serves the API. This separation is what lets DeepSeek, TogetherAI, Cerebras,
  * etc. all reuse `OpenAIChat.protocol` without forking 300 lines per provider.
  *
  * The four type parameters reflect the pipeline:
@@ -50,7 +50,7 @@ export interface Protocol<Body, Frame, Event, State> {
   /** Whether `body.from` sends tool namespaces natively; otherwise `make` hands it flattened requests. Wrappers around another `body.from` must forward it. */
   readonly namespaces?: boolean
   /** Tool schema sanitizer for every model on this protocol unless the model's compatibility sets one; wrappers around another `body.from` must forward it. */
-  readonly sanitizer?: LanguageModelSanitizerCompatibility
+  readonly sanitizer?: Capabilities.Sanitizer
 }
 
 export interface ProtocolBody<Body> {

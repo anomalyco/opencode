@@ -626,7 +626,7 @@ export const layer = Layer.effect(
             .compact(request, { mechanism: "endpoint", http: prepared.options.http })
             .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
         }
-        return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
+        return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.api.id}`)
       }
 
       return yield* deliver(trigger, prepared, budget, send)

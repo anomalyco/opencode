@@ -13,7 +13,7 @@ import {
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
-import type { StreamOptions } from "@opencode/ai/route"
+import { Auth, type StreamOptions } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -65,7 +65,13 @@ const options: Array<StreamOptions | undefined> = []
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
-const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
+const model = LanguageModel.make({
+  id: "generate-model",
+  provider: "test",
+  api: OpenAIChat.api,
+  baseURL: OpenAIChat.DEFAULT_BASE_URL,
+  auth: Auth.none,
+})
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
   generate: (request, requestOptions) =>

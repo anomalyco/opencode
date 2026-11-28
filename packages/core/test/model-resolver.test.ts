@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ai, LanguageModel, Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Auth } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { Headers } from "effect/http"
@@ -81,7 +82,7 @@ describe("ModelResolver", () => {
         ModelResolver.fromCatalogModel(model("@opencode/ai/providers/anthropic", { compatibility })).pipe(
           Effect.map((resolved) => ({
             effort: resolved.capabilities?.reasoning?.updates,
-            system: resolved.capabilities?.systemUpdates,
+            system: resolved.capabilities?.system?.updates,
           })),
         )
       expect(yield* flags({ supportsEffortUpdates: true, supportsSystemUpdates: true })).toEqual({
@@ -133,39 +134,37 @@ describe("ModelResolver", () => {
       )
 
       expect(responses).toMatchObject({ id: "responses-deployment", provider: "azure" })
-      expect(responses.route).toMatchObject({
-        id: "azure-openai-responses",
-        endpoint: {
-          baseURL: "https://modern-resource.openai.azure.com/openai/v1",
-          query: { "api-version": "2025-01-01-preview" },
-        },
+      expect(responses.api.id).toBe("azure-responses")
+      expect(responses).toMatchObject({
+        baseURL: "https://modern-resource.openai.azure.com/openai/v1",
+        query: { "api-version": "2025-01-01-preview" },
       })
       expect(chat).toMatchObject({ id: "chat-deployment", provider: "azure" })
-      expect(chat.route.id).toBe("azure-openai-chat")
+      expect(chat.api.id).toBe("azure-chat")
       expect(deployment).toMatchObject({ id: "legacy-url-deployment", provider: "azure" })
-      expect(deployment.route.endpoint).toMatchObject({
+      expect(deployment).toMatchObject({
         baseURL: "https://modern-resource.openai.azure.com/openai/deployments/legacy-url-deployment",
         query: { "api-version": "2025-01-01-preview" },
       })
       expect(compatible).toMatchObject({ id: "legacy-deployment", provider: "azure" })
-      expect(compatible.route.endpoint.baseURL).toBe("https://legacy-resource.cognitiveservices.azure.com/openai")
+      expect(compatible.baseURL).toBe("https://legacy-resource.cognitiveservices.azure.com/openai")
     }),
   )
 
   it.effect("routes compatible packages to the host's dedicated package when one exists", () =>
     Effect.gen(function* () {
       const routes = {
-        "alibaba-coding-plan-cn": "alibaba-chat",
+        "alibaba-coding-plan-cn": "alibaba-coding-plan-cn-chat",
         baseten: "baseten-chat",
         deepseek: "deepseek-chat",
-        "fireworks-ai": "fireworks-chat",
-        "moonshotai-cn": "moonshot-chat",
-        zhipuai: "zai-chat",
-        "zhipuai-coding-plan": "zai-coding-chat",
-        cerebras: "openai-compatible-chat",
-        deepinfra: "openai-compatible-chat",
-        groq: "openai-compatible-chat",
-        togetherai: "openai-compatible-chat",
+        "fireworks-ai": "fireworks-ai-chat",
+        "moonshotai-cn": "moonshotai-cn-chat",
+        zhipuai: "zhipuai-chat",
+        "zhipuai-coding-plan": "zhipuai-coding-plan-chat",
+        cerebras: "cerebras-chat",
+        deepinfra: "deepinfra-chat",
+        groq: "groq-chat",
+        togetherai: "togetherai-chat",
       }
       for (const [providerID, route] of Object.entries(routes)) {
         const selected = yield* ModelResolver.fromCatalogModel(
@@ -175,8 +174,8 @@ describe("ModelResolver", () => {
           }),
         )
         expect(String(selected.provider)).toBe(providerID)
-        expect(selected.route.id).toBe(route)
-        expect(selected.route.endpoint.baseURL).toBe("https://provider.example/v1/openai")
+        expect(selected.api.id).toBe(route)
+        expect(selected.baseURL).toBe("https://provider.example/v1/openai")
         const prepared = yield* compileRequest(ai.request({ model: selected, prompt: "Hello" }))
         expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello" }])
         expect(prepared.body).not.toHaveProperty("apiKey")
@@ -194,7 +193,7 @@ describe("ModelResolver", () => {
           }),
         )
 
-        expect(resolved.route.endpoint).toMatchObject({
+        expect(resolved).toMatchObject({
           baseURL: "https://resource.openai.azure.com/openai/v1",
           query: { "api-version": "v1" },
         })
@@ -220,14 +219,10 @@ describe("ModelResolver", () => {
         credential,
       )
 
-      expect(responses.route).toMatchObject({
-        id: "bedrock-mantle-responses",
-        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
-      })
-      expect(chat.route).toMatchObject({
-        id: "bedrock-mantle-chat",
-        endpoint: { baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" },
-      })
+      expect(responses.api.id).toBe("test-provider-responses")
+      expect(responses).toMatchObject({ baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" })
+      expect(chat.api.id).toBe("test-provider-chat")
+      expect(chat).toMatchObject({ baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" })
     }),
   )
 
@@ -244,10 +239,8 @@ describe("ModelResolver", () => {
         })
         const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
-        expect(resolved.route).toMatchObject({
-          id: "bedrock-mantle-responses",
-          endpoint: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" },
-        })
+        expect(resolved.api.id).toBe("amazon-bedrock-responses")
+        expect(resolved).toMatchObject({ baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" })
         expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
     ),
@@ -266,7 +259,7 @@ describe("ModelResolver", () => {
           settings: Provider.mergeOverlay({ region: "us-west-2" }, catalog.settings),
         })
 
-        expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+        expect(resolved.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
     ),
   )
@@ -284,7 +277,7 @@ describe("ModelResolver", () => {
           }),
         )
 
-        expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+        expect(resolved.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
     ),
   )
@@ -302,11 +295,8 @@ describe("ModelResolver", () => {
 
       expect(catalog.id).toBe(ID.make("test-model"))
       expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
-      expect(resolved.route).toMatchObject({
-        id: "openai-responses",
-        providerMetadataKey: "openai",
-        endpoint: { baseURL: "https://openai.example/v1" },
-      })
+      expect(resolved.api.id).toBe("test-provider-responses")
+      expect(resolved).toMatchObject({ metadataKey: "openai", baseURL: "https://openai.example/v1" })
       expect(resolved.options).toMatchObject({
         headers: { "x-test": "header" },
         http: { body: { custom_extension: { enabled: true } } },
@@ -339,7 +329,7 @@ describe("ModelResolver", () => {
             settings: { apiKey: "", baseURL: "https://openai.example/v1" },
           }),
         )
-        const headers = yield* resolved.route.auth.apply({
+        const headers = yield* resolved.auth.apply({
           request: ai.request({ model: resolved, prompt: "Hello" }),
           method: "POST",
           url: "https://openai.example/v1/responses",
@@ -438,10 +428,10 @@ describe("ModelResolver", () => {
         yield* Effect.forEach(selections, (selection) =>
           Effect.gen(function* () {
             const resolved = yield* resolver.resolveModel(selection)
-            const headers = yield* resolved.model.route.auth.apply({
+            const headers = yield* resolved.model.auth.apply({
               request: ai.request({ model: resolved.model, prompt: "Hello" }),
               method: "POST",
-              url: resolved.model.route.endpoint.baseURL ?? "",
+              url: resolved.model.baseURL ?? "",
               body: "{}",
               headers: Headers.fromInput(resolved.model.options?.headers),
             })
@@ -467,7 +457,7 @@ describe("ModelResolver", () => {
           }),
         )
         const exit = yield* Effect.exit(
-          resolved.route.auth.apply({
+          resolved.auth.apply({
             request: ai.request({ model: resolved, prompt: "Hello" }),
             method: "POST",
             url: "https://google.example.com/v1",
@@ -504,7 +494,7 @@ describe("ModelResolver", () => {
       )
       const request = ai.request({ model: resolved, prompt: "Hello", maxTokens: 10 })
       const prepared = yield* compileRequest(request)
-      const headers = yield* resolved.route.auth.apply({
+      const headers = yield* resolved.auth.apply({
         request,
         method: "POST",
         url: "https://compatible.example/v1/chat/completions",
@@ -513,18 +503,18 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer settings-secret")
-      expect(resolved.route.id).toBe("openai-compatible-chat")
+      expect(resolved.api.id).toBe("deepseek-chat")
       expect(String(resolved.provider)).toBe("deepseek")
-      expect(resolved.route.providerMetadataKey).toBe("deepseek")
-      expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
-      expect(resolved.compatibility?.requireReasoning).toBe(true)
-      expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
-      expect(resolved.compatibility?.requireFinishReason).toBe(false)
-      expect(resolved.compatibility?.requireAssistantAfterTool).toBe(true)
+      expect(resolved.metadataKey).toBe("deepseek")
+      expect(resolved.capabilities).toMatchObject({
+        reasoning: { field: "vendor_reasoning", required: true },
+        output: { maxTokensField: "max_completion_tokens", requireFinishReason: false },
+        messages: { requireAssistantAfterTool: true },
+      })
       expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
-      expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
-      expect(resolved.options?.http?.body).toBeUndefined()
+      expect(resolved.baseURL).toBe("https://compatible.example/v1")
+      expect(resolved.options?.http?.body ?? {}).toEqual({})
     }),
   )
 
@@ -536,7 +526,7 @@ describe("ModelResolver", () => {
         })
         const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
-        expect(resolved.route.endpoint.baseURL).toBe("https://api.acme.test/v1")
+        expect(resolved.baseURL).toBe("https://api.acme.test/v1")
         expect(catalog.settings?.baseURL).toBe("https://${ACME_HOST}/v1")
       }),
     ),
@@ -626,7 +616,7 @@ describe("ModelResolver", () => {
       )
       const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
 
-      expect(resolved.route.id).toBe("xai-responses")
+      expect(resolved.api.id).toBe("xai-responses")
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "high", summary: "auto" },
         include: ["reasoning.encrypted_content"],
@@ -707,11 +697,8 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.route).toMatchObject({
-        id: "anthropic-messages",
-        providerMetadataKey: "anthropic",
-        endpoint: { baseURL: "https://anthropic.example/v1" },
-      })
+      expect(resolved.api.id).toBe("test-provider-messages")
+      expect(resolved).toMatchObject({ metadataKey: "anthropic", baseURL: "https://anthropic.example/v1" })
     }),
   )
 
@@ -726,7 +713,7 @@ describe("ModelResolver", () => {
         }),
         credential,
       )
-      const headers = yield* resolved.route.auth.apply({
+      const headers = yield* resolved.auth.apply({
         request: ai.request({ model: resolved, prompt: "Hello" }),
         method: "POST",
         url: "https://openai.example/v1/responses",
@@ -766,7 +753,7 @@ describe("ModelResolver", () => {
           credential,
         )
         const authorize = (resolved: LanguageModel) =>
-          resolved.route.auth.apply({
+          resolved.auth.apply({
             request: ai.request({ model: resolved, prompt: "Hello" }),
             method: "POST",
             url: "https://cli-resource.openai.azure.com/openai/v1/responses",
@@ -774,7 +761,7 @@ describe("ModelResolver", () => {
             headers: Headers.empty,
           })
 
-        expect(azure.route.endpoint.baseURL).toBe("https://cli-resource.openai.azure.com/openai/v1")
+        expect(azure.baseURL).toBe("https://cli-resource.openai.azure.com/openai/v1")
         expect((yield* authorize(azure))["api-key"]).toBe("azure-cli")
         expect((yield* authorize(foundry)).authorization).toBe("Bearer azure-cli")
       }),
@@ -806,8 +793,8 @@ describe("ModelResolver", () => {
       )
 
       expect(failure).toBeInstanceOf(ModelResolver.ModelConfigurationError)
-      expect(resolved.route.endpoint.baseURL).toBe("https://configured-resource.openai.azure.com/openai/v1")
-      expect(resolved.options?.http?.body).toBeUndefined()
+      expect(resolved.baseURL).toBe("https://configured-resource.openai.azure.com/openai/v1")
+      expect(resolved.options?.http?.body ?? {}).toEqual({})
     }),
   )
 
@@ -829,7 +816,7 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.options?.http?.body).toBeUndefined()
+      expect(resolved.options?.http?.body ?? {}).toEqual({})
     }),
   )
 
@@ -859,7 +846,7 @@ describe("ModelResolver", () => {
         messages: [Message.user("Hello"), Message.system("Updated instructions.")],
       })
       const prepared = yield* compileRequest(request)
-      const headers = yield* resolved.route.auth.apply({
+      const headers = yield* resolved.auth.apply({
         request,
         method: "POST",
         url: "https://chatgpt.com/backend-api/codex/responses",
@@ -867,10 +854,8 @@ describe("ModelResolver", () => {
         headers: Headers.empty,
       })
 
-      expect(resolved.route).toMatchObject({
-        id: "openai-responses",
-        endpoint: { baseURL: "https://chatgpt.com/backend-api/codex" },
-      })
+      expect(resolved.api.id).toBe("test-provider-responses")
+      expect(resolved).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
       expect(resolved.options?.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
       expect(prepared.body).not.toHaveProperty("instructions")
@@ -900,8 +885,8 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.route.id).toBe("openai-compatible-chat")
-      expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
+      expect(resolved.api.id).toBe("test-provider-chat")
+      expect(resolved.baseURL).toBe("https://compatible.example/v1")
     }),
   )
 
@@ -938,7 +923,7 @@ describe("ModelResolver", () => {
         }),
       )
       const request = ai.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth.apply({
+      const headers = yield* resolved.auth.apply({
         request,
         method: "POST",
         url: "https://openai.example/v1/responses",
@@ -946,7 +931,7 @@ describe("ModelResolver", () => {
         headers: Headers.empty,
       })
 
-      expect(resolved.route.endpoint.baseURL).toBe("https://openai.example/v1")
+      expect(resolved.baseURL).toBe("https://openai.example/v1")
       expect(headers.authorization).toBe("Bearer oauth-token")
       expect(headers["chatgpt-account-id"]).toBeUndefined()
     }),
@@ -977,7 +962,7 @@ describe("ModelResolver", () => {
                   headers: { "x-package": "header" },
                   body: { custom: true },
                 })
-                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+                return LanguageModel.update(native, { id: modelID, provider: "package-provider" })
               },
             })
           },
@@ -1024,7 +1009,7 @@ describe("ModelResolver", () => {
                 expect(settings).not.toHaveProperty("server")
                 expect(settings).not.toHaveProperty("orgID")
                 expect(settings).not.toHaveProperty("orgName")
-                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+                return LanguageModel.update(native, { id: modelID, provider: "package-provider" })
               },
             }),
         }),
@@ -1147,7 +1132,7 @@ describe("ModelResolver", () => {
                     body: { custom: true },
                     ...providerOptions,
                   })
-                  return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
+                  return LanguageModel.update(native, { id: modelID, provider: "native-provider" })
                 },
               })
             },
@@ -1193,7 +1178,14 @@ describe("ModelResolver", () => {
             loadPackage: (specifier) => {
               expect(specifier).toBe(nativePackage)
               return Effect.succeed({
-                model: (id) => LanguageModel.make({ id, provider: "native-provider", route: OpenAIChat.route }),
+                model: (id) =>
+                  LanguageModel.make({
+                    id,
+                    provider: "native-provider",
+                    api: OpenAIChat.api,
+                    baseURL: OpenAIChat.DEFAULT_BASE_URL,
+                    auth: Auth.none,
+                  }),
               })
             },
             loadAISDK: () => Effect.die(`AI SDK loader called for ${catalogPackage}`),
@@ -1238,7 +1230,7 @@ describe("ModelResolver", () => {
                   thinking: { type: "adaptive", display: "summarized" },
                   effort: "high",
                 })
-                return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
+                return LanguageModel.update(native, { id: modelID, provider: "native-provider" })
               },
             })
           },
@@ -1274,7 +1266,13 @@ describe("ModelResolver", () => {
                 transforms: ["middle-out"],
                 provider: { sort: "price", only: ["anthropic"] },
               })
-              return LanguageModel.make({ id: modelID, provider: "openrouter", route: OpenAIChat.route })
+              return LanguageModel.make({
+                id: modelID,
+                provider: "openrouter",
+                api: OpenAIChat.api,
+                baseURL: OpenAIChat.DEFAULT_BASE_URL,
+                auth: Auth.none,
+              })
             },
           }),
       },
@@ -1304,7 +1302,13 @@ describe("ModelResolver", () => {
                 factory: true,
                 custom: { source: true, catalog: true },
               })
-              return LanguageModel.make({ id: modelID, provider: "mistral", route: OpenAIChat.route })
+              return LanguageModel.make({
+                id: modelID,
+                provider: "mistral",
+                api: OpenAIChat.api,
+                baseURL: OpenAIChat.DEFAULT_BASE_URL,
+                auth: Auth.none,
+              })
             },
           }),
       },
@@ -1365,43 +1369,43 @@ describe("ModelResolver", () => {
         Credential.Key.make({ type: "key", key: "workers-secret" }),
       )
 
-      expect(google.route.id).toBe("gemini")
+      expect(google.api.id).toBe("test-provider-gemini")
       expect(google.options?.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
-      expect(openrouter.route.id).toBe("openrouter")
+      expect(openrouter.api.id).toBe("test-provider-chat")
       expect(openrouter.options?.providerOptions).toEqual({ reasoning: { effort: "high" } })
-      expect(cerebras.route.id).toBe("cerebras-chat")
+      expect(cerebras.api.id).toBe("test-provider-chat")
       expect(cerebras.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(cerebras.provider)).toBe("test-provider")
-      expect(deepinfra.route.id).toBe("deepinfra-chat")
-      expect(deepinfra.route.endpoint.baseURL).toBe("https://deepinfra.example/provider-root/openai")
+      expect(deepinfra.api.id).toBe("test-provider-chat")
+      expect(deepinfra.baseURL).toBe("https://deepinfra.example/provider-root/openai")
       expect(deepinfra.options?.providerOptions).toEqual({ reasoningEffort: "none" })
       expect(String(deepinfra.provider)).toBe("test-provider")
-      expect(togetherai.route.id).toBe("togetherai-chat")
+      expect(togetherai.api.id).toBe("test-provider-chat")
       expect(togetherai.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(togetherai.provider)).toBe("test-provider")
-      expect(groq.route.id).toBe("groq-chat")
-      expect(groq.route.protocol).toBe("groq-chat")
+      expect(groq.api.id).toBe("test-provider-chat")
+      expect(groq.api.protocol.id).toBe("groq-chat")
       expect(groq.options?.providerOptions).toEqual({ reasoningEffort: "high", parallelToolCalls: false })
       expect(String(groq.provider)).toBe("test-provider")
-      expect(mistral.route.id).toBe("mistral-chat")
+      expect(mistral.api.id).toBe("test-provider-mistral-chat")
       expect(mistral.options?.providerOptions).toEqual({
         safePrompt: true,
         promptCacheKey: "session-123",
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.route.id).toBe("xai-responses")
+      expect(xai.api.id).toBe("test-provider-responses")
       expect(xai.options?.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,
         include: ["reasoning.encrypted_content"],
       })
-      expect(bedrock.route.id).toBe("bedrock-converse")
+      expect(bedrock.api.id).toBe("test-provider-converse")
       expect(bedrock.options?.topP).toBe(0.8)
       expect(bedrock.options?.http?.body).toEqual({ serviceTier: { type: "priority" } })
-      expect(mantle.route.id).toBe("bedrock-mantle-chat")
+      expect(mantle.api.id).toBe("test-provider-chat")
       expect(mantle.options?.topP).toBe(0.6)
-      expect(workers.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
+      expect(workers.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
     }),
   )
 
@@ -1437,11 +1441,7 @@ describe("ModelResolver", () => {
                 body: { custom: true },
               })
               expect(runtime.settings).not.toHaveProperty("accountId")
-              return LanguageModel.make({
-                id: runtime.modelID ?? runtime.id,
-                provider: runtime.providerID,
-                route: native.route,
-              })
+              return LanguageModel.update(native, { id: runtime.modelID ?? runtime.id, provider: runtime.providerID })
             }),
         },
       )

@@ -12,17 +12,17 @@ describe("provider error retention", () => {
   const cases = [
     {
       name: "Anthropic",
-      model: Anthropic.configure(options).model("claude"),
+      model: Anthropic.model("claude", options),
       event: { type: "error", error: { type: "rate_limit_error", message: "Slow down", details: { opaque: [1, 2] } } },
     },
     {
       name: "OpenAI Chat",
-      model: OpenAI.configure(options).chat("gpt"),
+      model: OpenAI.openai.with(options).model("gpt", { api: "chat-completions" }),
       event: { error: { code: "rate_limit_exceeded", message: "Slow down", details: { opaque: [1, 2] } } },
     },
     {
       name: "OpenAI Responses",
-      model: OpenAI.configure(options).responses("gpt"),
+      model: OpenAI.openai.with(options).model("gpt"),
       event: {
         type: "response.failed",
         response: {
@@ -34,7 +34,7 @@ describe("provider error retention", () => {
     },
     {
       name: "Gemini",
-      model: Google.configure(options).model("gemini"),
+      model: Google.model("gemini", options),
       event: { error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Slow down", details: { opaque: [1, 2] } } },
     },
   ]
@@ -69,7 +69,7 @@ describe("provider error retention", () => {
         trace: { opaque: "outer" },
       })
       const error = yield* LLMClient.generate(
-        ai.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.request({ model: Google.model("gemini", options), prompt: "hello" }),
       ).pipe(
         Effect.provide(
           fixedResponse(sseEvents(body), {
@@ -91,11 +91,11 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = JSON.stringify({ error: "RESOURCE_EXHAUSTED", trace: { opaque: "outer" } })
       const error = yield* LLMClient.generate(
-        ai.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.request({ model: Google.model("gemini", options), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.message).toContain("Invalid google/gemini stream event")
+      expect(error.message).toContain("Invalid google/google-gemini stream event")
       expect(error.reason.body).toBe(body)
       expect(error.reason.http?.status).toBe(200)
     }),
@@ -105,7 +105,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = JSON.stringify({ error: null, trace: { opaque: "outer" } })
       const error = yield* LLMClient.generate(
-        ai.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.request({ model: Google.model("gemini", options), prompt: "hello" }),
       ).pipe(
         Effect.provide(fixedResponse(sseEvents(body), { headers: { "x-provider-trace": "trace-null" } })),
         Effect.flip,
@@ -122,7 +122,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = '{"type":"error","error":{"message":42,"opaque":{"nested":true}},"trace":"outer"}'
       const error = yield* LLMClient.generate(
-        ai.request({ model: Anthropic.configure(options).model("claude"), prompt: "hello" }),
+        ai.request({ model: Anthropic.model("claude", options), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       expect(error.reason.body).toBe(body)
@@ -135,7 +135,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = '{"type":"error","error":{"code":"rate_limit_exceeded","message":"Slow down","extra":42}}'
       const error = yield* LLMClient.generate(
-        ai.request({ model: OpenAI.configure(options).responses("gpt"), prompt: "hello" }),
+        ai.request({ model: OpenAI.openai.with(options).model("gpt"), prompt: "hello" }),
         {
           webSocket: {
             execute: (exchange) => Effect.succeed({ frames: exchange.fallback(), complete: Effect.void }),

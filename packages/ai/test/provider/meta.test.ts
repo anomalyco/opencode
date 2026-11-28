@@ -13,20 +13,19 @@ import { sseEvents } from "../lib/sse.js"
 
 it.effect("Meta composes baseline protocols with provider-owned endpoints and defaults", () =>
   Effect.gen(function* () {
-    const meta = Meta.configure({ apiKey: "fixture" })
+    const meta = Meta.meta.with({ apiKey: "fixture" })
     const responses = meta.model("muse-spark-1.3")
-    const chat = meta.chat("muse-spark-1.3")
-    expect(responses.route.body).toBe(MetaResponses.protocol.body)
+    const chat = meta.model("muse-spark-1.3", { api: "chat-completions" })
+    expect(responses.api.protocol.body).toBe(MetaResponses.protocol.body)
     expect(MetaResponses.protocol.stream.event).toBe(OpenResponses.protocol.stream.event)
-    expect(chat.route.body).toBe(OpenAIChat.protocol.body)
-    expect(meta.model).toBe(meta.responses)
+    expect(chat.api.protocol.body).toBe(OpenAIChat.protocol.body)
     for (const model of [responses, chat]) {
-      expect(model.provider).toBe("meta")
-      expect(model.route.providerMetadataKey).toBe("meta")
-      expect(model.route.endpoint.baseURL).toBe("https://api.meta.ai/v1")
+      expect(String(model.provider)).toBe("meta")
+      expect(model.metadataKey).toBe("meta")
+      expect(model.baseURL).toBe("https://api.meta.ai/v1")
     }
-    expect(responses.route.endpoint.path).toBe("/responses")
-    expect(chat.route.endpoint.path).toBe("/chat/completions")
+    expect(responses.api.path).toBe("/responses")
+    expect(chat.api.path).toBe("/chat/completions")
     const compiled = yield* compileRequest(ai.request({ model: responses, prompt: "Hello" }))
     expect(compiled.protocol).toBe("meta-responses")
     expect(compiled.body).toMatchObject({ store: false, include: ["reasoning.encrypted_content"] })
@@ -39,7 +38,7 @@ it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", 
     for (const baseURL of ["https://api.meta.ai/v1", "https://gateway.example/v1"]) {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: Meta.configure({ apiKey: "fixture", baseURL }).responses("muse-spark-1.3"),
+          model: Meta.model("muse-spark-1.3", { apiKey: "fixture", baseURL }),
           prompt: "Hello",
         }),
         { webSocket: { execute: () => Effect.die("Meta must not execute WebSocket requests") } },
@@ -89,7 +88,7 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
         body: { custom: "value" },
         reasoningEffort: "future-effort",
       })
-      expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
+      expect(model.baseURL).toBe("https://gateway.example/v1")
       expect(model.options?.headers).toEqual({ "x-client": "test" })
       expect(model.options?.http?.body).toEqual({ custom: "value" })
       const compiled = yield* compileRequest(
@@ -119,21 +118,21 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
 
 it.effect("Meta resolves environment credentials and accepts explicit auth overrides", () =>
   Effect.gen(function* () {
-    for (const api of ["responses", "chat"] as const) {
+    for (const api of ["responses", "chat-completions"] as const) {
       for (const scenario of [
-        { provider: Meta.configure(), authorization: "Bearer environment-key" },
-        { provider: Meta.configure({ apiKey: "explicit-key" }), authorization: "Bearer explicit-key" },
-        { provider: Meta.configure({ auth: Auth.none }), authorization: undefined },
+        { provider: Meta.meta, authorization: "Bearer environment-key" },
+        { provider: Meta.meta.with({ apiKey: "explicit-key" }), authorization: "Bearer explicit-key" },
+        { provider: Meta.meta.with({ auth: Auth.none }), authorization: undefined },
       ]) {
-        const model = scenario.provider[api]("muse-spark-1.3")
-        const headers = yield* model.route.auth.apply({
+        const model = scenario.provider.model("muse-spark-1.3", { api })
+        const headers = yield* model.auth.apply({
           request: ai.request({ model, prompt: "Hello" }),
           method: "POST",
           url: "https://api.meta.ai/v1/responses",
           body: "{}",
           headers: Headers.empty,
         })
-        expect(headers.authorization).toBe(scenario.authorization)
+        expect(headers.authorization as string | undefined).toBe(scenario.authorization)
       }
     }
   }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { META_API_KEY: "environment-key" } })))),

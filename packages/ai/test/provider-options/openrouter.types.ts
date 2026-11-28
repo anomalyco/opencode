@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
 import { OpenRouter } from "../../src/providers.js"
 
-const model = OpenRouter.provider.model("anthropic/claude-sonnet-4.5")
+const model = OpenRouter.model("anthropic/claude-sonnet-4.5")
 
 ai.request({ model, prompt: "Hello", providerOptions: { usage: true } })
 
@@ -32,7 +32,7 @@ ai.request({
   providerOptions: { usage: "yes" },
 })
 
-const responses = OpenRouter.provider.responses("openai/gpt-5.4")
+const responses = OpenRouter.responsesModel("openai/gpt-5.4")
 
 ai.request({
   model: responses,

@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode/schema/money"
 import { Document, Info, type Entry } from "@opencode/schema/config"
+import { Capabilities } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
@@ -74,7 +75,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       yield* ModelResolver.fromCatalogModel(defaultModel)
       expect(yield* ModelResolver.fromCatalogModel(unsupported).pipe(Effect.flip)).toMatchObject({
         _tag: "SessionRunnerModel.UnsupportedCompactionError",
-        message: "Provider compaction is not supported by custom/unsupported (openai-chat)",
+        message: "Provider compaction is not supported by custom/unsupported (custom-chat)",
       })
     }),
   )
@@ -194,7 +195,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const model = required(yield* models.get(Provider.ID.make("litellm"), Model.ID.make("claude-sonnet-5")))
       expect(model.compatibility).toEqual({ cacheFormat: "anthropic" })
-      expect((yield* ModelResolver.fromCatalogModel(model)).compatibility?.cacheFormat).toBe("anthropic")
+      expect(Capabilities.cache((yield* ModelResolver.fromCatalogModel(model)).capabilities)?.format).toBe("anthropic")
     }),
   )
 
@@ -236,8 +237,12 @@ describe("ConfigProviderPlugin.Plugin", () => {
       })
       expect(configured.compatibility).toEqual({ supportsPromptCacheKey: true, requireFinishReason: false })
       // The OpenAI chat package enables the key by default; provider config overrides it on the runtime model.
-      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.promptCacheKey).toBe(false)
-      expect((yield* ModelResolver.fromCatalogModel(configured)).capabilities?.promptCacheKey).toBe(true)
+      expect(Capabilities.cache((yield* ModelResolver.fromCatalogModel(catalog)).capabilities)?.promptCacheKey).toBe(
+        false,
+      )
+      expect(Capabilities.cache((yield* ModelResolver.fromCatalogModel(configured)).capabilities)?.promptCacheKey).toBe(
+        true,
+      )
     }),
   )
 
@@ -262,7 +267,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const catalog = required(yield* models.get(providerID, Model.ID.make("catalog")))
       expect(catalog.compatibility).toEqual({ streamUsage: false })
-      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.streamUsage).toBe(false)
+      expect((yield* ModelResolver.fromCatalogModel(catalog)).capabilities?.output?.streamUsage).toBe(false)
     }),
   )
 

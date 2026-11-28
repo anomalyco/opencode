@@ -1,4 +1,7 @@
 import { Effect, Schema } from "effect"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
+import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { AnthropicMessages } from "./anthropic-messages.js"
 import { ProviderShared } from "./shared.js"
@@ -15,7 +18,7 @@ const Options = Schema.Struct({
   ),
 })
 export type OptionsInput = typeof Options.Type & Pick<AnthropicMessages.OptionsInput, "outputConfig">
-export const protocol = Protocol.make({
+const protocol = Protocol.make({
   id: "alibaba-messages",
   body: {
     schema: Schema.Struct({
@@ -46,6 +49,17 @@ export const protocol = Protocol.make({
   stream: AnthropicMessages.protocol.stream,
   supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
   toolUpdates: AnthropicMessages.protocol.toolUpdates,
+})
+
+/** Model Studio's Messages dialect. */
+export const api = Api.make({
+  name: "messages",
+  id: "alibaba-messages",
+  protocol,
+  path: AnthropicMessages.PATH,
+  framing: Framing.sse,
+  headers: () => ({ "anthropic-version": "2023-06-01" }),
+  capabilities: Capabilities.defaults<Capabilities.Messages>({ cache: { markers: true } }),
 })
 
 export * as AlibabaMessages from "./alibaba-messages.js"

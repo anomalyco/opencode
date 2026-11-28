@@ -6,9 +6,11 @@ import * as OpenAI from "../../src/providers/openai.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = OpenAI.configure({
-  apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).responses("gpt-4.1-mini")
+const model = OpenAI.openai
+  .with({
+    apiKey: process.env.OPENAI_API_KEY ?? "fixture",
+  })
+  .model("gpt-4.1-mini")
 
 // OpenAI caches prefixes automatically once they cross the 1024-token threshold;
 // `CacheHint` is a no-op for the wire body. The stable signal is the
@@ -27,7 +29,7 @@ const cacheRequest = ai.request({
 // GPT-6.2 never caches top-level `instructions`; a system prompt this size caches only as a developer message.
 const frontierRequest = ai.request({
   id: "recorded_openai_responses_cache_gpt_6_2",
-  model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-6.2-sol"),
+  model: OpenAI.openai.with({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).model("gpt-6.2-sol"),
   system: LARGE_CACHEABLE_SYSTEM,
   prompt: "Say hi.",
   maxTokens: 64,

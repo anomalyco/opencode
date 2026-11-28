@@ -6,9 +6,9 @@ import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("fixture"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
-  XAI.configure({ apiKey: "test" }).responses("fixture"),
+  OpenAI.openai.with({ apiKey: "test" }).model("fixture"),
+  Azure.model("fixture", { apiKey: "test", resourceName: "test" }),
+  XAI.model("fixture", { apiKey: "test" }),
 ]) {
   it.effect(`${model.provider} preserves image detail through message serialization and lowering`, () =>
     Effect.gen(function* () {
@@ -17,8 +17,7 @@ for (const model of [
         details.map((detail) => ({
           type: "media",
           media: Media.url("https://example.com/image.png", { mediaType: "image/png" }),
-          providerMetadata:
-            detail === undefined ? undefined : { [model.route.providerMetadataKey ?? model.provider]: { detail } },
+          providerMetadata: detail === undefined ? undefined : { [model.metadataKey]: { detail } },
         })),
       )
       const codec = Schema.fromJsonString(Message)
@@ -43,7 +42,7 @@ it.effect("rejects malformed image detail instead of silently discarding it", ()
   Effect.gen(function* () {
     const error = yield* compileRequest(
       ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: OpenAI.openai.with({ apiKey: "test" }).model("fixture"),
         messages: [
           Message.user({
             type: "media",

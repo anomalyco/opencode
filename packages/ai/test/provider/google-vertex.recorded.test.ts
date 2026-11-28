@@ -6,9 +6,9 @@ import { GoogleVertex } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = GoogleVertex.configure({
+const model = GoogleVertex.model("gemini-3.5-flash", {
   apiKey: process.env.GOOGLE_VERTEX_API_KEY ?? "fixture",
-}).model("gemini-3.5-flash")
+})
 
 const lookupWeather = ToolDefinition.make({
   name: "lookup_weather",

@@ -3,9 +3,8 @@ import { CloudflareRunExtraction } from "../experimental/cloudflare-run-extracti
 import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
 import { CloudflareWorkersAIImages } from "../protocols/cloudflare-workers-ai-images.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { Provider } from "../provider.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route } from "../route/client.js"
-import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -19,6 +18,7 @@ type WorkersAIURL = AtLeastOne<{
   readonly baseURL: string
 }>
 
+/** Connection settings for Workers AI's media models. Language models come from `cloudflareWorkersAI`. */
 export type Config = WorkersAIURL &
   Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -33,61 +33,57 @@ export type Settings = ProviderPackage.Settings &
 
 export type { CloudflareWorkersAIImageOptions } from "../protocols/cloudflare-workers-ai-images.js"
 
-export const baseURL = (input: WorkersAIURL) => CloudflareShared.baseURL(input, id, "CloudflareWorkersAI")
+export const baseURL = (input: Partial<WorkersAIURL>) => CloudflareShared.baseURL(input, id, "CloudflareWorkersAI")
 
 /** The Run API (`/ai/run`) next to the OpenAI-compatible `/ai/v1` base. */
-export const runBaseURL = (input: WorkersAIURL) => CloudflareShared.runBaseURL(input, id, "CloudflareWorkersAI")
+export const runBaseURL = (input: Partial<WorkersAIURL>) =>
+  CloudflareShared.runBaseURL(input, id, "CloudflareWorkersAI")
 
-export const route = Route.make({
-  id: "cloudflare-workers-ai",
-  provider: id,
-  providerMetadataKey: "cloudflare-workers-ai",
-  protocol: OpenAIChat.protocol,
-  endpoint: Endpoint.path("/chat/completions"),
-  framing: OpenAIChat.framing,
+export const chatCompletions = OpenAIChat.api.extend({ id: "cloudflare-workers-ai" })
+
+/** Workers AI's OpenAI-compatible API. Flat settings take `accountId` in place of a `baseURL`. */
+export const cloudflareWorkersAI = Provider.make({
+  id,
+  auth: Provider.apiKey(authEnvVars),
+  apis: [chatCompletions],
+  settings: {
+    keys: ["accountId", "baseURL"],
+    patch: (values: Partial<WorkersAIURL>) => ({ baseURL: baseURL(values) }),
+  },
 })
 
-export const routes = [route]
+export const model = Provider.entrypoint<Settings, OpenAIProviderOptionsInput>(cloudflareWorkersAI)
 
-export const configure = (input: Config) => {
+export const media = (input: Config) => {
   const { accountId: _accountId, apiKey: _apiKey, auth: _auth, baseURL: _baseURL, ...defaults } = input
   const auth = AuthOptions.bearer(input, authEnvVars)
-  const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })
-  // The Run API base is derived per call so a chat-only configuration without an account still constructs.
-  const runDeployment = () => MediaRoute.deployment({ ...input, baseURL: runBaseURL(input) }, auth)
-  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    CloudflareRunDecisions.route
-      .with({
-        provider: id,
-        endpoint: { baseURL: runBaseURL(input) },
-        auth: auth,
-        ...mergeTransport(input),
-      })
-      .model({ id: modelID, providerOptions })
+  // The Run API base is derived per call so a configuration with only a custom chat base still constructs.
+  const runDeployment = () => MediaRoute.deployment({ ...defaults, baseURL: runBaseURL(input) }, auth)
   return {
-    id,
-    model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
-    decision,
+    decision: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      CloudflareRunDecisions.route
+        .with({
+          provider: id,
+          endpoint: { baseURL: runBaseURL(input) },
+          auth,
+          ...mergeTransport(input),
+        })
+        .model({ id: modelID, providerOptions }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       CloudflareWorkersAIImages.model({ ...runDeployment(), id: modelID, providerOptions }),
     experimental: {
       extraction: (modelID: string | ModelID) => CloudflareRunExtraction.model({ ...runDeployment(), id: modelID }),
     },
-    configure,
   }
 }
 
-export const provider = { id, configure }
-
-export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
+  return media(input).image(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
-  return configure(input).decision(modelID, input.providerOptions)
+  return media(input).decision(modelID, input.providerOptions)
 }
 
 function config(settings: Settings) {

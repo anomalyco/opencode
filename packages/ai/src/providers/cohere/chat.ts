@@ -1,8 +1,21 @@
-import type { ProviderPackage } from "../../provider-package.js"
-import { Cohere } from "../cohere.js"
-import { toConfig } from "../settings.js"
+import { OpenAIChat } from "../../protocols/openai-chat.js"
+import { Provider } from "../../provider.js"
+import { compatibilityBaseURL, shared, type ChatOptionsInput, type Settings as SharedSettings } from "./shared.js"
 
-export type Settings = Cohere.Settings<Cohere.ChatOptionsInput>
+export type Settings = SharedSettings<ChatOptionsInput>
 
-export const model: ProviderPackage.Model<Settings, Cohere.ChatOptionsInput> = (modelID, settings) =>
-  Cohere.configure(toConfig(settings)).chat(modelID)
+/** Cohere's OpenAI-compatible Chat Completions API. */
+export const chatCompletions = OpenAIChat.api.configure({
+  // The native Chat API is cohere-chat.
+  id: "cohere-chat-completions",
+  baseURL: compatibilityBaseURL,
+  capabilities: {
+    output: { maxTokensField: "max_tokens" },
+    reasoning: { field: "reasoning_content" },
+    tools: { strict: false },
+  },
+})
+
+export const model = Provider.entrypoint<Settings, ChatOptionsInput>(
+  Provider.make({ ...shared, apis: [chatCompletions] }),
+)

@@ -6,7 +6,7 @@ import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = Meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" }).messages("muse-spark-1.3")
+const model = Meta.messagesModel("muse-spark-1.3", { apiKey: process.env.META_API_KEY ?? "fixture" })
 const recorded = recordedTests({
   prefix: "meta-messages",
   provider: "meta",

@@ -5,7 +5,7 @@ import { OpenAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = OpenAI.configure({
+const model = OpenAI.media({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
 }).image("gpt-image-1-mini")
 

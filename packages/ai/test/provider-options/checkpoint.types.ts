@@ -17,13 +17,13 @@ import {
   XAI,
 } from "../../src/providers.js"
 import { AI } from "../../src/index.js"
+import { Api, type AnyApi } from "../../src/api.js"
+import { Provider } from "../../src/provider.js"
 import type { WebSocketChannelExecutor } from "../../src/route.js"
-import type { RoutePatch } from "../../src/route/client.js"
-import type { OpenAIResponsesBody } from "../../src/protocols/openai-responses.js"
-import type { Prepared } from "../../src/protocols/open-responses-channel.js"
+import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 
 declare const webSocket: WebSocketChannelExecutor
-const model = OpenAI.configure().responses("fixture")
+const model = OpenAI.openai.model("fixture")
 const request = ai.request({ model, prompt: "hello" })
 ai.compact(request, { mechanism: "endpoint" }).pipe(Effect.map((result) => result satisfies CompactionResponse))
 ai.compact(request, { mechanism: "trigger", webSocket }).pipe(
@@ -45,8 +45,8 @@ ai.compact(request, { mechanism: "other" })
 for (const selected of [
   model,
   OpenAI.model("fixture", {}),
-  model.route.with({ headers: { fixture: "test" } }).model({ id: "fixture" }),
-  LanguageModel.make(LanguageModel.input(model)),
+  OpenAI.openai.with({ headers: { fixture: "test" } }).model("fixture"),
+  LanguageModel.make({ ...model }),
   LanguageModel.update(model, { options: { maxTokens: 100 } }),
 ]) {
   ai.compact(ai.request({ model: selected, prompt: "Hello" }), { mechanism: "trigger" })
@@ -54,28 +54,21 @@ for (const selected of [
 ai.compact({ ...request }, { mechanism: "trigger" })
 ai.compact({ ...request, messages: [] }, { mechanism: "trigger" })
 
-const azure = Azure.configure({ resourceName: "fixture" }).responses("fixture")
-const xai = XAI.configure().responses("fixture")
-// @ts-expect-error Azure must not inherit OpenAI's trigger operation.
-ai.compact(ai.request({ model: azure, prompt: "Hello" }), { mechanism: "trigger" })
-ai.compact(ai.request({ model: Azure.responsesModel("fixture", { resourceName: "fixture" }), prompt: "Hello" }), {
-  // @ts-expect-error Azure's package entrypoint must preserve its narrower capability.
-  mechanism: "trigger",
-})
+const xai = XAI.model("fixture")
 // @ts-expect-error xAI endpoint support does not imply trigger support.
 ai.compact(ai.request({ model: xai, prompt: "Hello" }), { mechanism: "trigger" })
 // @ts-expect-error xAI's package entrypoint must preserve its narrower capability.
 ai.compact(ai.request({ model: XAI.model("fixture", {}), prompt: "Hello" }), { mechanism: "trigger" })
 
 const unsupported = {
-  bedrock: ai.request({ model: AmazonBedrock.configure().model("fixture"), prompt: "Hello" }),
-  mantle: ai.request({ model: AmazonBedrockMantle.configure().responses("fixture"), prompt: "Hello" }),
-  anthropic: ai.request({ model: Anthropic.configure().model("fixture"), prompt: "Hello" }),
-  openai: ai.request({ model: OpenAI.configure().chat("fixture"), prompt: "Hello" }),
-  azure: ai.request({ model: Azure.configure({ resourceName: "fixture" }).chat("fixture"), prompt: "Hello" }),
-  xai: ai.request({ model: XAI.configure().chat("fixture"), prompt: "Hello" }),
+  bedrock: ai.request({ model: AmazonBedrock.model("fixture"), prompt: "Hello" }),
+  mantle: ai.request({ model: AmazonBedrockMantle.model("fixture"), prompt: "Hello" }),
+  anthropic: ai.request({ model: Anthropic.model("fixture"), prompt: "Hello" }),
+  openai: ai.request({ model: OpenAI.openai.model("fixture", { api: "chat-completions" }), prompt: "Hello" }),
+  azure: ai.request({ model: Azure.chatModel("fixture", { resourceName: "fixture" }), prompt: "Hello" }),
+  xai: ai.request({ model: XAI.xai.model("fixture", { api: "chat-completions" }), prompt: "Hello" }),
   compatible: ai.request({
-    model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+    model: OpenAICompatibleResponses.model("fixture", { baseURL: "https://example.com" }),
     prompt: "Hello",
   }),
 }
@@ -94,29 +87,37 @@ ai.compact(unsupported.xai, { mechanism: "trigger" })
 // @ts-expect-error Generic protocol compatibility does not grant trigger support.
 ai.compact(unsupported.compatible, { mechanism: "trigger" })
 // @ts-expect-error Changing the model replaces its capability.
-ai.compact({ ...request, model: azure }, { mechanism: "trigger" })
-ai.compact(ai.request({ model: LanguageModel.update(model, { route: azure.route }), prompt: "Hello" }), {
-  // @ts-expect-error Changing the route replaces its capability.
-  mechanism: "trigger",
+ai.compact({ ...request, model: xai }, { mechanism: "trigger" })
+const hosted = <const A extends AnyApi>(api: A) =>
+  Provider.make({ id: "fixture", baseURL: "https://example.com", auth: Provider.keyless, apis: [api] })
+const endpointOnly = Api.make({
+  name: "responses",
+  protocol: OpenAIResponses.protocol,
+  path: OpenAIResponses.PATH,
+  transport: OpenAIResponses.httpTransport,
+  compact: { endpoint: OpenAIResponses.api.compact.endpoint },
+})
+const withoutOperations = Api.make({
+  name: "responses",
+  protocol: OpenAIResponses.protocol,
+  path: OpenAIResponses.PATH,
+  transport: OpenAIResponses.httpTransport,
 })
 ai.compact(
-  ai.request({
-    model: model.route.with({ compact: { endpoint: model.route.compact.endpoint } }).model({ id: "fixture" }),
-    prompt: "Hello",
-  }),
-  // @ts-expect-error Replacing route operations does not retain the old trigger capability.
+  ai.request({ model: hosted(endpointOnly).model("fixture"), prompt: "Hello" }),
+  // @ts-expect-error An API with only the endpoint operation does not grant trigger support.
   { mechanism: "trigger" },
 )
 
 declare const dynamic: LLMRequest
 declare const patch: Partial<LLMRequest>
-declare const routePatch: RoutePatch<OpenAIResponsesBody, Prepared>
-// @ts-expect-error A dynamic operation override cannot preserve trigger support.
-ai.compact(ai.request({ model: model.route.with(routePatch).model({ id: "fixture" }), prompt: "Hello" }), {
+declare const dynamicApi: AnyApi
+// @ts-expect-error A dynamic API cannot preserve trigger support.
+ai.compact(ai.request({ model: hosted(dynamicApi).model("fixture"), prompt: "Hello" }), {
   mechanism: "trigger",
 })
-// @ts-expect-error Explicitly removing operations removes trigger support.
-ai.compact(ai.request({ model: model.route.with({ compact: undefined }).model({ id: "fixture" }), prompt: "Hello" }), {
+// @ts-expect-error An API without operations has no trigger support.
+ai.compact(ai.request({ model: hosted(withoutOperations).model("fixture"), prompt: "Hello" }), {
   mechanism: "trigger",
 })
 // @ts-expect-error Dynamic models must be narrowed.
@@ -141,8 +142,6 @@ void AI.ai.compact(request, { mechanism: "trigger", webSocket, signal: AbortSign
 })
 // @ts-expect-error Endpoint compaction does not accept a WebSocket executor.
 void AI.ai.compact(request, { webSocket })
-// @ts-expect-error Azure must not inherit OpenAI's trigger operation.
-void AI.ai.compact(ai.request({ model: azure, prompt: "Hello" }), { mechanism: "trigger" })
 // @ts-expect-error OpenAI Chat does not expose explicit compaction.
 void AI.ai.compact(unsupported.openai)
 // @ts-expect-error Dynamic models must be narrowed.

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { ai, Auth, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
+import { ai, Auth, LLMClient, Message, ReasoningPart, ToolDefinition, type ProviderOptions } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -14,6 +14,24 @@ const tool = ToolDefinition.make({
   description: "Look up a value",
   inputSchema: { type: "object", properties: { key: { type: "string" } } },
 })
+const configure = ({
+  apiKey,
+  auth,
+  providerOptions,
+  ...location
+}: Alibaba.Location & { apiKey?: string; auth?: Auth.Definition; providerOptions?: ProviderOptions }) => {
+  const provider = Alibaba.alibaba(location).with({ apiKey, auth, providerOptions })
+  return {
+    chat: (id: string) => provider.model(id, { api: "chat-completions" }),
+    messages: (id: string) => provider.model(id, { api: "messages" }),
+    responses: (id: string) => provider.model(id, { api: "responses" }),
+  }
+}
+const endpoint = (model: { baseURL: string; api: { path: unknown } }) => ({
+  baseURL: model.baseURL,
+  path: model.api.path as string,
+})
+
 const paths = {
   chat: "/compatible-mode/v1/chat/completions",
   messages: "/apps/anthropic/v1/messages",
@@ -30,17 +48,16 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
       "eu-central-1",
       "ap-northeast-1",
     ]) {
-      const provider = Alibaba.configure({ region, workspaceID: "llm-fixture", apiKey: "fixture" })
-      expect(provider.model).toBe(provider.chat)
+      const provider = configure({ region, workspaceID: "llm-fixture", apiKey: "fixture" })
       for (const api of ["chat", "messages", "responses"] as const) {
         const model = provider[api]("qwen-plus-us")
         const request = ai.request({ model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
-        expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
+        expect(Endpoint.render(endpoint(model), { request, body: compiled.body }).toString()).toBe(
           `https://llm-fixture.${region}.maas.aliyuncs.com${paths[api]}`,
         )
-        expect(model.provider).toBe("alibaba")
-        expect(model.route.id).toBe(`alibaba-${api}`)
+        expect(String(model.provider)).toBe("alibaba")
+        expect(model.api.id).toBe(`alibaba-${api}`)
         expect(compiled.body.model).toBe("qwen-plus-us")
         for (const field of [
           "thinking",
@@ -62,11 +79,11 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
       ["cn-hongkong", "cn-hongkong.dashscope.aliyuncs.com"],
       ["us-east-1", "dashscope-us.aliyuncs.com"],
     ]) {
-      const provider = Alibaba.configure({ region, apiKey: "fixture" })
+      const provider = configure({ region, apiKey: "fixture" })
       for (const api of ["chat", "messages", "responses"] as const) {
         const request = ai.request({ model: provider[api]("qwen3.8-max"), prompt: "Hello" })
         const compiled = yield* compileRequest(request)
-        expect(Endpoint.render(request.model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
+        expect(Endpoint.render(endpoint(request.model), { request, body: compiled.body }).toString()).toBe(
           `https://${host}${paths[api]}`,
         )
       }
@@ -76,7 +93,7 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
 
 test("Alibaba requires explicit placement and supports complete base URL overrides", () => {
   for (const region of ["eu-central-1", "ap-northeast-1", "future-region"])
-    expect(() => Alibaba.configure({ region })).toThrow(
+    expect(() => configure({ region })).toThrow(
       expect.objectContaining({
         _tag: "ProviderConfiguration",
         provider: "alibaba",
@@ -87,13 +104,13 @@ test("Alibaba requires explicit placement and supports complete base URL overrid
     { baseURL: "https://gateway.example/prefix" },
     { region: "future-region", workspaceID: "ignored", baseURL: "https://gateway.example/prefix" },
   ]) {
-    const provider = Alibaba.configure(config)
+    const provider = configure(config)
     for (const api of ["chat", "messages", "responses"] as const)
-      expect(provider[api]("unchanged-id").route.endpoint.baseURL).toBe(config.baseURL)
+      expect(provider[api]("unchanged-id").baseURL).toBe(config.baseURL)
   }
-  expect(
-    Alibaba.configure({ region: "future-region", workspaceID: "llm-fixture" }).chat("new-model").route.endpoint.baseURL,
-  ).toBe("https://llm-fixture.future-region.maas.aliyuncs.com/compatible-mode/v1")
+  expect(configure({ region: "future-region", workspaceID: "llm-fixture" }).chat("new-model").baseURL).toBe(
+    "https://llm-fixture.future-region.maas.aliyuncs.com/compatible-mode/v1",
+  )
 })
 
 it.effect("Alibaba resolves explicit auth, API keys, and regional environment credentials", () =>
@@ -116,10 +133,10 @@ it.effect("Alibaba resolves explicit auth, API keys, and regional environment cr
         headers: { "x-custom-key": "custom" },
       },
     ]) {
-      const provider = Alibaba.configure({ region: "ap-southeast-1", ...item.config })
+      const provider = configure({ region: "ap-southeast-1", ...item.config })
       for (const api of ["chat", "messages", "responses"] as const) {
         const request = ai.request({ model: provider[api]("qwen3.8-max"), prompt: "Hello" })
-        const headers = yield* request.model.route.auth
+        const headers = yield* request.model.auth
           .apply({ request, method: "POST", url: "https://fixture", body: "{}", headers: Headers.empty })
           .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: item.env }))))
         expect(headers).toEqual(expect.objectContaining(item.headers))
@@ -130,7 +147,7 @@ it.effect("Alibaba resolves explicit auth, API keys, and regional environment cr
 
 it.effect("Alibaba keeps native reasoning controls and future efforts on their selected API", () =>
   Effect.gen(function* () {
-    const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
+    const provider = configure({ region: "ap-southeast-1", apiKey: "fixture" })
     for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-effort"]) {
       const chat = yield* compileRequest(
         ai.request({
@@ -229,7 +246,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
 
 it.effect("Alibaba fits explicit thinking budgets to half the output limit", () =>
   Effect.gen(function* () {
-    const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
+    const provider = configure({ region: "ap-southeast-1", apiKey: "fixture" })
     const chat = (maxTokens?: number) =>
       compileRequest(
         ai.request({
@@ -256,13 +273,12 @@ it.effect("Alibaba fits explicit thinking budgets to half the output limit", () 
 
 it.effect("Alibaba validates malformed options before execution", () =>
   Effect.gen(function* () {
-    const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
     for (const [api, providerOptions] of [
       ["chat", { preserveThinking: "false" }],
       ["messages", { thinking: { type: "enabled", budgetTokens: "512" } }],
       ["responses", { enableThinking: "false" }],
     ] as const) {
-      const model = provider[api]("qwen3.8-max").route.with({ providerOptions }).model({ id: "qwen3.8-max" })
+      const model = configure({ region: "ap-southeast-1", apiKey: "fixture", providerOptions })[api]("qwen3.8-max")
       const error = yield* compileRequest(ai.request({ model, prompt: "Hello" })).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }
@@ -273,7 +289,7 @@ it.effect("Alibaba preserves unsigned and signed Messages thinking without a bud
   Effect.gen(function* () {
     const result = yield* compileRequest(
       ai.request({
-        model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).messages("qwen3.8-max"),
+        model: configure({ region: "ap-southeast-1", apiKey: "fixture" }).messages("qwen3.8-max"),
         providerOptions: { thinking: { type: "enabled" }, effort: "low" },
         messages: [
           Message.user("Hello"),
@@ -306,7 +322,7 @@ it.effect("Alibaba preserves unsigned and signed Messages thinking without a bud
 it.effect("Alibaba serializes Messages configuration, per-request controls, and final HTTP overlays", () =>
   LLMClient.generate(
     ai.request({
-      model: Alibaba.configure({
+      model: configure({
         baseURL: "https://gateway.example/v1",
         apiKey: "fixture",
         providerOptions: { thinking: { type: "enabled", budgetTokens: 512 }, effort: "high" },
@@ -347,7 +363,7 @@ it.effect("Alibaba serializes Messages configuration, per-request controls, and 
 it.effect("Alibaba Responses lowers hosted tools and named selection using HTTP even with a WebSocket executor", () =>
   Effect.gen(function* () {
     const request = ai.request({
-      model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).responses("qwen3.8-max"),
+      model: configure({ region: "ap-southeast-1", apiKey: "fixture" }).responses("qwen3.8-max"),
       tools: [Alibaba.webSearch(), Alibaba.webExtractor(), Alibaba.codeInterpreter(), tool],
       prompt: "Hello",
     })

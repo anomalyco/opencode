@@ -5,7 +5,7 @@ import { OpenAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const model = OpenAI.configure({
+const model = OpenAI.media({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
 }).speech("gpt-4o-mini-tts")
 

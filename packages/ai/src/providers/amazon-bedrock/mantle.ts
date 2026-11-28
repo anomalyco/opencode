@@ -1,2 +1,2 @@
-export { responsesModel as model } from "../amazon-bedrock-mantle.js"
-export type { Settings } from "../amazon-bedrock-mantle.js"
+export { model } from "./mantle/responses.js"
+export type { Settings } from "./mantle/responses.js"

@@ -1,7 +1,9 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { Provider } from "../provider.js"
+import { chatCompletions } from "./openai/chat.js"
+import { responses } from "./openai/responses.js"
+import { shared, type Settings } from "./openai/shared.js"
 import {
   mergeTransport,
   ProviderID,
@@ -11,9 +13,7 @@ import {
   type ProviderOptions,
   type RequestOptions,
 } from "../schema/index.js"
-import * as OpenAIChat from "../protocols/openai-chat.js"
-import * as OpenAIResponses from "../protocols/openai-responses.js"
-import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
@@ -29,11 +29,7 @@ export type { OptionsInput as OpenAIEmbeddingOptions } from "../protocols/openai
 
 export const id = ProviderID.make("openai")
 
-export const routes = [OpenAIResponses.route, OpenAIChat.route]
-
-// This provider facade wraps the lower-level Responses and Chat model factories
-// with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
-// and default option normalization.
+/** Connection settings for OpenAI's media models. Language models come from `openai`. */
 export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
@@ -74,42 +70,13 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export type Settings = ProviderPackage.Settings &
-  OpenAIProviderOptionsInput & {
-    readonly apiKey?: string | false
-    readonly baseURL?: string
-    readonly organization?: string
-    readonly project?: string
-    readonly queryParams?: Readonly<Record<string, string>>
-  }
+export type { Settings } from "./openai/shared.js"
+
+export const openai = Provider.make({ ...shared, apis: [responses, chatCompletions] })
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
-const defaults = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL: _baseURL, queryParams: _queryParams, ...rest } = input
-  return rest
-}
-
-const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
-  route: Route<Body, Prepared, Compact>,
-  input: Config,
-) =>
-  route.with({
-    auth: auth(input),
-    endpoint: { baseURL: input.baseURL, query: input.queryParams },
-  })
-
-export const configure = (input: Config = {}) => {
-  const responsesRoute = configuredRoute(OpenAIResponses.route, input)
-  const chatRoute = configuredRoute(OpenAIChat.route, input)
-  const modelDefaults = defaults(input)
-  const responses = (id: string | ModelID) =>
-    responsesRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
-  const chat = (id: string | ModelID) =>
-    chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
-      id,
-      capabilities: { promptCacheKey: true },
-    })
+export const media = (input: Config = {}) => {
   const media = MediaRoute.deployment(
     { ...mergeTransport(input, { http: { query: input.queryParams } }), baseURL: input.baseURL },
     auth(input),
@@ -137,19 +104,15 @@ export const configure = (input: Config = {}) => {
 
   return {
     id,
-    model: responses,
-    responses,
-    chat,
     image,
     speech,
     transcription,
     decision,
     embedding,
-    configure,
   }
 }
 
-export const provider = configure()
+const defaultMedia = media()
 
 const config = ({
   apiKey,
@@ -176,32 +139,23 @@ const config = ({
   }
 }
 
-export const model: ProviderPackage.Model<
-  Settings,
-  OpenAIProviderOptionsInput,
-  typeof OpenAIResponses.route.compact
-> = (modelID, settings) => {
-  return configure(config(settings)).responses(modelID)
-}
+export const model = Provider.entrypoint<Settings, OpenAIProviderOptionsInput, typeof responses.compact>(openai)
 
-export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
+export const chatModel = Provider.entrypoint<Settings, OpenAIProviderOptionsInput>(openai, "chat-completions")
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
+  return media(input).image(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
-  return configure(input).decision(modelID, input.providerOptions)
+  return media(input).decision(modelID, input.providerOptions)
 }
 export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
-  return configure(input).embedding(modelID, input.providerOptions)
+  return media(input).embedding(modelID, input.providerOptions)
 }
-export const responses = provider.responses
-export const chat = provider.chat
-export const image = provider.image
-export const speech = provider.speech
-export const transcription = provider.transcription
-export const decision = provider.decision
-export const embedding = provider.embedding
+export const image = defaultMedia.image
+export const speech = defaultMedia.speech
+export const transcription = defaultMedia.transcription
+export const decision = defaultMedia.decision
+export const embedding = defaultMedia.embedding

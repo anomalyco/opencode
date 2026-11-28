@@ -639,12 +639,12 @@ describe("GithubCopilotPlugin", () => {
       const resolved = yield* ModelResolver.fromCatalogModel(
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))),
       )
-      expect(resolved.route.id).toBe("openai-compatible-chat")
+      expect(resolved.api.id).toBe("github-copilot-chat")
 
       const luna = yield* ModelResolver.fromCatalogModel(
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-6-luna"))),
       )
-      expect(luna.route.id).toBe("openai-compatible-responses")
+      expect(luna.api.id).toBe("github-copilot-responses")
       expect(luna.capabilities?.reasoning?.updates).toBe(true)
     }),
   )

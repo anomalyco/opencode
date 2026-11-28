@@ -1,7 +1,6 @@
 import { Effect, Option, Schema, SchemaGetter, Stream } from "effect"
-import { Route } from "../route/client.js"
-import { Auth } from "../route/auth.js"
-import { Endpoint } from "../route/endpoint.js"
+import { Api } from "../api.js"
+import { Capabilities } from "../capabilities.js"
 import { Protocol } from "../route/protocol.js"
 import {
   HttpTransport,
@@ -286,7 +285,7 @@ const signature = (metadata: ProviderMetadata | undefined, key: string) => {
 
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
-  const key = request.model.route.providerMetadataKey ?? request.model.provider
+  const key = request.model.metadataKey
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Google Interactions", message)
@@ -718,7 +717,7 @@ export const transport: Transport<Body, Prepared, Event | NextRequest> = {
   prepare: (input) => sse.prepare(input).pipe(Effect.map((http) => ({ http, input }))),
   execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
-      const label = `${request.model.provider}/${request.model.route.id}`
+      const label = `${request.model.provider}/${request.model.api.id}`
       const raw = new WeakMap<object, string>()
       const respond = (
         execution: TransportExecution<string>,
@@ -865,7 +864,7 @@ export const transport: Transport<Body, Prepared, Event | NextRequest> = {
 }
 
 // =============================================================================
-// Protocol And Route
+// Protocol And API
 // =============================================================================
 export const protocol = Protocol.make({
   id: ADAPTER,
@@ -874,8 +873,8 @@ export const protocol = Protocol.make({
   stream: {
     event: Schema.Union([Schema.instanceOf(NextRequest), Schema.toType(Event), WireEvent]),
     initial: (request): ParserState => ({
-      route: `${request.model.provider}/${request.model.route.id}`,
-      metadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
+      route: `${request.model.provider}/${request.model.api.id}`,
+      metadataKey: request.model.metadataKey,
       lifecycle: Lifecycle.initial(),
       hop: 0,
       hasToolCalls: false,
@@ -891,14 +890,14 @@ export const protocol = Protocol.make({
   },
 })
 
-export const route = Route.make({
+/** Google Interactions. */
+export const api = Api.make({
+  name: "interactions",
   id: ADAPTER,
-  provider: "google",
-  providerMetadataKey: "google",
   protocol,
-  endpoint: Endpoint.path("/interactions", { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.none,
+  path: "/interactions",
   transport,
+  capabilities: Capabilities.defaults<Capabilities.Common>(),
 })
 
 export * as GoogleInteractions from "./google-interactions.js"

@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Protocol } from "../route/protocol.js"
-import type { LanguageModelCompatibility, LLMRequest, Capabilities } from "../schema/index.js"
+import type { AIError, LLMRequest } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { ProviderShared } from "./shared.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -24,24 +23,18 @@ const Options = Schema.Struct({
 })
 export type OptionsInput = typeof Options.Type
 
-const Body = Schema.Struct({
-  ...OpenAIChat.bodyFields,
-  thinking: Options.fields.thinking,
-  do_sample: Options.fields.doSample,
-  response_format: Options.fields.responseFormat,
-  request_id: Options.fields.requestID,
-  user_id: Options.fields.userID,
-})
-
 // Tool streaming was introduced in GLM-4.6; later versions inherit support.
 const supportsToolStreaming = (modelID: string) => {
   const match = /(?:^|\/)glm-(\d+)(?:\.(\d+))?(?:-|$)/i.exec(modelID)
   return match !== null && (Number(match[1]) > 4 || (Number(match[1]) === 4 && Number(match[2] ?? 0) >= 6))
 }
 
-const fromRequest = Effect.fn("ZAIChat.fromRequest")(function* (request: LLMRequest) {
+const fromRequest = Effect.fn("ZAIChat.fromRequest")(function* (
+  request: LLMRequest,
+  base: (request: LLMRequest) => Effect.Effect<OpenAIChat.OpenAIChatBody, AIError>,
+) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
-  const body = yield* OpenAIChat.protocol.body.from(request)
+  const body = yield* base(request)
   return {
     ...body,
     thinking: options.thinking,
@@ -54,18 +47,15 @@ const fromRequest = Effect.fn("ZAIChat.fromRequest")(function* (request: LLMRequ
   }
 })
 
-export const compatibility = {
-  maxTokensField: "max_tokens",
-  reasoningField: "reasoning_content",
-  zaiToolStream: false,
-} satisfies LanguageModelCompatibility
-
-export const capabilities = { tools: { strict: false } } satisfies Capabilities
-
-export const protocol = Protocol.make({
+/** Z.AI's Chat Completions dialect. */
+export const api = OpenAIChat.api.extend({
   id: "zai-chat",
-  body: { schema: Body, from: fromRequest },
-  stream: OpenAIChat.protocol.stream,
+  body: fromRequest,
+  capabilities: {
+    tools: { strict: false, stream: false },
+    reasoning: { field: "reasoning_content" },
+    output: { maxTokensField: "max_tokens" },
+  },
 })
 
 export * as ZAIChat from "./zai-chat.js"

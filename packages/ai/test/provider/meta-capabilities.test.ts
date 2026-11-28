@@ -13,8 +13,9 @@ import { sseEvents } from "../lib/sse.js"
 it.effect("Meta selects Messages and lowers native search alongside ordinary functions", () =>
   Effect.gen(function* () {
     const model = Meta.messagesModel("muse-spark-1.3", { apiKey: "fixture", baseURL: "https://gateway.example/v1" })
-    expect(model.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/v1", path: "/messages" })
-    expect(MetaMessages.protocol.stream).toBe(AnthropicMessages.protocol.stream)
+    expect(model.baseURL).toBe("https://gateway.example/v1")
+    expect(model.api.path).toBe("/messages")
+    expect(MetaMessages.api.protocol.stream).toBe(AnthropicMessages.protocol.stream)
     const compiled = yield* compileRequest(
       ai.request({
         model,
@@ -42,7 +43,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
       ],
     })
     const entrypoint = yield* Effect.promise(() => import("@opencode/ai/providers/meta/messages"))
-    expect(entrypoint.model("muse-spark-1.3", {}).route.id).toBe("meta-messages")
+    expect(entrypoint.model("muse-spark-1.3", {}).api.id).toBe("meta-messages")
   }),
 )
 
@@ -50,7 +51,7 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
   Effect.gen(function* () {
     for (const input of [
       {
-        model: Meta.responses("muse-spark-1.3"),
+        model: Meta.model("muse-spark-1.3"),
         tool: ToolDefinition.make({
           name: "foreign",
           description: "Foreign tool",
@@ -58,8 +59,8 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
           native: { other: { type: "web_search" } },
         }),
       },
-      { model: Meta.messages("muse-spark-1.3"), tool: Meta.imageGeneration() },
-      { model: Meta.messages("muse-spark-1.3"), tool: Meta.webSearch({ searchContextSize: "low" }) },
+      { model: Meta.messagesModel("muse-spark-1.3"), tool: Meta.imageGeneration() },
+      { model: Meta.messagesModel("muse-spark-1.3"), tool: Meta.webSearch({ searchContextSize: "low" }) },
     ]) {
       const error = yield* compileRequest(
         ai.request({ model: input.model, prompt: "Hello", tools: [input.tool] }),
@@ -72,7 +73,7 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
 it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs and URL output formats", () =>
   Effect.gen(function* () {
     const response = yield* ai.image.generate({
-      model: Meta.configure({
+      model: Meta.media({
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",
         headers: { "x-client": "test" },
@@ -129,7 +130,7 @@ it.effect("Meta Images validates the final output format before sending the requ
   Effect.gen(function* () {
     const error = yield* ai.image
       .generate({
-        model: Meta.configure({ apiKey: "fixture" }).image("muse-image-1.0"),
+        model: Meta.media({ apiKey: "fixture" }).image("muse-image-1.0"),
         prompt: "Draw",
         format: "png",
         http: { body: { output_format: 42 } },
@@ -152,7 +153,7 @@ for (const streamed of [false, true]) {
       Effect.gen(function* () {
         const item = { type: "image_generation_call", id: "ig_signed", status: "completed", result: "iVBORw0KGgo=" }
         const request = ai.request({
-          model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"),
+          model: Meta.model("muse-image-1.0", { apiKey: "fixture" }),
           prompt: "Draw",
         })
         const response = yield* ai.generate(request).pipe(
@@ -194,9 +195,7 @@ for (const streamed of [false, true]) {
 it.effect("Meta rejects malformed image data from terminal-only Responses output", () =>
   Effect.gen(function* () {
     const error = yield* ai
-      .generate(
-        ai.request({ model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
-      )
+      .generate(ai.request({ model: Meta.model("muse-image-1.0", { apiKey: "fixture" }), prompt: "Draw" }))
       .pipe(
         Effect.provide(
           fixedResponse(

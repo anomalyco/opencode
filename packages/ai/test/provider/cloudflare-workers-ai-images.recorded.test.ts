@@ -5,7 +5,7 @@ import { CloudflareWorkersAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const workers = CloudflareWorkersAI.configure({
+const workers = CloudflareWorkersAI.media({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
   apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
 })

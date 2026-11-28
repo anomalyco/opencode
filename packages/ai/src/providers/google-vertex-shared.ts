@@ -1,9 +1,8 @@
 import type { AnyAuthClient, GoogleAuthOptions } from "google-auth-library"
 import { Effect, Redacted } from "effect"
-import type { ProviderPackage } from "../provider-package.js"
+import { Provider } from "../provider.js"
 import { Auth, MissingCredentialError } from "../route/auth.js"
-import type { CompactionOperations, Route } from "../route/client.js"
-import { ProviderConfigurationError, ProviderID, type RequestOptions } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type LLMRequest } from "../schema/index.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 const id = ProviderID.make("google-vertex")
@@ -70,7 +69,13 @@ export const requireProject = (value: string | undefined) => {
   })
 }
 
-export const apiKey = (input: ApiKeyOptions & { readonly project?: string; readonly location?: string }) => {
+export const apiKey = (input: {
+  readonly accessToken?: string
+  readonly apiKey?: string
+  readonly auth?: Auth.Definition
+  readonly location?: string
+  readonly project?: string
+}) => {
   if (input.apiKey !== undefined && (input.accessToken !== undefined || input.auth !== undefined))
     throw new ProviderConfigurationError({
       provider: id,
@@ -103,7 +108,7 @@ const adc = (project?: string) => {
   ).bearer()
 }
 
-export const oauth = (input: OAuthOptions, project?: string) => {
+export const oauth = (input: { readonly accessToken?: string; readonly auth?: Auth.Definition }, project?: string) => {
   if (input.accessToken !== undefined && input.auth !== undefined)
     throw new ProviderConfigurationError({
       provider: id,
@@ -114,63 +119,42 @@ export const oauth = (input: OAuthOptions, project?: string) => {
   return adc(project)
 }
 
-export const oauthRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
-  route: Route<Body, Prepared, Compact>,
-  label: string,
-  input: RequestOptions &
-    OAuthOptions & { readonly baseURL?: string; readonly location?: string; readonly project?: string },
-  url: (project: string, location: string) => string,
-) => {
-  if ("apiKey" in input && input.apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: `Google Vertex ${label} does not support API keys` })
-  const {
-    accessToken: _accessToken,
-    auth: _auth,
-    baseURL,
-    location: inputLocation,
-    project: inputProject,
-    ...rest
-  } = input
-  const resolvedLocation = location(inputLocation)
-  const resolvedProject = project(inputProject)
-  return route.with({
-    ...rest,
-    endpoint: { baseURL: baseURL ?? url(requireProject(resolvedProject), resolvedLocation) },
-    auth: oauth(input, resolvedProject),
-  })
+/** What every Vertex API shares. Each API's settings hook resolves its host and credentials from flat settings. */
+export const shared = {
+  id: "google-vertex",
+  auth: Provider.custom(adc()),
+} satisfies Omit<Provider.Input<[]>, "apis">
+
+export interface ConnectionSettings {
+  readonly accessToken?: string
+  readonly apiKey?: string
+  readonly baseURL?: string
+  readonly location?: string
+  readonly project?: string
 }
 
-export const oauthSettings = <Options>(
-  label: string,
-  {
-    accessToken,
-    apiKey,
-    baseURL,
-    body,
-    headers,
-    location,
-    project,
-    ...providerOptions
-  }: ProviderPackage.Settings &
-    Options & {
-      readonly accessToken?: string
-      readonly apiKey?: never
-      readonly baseURL?: string
-      readonly location?: string
-      readonly project?: string
-    },
-) => {
-  if (apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: `Google Vertex ${label} does not support API keys` })
-  return {
-    accessToken,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    location,
-    project,
-    providerOptions,
-  }
+export const connectionKeys = ["accessToken", "apiKey", "baseURL", "location", "project"]
+
+/** Settings for a Vertex API that only takes Google credentials, served under `url(project, location)`. */
+export const oauthSettings = (label: string, url: (project: string, location: string) => string) => ({
+  keys: connectionKeys,
+  patch: (values: ConnectionSettings): Provider.Patch => {
+    if (values.apiKey !== undefined)
+      throw new ProviderConfigurationError({
+        provider: id,
+        message: `Google Vertex ${label} does not support API keys`,
+      })
+    const resolvedProject = project(values.project)
+    return {
+      baseURL: values.baseURL ?? url(requireProject(resolvedProject), location(values.location)),
+      auth: oauth(values, resolvedProject),
+    }
+  },
+})
+
+export const serviceTierHeader = ({ request }: { readonly request: LLMRequest }): Record<string, string> => {
+  const serviceTier = request.providerOptions?.serviceTier
+  return typeof serviceTier === "string" ? { "x-vertex-ai-llm-shared-request-type": serviceTier } : {}
 }
 
 export * as GoogleVertexShared from "./google-vertex-shared.js"

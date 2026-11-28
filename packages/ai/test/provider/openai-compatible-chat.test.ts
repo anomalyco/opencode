@@ -4,7 +4,7 @@ import { HttpClientRequest } from "effect/http"
 import { ai, LLMEvent, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
-import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
+import { OpenAICompatible } from "../../src/providers/openai-compatible.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -12,13 +12,13 @@ import { sseEvents } from "../lib/sse.js"
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const model = OpenAICompatibleChat.route
+const model = OpenAICompatible.make("deepseek")
   .with({
-    provider: "deepseek",
-    endpoint: { baseURL: "https://api.deepseek.test/v1/", query: { "api-version": "2026-01-01" } },
+    baseURL: "https://api.deepseek.test/v1/",
+    query: { "api-version": "2026-01-01" },
     auth: Auth.bearer("test-key"),
   })
-  .model({ id: "deepseek-chat" })
+  .model("deepseek-chat")
 
 const request = ai.request({
   id: "req_1",
@@ -29,9 +29,10 @@ const request = ai.request({
   temperature: 0,
 })
 
-const copilot = OpenAICompatibleChat.route
-  .with({ provider: "github-copilot", endpoint: { baseURL: "https://api.githubcopilot.test" } })
-  .model({ id: "gemini-3-pro" })
+const copilot = OpenAICompatible.make("github-copilot")
+  .with({ apiKey: false, baseURL: "https://api.githubcopilot.test" })
+  .model("gemini-3-pro")
+const custom = OpenAICompatible.make("custom").with({ apiKey: false, baseURL: "https://api.custom.test/v1" })
 const copilotRequest = ai.request({ model: copilot, prompt: "Read the project." })
 
 const deltaChunk = (delta: object, finishReason: string | null = null) => ({
@@ -53,9 +54,7 @@ describe("OpenAI-compatible Chat route", () => {
       const url = "https://example.com/clip.mp4"
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAICompatibleChat.route
-            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
-            .model({ id: "video-model" }),
+          model: custom.model("video-model"),
           messages: [
             Message.user([
               Message.media(Media.fromDataUrl(inline)),
@@ -95,13 +94,11 @@ describe("OpenAI-compatible Chat route", () => {
         toolChoice: ToolChoice.make({ type: "required" }),
       })
 
-      expect(prepared.route).toBe("openai-compatible-chat")
+      expect(prepared.api).toBe("deepseek-chat")
       expect(prepared.model).toMatchObject({
         id: "deepseek-chat",
         provider: "deepseek",
-        route: { id: "openai-compatible-chat" },
-      })
-      expect(prepared.model.route.endpoint).toMatchObject({
+        api: { id: "deepseek-chat" },
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })
@@ -149,9 +146,9 @@ describe("OpenAI-compatible Chat route", () => {
       const prepare = (cacheFormat: "anthropic" | "alibaba" | undefined) =>
         compileRequest(
           ai.request({
-            model: OpenAICompatibleChat.route
-              .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
-              .model({ id: "claude-sonnet-5", compatibility: cacheFormat === undefined ? undefined : { cacheFormat } }),
+            model: custom.model("claude-sonnet-5", {
+              capabilities: cacheFormat === undefined ? undefined : { cache: { format: cacheFormat } },
+            }),
             system: "You are concise.",
             prompt: "Say hello.",
             tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: {} })],
@@ -189,9 +186,9 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("configures the max tokens request field", () =>
     Effect.gen(function* () {
-      const compatible = OpenAICompatibleChat.route
-        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
-        .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
+      const compatible = custom.model("custom-model", {
+        capabilities: { output: { maxTokensField: "max_completion_tokens" } },
+      })
       const prepared = yield* compileRequest(ai.request({ model: compatible, prompt: "Say hello.", maxTokens: 20 }))
 
       expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
@@ -204,7 +201,7 @@ describe("OpenAI-compatible Chat route", () => {
       const prepare = (provider: string, baseURL: string, id: string) =>
         compileRequest(
           ai.request({
-            model: OpenAICompatibleChat.route.with({ provider, endpoint: { baseURL } }).model({ id }),
+            model: OpenAICompatible.make(provider).with({ apiKey: false, baseURL }).model(id),
             prompt: "Use a tool.",
             tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: {} })],
           }),
@@ -298,9 +295,9 @@ describe("OpenAI-compatible Chat route", () => {
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
             ai.request({
-              model: OpenAICompatibleChat.route
-                .with({ provider: item.provider, endpoint: { baseURL: "https://api.custom.test/v1" } })
-                .model({ id: item.model }),
+              model: OpenAICompatible.make(item.provider)
+                .with({ apiKey: false, baseURL: "https://api.custom.test/v1" })
+                .model(item.model),
               messages: [
                 Message.assistant([ToolCallPart.make({ id: item.id, name: "lookup", input: {} })]),
                 Message.tool({ id: item.id, name: "lookup", result: { type: "content", value: [] } }),
@@ -332,12 +329,9 @@ describe("OpenAI-compatible Chat route", () => {
 
       yield* Effect.forEach(cases, (item) =>
         Effect.gen(function* () {
-          const selected = OpenAICompatibleChat.route
-            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
-            .model({
-              id: item.id,
-              compatibility: "override" in item ? { requireAssistantAfterTool: item.override } : undefined,
-            })
+          const selected = custom.model(item.id, {
+            capabilities: "override" in item ? { messages: { requireAssistantAfterTool: item.override } } : undefined,
+          })
           const prepared = yield* compileRequest(
             ai.request({
               model: selected,
@@ -349,7 +343,7 @@ describe("OpenAI-compatible Chat route", () => {
             }),
           )
 
-          expect(prepared.body.messages.map((message) => message.role)).toEqual(
+          expect(prepared.body.messages.map((message: { readonly role: string }) => message.role)).toEqual(
             item.bridge ? ["assistant", "tool", "assistant", "user"] : ["assistant", "tool", "user"],
           )
           if (item.bridge) expect(prepared.body.messages[2]).toEqual({ role: "assistant", content: "Done." })
@@ -369,7 +363,7 @@ describe("OpenAI-compatible Chat route", () => {
           id: "ordinary-model",
           provider: "custom",
           baseURL: "https://api.custom.test/v1",
-          compatibility: { requireReasoning: true, reasoningField: "reasoning" },
+          capabilities: { reasoning: { required: true, field: "reasoning" } },
           required: true,
           field: "reasoning",
         },
@@ -377,16 +371,16 @@ describe("OpenAI-compatible Chat route", () => {
           id: "deepseek-chat",
           provider: "deepseek",
           baseURL: "https://api.deepseek.com/v1",
-          compatibility: { requireReasoning: false },
+          capabilities: { reasoning: { required: false } },
           required: false,
         },
       ] as const
 
       yield* Effect.forEach(cases, (item) =>
         Effect.gen(function* () {
-          const selected = OpenAICompatibleChat.route
-            .with({ provider: item.provider, endpoint: { baseURL: item.baseURL } })
-            .model({ id: item.id, compatibility: "compatibility" in item ? item.compatibility : undefined })
+          const selected = OpenAICompatible.make(item.provider)
+            .with({ apiKey: false, baseURL: item.baseURL })
+            .model(item.id, { capabilities: "capabilities" in item ? item.capabilities : undefined })
           const prepared = yield* compileRequest(
             ai.request({
               model: selected,
@@ -399,7 +393,9 @@ describe("OpenAI-compatible Chat route", () => {
           )
           const field = "field" in item ? item.field : "reasoning_content"
 
-          for (const message of prepared.body.messages.filter((message) => message.role === "assistant")) {
+          for (const message of prepared.body.messages.filter(
+            (message: { readonly role: string }) => message.role === "assistant",
+          )) {
             if (item.required) expect(message).toHaveProperty(field, "")
             else expect(message).not.toHaveProperty(field)
           }
@@ -570,9 +566,7 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("infers stop when finish reasons are optional", () =>
     Effect.gen(function* () {
-      const compatible = OpenAICompatibleChat.route
-        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
-        .model({ id: "custom-model", compatibility: { requireFinishReason: false } })
+      const compatible = custom.model("custom-model", { capabilities: { output: { requireFinishReason: false } } })
       const response = yield* LLMClient.generate({ ...request, model: compatible }).pipe(
         Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
       )
