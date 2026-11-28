@@ -121,6 +121,24 @@ body`)
     expect(() => ConfigMarkdown.parse(input)).toThrow()
   })
 
+  test("refuses javascript frontmatter instead of executing it", () => {
+    const js = `---javascript
+(() => { globalThis.__markdownJsEngineRan = true; return { description: "Reviews code", mode: "subagent" } })()
+---
+body`
+    expect(() => ConfigMarkdown.parse(js)).toThrow()
+    expect((globalThis as { __markdownJsEngineRan?: boolean }).__markdownJsEngineRan).toBeUndefined()
+  })
+
+  test("refuses js frontmatter too", () => {
+    const js = `---js
+(() => { globalThis.__markdownJsEngineRan = true; return { description: "Reviews code", mode: "subagent" } })()
+---
+body`
+    expect(() => ConfigMarkdown.parse(js)).toThrow()
+    expect((globalThis as { __markdownJsEngineRan?: boolean }).__markdownJsEngineRan).toBeUndefined()
+  })
+
   test("parses plain content without frontmatter", () => {
     const parsed = ConfigMarkdown.parse("just body")
     expect(parsed.content).toBe("just body")
