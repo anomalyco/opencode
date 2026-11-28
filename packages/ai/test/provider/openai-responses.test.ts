@@ -1658,6 +1658,86 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  for (const custom of [false, true]) {
+    it.effect(`pairs reused ${custom ? "custom" : "function"} call IDs without colliding with later IDs`, () =>
+      Effect.gen(function* () {
+        const messages = ["read:0", "read:0", "000000000", "read:0"].flatMap((id, index) => [
+          Message.assistant([
+            ToolCallPart.make({
+              id,
+              name: "run",
+              input: { code: `read(${index})` },
+              providerMetadata: { openai: { itemId: `${custom ? "ctc" : "fc"}_${index}`, custom } },
+            }),
+          ]),
+          Message.tool({ id, name: "run", result: `result ${index}` }),
+        ])
+        const before = JSON.stringify(messages)
+        const replay = ai.request({
+          model: LanguageModel.update(model, { capabilities: { tools: { freeform: ["text"] } } }),
+          messages,
+          tools: [
+            ToolDefinition.make({
+              name: "run",
+              description: "Run code",
+              inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] },
+              ...(custom ? { freeform: { type: "text", field: "code" } } : {}),
+            }),
+          ],
+        })
+        const prepared = yield* compileRequest(replay)
+        expect(prepared.body.input).toMatchObject(
+          ["read:0", "000000001", "000000000", "000000002"].flatMap((id, index) => [
+            {
+              type: custom ? "custom_tool_call" : "function_call",
+              call_id: id,
+              name: "run",
+              ...(custom ? { input: `read(${index})` } : { arguments: `{"code":"read(${index})"}` }),
+            },
+            {
+              type: custom ? "custom_tool_call_output" : "function_call_output",
+              call_id: id,
+              output: `"result ${index}"`,
+            },
+          ]),
+        )
+        expect(prepared.body.input[0]).toHaveProperty("id", `${custom ? "ctc" : "fc"}_0`)
+        expect(prepared.body.input[2]).not.toHaveProperty("id")
+        expect(prepared.body.input[4]).toHaveProperty("id", `${custom ? "ctc" : "fc"}_2`)
+        expect(prepared.body.input[6]).not.toHaveProperty("id")
+        expect((yield* compileRequest(replay)).body.input).toEqual(prepared.body.input)
+        expect(JSON.stringify(messages)).toBe(before)
+
+        // A cached response still knows the original ID, so a renamed call needs a full replay.
+        const previous = yield* compileRequest({ ...replay, messages: messages.slice(0, -2) })
+        const channel = continuationDriver(previous.body)
+        const create = yield* channel.create(undefined)
+        const saved = checkpoint(
+          yield* channel.observe(
+            create,
+            ProviderShared.encodeJson({
+              type: "response.completed",
+              response: {
+                id: "resp_reused",
+                output: [
+                  {
+                    type: custom ? "custom_tool_call" : "function_call",
+                    call_id: "read:0",
+                    name: "run",
+                    ...(custom ? { input: "read(3)" } : { arguments: '{"code":"read(3)"}' }),
+                  },
+                ],
+              },
+            }),
+          ),
+        )
+        const next = yield* continuationDriver(prepared.body).create(saved)
+        expect(next.mode).toBe("full")
+        expect(ProviderShared.decodeJson(next.message)).not.toHaveProperty("previous_response_id")
+      }),
+    )
+  }
+
   it.effect("preserves structured tool errors for the model", () =>
     Effect.gen(function* () {
       const error = {

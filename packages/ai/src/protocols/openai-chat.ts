@@ -34,6 +34,7 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
+import { ToolCallIDReplay } from "./utils/tool-call-id-replay.js"
 
 const ADAPTER = "openai-chat"
 const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
@@ -687,6 +688,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     },
   }
   const requireAssistantAfterTool = request.model.compatibility?.requireAssistantAfterTool ?? mistral
+  const replay = ToolCallIDReplay.normalizer(request, lowering.toolCallID)
   const bridgeTools = () => {
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
@@ -698,6 +700,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
   for (const message of request.messages) {
+    lowering.toolCallID = replay(message)
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)

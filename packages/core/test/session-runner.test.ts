@@ -4819,6 +4819,73 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject(expected)
   })
 
+  scenario("preserves stored tool IDs and disambiguates both wire protocols after projection replay", function* (s) {
+    yield* s.llm.push(
+      TestLLM.toolCall("read:0", "echo", { text: "first" }),
+      [],
+      TestLLM.toolCall("read:0", "echo", { text: "second" }),
+      [],
+      TestLLM.stop(),
+    )
+    yield* s.runPrompt("Read first")
+    yield* s.runPrompt("Read second")
+    const stored = yield* s.context
+    expect(
+      stored.flatMap((message) =>
+        message.type === "assistant"
+          ? message.content.filter((part) => part.type === "tool").map((part) => part.id)
+          : [],
+      ),
+    ).toEqual(["read:0", "read:0"])
+
+    yield* replaySessionProjection(sessionID)
+    expect(yield* s.context).toEqual(stored)
+    yield* s.runPrompt("Inspect replay")
+    expect(
+      s.requests
+        .at(-1)
+        ?.messages.flatMap((message) =>
+          message.content.flatMap((part) =>
+            part.type === "tool-call" || part.type === "tool-result" ? [{ type: part.type, id: part.id }] : [],
+          ),
+        ),
+    ).toEqual([
+      { type: "tool-call", id: "read:0" },
+      { type: "tool-result", id: "read:0" },
+      { type: "tool-call", id: "read:0" },
+      { type: "tool-result", id: "read:0" },
+    ])
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected a replay request")
+    const chat: OpenAIChat.OpenAIChatBody = (yield* compileRequest({
+      ...request,
+      model: OpenAIChat.route.model({ id: "replay-test" }),
+    })).body
+    expect(
+      chat.messages.flatMap((message) =>
+        message.role === "assistant" ? (message.tool_calls?.map((call) => call.id) ?? []) : [],
+      ),
+    ).toEqual(["read:0", "000000000"])
+    expect(chat.messages.flatMap((message) => (message.role === "tool" ? [message.tool_call_id] : []))).toEqual([
+      "read:0",
+      "000000000",
+    ])
+    const responses: OpenAIResponses.OpenAIResponsesBody = (yield* compileRequest({
+      ...request,
+      model: OpenAIResponses.route.model({ id: "replay-test" }),
+    })).body
+    expect(
+      responses.input.flatMap((item) =>
+        item.type === "function_call" || item.type === "function_call_output" ? [[item.type, item.call_id]] : [],
+      ),
+    ).toEqual([
+      ["function_call", "read:0"],
+      ["function_call_output", "read:0"],
+      ["function_call", "000000000"],
+      ["function_call_output", "000000000"],
+    ])
+  })
+
   scenario("joins concurrent resume calls into one active provider run", function* (s) {
     yield* s.admit("Run once")
 

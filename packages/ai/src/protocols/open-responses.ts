@@ -36,6 +36,7 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
+import { ToolCallIDReplay } from "./utils/tool-call-id-replay.js"
 
 const ADAPTER = "open-responses"
 const NAME = "Open Responses"
@@ -550,22 +551,24 @@ const lowerToolCall = (
   part: ToolCallPart,
   providerMetadataKey: string,
   custom: OpenAIFreeform.Custom | undefined,
+  callID: string,
 ): OpenResponsesInputItem => {
-  const id = OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
-    ? itemID(part.providerMetadata, providerMetadataKey)
-    : undefined
+  const id =
+    callID === part.id && OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
+      ? itemID(part.providerMetadata, providerMetadataKey)
+      : undefined
   if (custom)
     return {
       type: "custom_tool_call",
       ...(id === undefined ? {} : { id }),
-      call_id: part.id,
+      call_id: callID,
       name: part.name,
       input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[providerMetadataKey]?.header),
     }
   return {
     type: "function_call",
     ...(id === undefined ? {} : { id }),
-    call_id: part.id,
+    call_id: callID,
     name: part.name,
     namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
@@ -661,6 +664,7 @@ const rejectsPendingCommentary = (request: LLMRequest) =>
 
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
+  const replay = ToolCallIDReplay.normalizer(request)
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
   const pendingCommentaryRejected = rejectsPendingCommentary(request)
@@ -668,6 +672,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
     part.namespace === undefined ? custom.get(part.name) : undefined
 
   for (const message of request.messages) {
+    const callID = replay(message)
     const rawMetadata =
       message.role === "user" || message.role === "assistant"
         ? message.providerMetadata?.[providerMetadataKey]
@@ -769,7 +774,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
+          input.push(lowerToolCall(part, providerMetadataKey, customTool(part), callID(part.id)))
           calledTool = true
           continue
         }
@@ -825,7 +830,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
     for (const part of message.content) {
       input.push({
         type: customTool(part) ? "custom_tool_call_output" : "function_call_output",
-        call_id: part.id,
+        call_id: callID(part.id),
         output: yield* lowerToolResultOutput(part, request, adapter),
       })
     }
