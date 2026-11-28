@@ -1003,7 +1003,11 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Permissions, (event) =>
-      setSession(db, event.data.sessionID, { permission: event.data.permissions, time_updated: event.created }),
+      setSession(db, event.data.sessionID, {
+        permission: event.data.permissions,
+        // Permission syncs, including browser attach/detach, must not refresh session recency.
+        time_updated: sql`${SessionTable.time_updated}`,
+      }),
     )
     yield* bus.project(SessionEvent.Viewed, (event) => {
       const idle = event.data.idle

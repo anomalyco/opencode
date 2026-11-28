@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import { Context, Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { eq } from "drizzle-orm"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { Permission } from "@opencode/schema/permission"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -13,6 +14,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionTable } from "@opencode/core/session/sql"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -105,6 +107,7 @@ const setup = Effect.gen(function* () {
   )
   return {
     ref,
+    sessionID: session.id,
     locations,
     attach: (connectionID: string) =>
       rpc.attach({ sessionID: session.id, connectionID, version: 4 }).pipe(Effect.forkScoped),
@@ -112,6 +115,35 @@ const setup = Effect.gen(function* () {
     permissions: Effect.map(sessions.get(session.id), (info) => info.permissions ?? []),
   }
 })
+
+it.live("browser attach and detach preserve idle session recency and list order", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup
+    const sessions = yield* Session.Service
+    const db = (yield* Database.Service).db
+    const recent = yield* sessions.create({ location: browser.ref })
+    yield* db
+      .update(SessionTable)
+      .set({ time_created: 0, time_updated: 0 })
+      .where(eq(SessionTable.id, browser.sessionID))
+      .run()
+    const before = yield* sessions.get(browser.sessionID)
+    expect((yield* sessions.list()).data.map((session) => session.id)).toEqual([recent.id, browser.sessionID])
+
+    const attachment = yield* browser.attach("conn_recency")
+    yield* browser.attached("conn_recency")
+    expect(yield* browser.permissions).toEqual([user, ...allows])
+    expect((yield* sessions.get(browser.sessionID)).time).toEqual(before.time)
+    expect((yield* sessions.list()).data.map((session) => session.id)).toEqual([recent.id, browser.sessionID])
+
+    yield* Fiber.interrupt(attachment)
+    yield* Deferred.await(writes.revoked).pipe(Effect.timeout("10 seconds"))
+    expect(yield* browser.permissions).toEqual([user])
+    expect((yield* sessions.get(browser.sessionID)).time).toEqual(before.time)
+    expect((yield* sessions.list()).data.map((session) => session.id)).toEqual([recent.id, browser.sessionID])
+    expect(yield* sessions.messages({ sessionID: browser.sessionID, order: "asc" })).toEqual([])
+  }),
+)
 
 it.live("a replaced attachment's revoke never removes its replacement's grant", () =>
   Effect.gen(function* () {
