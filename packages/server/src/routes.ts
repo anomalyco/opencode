@@ -66,7 +66,7 @@ import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
-import type { ServerOptions } from "./options"
+import type { EmbeddedRoutesOptions, ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   App.node,
@@ -131,21 +131,30 @@ export function createRoutes(
 
 type InstanceNode = LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
 
+/**
+ * The routes without a listener: no Basic auth, so the embedder owns access control. A per-Session `Instance`
+ * provider goes in `overrides` as `Instance.node.replace(...)`.
+ */
 export function createEmbeddedRoutes(
-  options: ServerOptions = {},
+  options: EmbeddedRoutesOptions = {},
   overrides: LayerNode.Replacements = [],
+  /** @deprecated Pass `Instance.node.replace(instances)` first in `overrides`. Removed in the next minor. */
   instances?: InstanceNode,
 ) {
-  return makeRoutes(Option.none(), options, () => [], overrides, instances)
+  return makeRoutes(
+    Option.none(),
+    options,
+    () => [],
+    instances ? [Instance.node.replace(instances), ...overrides] : overrides,
+  )
 }
 
 function makeRoutes(
   password: Option.Option<string>,
-  options: ServerOptions,
+  options: EmbeddedRoutesOptions,
   serviceURLs: () => ReadonlyArray<string>,
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
-  instances?: InstanceNode,
 ) {
   const auth = ServerAuth.Config.configLayer({ password })
   // Code Mode `opencode://` fetches go straight to this router, set once the router below is built. They carry the
@@ -206,11 +215,7 @@ function makeRoutes(
     ),
   ]
   const build = (overrides: LayerNode.Replacements) =>
-    AppNodeBuilder.build(applicationServices, [
-      ...standard,
-      ...(instances ? [Instance.node.replace(instances)] : []),
-      ...overrides,
-    ])
+    AppNodeBuilder.build(applicationServices, [...standard, ...overrides])
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {

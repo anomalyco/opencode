@@ -82,6 +82,7 @@ pub const DEFINITIONS: &[Definition] = &[
     Definition { name: "session.tab.close", default: "\"<leader>w\"", description: "Close current session tab" },
     Definition { name: "session.tab.reopen", default: "\"ctrl+shift+t\"", description: "Reopen last closed session tab" },
     Definition { name: "session.timeline", default: "\"<leader>g\"", description: "Show session timeline" },
+    Definition { name: "session.find", default: "\"<leader>f,super+f\"", description: "Find in session" },
     Definition { name: "session.fork", default: "\"none\"", description: "Fork session from message" },
     Definition { name: "session.rename", default: "\"ctrl+r\"", description: "Rename session" },
     Definition { name: "session.delete", default: "\"ctrl+d\"", description: "Delete session" },

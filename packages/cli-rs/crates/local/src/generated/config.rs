@@ -74,6 +74,7 @@ pub const KEYBIND_NAMES: &[&str] = &[
     "session.tab.close",
     "session.tab.reopen",
     "session.timeline",
+    "session.find",
     "session.fork",
     "session.rename",
     "session.delete",

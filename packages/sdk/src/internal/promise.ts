@@ -1,36 +1,13 @@
 export * as PromiseSdk from "./promise"
 
-import { OpenCode, type OpenCodeClient } from "@opencode/client"
+import { OpenCode } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
-import { EmbeddedHost } from "./internal/host"
+import type { CreateOptions, Interface } from "../opencode"
+import { EmbeddedHost } from "./host"
 
-export interface InstanceConfiguration {
-  readonly plugins: ReadonlyArray<Plugin.Plugin>
-}
-
-export interface InstanceOptions {
-  /** Select a sharing key within the Session's current Location. Must not initialize plugins. */
-  readonly key: (session: typeof Session.Info.Encoded) => string
-  /** Reconstruct configuration on a cache miss, including after a host restart. */
-  readonly configure: (key: string) => InstanceConfiguration | Promise<InstanceConfiguration>
-}
-
-export interface CreateOptions
-  extends Omit<EmbeddedHost.CreateOptions, "plugins" | "workspaceProviders" | "instances"> {
-  readonly plugins?: ReadonlyArray<Plugin.Plugin>
-  readonly instances?: InstanceOptions
-}
-
-export type Interface = Omit<OpenCodeClient, "plugin"> & {
-  readonly sessions: OpenCodeClient["session"]
-  readonly events: OpenCodeClient["event"]
-  readonly plugin: ((plugin: Plugin.Plugin) => Promise<void>) & OpenCodeClient["plugin"]
-  readonly close: () => Promise<void>
-  readonly [Symbol.asyncDispose]: () => Promise<void>
-}
-
+/** `OpenCode.create` with the host hooks a runtime profile (such as workerd) needs, returning the host too. */
 export async function createWithHost(
   options: CreateOptions = {},
   embed: EmbeddedHost.EmbedOptions = {},
@@ -72,10 +49,6 @@ export async function createWithHost(
       [Symbol.asyncDispose]: host.close,
     },
   }
-}
-
-export async function create(options: CreateOptions = {}): Promise<Interface> {
-  return (await createWithHost(options)).sdk
 }
 
 async function adaptPlugins(plugins: ReadonlyArray<Plugin.Plugin> | undefined) {

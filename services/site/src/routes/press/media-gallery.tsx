@@ -58,7 +58,7 @@ export function MediaGallery(props: { products: Product[]; style: Style }) {
                 </a>
                 {/* In a narrow column the size moves out of the button to a muted line under it. */}
                 <span data-slot="zip-size" aria-hidden="true">
-                  ZIP, {product.zip.size}
+                  {i18n.t("press.ui.zipSize", { size: product.zip.size })}
                 </span>
               </section>
             }

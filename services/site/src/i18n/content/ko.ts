@@ -4,12 +4,12 @@ export const content = {
   products: {
     desktop: {
       name: "Desktop",
-      body: "macOS, Windows, Linux에서 세션, 탭, diff, 내장 브라우저, 확장 프로그램을 사용하세요.",
+      body: "macOS, Windows, Linux에서 세션과 탭, diff, 내장 브라우저, 확장 프로그램을 쓰세요.",
       action: "다운로드",
     },
     mobile: {
       name: "Mobile",
-      body: "어디에 있든 휴대폰으로 세션을 시작하고, 방향을 잡고, 승인하세요.",
+      body: "어디서든 휴대폰으로 세션을 시작하고, 작업을 조율하고 승인하세요.",
       action: "다운로드",
     },
     terminal: {
@@ -20,25 +20,25 @@ export const content = {
     sdk: { name: "SDK", body: "직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요.", action: "문서 읽기" },
     mini: {
       name: "Mini",
-      body: "미니멀한 터미널 인터페이스입니다. 답변은 스크롤백에 출력되고, 아래에는 프롬프트 하나만 남습니다.",
+      body: "간결한 터미널 인터페이스. 답변은 스크롤백에 쌓이고, 아래에는 프롬프트 하나만 남습니다.",
       action: "설치",
     },
   },
   productDetails: {
     desktop: {
-      title: "OpenCode | macOS, Windows, Linux용 데스크톱 앱",
+      title: "OpenCode | macOS, Windows, Linux용 Desktop 앱",
       description:
-        "원하는 만큼 OpenCode 에이전트를 병렬로 실행하고, 옆 브라우저에서 모든 변경 사항을 확인하고, 어떤 기기에서든 이어서 작업하세요. macOS, Windows, Linux용.",
+        "OpenCode 에이전트를 원하는 만큼 병렬로 실행하세요. 나란히 열린 브라우저에서 모든 변경 사항을 확인하고, 어느 기기에서든 작업을 이어 가세요. macOS, Windows, Linux를 지원합니다.",
       intro:
-        "여러 에이전트를 동시에 실행하고, 세션마다 각자의 탭을 쓰세요. 모든 변경 사항을 diff로 검토하고, 원하는 줄에 댓글을 달고, 내장 브라우저에서 결과를 확인하세요. macOS, Windows, Linux를 지원합니다.",
+        "여러 에이전트를 동시에 실행하고 세션마다 별도 탭에서 작업하세요. 변경 사항을 모두 diff로 검토하고 원하는 줄에 댓글을 달 수 있습니다. 결과는 내장 브라우저에서 확인하세요. macOS, Windows, Linux를 지원합니다.",
       showcase: {
         "parallel-agents": {
-          title: "병렬 에이전트",
-          body: "원하는 만큼 에이전트를 시작하고 모두 병렬로 작업하게 하세요. 작업이 끝나는 대로 에이전트 사이를 오가세요.",
+          title: "에이전트 병렬 실행",
+          body: "에이전트를 원하는 만큼 띄워 동시에 작업을 맡기세요. 완료되는 순서대로 세션을 오가며 확인하세요.",
         },
         "see-it-in-the-browser": {
           title: "브라우저에서 확인",
-          body: "앱이 에이전트 옆 브라우저에서 열리므로, 당신과 에이전트 모두 모든 변경 사항을 바로 확인할 수 있습니다.",
+          body: "에이전트 옆에 브라우저로 앱을 띄워, 변경 사항이 반영되는 즉시 에이전트와 함께 확인하세요.",
         },
         "on-every-device": {
           title: "모든 기기에서",
@@ -51,11 +51,11 @@ export const content = {
       },
     },
     mobile: {
-      title: "OpenCode | 휴대폰으로 코딩 에이전트를 조종하는 모바일 앱",
+      title: "OpenCode | Mobile, 코딩 세션을 휴대폰에서",
       description:
-        "휴대폰에서 OpenCode 세션을 시작하고 조작하세요. 에이전트가 컴퓨터에서 실행되는 동안 대화할 수 있습니다.",
+        "휴대폰에서 OpenCode 세션을 시작하고 작업을 조율하세요. 컴퓨터에서 실행 중인 에이전트와 대화할 수 있습니다.",
       intro:
-        "어디서든 휴대폰에서 세션을 시작하고 조작하세요. 세션에 전화해 에이전트와 대화하거나, 세션을 열어 멈춘 곳에서 이어갈 수 있습니다. 모두 내 컴퓨터에서 실행되는 OpenCode에서 이뤄집니다.",
+        "어디서든 휴대폰으로 세션을 시작하고 작업을 조율하세요. 세션에 전화를 걸어 에이전트와 대화하거나 멈춘 곳에서 작업을 이어 가세요. OpenCode는 내 컴퓨터에서 계속 실행됩니다.",
       features: {
         "notify-when-done": { title: "완료 알림", body: "시작한 세션이 끝나면 짧은 요약을 받아 보세요." },
         "pair-from-anywhere": {
@@ -74,17 +74,16 @@ export const content = {
       },
       showcase: {
         results: { title: "결과", body: "요청한 작업이 끝나면 통화로 무엇이 바뀌었는지 알려 줍니다." },
-        voice: { title: "음성", body: "세션에 전화를 걸어 필요한 것을 말하세요. 에이전트가 소리 내어 답합니다." },
+        voice: { title: "음성", body: "세션에 전화를 걸어 필요한 작업을 말하세요. 에이전트가 음성으로 답합니다." },
         sessions: { title: "세션", body: "세션을 열어 진행 상황을 보고, 멈춘 곳에서 바로 이어 가세요." },
-        steer: { title: "조종", body: "후속 메시지를 보내 세션 도중에 방향을 바꾸세요." },
       },
     },
     terminal: {
       title: "OpenCode | 오픈 소스 코딩 에이전트를 위한 터미널 UI",
       description:
-        "어떤 셸, 에디터, 원격 서버에서도 동작하는 OpenCode의 빠른 터미널 UI입니다. 원하는 것을 설명하고, 모든 편집을 diff로 보고, 명령어를 승인하세요.",
+        "어떤 셸, 에디터, 원격 서버에서도 동작하는 빠른 OpenCode 터미널 UI입니다. 원하는 작업을 설명하고, 수정 사항을 하나씩 diff로 확인하고, 명령어를 승인하세요.",
       intro:
-        "어떤 셸, 에디터, 원격 서버에서도 동작하는 빠른 터미널 UI입니다. 원하는 것을 평소 말투로 설명하고, 편집이 diff로 반영되는 모습을 지켜보고, 스스로 실행될 명령어를 직접 정하세요.",
+        "어떤 셸, 에디터, 원격 서버에서도 동작하는 빠른 터미널 UI입니다. 원하는 작업을 일상적인 말로 설명하고 변경 사항을 실시간으로 diff에서 확인하세요. 자동으로 실행할 명령어도 직접 정할 수 있습니다.",
       features: {
         "any-terminal": { title: "모든 터미널", body: "어떤 셸, 에디터의 터미널, 원격 서버에서도 동작합니다." },
         "diffs-in-the-timeline": {
@@ -95,7 +94,7 @@ export const content = {
         "one-off-runs": { title: "일회성 실행", body: "opencode run은 메시지 하나를 보내고 답변을 출력합니다." },
         "agents-and-commands": {
           title: "에이전트와 명령어",
-          body: "shift+tab으로 에이전트를 바꾸고 ctrl+p로 모든 명령어를 여세요.",
+          body: "shift+tab으로 에이전트를 전환하고 ctrl+p로 전체 명령어 목록을 여세요.",
         },
         "auto-approve": { title: "자동 승인", body: "--auto로 실행하면 거부하지 않은 모든 작업을 허용합니다." },
         "any-server": { title: "모든 서버", body: "--server로 URL을 지정해 OpenCode 서버에 연결하세요." },
@@ -103,24 +102,24 @@ export const content = {
       },
       showcase: {
         "ask-in-plain-words": {
-          title: "평소 말투로 요청",
-          body: "원하는 것을 입력하면 에이전트가 작업하면서 계획을 보여 줍니다.",
+          title: "일상 언어로 요청",
+          body: "원하는 작업을 입력하면 에이전트가 진행하면서 계획을 보여 줍니다.",
         },
-        "approve-what-runs": { title: "실행할 것만 승인", body: "편집은 diff로 표시되고, 명령어는 허락을 기다립니다." },
-        "make-it-yours": { title: "내 취향대로", body: "기본 테마부터 tokyonight까지, 키 하나로 테마를 바꾸세요." },
+        "approve-what-runs": { title: "실행할 것만 승인", body: "변경 사항은 diff로 표시되며, 명령어는 승인한 뒤에만 실행됩니다." },
+        "make-it-yours": { title: "내 취향대로", body: "키 한 번으로 기본 테마, tokyonight 등 원하는 테마로 전환하세요." },
         mini: { title: "Mini", body: "opencode mini를 실행하면 답변이 내 스크롤백에 출력됩니다." },
       },
     },
     sdk: {
-      title: "OpenCode | 코드로 에이전트를 제어하는 TypeScript SDK",
+      title: "OpenCode | 스크립트, CI 작업, 도구용 TypeScript SDK",
       description:
-        "직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요. 타입이 지정된 TypeScript 클라이언트로 세션을 만들고, 프롬프트를 보내고, 모든 이벤트를 실시간으로 스트리밍합니다.",
+        "직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요. 타입을 제공하는 TypeScript 클라이언트로 세션을 만들고 프롬프트를 보내며 모든 이벤트를 실시간으로 스트리밍할 수 있습니다.",
       intro:
-        "직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요. SDK는 내 설정과 모델로 OpenCode를 내 프로세스 안에서 실행하며, 타입이 지정된 클라이언트가 세션을 만들고, 프롬프트를 보내고, 모든 이벤트를 스트리밍합니다.",
+        "직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요. SDK는 기존 설정과 모델을 그대로 써서 작업 중인 프로세스 안에서 OpenCode를 실행합니다. 타입을 제공하는 클라이언트로 세션을 만들고 프롬프트를 보내며 모든 이벤트를 스트리밍할 수 있습니다.",
       features: {
         "typescript-client": {
           title: "TypeScript 클라이언트",
-          body: "@opencode/client와 같은 값을 쓰는 타입 지정 요청과 이벤트.",
+          body: "요청과 이벤트에 타입을 제공하며 @opencode/client와 같은 값을 사용합니다.",
         },
         "sessions-from-code": {
           title: "코드로 세션 생성",
@@ -142,7 +141,7 @@ export const content = {
       showcase: {
         "in-your-process": {
           title: "내 프로세스 안에서",
-          body: "내 설정과 모델로 OpenCode를 내 프로세스 안에서 실행합니다.",
+          body: "기존 설정과 모델을 그대로 써서 작업 중인 프로세스 안에서 OpenCode를 실행합니다.",
         },
         "fix-ci-from-code": {
           title: "코드로 CI 고치기",
@@ -165,20 +164,20 @@ export const content = {
       intro:
         "OpenCode를 위한 미니멀한 터미널 인터페이스입니다. opencode mini를 실행하면 답변이 터미널 자체의 스크롤백에 바로 출력되므로, 다른 출력처럼 스크롤하고, 검색하고, 복사할 수 있습니다. 아래에는 프롬프트와 상태 줄만 남습니다.",
       features: {
-        "your-scrollback": { title: "내 스크롤백", body: "답변이 평범한 터미널 기록이 됩니다." },
+        "your-scrollback": { title: "터미널 스크롤백", body: "답변이 다른 터미널 출력과 함께 기록됩니다." },
         "one-prompt": { title: "프롬프트 하나", body: "에이전트, 모델, 컨텍스트, 비용을 상태 줄 하나에." },
         permissions: { title: "권한", body: "프롬프트 영역에서 편집과 명령어를 허용하세요." },
-        "how-much-shows": { title: "표시 수준", body: "생각 과정과 도구 출력을 조용히, 기본, 전체 중에서 고르세요." },
+        "how-much-shows": { title: "표시 수준", body: "추론 과정과 도구 출력의 표시 수준을 최소, 기본, 전체 중에서 고르세요." },
         "pick-up-later": { title: "나중에 이어 하기", body: "-c로 마지막 세션을, -s로 원하는 세션을 이어 가세요." },
         "same-opencode": { title: "같은 OpenCode", body: "다른 앱과 같은 서버, 에이전트, 모델." },
         agents: { title: "에이전트", body: "프롬프트에서 바로 에이전트를 바꾸세요." },
-        compact: { title: "압축", body: "/compact로 긴 세션을 줄이세요." },
+        compact: { title: "압축", body: "/compact로 긴 세션을 압축하세요." },
       },
     },
   },
   extensionCard: {
     name: "확장 프로그램",
-    body: "VS Code 안에서, 또는 ACP로 Zed 등 다른 에디터에서 OpenCode를 사용하세요.",
+    body: "VS Code에서 바로 쓰거나 ACP로 Zed 등 다른 에디터에 OpenCode를 연결하세요.",
     action: "설치",
   },
   extensions: {
@@ -187,16 +186,16 @@ export const content = {
       body: "에이전트가 실제 브라우저를 쓰게 하세요.",
       title: "OpenCode | Browse, 코딩 에이전트를 위한 실제 브라우저",
       description:
-        "Browse는 OpenCode와 다른 MCP 클라이언트가 실제 브라우저를 쓰게 합니다. 에이전트는 페이지를 읽고, 클릭하고, 입력하고, 스크린샷을 찍고, 탭을 녹화하며, 로그인과 2FA는 사용자에게 넘깁니다.",
+        "Browse를 쓰면 OpenCode와 다른 MCP 클라이언트에서 실제 브라우저를 사용할 수 있습니다. 에이전트는 페이지 읽기, 클릭, 입력, 스크린샷, 탭 녹화를 맡고 로그인과 2FA는 사용자에게 넘깁니다.",
       intro:
-        "MCP 서버와 Chromium 확장 프로그램으로, 에이전트가 내 탭, 내 로그인, 내 확장 프로그램이 있는 실제 브라우저를 쓰게 합니다. 에이전트는 탭을 백그라운드에서 그룹으로 묶어 열고, 페이지를 읽고, 클릭하고, 입력하고, 스크린샷을 찍고, 탭을 녹화합니다. 로그인, 2FA, 결제처럼 내가 직접 해야 할 때가 오면 탭을 넘겨주고, 내가 계속을 클릭하면 다시 이어 갑니다.",
+        "MCP 서버와 Chromium 확장 프로그램을 연결하면 에이전트가 탭, 로그인 상태, 확장 프로그램을 그대로 쓰는 실제 브라우저에서 작업합니다. 탭을 백그라운드에서 별도 그룹으로 열어 쓰던 탭을 방해하지 않습니다. 에이전트는 페이지 읽기, 클릭, 입력, 스크린샷, 탭 녹화를 맡습니다. 로그인, 2FA, 결제는 직접 처리할 수 있도록 탭을 넘겨주며, Continue를 클릭하면 작업을 재개합니다.",
       features: {
         "your-real-browser": {
           title: "실제 브라우저",
           body: "Chrome, Edge, Brave, Arc, Helium, Vivaldi, Opera, Chromium.",
         },
         "out-of-your-way": { title: "방해 없이", body: "에이전트 탭은 접힌 그룹으로 백그라운드에서 열립니다." },
-        handoffs: { title: "작업 넘기기", body: "로그인이나 2FA는 직접 처리하고, 계속을 클릭하세요." },
+        handoffs: { title: "필요할 때 직접 이어받기", body: "로그인이나 2FA를 직접 처리한 뒤 Continue를 클릭하세요." },
         "lend-a-tab": { title: "탭 빌려주기", body: "툴바 버튼을 클릭해 열려 있는 탭을 에이전트에게 넘기세요." },
         "record-and-capture": { title: "녹화와 캡처", body: "스크린샷, 탭 녹화, 네트워크 트래픽." },
         "any-mcp-client": {
@@ -204,19 +203,19 @@ export const content = {
           body: "OpenCode, Claude Code, Cursor, Codex, Zed 등 다양한 클라이언트.",
         },
         "all-your-logins": {
-          title: "모든 로그인 그대로",
-          body: "에이전트가 이미 로그인한 사이트를 그대로 사용합니다. 키도, 설정도 필요 없습니다.",
+          title: "로그인 상태 그대로",
+          body: "이미 로그인해 둔 사이트를 에이전트가 그대로 사용합니다. 키도 설정도 필요 없습니다.",
         },
-        "allowed-sites": { title: "허용된 사이트", body: "에이전트의 탭을 지정한 사이트에만 유지하세요." },
+        "allowed-sites": { title: "허용된 사이트", body: "에이전트가 지정한 사이트에서만 탭을 사용하도록 제한하세요." },
       },
       install:
-        "먼저 [Chrome 확장 프로그램]을 설치하세요. 나머지 단계는 확장 프로그램이 안내합니다. CLI를 직접 설치하려면(보통은 필요 없습니다) 아래 명령 중 하나를 사용하세요.",
+        "먼저 [Chrome 확장 프로그램]을 설치하세요. 나머지는 확장 프로그램이 안내합니다. 보통은 필요 없지만 CLI를 직접 설치하려면 아래 명령어 중 하나를 사용하세요.",
     },
   },
   apps: {
     browse: {
       category: "에이전트용 브라우저 제어",
-      body: "로그인과 탭이 그대로인 실제 브라우저를 에이전트가 사용하게 하세요.",
+      body: "에이전트가 브라우저의 로그인 상태와 탭을 그대로 사용합니다.",
     },
     hex: { category: "음성 받아쓰기", body: "어떤 앱에서든 쓰는 온디바이스 음성 받아쓰기." },
     opentunnel: { category: "로컬 터널", body: "로컬 앱을 위한 공개 HTTPS URL." },
@@ -224,32 +223,32 @@ export const content = {
   },
   getStarted: {
     title: "시작하기",
-    lead: "가장 쉬운 시작 방법은 OpenCode 다운로드 후 무료 모델을 쓰는 것입니다. 계정은 필요 없습니다. 더 필요하면 내 구독을 연결하거나 OpenCode Go를 사용하세요.",
+    lead: "처음이라면 OpenCode를 다운로드해 무료 모델부터 써 보세요. 계정은 필요 없습니다. 더 많은 모델이 필요하면 기존 구독을 연결하거나 OpenCode Go를 이용하세요.",
     phrases: {
-      "download-opencode": { text: "OpenCode 다운로드" },
+      "download-opencode": { text: "OpenCode를 다운로드" },
       "free-models": { text: "무료 모델" },
-      "your-own-subscription": { text: "내 구독" },
+      "your-own-subscription": { text: "기존 구독" },
       "a-subscription-you-already-have": { text: "이미 사용 중인 구독" },
       "opencode-go": { text: "OpenCode Go" },
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "다운로드", line: "데스크톱, 터미널, 모바일 중에서 고르세요." },
+      download: { title: "다운로드", line: "Desktop, Terminal 또는 Mobile 중에서 고르세요." },
       "use-free-models": {
         title: "무료 모델 사용",
-        line: "OpenCode에는 무료 모델이 기본으로 들어 있습니다. 계정은 필요 없습니다.",
+        line: "OpenCode는 무료 모델을 기본으로 제공합니다. 계정은 필요 없습니다.",
       },
       "add-more-models": {
         title: "모델 추가",
-        line: "내 구독을 연결하거나, 월 $10부터 시작하는 OpenCode Go의 엄선된 모델을 사용하세요.",
+        line: "기존 구독을 연결하거나 월 $10부터 시작하는 OpenCode Go의 엄선된 모델을 쓰세요.",
       },
     },
-    sentence: "OpenCode 다운로드 후 무료 모델로 시작하고, 더 필요하면 내 구독이나 OpenCode Go를 사용하세요.",
+    sentence: "OpenCode를 다운로드해 무료 모델로 시작하세요. 더 많은 모델이 필요하면 기존 구독을 연결하거나 OpenCode Go를 쓰세요.",
   },
   byos: {
-    title: "내 구독 사용",
-    headline: "이미 가진 구독을 그대로 쓰세요.",
-    line: "ChatGPT Plus 또는 Pro나 GitHub Copilot으로 로그인하세요. OpenCode 구독을 사용할 수도 있습니다.",
+    title: "기존 구독 연결",
+    headline: "쓰던 구독을 그대로 이용하세요.",
+    line: "ChatGPT Plus 또는 Pro, GitHub Copilot 계정으로 로그인하세요. OpenCode 구독을 사용할 수도 있습니다.",
     yours: { label: "내 구독", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode 구독", "OpenCode Go"],
     ours: { label: "OpenCode 요금제" },
@@ -264,7 +263,7 @@ export const content = {
     families: {
       logo: {
         title: "로고",
-        body: "앱 아이콘, 아바타 등 작은 공간을 위한 로고 단독형입니다. 정사각형 버전은 정사각형으로 잘리는 곳을 위해 여백을 더했습니다.",
+        body: "앱 아이콘이나 아바타처럼 공간이 작을 때 쓰는 로고 단독형입니다. 정사각형으로 잘리는 곳에는 여백을 더한 버전을 쓰세요.",
         assets: {
           light: { name: "라이트" },
           dark: { name: "다크" },
@@ -274,12 +273,12 @@ export const content = {
       },
       wordmark: {
         title: "워드마크",
-        body: "OpenCode 글자꼴로 쓴 전체 이름입니다. 이름을 모두 쓸 공간이 있는 곳이라면 어디서나 사용하세요.",
+        body: "OpenCode 전체 이름을 전용 글자체로 표기한 형태입니다. 이름을 모두 표시할 공간이 있다면 워드마크를 사용하세요.",
         assets: { light: { name: "라이트" }, dark: { name: "다크" } },
       },
       "simple-wordmark": {
         title: "심플 워드마크",
-        body: "워드마크의 단색 버전으로, 인쇄, 자수, 한 가지 색만 쓸 수 있는 곳을 위한 것입니다.",
+        body: "인쇄, 자수 등 한 가지 색만 쓸 수 있는 곳을 위한 단색 워드마크입니다.",
         assets: { light: { name: "라이트" }, dark: { name: "다크" } },
       },
     },
@@ -311,12 +310,12 @@ export const content = {
       },
     },
     variants: {
-      title: "변형",
+      title: "로고 버전",
       body: "배경에서 로고가 또렷하게 보이는 버전을 고르세요. 밝은 배경에는 다크, 어두운 배경에는 라이트를 씁니다. 로고와 워드마크는 별도 파일이니 둘 중 하나만 사용하세요.",
       groups: {
         default: {
           name: "기본",
-          body: "거의 모든 곳에 쓰는 로고입니다. 안쪽 음영이 투명해서 흰색이나 검은색 위에서는 2톤 회색과 똑같이 보이고, 사진, 그라데이션, 컬러 위에서는 배경이 비쳐 보입니다.",
+          body: "거의 모든 곳에 쓸 수 있는 로고입니다. 안쪽 음영이 투명해 흰색이나 검은색 배경에서는 두 가지 회색 톤을 쓴 버전과 똑같이 보입니다. 사진, 그라데이션, 색이 있는 배경에서는 배경이 비칩니다.",
           rows: {
             logo: { title: "로고", tiles: { dark: { name: "다크" }, light: { name: "라이트" } } },
             wordmark: { title: "워드마크", tiles: { dark: { name: "다크" }, light: { name: "라이트" } } },
@@ -324,7 +323,7 @@ export const content = {
         },
         simple: {
           name: "심플",
-          body: "단색에 속공간이 열려 있고 안쪽 음영이 없습니다. 단색 컬러 배경, 1도 인쇄, 회색을 쓸 수 없는 곳에 사용하세요. 밝은 색에는 심플 다크, 어두운 색에는 심플 라이트를 씁니다.",
+          body: "음영 없이 내부 공간을 비워 둔 단색 버전입니다. 단색 배경이나 1도 인쇄 등 회색을 쓸 수 없는 곳에 사용하세요. 밝은 색에는 심플 다크, 어두운 색에는 심플 라이트를 쓰세요.",
           rows: { wordmark: { title: "워드마크", tiles: { dark: { name: "다크" }, light: { name: "라이트" } } } },
         },
       },
@@ -334,7 +333,7 @@ export const content = {
       body: "밝은 배경에는 라이트 버전을, 어두운 배경에는 다크 버전을 사용하세요. 로고와 워드마크는 별개이므로 둘 중 하나만 쓰고, 함께 쓰지 마세요.",
       stroke: {
         title: "1 스트로크",
-        body: "이 페이지의 간격 규칙은 스트로크 단위로 잽니다. 1 스트로크는 로고 외곽선의 두께로, 로고 너비의 4분의 1입니다. 따라서 로고는 너비 4 스트로크, 높이 5 스트로크입니다.",
+        body: "이 페이지에서 간격은 스트로크 단위로 표시합니다. 1 스트로크는 로고 외곽선의 두께이자 로고 너비의 4분의 1입니다. 로고의 너비는 4 스트로크, 높이는 5 스트로크입니다.",
       },
       clearSpace: {
         title: "여백",
@@ -344,7 +343,7 @@ export const content = {
         title: "정수 픽셀",
         body: "로고의 비율은 4:5로 고정되어 있고, 1 스트로크는 너비의 4분의 1입니다. 4 × 5px 단위로 크기를 조절해 모든 가장자리와 스트로크가 정수 픽셀에 맞도록 하세요.",
         do: "모든 가장자리와 4px 스트로크를 정수 픽셀에 맞추기.",
-        dont: "4:5에서 벗어난 크기로 쓰기. 가장자리가 픽셀 사이에 걸려 흐려집니다.",
+        dont: "로고의 4:5 비율을 바꾸기. 가장자리가 픽셀 사이에 걸려 흐려집니다.",
         sizes: { logo: { title: "로고" }, wordmark: { title: "워드마크" } },
       },
       minimumTitle: "최소 크기",
@@ -363,19 +362,19 @@ export const content = {
         inverted: { caption: "톤을 서로 바꾸기." },
         stretch: { caption: "로고를 늘이거나 찌그러뜨리기." },
         shadow: { caption: "그림자 넣기." },
-        glow: { caption: "글로나 외곽선 넣기." },
+        glow: { caption: "광채 효과나 외곽선 넣기." },
         lockup: { caption: "로고 옆에 다른 단어 붙이기." },
-        "low-contrast": { caption: "대비가 낮은 회색 위에 회색 쓰기." },
+        "low-contrast": { caption: "회색 배경에 대비가 낮은 회색 로고 쓰기." },
         color: { caption: "회색 2톤 로고를 컬러 배경에 올리기. 회색이 탁해집니다." },
       },
     },
     integrations: {
-      title: "통합",
-      body: "OpenCode와 함께 동작하는 플러그인, 제공자, 도구와 OpenCode로 만든 프로젝트는 그 사실을 밝힐 수 있습니다. 배지나 파트너 록업을 사용하고, 프로젝트가 내 것임이 분명하도록 이름을 지으세요.",
+      title: "연동",
+      body: "플러그인, 제공자, 도구가 OpenCode와 연동되거나 프로젝트를 OpenCode로 만들었다면 그 사실을 표시할 수 있습니다. 배지나 파트너 록업을 쓰고 프로젝트의 제작 주체가 드러나는 이름을 지으세요.",
       badges: {
-        body: "README, 문서, 웹사이트에 배지를 넣고 opencode.ai로 링크하세요. 배경에 맞춰 라이트 또는 다크 파일을 고르고(HTML은 자동으로 전환됩니다), 색상이나 텍스트는 바꾸지 마세요.",
+        body: "README, 문서나 웹사이트에 배지를 넣고 opencode.ai에 연결하세요. 배경에 맞춰 라이트 또는 다크 파일을 고르세요. HTML은 자동으로 전환됩니다. 색이나 문구는 바꾸지 마세요.",
         sizes: "모든 스타일은 20, 32, 44px(Shields는 20px만)로 제공되며, SVG와 2배 PNG 형식입니다.",
-        mono: "각 파일에는 OpenMono 텍스트 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이고, 대문자 OpenMono는 -mono-caps를 붙이세요.",
+        mono: "모든 파일에는 OpenMono 글꼴 버전도 있습니다. opencode-works-with-a-light-20-mono.svg처럼 확장자 앞에 -mono를 붙이세요. 대문자 OpenMono 버전은 -mono-caps를 붙이면 됩니다.",
         groups: {
           "works-with": {
             title: "호환",
@@ -393,21 +392,21 @@ export const content = {
       },
       naming: {
         title: "프로젝트 이름 짓기",
-        body: "프로젝트가 내 것임이 분명하도록 내 이름을 앞에 두세요.",
+        body: "누가 만든 프로젝트인지 명확하도록 자체 이름을 앞에 쓰세요.",
         rule: "`Linear for OpenCode`로 쓰거나 패키지 이름을 `opencode-linear`로 지으세요. `OpenCode Linear`나 `Linear by OpenCode`로 쓰지 마세요.",
       },
     },
     trademarks: {
       title: "상표",
-      body: "OpenCode와 OpenCode 로고는 Anomaly의 상표입니다. Anomaly가 보증하거나 후원한다고 암시하는 데, 제품명이나 회사명에, 또는 허락 없이 굿즈에 사용하지 마세요.",
-      contact: { before: "문의 사항은 ", after: "(으)로 이메일을 보내 주세요." },
+      body: "OpenCode와 OpenCode 로고는 Anomaly의 상표입니다. Anomaly의 보증이나 후원을 암시하거나 제품명, 회사명에 이 상표를 쓰지 마세요. 허락 없이 굿즈에 쓰지 마세요.",
+      contact: { before: "문의 이메일은 ", after: "입니다." },
     },
   },
   press: {
     title: "OpenCode | 회사 정보와 브랜드 자산이 담긴 프레스 키트",
     description:
       "OpenCode 프레스 키트입니다. OpenCode와 이를 만드는 회사 Anomaly에 관한 정보, 다운로드할 수 있는 로고와 워드마크, 언론 문의 연락처를 담았습니다.",
-    hero: { title: "언론", body: "OpenCode와 Anomaly에 관해 쓰기 위한 정보, 브랜드 자산, 연락처." },
+    hero: { title: "프레스", body: "OpenCode와 Anomaly에 대한 취재에 필요한 정보, 브랜드 자료, 연락처를 제공합니다." },
     company: {
       title: "Anomaly 소개",
       lead: "Anomaly는 OpenCode를 만드는 회사입니다. 개발자를 위한 오픈 소스 도구를 만듭니다.",
@@ -428,15 +427,15 @@ export const content = {
         },
         "models-dev": {
           name: "Models.dev",
-          body: "AI 모델의 사양, 가격, 기능을 담은 오픈 소스 데이터베이스로, 공개 API를 제공합니다. 200개 이상 제공자의 모델 8,900개 이상을 수록하고 있습니다.",
+          body: "AI 모델의 사양, 가격, 기능을 담은 오픈 소스 데이터베이스입니다. 공개 API를 제공하며, 200곳 이상에서 제공하는 모델 8,900개 이상을 수록합니다.",
         },
         hex: {
           name: "Hex",
-          body: "Mac, Windows, Linux용 음성 받아쓰기. Hex는 기기에서 받아쓰고 어떤 앱에든 붙여 넣으므로, 오디오가 기기 밖으로 나가지 않습니다.",
+          body: "Mac, Windows, Linux용 음성 받아쓰기입니다. Hex는 기기 안에서 음성을 텍스트로 바꿔 어떤 앱에든 붙여 넣습니다. 음성은 기기 밖으로 나가지 않습니다.",
         },
         opentunnel: {
           name: "OpenTunnel",
-          body: "내 컴퓨터의 앱에 공개 HTTPS URL을 주는 CLI와 SDK. TLS가 내 컴퓨터에서 종료되므로, 릴레이는 평문을 볼 수 없습니다.",
+          body: "내 컴퓨터에서 실행하는 앱에 공개 HTTPS URL을 제공하는 CLI와 SDK입니다. TLS 연결은 내 컴퓨터에서 종료되므로 릴레이가 평문을 볼 수 없습니다.",
         },
       },
     },
@@ -444,19 +443,19 @@ export const content = {
       title: "OpenCode 소개",
       body: "OpenCode와 각 제품의 소개 글입니다. 긴 버전과 짧은 버전이 있으며 바로 복사해 쓸 수 있습니다.",
       boilerplate: {
-        long: "OpenCode는 오픈 소스 코딩 에이전트입니다. 데스크톱 앱, 터미널 UI, 모바일 앱, SDK로 제공되며, Claude, GPT, Gemini를 비롯해 모든 제공자의 모델과 함께 작동합니다. OpenCode는 MIT 라이선스이며 Anomaly가 만듭니다. GitHub 스타 220,000개 이상, 기여자 1,000명 이상을 보유하고 있으며, 매달 2,200만 명 이상의 개발자가 사용합니다.",
+        long: "OpenCode는 오픈 소스 코딩 에이전트입니다. 데스크톱 앱, 터미널 UI, 모바일 앱, SDK로 제공되며, Claude, GPT, Gemini 등 어느 제공자의 모델이든 쓸 수 있습니다. Anomaly가 개발하고 MIT 라이선스로 배포합니다. GitHub 스타는 220,000개 이상, 기여자는 1,000명 이상이며, 매달 2,200만 명 이상의 개발자가 사용합니다.",
         short: "OpenCode는 Anomaly가 만든 오픈 소스 코딩 에이전트로, 데스크톱, 터미널, 모바일 앱과 SDK를 제공합니다.",
       },
       products: {
         "opencode-console": {
           name: "OpenCode Console",
-          long: "OpenCode Console은 개발자와 팀이 OpenCode 및 다른 코딩 에이전트를 위한 AI 모델 이용권을 구매하고 관리하는 웹 앱입니다. 프런티어 모델과 오픈 웨이트 모델에 대한 종량제 추론을 제공하며, 선불 크레딧에서 요청마다 차감하고, OpenCode Go 구독도 제공합니다. 팀은 Member, Admin, Owner 역할이 있는 워크스페이스, 워크스페이스 및 사용자별 지출 한도, Okta, Microsoft Entra ID, Google Workspace를 통한 SSO, SCIM을 이용할 수 있습니다. Console은 30개 이상의 제공자를 지원하므로 팀이 이미 가진 제공자 계정을 연결할 수 있으며, 자체 추론은 선택 사항입니다. 주소는 opencode.ai/console입니다.",
+          long: "OpenCode Console은 개발자와 팀이 OpenCode나 다른 코딩 에이전트에서 쓸 AI 모델의 이용을 결제하고 관리하는 웹 앱입니다. 프런티어 모델과 오픈 웨이트 모델의 추론을 종량제로 제공하며, 요청마다 선불 크레딧에서 비용을 차감합니다. OpenCode Go도 구독할 수 있습니다. 팀은 워크스페이스에서 멤버, 관리자, 소유자 역할을 지정하고 워크스페이스 및 사용자별 지출 한도를 설정할 수 있습니다. Okta, Microsoft Entra ID 또는 Google Workspace를 통한 SSO와 SCIM을 지원합니다. Console은 30곳 이상의 제공자를 지원하므로 팀에서 이미 쓰는 제공자 계정을 연결할 수 있습니다. Console의 추론은 선택 사항입니다. 주소는 opencode.ai/console입니다.",
           short:
             "OpenCode Console은 종량제 AI 모델 이용, OpenCode Go 구독, 예산과 SSO 같은 팀 관리 기능을 제공하는 Anomaly의 웹 앱입니다.",
         },
         "opencode-go": {
           name: "OpenCode Go",
-          long: "OpenCode Go는 코딩 모델을 고정 월 요금으로 쓰고 싶은 개발자를 위한 구독입니다. Go는 월 $10, 한도가 더 높은 Go Plus는 월 $40, Go Teams는 멤버당 월 $20입니다. 각 요금제에는 에이전트 기반 코딩용으로 테스트한 엄선된 모델이 포함됩니다. 사용 한도는 모델별 월간 금액이며, 월간 한도의 20%와 50%에 해당하는 5시간 및 주간 롤링 한도가 있습니다. 구독자는 크레딧을 충전하고, 종량제 잔액으로 넘어가 사용할 수 있으며, 언제든 해지할 수 있습니다. Go는 OpenCode와 다른 에이전트에서 작동합니다. 주소는 opencode.ai/console/go입니다.",
+          long: "OpenCode Go는 코딩 모델을 고정 월 요금으로 쓰고 싶은 개발자를 위한 구독입니다. Go는 월 $10, 한도가 더 높은 Go Plus는 월 $40, Go Teams는 멤버당 월 $20입니다. 각 요금제는 에이전트 코딩에 맞춰 테스트한 모델을 엄선해 제공합니다. 모델별 월간 사용 한도는 달러로 책정되며, 최근 5시간과 최근 1주 기준 한도는 각각 월간 한도의 20%와 50%입니다. 구독자는 크레딧을 충전해 종량제 잔액으로 이어서 쓸 수 있으며, 언제든 구독을 해지할 수 있습니다. Go는 OpenCode와 다른 에이전트에서도 쓸 수 있습니다. 주소는 opencode.ai/console/go입니다.",
           short:
             "OpenCode Go는 엄선된 코딩 모델에 대한 월간 사용 한도를 제공하는 Anomaly의 월 구독으로, 월 $10부터 시작합니다.",
         },
@@ -478,7 +477,7 @@ export const content = {
         "first-release-v0-0-1": { date: "2025년 4월", text: "첫 출시, v0.0.1" },
         "1-million-downloads": { date: "2025년 10월", text: "다운로드 100만 회 돌파" },
         "opencode-1-0": { date: "2025년 10월", text: "OpenCode 1.0" },
-        "desktop-app-ships": { date: "2025년 12월", text: "데스크톱 앱 출시" },
+        "desktop-app-ships": { date: "2025년 12월", text: "Desktop 앱 출시" },
         "10-million-downloads": { date: "2026년 1월", text: "다운로드 1,000만 회 돌파" },
         "opencode-2-0": { date: "2026년 9월", text: "OpenCode 2.0" },
         "220-000-github-stars": { date: "2026년 11월", text: "GitHub 스타 220,000개 돌파" },
@@ -486,7 +485,7 @@ export const content = {
     },
     news: {
       title: "최신 릴리스",
-      intro: "OpenCode는 자주 출시됩니다. 새 기능이 담긴 최신 릴리스입니다.",
+      intro: "OpenCode는 자주 업데이트됩니다. 새 기능을 담은 최신 릴리스를 확인하세요.",
       changelog: { text: "전체 변경 내역" },
       feed: { text: "RSS 피드" },
     },
@@ -503,9 +502,9 @@ export const content = {
             "frame-2": { title: "Desktop 스틸 2" },
             "frame-3": { title: "Desktop 스틸 3" },
             "frame-4": { title: "Desktop 스틸 4" },
-            "feature-1": { title: "탭으로 나뉜 세션" },
-            "feature-2": { title: "검토와 댓글" },
-            "feature-3": { title: "브라우저에서 확인" },
+            "feature-1": { title: "에이전트 병렬 실행" },
+            "feature-2": { title: "브라우저에서 확인" },
+            "feature-3": { title: "모든 기기에서" },
             "locked-portrait": { title: "Desktop 영상, 세로형" },
           },
         },
@@ -517,8 +516,8 @@ export const content = {
             "frame-2": { title: "Mobile 스틸 2" },
             "frame-3": { title: "Mobile 스틸 3" },
             "feature-1": { title: "음성" },
-            "feature-2": { title: "승인" },
-            "feature-3": { title: "세션" },
+            "feature-2": { title: "세션" },
+            "feature-3": { title: "결과" },
             "locked-portrait": { title: "Mobile 영상, 세로형" },
           },
         },
@@ -530,7 +529,7 @@ export const content = {
             "frame-2": { title: "Terminal 스틸 2" },
             "frame-3": { title: "Terminal 스틸 3" },
             "frame-4": { title: "Terminal 스틸 4" },
-            "feature-1": { title: "평소 말투로 요청" },
+            "feature-1": { title: "일상 언어로 요청" },
             "feature-2": { title: "실행할 것만 승인" },
             "feature-3": { title: "내 취향대로" },
             "locked-portrait": { title: "Terminal 영상, 세로형" },
@@ -552,7 +551,7 @@ export const content = {
         },
       },
     },
-    people: { title: "사람들" },
+    people: { title: "팀 소개" },
     anomalyLogo: {
       title: "Anomaly 로고",
       body: "Anomaly 마크와 워드마크, 검은색과 흰색 버전입니다. PNG는 너비 2048px입니다.",
@@ -574,11 +573,11 @@ export const content = {
     coverage: { title: "보도" },
     brand: {
       title: "브랜드",
-      before: "OpenCode 로고와 워드마크를 ZIP 파일 하나로 다운로드하세요. 개별 파일, 변형, 사용 규칙은 ",
+      before: "OpenCode 로고와 워드마크를 ZIP 파일 하나로 다운로드하세요. 개별 파일, 로고 버전, 사용 규칙은 ",
       link: { text: "브랜드 페이지" },
       after: "에서 확인하세요.",
       usage:
-        "OpenCode에 관한 글에 이 파일들을 사용할 수 있습니다. 파일을 수정하거나, OpenCode가 내 작업을 보증한다고 암시하지 마세요.",
+        "OpenCode를 소개하는 글에 이 파일들을 쓸 수 있습니다. 파일을 수정하거나 OpenCode가 해당 작업을 보증한다고 암시하지 마세요.",
     },
     product: {
       title: "제품",
@@ -589,22 +588,22 @@ export const content = {
         },
         mobile: {
           name: "Mobile",
-          body: "가장 새로운 OpenCode 앱. 세션에 전화를 걸어 에이전트와 대화하고, 어디서든 휴대폰으로 변경 사항을 검토하고 승인하세요.",
+          body: "OpenCode의 최신 앱입니다. 세션에 전화를 걸어 에이전트와 대화하고, 어디서든 휴대폰으로 변경 사항을 검토하고 승인하세요.",
         },
         terminal: {
           name: "Terminal",
-          body: "어떤 셸, 에디터, 원격 서버에서도 동작하는 터미널 UI. 모든 편집을 diff로 보고, 스스로 실행될 명령어를 정하세요.",
+          body: "어떤 셸, 에디터, 원격 서버에서도 동작하는 터미널 UI입니다. 모든 변경 사항을 diff로 확인하고 자동으로 실행할 명령어를 정하세요.",
         },
         sdk: {
           name: "SDK",
-          body: "스크립트, CI 작업, 나만의 도구를 위한 타입 지정 TypeScript 클라이언트. 세션을 만들고, 프롬프트를 보내고, 모든 이벤트를 스트리밍하세요.",
+          body: "스크립트, CI 작업, 자체 도구를 위한 TypeScript 클라이언트가 타입을 제공합니다. 세션을 만들고 프롬프트를 보내며 모든 이벤트를 실시간으로 스트리밍하세요.",
         },
       },
     },
     contact: {
       title: "연락처",
       items: {
-        press: { title: "언론", body: "기자와 애널리스트를 위한 창구입니다. 언론 요청에만 답변합니다." },
+        press: { title: "언론 문의", body: "기자와 애널리스트를 위한 창구입니다. 취재 문의에만 답변합니다." },
         support: {
           links: { "github-issues": { text: "GitHub 이슈" }, "help-anoma-ly": { text: "help@anoma.ly" } },
           title: "지원",
@@ -647,11 +646,11 @@ export const content = {
     title: "휴대폰 연결",
     cardTitle: "명령어 하나로 휴대폰 페어링",
     intro:
-      "OpenCode Mobile은 내 컴퓨터의 OpenCode를 위한 리모컨입니다. 세션은 컴퓨터에서 계속 실행되고, 앱은 세션을 보여 주며 방향을 잡게 해 줍니다.",
+      "OpenCode Mobile로 컴퓨터에서 실행 중인 OpenCode를 원격 제어할 수 있습니다. 세션은 컴퓨터에서 계속 실행되며, 앱에서 세션을 확인하고 작업을 조율할 수 있습니다.",
     steps: {
       "get-the-app": {
         title: "앱 받기",
-        body: "TestFlight에서 iPhone에 OpenCode 베타를 설치하세요. Android 앱은 곧 출시됩니다.",
+        body: "iPhone에서는 TestFlight로 OpenCode 베타를, Android 휴대폰에서는 OpenCode 앱을 설치하세요.",
       },
       "run-this-on-your-computer": {
         title: "컴퓨터에서 실행",
@@ -664,7 +663,7 @@ export const content = {
     },
     note: "--remote는 OpenTunnel 주소를 거쳐 연결되므로 어떤 네트워크에서든 동작합니다. 같은 Wi-Fi에서는 opencode service set hostname 0.0.0.0을 한 번 실행한 뒤 opencode pair를 실행하세요.",
     facts: [
-      "어떤 네트워크에서든 동작합니다. --remote는 OpenTunnel 주소를 거쳐 연결됩니다.",
+      "--remote는 OpenTunnel 주소를 거쳐 연결되므로 어떤 네트워크에서도 페어링할 수 있습니다.",
       "링크와 코드는 한 번만 쓸 수 있고 5분 뒤 만료됩니다.",
       "컴퓨터를 켜 두세요. 에이전트는 휴대폰이 아니라 컴퓨터에서 실행됩니다.",
       "같은 Wi-Fi라면 opencode service set hostname 0.0.0.0을 한 번 실행한 뒤 opencode pair를 실행하세요.",
@@ -672,18 +671,18 @@ export const content = {
   },
   announcements: {
     "create-install-and-share-desktop-plugins": {
-      text: "데스크톱 플러그인을 만들고, 설치하고, 공유하세요.",
+      text: "Desktop 플러그인을 만들고 설치하고 공유하세요.",
       link: "2.2의 새 기능 보기",
     },
     "desktop-terminals-now-survive-restarts": {
-      text: "이제 데스크톱 터미널이 재시작 후에도 유지됩니다.",
+      text: "이제 Desktop에서 터미널이 재시작 후에도 유지됩니다.",
       link: "v2.2.4 보기",
     },
     "agents-can-now-generate-images": { text: "이제 에이전트가 이미지를 생성할 수 있습니다.", link: "v2.2.1 보기" },
     "steer-your-sessions-from-your-phone": {
-      text: "휴대폰으로 세션의 방향을 잡으세요.",
+      text: "휴대폰으로 세션의 작업을 조율하세요.",
       link: "OpenCode Mobile 만나기",
     },
-    "a-refreshed-desktop-app": { text: "새로워진 데스크톱 앱.", link: "2.2의 새 기능 보기" },
+    "a-refreshed-desktop-app": { text: "새로워진 Desktop 앱", link: "2.2의 새 기능 보기" },
   },
 } satisfies ContentOverlay

@@ -612,6 +612,7 @@ export const dict = {
   "brand.ui.oneStroke": "1 stroke",
   "brand.ui.avatarAlt": "OpenCode avatar, {{name}}",
   "brand.ui.lockupAlt": "The OpenCode logo × the {{partner}} logo, with 3 strokes of space on each side of the ×.",
+  "brand.ui.lockupName": "OpenCode × {{partner}}, {{theme}}",
   "brand.ui.strokeAlt": "One stroke is the thickness of the logo's outline, a quarter of its width.",
   "brand.ui.clearSpaceAlt":
     "The logo with two strokes of clear space on every side. One stroke is the thickness of the logo's outline, a quarter of the logo's width.",
@@ -627,6 +628,7 @@ export const dict = {
   "press.ui.anomalyAll": "{{label}}[ Anomaly logo files](sr)",
   "press.ui.anomalyAsset": "the Anomaly {{name}}",
   "press.ui.items": "{{count}} items",
+  "press.ui.zipSize": "ZIP, {{size}}",
   "press.ui.downloadAll": "Download all[ {{name}} media](sr)",
   "press.ui.open": "Open {{title}}",
   "press.ui.openVideo": "Open {{title}}, video",

@@ -920,6 +920,11 @@
     dt {
       color: var(--text-weak);
       text-box: trim-start cap alphabetic;
+      /* Labels share three columns on phones; a long word in any language (Russian
+         "Контрибьюторов", a German compound) wraps inside its own column instead of spilling into
+         the next one. */
+      hyphens: auto;
+      overflow-wrap: break-word;
     }
   }
 
