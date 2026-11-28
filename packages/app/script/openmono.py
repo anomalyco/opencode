@@ -50,6 +50,8 @@ symbols = {
     *(0x22EF, 0xFFFD),
     # ⁰ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹, ₀ ₁, σ and Σ (¹ ² ³ are in Latin-1)
     *(0x2070, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079, 0x2080, 0x2081, 0x03C3, 0x03A3),
+    # The OpenCode logo (OpenMono 1.001), set in Latin text
+    0x10C0DE,
 }
 cyrillic = [(0x0400, 0x052F), (0x1C80, 0x1C8F), (0x2DE0, 0x2DFF), (0xA640, 0xA69F)]
 # The stress marks, which the Cyrillic file has too: a stressed letter such as у́ has no code point of its own, and a
@@ -82,7 +84,7 @@ sparse = [
     (0x1DF00, 0x1DFFF),
     (0x1FB00, 0x1FBFF),
 ]
-notice = """The OpenMono-*.woff2 files of this app are subsets of OpenMono 1.000, made by
+notice = """The OpenMono-*.woff2 files of this app are subsets of OpenMono 1.001, made by
 packages/app/script/openmono.py from the app build (no ligatures, every
 character one cell wide). OpenMono is Anomaly's typeface, built on Iosevka by
 Renzhi Li (Belleve Invis).

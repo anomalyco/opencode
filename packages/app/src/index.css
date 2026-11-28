@@ -24,7 +24,7 @@
   font-style: normal;
 }
 
-/* OpenMono, the code and terminal font: the app build of OpenMono Nerd 1.000, which has no ligatures and every
+/* OpenMono, the code and terminal font: the app build of OpenMono Nerd 1.001, which has no ligatures and every
    character one cell wide (script/openmono.py builds these files from it; SIL OFL 1.1, /assets/OpenMono-OFL.txt).
    These faces take the name ahead of an installed OpenMono, which has ligatures. Regular covers every weight below
    bold, so only bold syntax tokens, markup and terminal cells load the Bold files. The files are in src so that the
@@ -49,7 +49,7 @@
   unicode-range:
     U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
     U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
-    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD, U+10C0DE;
 }
 
 @font-face {
@@ -96,7 +96,7 @@
   unicode-range:
     U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
     U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
-    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD, U+10C0DE;
 }
 
 @font-face {
@@ -143,7 +143,7 @@
   unicode-range:
     U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
     U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
-    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD, U+10C0DE;
 }
 
 @font-face {
