@@ -40,8 +40,8 @@ export function createTipToasts() {
   const startup = setTimeout(() => {
     setAwake(true)
 
-    if (!platform.checkAppExists) return setHexInstalled(false)
-    void platform.checkAppExists("hex").then(setHexInstalled, () => setHexInstalled(false))
+    // Without a successful check the result stays unknown and the Hex tip stays hidden.
+    void platform.checkAppExists?.("hex").then(setHexInstalled, () => undefined)
   }, STARTUP_DELAY)
 
   onCleanup(() => clearTimeout(startup))
