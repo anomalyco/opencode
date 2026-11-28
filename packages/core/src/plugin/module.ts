@@ -76,8 +76,6 @@ function watchTarget(file: string): Promise<Watcher.WatchInput> {
   )
 }
 
-const GuiOptions = GuiBundle.fields.options
-
 const Module = Schema.Struct({
   default: Schema.Union([
     Schema.Struct({
@@ -140,14 +138,15 @@ const load = Effect.fn("PluginModule.load")(function* (
   const gui = local && entrypoints.gui ? fileURLToPath(entrypoints.gui) : undefined
   if (gui) yield* watch(gui)
   const bundle = gui ? Hash.sha256(yield* Effect.promise(() => readFile(gui))) : undefined
-  // The GUI receives the same options as the server entry; they cross to the app, so they must be JSON.
-  const guiOptions = entrypoints.gui
-    ? yield* Schema.decodeUnknownEffect(GuiOptions)(operation.options).pipe(
-        Effect.mapError(
-          (cause) => new LoadError({ message: "Plugin options must be JSON to reach its ./gui-experimental", cause }),
-        ),
-      )
-    : {}
+  // The GUI and TUI receive the same options as the server entry; they cross to a client, so they must be JSON.
+  const clientOptions =
+    entrypoints.gui || entrypoints.tui
+      ? yield* Schema.decodeUnknownEffect(GuiBundle.fields.options)(operation.options).pipe(
+          Effect.mapError(
+            (cause) => new LoadError({ message: "Plugin options must be JSON to reach its GUI or TUI entry", cause }),
+          ),
+        )
+      : {}
   return {
     id: plugin.id,
     features: {
@@ -157,8 +156,9 @@ const load = Effect.fn("PluginModule.load")(function* (
       ...(entrypoints.gui ? { gui: true as const } : {}),
     },
     gui: entrypoints.gui
-      ? { file: entrypoints.gui, revision: Hash.sha256(JSON.stringify([revision, bundle])), options: guiOptions }
+      ? { file: entrypoints.gui, revision: Hash.sha256(JSON.stringify([revision, bundle])), options: clientOptions }
       : undefined,
+    options: entrypoints.tui ? clientOptions : undefined,
     revision,
     source: source(operation.target, installed?.version),
     effect: (host) => plugin.effect({ ...host, options: operation.options }),

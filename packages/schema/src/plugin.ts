@@ -53,6 +53,8 @@ export const Info = Schema.Struct({
   source: Source,
   features: Features,
   state: State,
+  /** A TUI plugin's options from its `opencode.json` entry, as its server entry receives them. */
+  options: GuiBundle.fields.options.pipe(optional),
 }).annotate({ identifier: "Plugin.Info" })
 
 const Updated = ephemeral({

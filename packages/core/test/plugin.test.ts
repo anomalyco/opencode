@@ -100,13 +100,18 @@ it.live("loads a local plugin with its configured options", () =>
     const modules = yield* PluginModule.make().pipe(Effect.provide(Watcher.testLayer))
     const definition = yield* modules.load({
       type: "add",
-      target: path.join(import.meta.dir, "plugin/fixtures/greeting.ts"),
+      target: path.join(import.meta.dir, "plugin/fixtures/greeting"),
       options: { description: "Configured greeting" },
     })
     if ("pending" in definition || "blocked" in definition) return yield* Effect.die("Local plugin was not loaded")
     yield* plugins.activate([definition])
 
     expect(yield* commands.get("greet")).toMatchObject({ description: "Configured greeting" })
+    // The TUI loads the plugin's TUI part from this listing, so the listing carries its options.
+    expect((yield* plugins.list()).find((plugin) => plugin.id === "greeting")).toMatchObject({
+      features: { server: true, tui: true },
+      options: { description: "Configured greeting" },
+    })
   }),
 )
 
