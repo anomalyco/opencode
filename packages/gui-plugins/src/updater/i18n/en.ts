@@ -11,6 +11,8 @@ export default {
   "action.reloading": "Reloading…",
   "toast.latest.title": "You're up to date",
   "toast.latest.description": "You're running the latest version of OpenCode.",
+  "toast.webLatest.title": "Web app is up to date",
+  "toast.webLatest.description": "You're running the latest web build.",
   "migration.title": "Move from Beta to Stable",
   "migration.description":
     "For now, OpenCode Beta is moving to OpenCode Stable. Download version {{version}}, then install OpenCode from the disk image to continue receiving updates.",
