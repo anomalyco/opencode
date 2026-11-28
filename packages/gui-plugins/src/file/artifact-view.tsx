@@ -25,7 +25,14 @@ import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
+import {
+  createKeyed,
+  usePanel,
+  usePlugin,
+  type FileContent,
+  type MountedSession,
+  type SessionScreen,
+} from "@opencode/plugin/gui"
 import {
   blobUrlFromContent,
   bytesFromContent,
@@ -39,6 +46,7 @@ import { FileViewer } from "@opencode/plugin/gui/file"
 import { uuid } from "@opencode/util/uuid"
 import { ArtifactToolbar } from "./artifact-toolbar"
 import { findableHtml } from "./find"
+import { createFrameMedia, mediaHtml } from "./frame-media"
 import {
   createArtifactViewerState,
   createVideoOverlayState,
@@ -202,7 +210,12 @@ export default function ArtifactView(props: {
             <ArtifactAudio path={props.path} content={props.content} {...media} />
           </Match>
           <Match when={kind() === "pdf" || kind() === "html"}>
-            <ArtifactFrame path={props.path} content={props.content} kind={kind() === "pdf" ? "pdf" : "html"} />
+            <ArtifactFrame
+              screen={props.screen}
+              path={props.path}
+              content={props.content}
+              kind={kind() === "pdf" ? "pdf" : "html"}
+            />
           </Match>
           <Match when={kind() === "font"}>
             <ArtifactFont path={props.path} content={props.content} />
@@ -721,13 +734,22 @@ function ArtifactAudio(props: MediaProps) {
   )
 }
 
-function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" | "html" }) {
-  const source = createMediaSource(() => (props.kind === "html" ? findableHtml(props.content) : props.content))
+function ArtifactFrame(props: { screen: SessionScreen; path: string; content: FileContent; kind: "pdf" | "html" }) {
+  let frame: HTMLIFrameElement | undefined
+
+  const panel = usePanel()
+
+  const source = createMediaSource(() =>
+    props.kind === "html" ? findableHtml(mediaHtml(props.content)) : props.content,
+  )
+
+  createFrameMedia({ frame: () => frame, path: () => props.path, file: props.screen.file, open: panel.open })
   // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
   const src = () => (props.kind === "pdf" ? `${source().src}#navpanes=0&view=FitH` : source().src)
 
   return (
     <iframe
+      ref={frame}
       class="block h-full w-full flex-1 border-0 bg-white"
       title={getFilename(props.path)}
       data-file-find={props.kind === "html" ? "frame" : undefined}
