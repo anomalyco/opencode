@@ -5,6 +5,7 @@ import {
   buildKindsStatus,
   buildLiveTreeInput,
   collectAllowedCollapsedDirs,
+  collectRefreshTargets,
   diffStatusLayers,
 } from "./tree-model"
 
@@ -81,6 +82,65 @@ describe("collectAllowedCollapsedDirs", () => {
 
     expect([...collectAllowedCollapsedDirs(model, (dir) => state.get(dir))]).toEqual(["docs"])
     expect([...collectAllowedCollapsedDirs(model, () => undefined)]).toEqual(["research"])
+  })
+})
+
+describe("collectRefreshTargets", () => {
+  test("lists the root plus every loaded directory, including collapsed ones, through native paths", () => {
+    const nodes = new Map<string, FileNode[]>([
+      ["", [{ name: "src", path: "src\\", absolute: "/repo/src", type: "directory", ignored: false }]],
+      ["src", [{ name: "lib", path: "src\\lib", absolute: "/repo/src/lib", type: "directory", ignored: false }]],
+      ["src/lib", []],
+    ])
+
+    const loaded = new Set(["src", "src/lib"])
+
+    const targets = collectRefreshTargets((path) => nodes.get(path) ?? [], (dir) => ({
+      loaded: loaded.has(dir),
+    }))
+
+    expect(targets).toEqual([
+      { dir: "", original: "" },
+      { dir: "src", original: "src\\" },
+      { dir: "src/lib", original: "src\\lib" },
+    ])
+  })
+
+  test("an unloaded branch is not traversed, so its descendants stay lazy", () => {
+    const nodes = new Map<string, FileNode[]>([
+      [
+        "",
+        [
+          { name: "dist", path: "dist", absolute: "/repo/dist", type: "directory", ignored: true },
+          { name: "vendor", path: "vendor", absolute: "/repo/vendor", type: "directory", ignored: false },
+        ],
+      ],
+      ["vendor", [{ name: "deep", path: "vendor/deep", absolute: "/repo/vendor/deep", type: "directory", ignored: false }]],
+    ])
+
+    const loaded = new Set<string>()
+
+    const targets = collectRefreshTargets((path) => nodes.get(path) ?? [], (dir) => ({ loaded: loaded.has(dir) }))
+
+    expect(targets).toEqual([{ dir: "", original: "" }])
+  })
+
+  test("files, messy duplicates and missing entries dedupe into one target per normalized directory", () => {
+    const nodes = new Map<string, FileNode[]>([
+      [
+        "",
+        [
+          { name: "a.ts", path: "a.ts", absolute: "/repo/a.ts", type: "file", ignored: false },
+          { name: "src", path: "src/", absolute: "/repo/src", type: "directory", ignored: false },
+          { name: "src again", path: "src//", absolute: "/repo/src", type: "directory", ignored: false },
+        ],
+      ],
+      ["src", []],
+    ])
+
+    const targets = collectRefreshTargets((path) => nodes.get(path) ?? [], () => ({ loaded: true }))
+
+    expect(targets).toEqual([{ dir: "", original: "" }, { dir: "src", original: "src/" }])
   })
 })
 

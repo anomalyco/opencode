@@ -9,6 +9,7 @@ import { ConfigMedia } from "./config/media.js"
 import { ConfigCompaction } from "./config/compaction.js"
 import { ConfigCommand } from "./config/command.js"
 import { ConfigExperimental } from "./config/experimental.js"
+import { ConfigFileTree } from "./config/file-tree.js"
 import { ConfigFormatter } from "./config/formatter.js"
 import { ConfigLSP } from "./config/lsp.js"
 import { ConfigMCP } from "./config/mcp.js"
@@ -112,6 +113,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   worktree: ConfigWorktree.Info.pipe(optional).annotate({
     description: "Directory defaults for local worktree creation",
+  }),
+  file_tree: ConfigFileTree.Info.pipe(optional).annotate({
+    description: "Files tree behavior",
   }),
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",

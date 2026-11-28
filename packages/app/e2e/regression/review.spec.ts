@@ -862,6 +862,121 @@ test("the file tree follows a folder the review closes and lists a recreated fol
   await expect(file).toBeVisible()
 })
 
+test("the file tree refresh button rereads the workspace without a filesystem event", async ({ page }) => {
+  const directory = "C:/OpenCode/TreeRefreshButton"
+  // The mock's listing reads this disk, so a refresh rereads it without a watcher event.
+  const disk = { rootNew: false, innerNew: false }
+  const listings: string[] = []
+  const searches: string[] = []
+
+  await openSession(page, {
+    name: "TreeRefreshButton",
+    fileList: (path) => {
+      listings.push(path)
+
+      if (path === "src") return [fileNode(directory, "src/a.ts"), fileNode(directory, "src/inner", "directory")]
+
+      if (path === "src/inner")
+        return disk.innerNew
+          ? [fileNode(directory, "src/inner/deep.ts"), fileNode(directory, "src/inner/new.ts")]
+          : [fileNode(directory, "src/inner/deep.ts")]
+
+      if (path) return []
+
+      return disk.rootNew
+        ? [fileNode(directory, "README.md"), fileNode(directory, "new.txt"), fileNode(directory, "src", "directory")]
+        : [fileNode(directory, "README.md"), fileNode(directory, "old.txt"), fileNode(directory, "src", "directory")]
+    },
+    findFiles: (input) => {
+      searches.push(input.query)
+
+      return input.query === "old" ? [fileNode(directory, "old.txt")] : []
+    },
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_treerefreshbutton: { review: true } },
+      storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: true } },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
+  const refresh = panel.getByRole("button", { name: "Refresh file tree" })
+  const folder = panel.getByRole("treeitem", { name: "src" })
+  const inner = panel.getByRole("treeitem", { name: "inner" })
+
+  await openReviewLauncher(panel)
+  await expect(panel.getByRole("treeitem", { name: "README.md" })).toBeVisible()
+
+  // "inner" loads and collapses again: a loaded but collapsed folder the refresh must reread too.
+  await folder.click()
+  await expect(panel.getByRole("treeitem", { name: "a.ts" })).toBeVisible()
+  await inner.click()
+  await expect(panel.getByRole("treeitem", { name: "deep.ts" })).toBeVisible()
+  await inner.click()
+  await expect(inner).toHaveAttribute("aria-expanded", "false")
+  await expect(panel.getByRole("treeitem", { name: "deep.ts" })).toHaveCount(0)
+
+  await panel.getByRole("treeitem", { name: "a.ts" }).click()
+  await expect(tab("a.ts")).toHaveAttribute("aria-selected", "true")
+
+  // The refresh holds on the listing request: the same static icon stays, disabled and busy.
+  disk.rootNew = true
+  disk.innerNew = true
+  const held = await holdRoute(page, (url) => url.pathname === "/api/fs/list")
+  await expect(refresh).toBeEnabled()
+  await refresh.click()
+  await held.arrived
+  await expect(refresh).toBeDisabled()
+  await expect(refresh).toHaveAttribute("aria-busy", "true")
+  await expect(refresh.locator("svg[data-slot='icon-svg']")).toHaveCount(1)
+  // The icon button's contract at its visual seam: a 28x28 control beside the 16px tree controls.
+  await expect
+    .poll(() =>
+      refresh.evaluate((element) => {
+        const box = element.getBoundingClientRect()
+
+        return { width: Math.round(box.width), height: Math.round(box.height) }
+      }),
+    )
+    .toEqual({ width: 28, height: 28 })
+  await expect(refresh.locator("[data-component='loader-v2']")).toHaveCount(0)
+  held.release()
+
+  // Settlement, not the response alone, re-enables the button; only then are the reread rows asserted.
+  await expect(refresh).toBeEnabled()
+  await expect(panel.getByRole("treeitem", { name: "old.txt" })).toHaveCount(0)
+  await expect(panel.getByRole("treeitem", { name: "new.txt" })).toBeVisible()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(inner).toHaveAttribute("aria-expanded", "false")
+  await expect(tab("a.ts")).toHaveAttribute("aria-selected", "true")
+
+  // The collapsed folder rereads too: its addition shows once it opens.
+  await inner.click()
+  await expect(panel.getByRole("treeitem", { name: "new.ts" })).toBeVisible()
+
+  // With a filter, the refresh only rereads the hidden workspace tree: the results and their find calls stay.
+  const filter = panel.getByRole("combobox", { name: "Filter files" })
+  await filter.fill("old")
+  const option = panel.getByRole("option", { name: "old.txt" })
+  await expect(option).toBeVisible()
+  const searched = searches.length
+  const listed = listings.length
+  await refresh.click()
+  // The refresh settles even though the tree it rereads stays hidden behind the results.
+  await expect(refresh).toBeEnabled()
+  await expect.poll(() => listings.length).toBeGreaterThan(listed)
+  await expect(option).toBeVisible()
+  expect(searches).toHaveLength(searched)
+  await filter.fill("")
+  await expect(panel.getByRole("treeitem", { name: "new.txt" })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "old.txt" })).toHaveCount(0)
+
+  // A hidden tree's preview toolbar keeps no refresh duplicate.
+  await panel.getByRole("button", { name: "Toggle file tree" }).click()
+  await expect(refresh).toHaveCount(0)
+})
+
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
   // Enough lines to scroll the code view, ending in the draft's name.
   const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
