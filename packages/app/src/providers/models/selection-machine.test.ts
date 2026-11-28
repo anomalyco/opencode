@@ -77,18 +77,21 @@ describe("model selection machine", () => {
     expect(deleted.effects).toEqual([{ type: "persist.write", sessionID: "ses_wt", selection: undefined }])
   })
 
-  test("a promotion the create request already committed keeps only agent memory", () => {
-    const choices = { build: choice("c", "low") }
+  test.each([undefined, "default"])(
+    "a promotion with variant %s already committed keeps only agent memory",
+    (variant) => {
+      const choices = { build: choice("c", "low") }
 
-    const next = transitionModelSelection(ready(), {
-      type: "session.promoted",
-      sessionID: "ses_a",
-      selection: { agent: "plan", choice: choice("b"), choices },
-      durable: durable("b", undefined, "plan"),
-    })
+      const next = transitionModelSelection(ready(), {
+        type: "session.promoted",
+        sessionID: "ses_a",
+        selection: { agent: "plan", choice: choice("b"), choices },
+        durable: durable("b", variant, "plan"),
+      })
 
-    expect(selectSession(next.state, "ses_a")).toEqual({ phase: "committed", choices })
-  })
+      expect(selectSession(next.state, "ses_a")).toEqual({ phase: "committed", choices })
+    },
+  )
 
   test("selections made while stored ones load win, are written once loaded, and deletions stay deleted", () => {
     const loading = replay(createModelSelectionState({ status: "hydrating" }), [
@@ -211,21 +214,28 @@ describe("model selection machine", () => {
     expect(selectSession(echoed.state, "ses_a")).toMatchObject({ phase, choices: { build: choice("c") } })
   })
 
-  test("an already committed selection releases a matching override without waiting", () => {
-    const result = replay(ready(), [
-      picked("ses_a", "a", "high"),
-      {
-        type: "commit.tracked",
-        sessionID: "ses_a",
-        target: target("a", "high"),
-        visible: true,
-        durable: durable("a", "high"),
-      },
-    ])
+  test.each([
+    { requested: "high", committed: "high" },
+    { requested: undefined, committed: "default" },
+    { requested: "default", committed: undefined },
+  ])(
+    "a $requested selection releases the committed $committed override without waiting",
+    ({ requested, committed }) => {
+      const result = replay(ready(), [
+        picked("ses_a", "a", requested),
+        {
+          type: "commit.tracked",
+          sessionID: "ses_a",
+          target: target("a", requested),
+          visible: true,
+          durable: durable("a", committed),
+        },
+      ])
 
-    expect(selectSession(result.state, "ses_a")).toBeUndefined()
-    expect(result.effects.some((effect) => effect.type === "ack-timer.start")).toBe(false)
-  })
+      expect(selectSession(result.state, "ses_a")).toBeUndefined()
+      expect(result.effects.some((effect) => effect.type === "ack-timer.start")).toBe(false)
+    },
+  )
 
   test("history restores a selection only for the shown Session without one", () => {
     const restore = (state: ModelSelectionState, visible: boolean, session?: DurableSelection) =>

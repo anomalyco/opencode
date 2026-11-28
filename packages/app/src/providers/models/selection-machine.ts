@@ -1,4 +1,4 @@
-import { durableVariantSelection, INHERIT_VARIANT, type VariantSelection } from "./variant"
+import { durableVariantSelection, INHERIT_VARIANT, normalizeVariant, type VariantSelection } from "./variant"
 
 /** How long a commit waits for the server to echo its agent and model before the local selection stops waiting. */
 export const COMMIT_ACK_TIMEOUT_MS = 10_000
@@ -374,7 +374,7 @@ function normalize(
 }
 
 function variantName(variant: VariantSelection) {
-  return variant.type === "named" ? variant.value : undefined
+  return variant.type === "named" ? normalizeVariant(variant.value) : undefined
 }
 
 function selectionTarget(selection: Selection) {
@@ -392,7 +392,7 @@ function matchesTarget(selection: Selection, target: CommitTarget) {
     selection.agent === target.agent &&
     selection.choice?.providerID === target.model.providerID &&
     selection.choice.modelID === target.model.modelID &&
-    variantName(selection.choice.variant) === target.variant
+    variantName(selection.choice.variant) === normalizeVariant(target.variant)
   )
 }
 
@@ -403,6 +403,6 @@ function matchesDurable(target: CommitTarget | undefined, durable: DurableSelect
     durable.agent === target.agent &&
     durable.model.providerID === target.model.providerID &&
     durable.model.id === target.model.modelID &&
-    durable.model.variant === target.variant
+    normalizeVariant(durable.model.variant) === normalizeVariant(target.variant)
   )
 }

@@ -69,11 +69,12 @@ describe("model variant", () => {
     expect(cycleModelVariant({ variants: [], selected: INHERIT_VARIANT, configured: undefined })).toBeUndefined()
   })
 
-  test("reads the prompt mirror's null as the explicit Default and a committed absence as Default too", () => {
+  test("reads the prompt mirror's null and both committed Default encodings as explicit Default", () => {
     expect(variantSelectionFrom(null)).toEqual(DEFAULT_VARIANT)
     expect(variantSelectionFrom(undefined)).toEqual(INHERIT_VARIANT)
     expect(variantSelectionFrom("high")).toEqual(named("high"))
     expect(durableVariantSelection(undefined)).toEqual(DEFAULT_VARIANT)
+    expect(durableVariantSelection("default")).toEqual(DEFAULT_VARIANT)
     expect(durableVariantSelection("high")).toEqual(named("high"))
   })
 })
