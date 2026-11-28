@@ -129,7 +129,7 @@ function fingerprint(secret: string | Readonly<Record<string, string>> | undefin
 interface Holder {
   readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler["create"]
-  readonly closed: (reason: string) => void
+  readonly closed: (failure: McpConnection.Failure) => void
   readonly changed: (kind: McpConnection.Kind) => void
 }
 
@@ -230,13 +230,13 @@ export const layer = Layer.effect(
                 yield* Deferred.succeed(slot.outcome, "private")
               }),
             settled: Effect.void,
-            closed: (reason) =>
+            closed: (failure) =>
               Effect.gen(function* () {
                 detach(key, slot)
                 const holders = Array.from(slot.holders)
                 slot.holders.clear()
                 yield* slot.connection.stop
-                for (const holder of holders) holder.closed(reason)
+                for (const holder of holders) holder.closed(failure)
               }),
             changed: (kind) =>
               Effect.sync(() => {
@@ -327,7 +327,7 @@ export const layer = Layer.effect(
           const holder: Holder = {
             authProvider: selected.authProvider,
             elicitation: elicit,
-            closed: (reason) => current(holder, () => input.events.closed(reason)),
+            closed: (failure) => current(holder, () => input.events.closed(failure)),
             changed: (kind) => current(holder, () => input.events.changed(kind)),
           }
           mode = { _tag: "Joining", claim, holder }
@@ -407,10 +407,7 @@ export const layer = Layer.effect(
             return yield* own.stop
           }
           yield* clear
-          yield* input.events.changed("tools")
-          yield* input.events.changed("resources")
-          yield* input.events.changed("prompts")
-          yield* input.events.changed("skills")
+          for (const kind of McpConnection.KINDS) yield* input.events.changed(kind)
         }),
         recovering: (client, request) => {
           if (mode._tag === "Shared") return mode.connection.recovering(client, (client) => request(bind(client)))

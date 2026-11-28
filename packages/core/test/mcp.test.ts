@@ -3769,6 +3769,54 @@ describe("MCP pool", () => {
     }),
   )
 
+  live("reports needs_auth in every Location when a shared connection's credential is refused", () =>
+    Effect.gen(function* () {
+      const refusing = { tools: false }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: async (request) =>
+          refusing.tools && (await toolCall(request)) ? new Response(null, { status: 401 }) : undefined,
+      })
+      // A signed-in credential with no refresh token: a 401 can only end in a new login.
+      const row = (integrationID: Integration.ID) =>
+        new Credential.Info({
+          id: Credential.ID.make("cred_signed"),
+          integrationID,
+          label: "signed",
+          value: {
+            type: "oauth",
+            methodID: Integration.MethodID.make("signed"),
+            access: "signed-in",
+            refresh: "",
+            expires: Date.now() + 3_600_000,
+            metadata: { serverUrl: server.url, tokenType: "Bearer" },
+          },
+        })
+      const credentials: Partial<Credential.Interface> = {
+        list: (integrationID) => Effect.succeed([row(integrationID)]),
+        get: () => Effect.succeed(row(Integration.ID.make("unused"))),
+      }
+      const pool = yield* makePool
+      const config = pooled(server.url, { oauth: undefined })
+      const a = yield* open(config, pool, directories[0], { credentials })
+      const b = yield* open(config, pool, directories[1], { credentials })
+      yield* a.mcp.callTool({ server: "resources", name: "echo" })
+      expect(server.state.toolLists).toBe(1)
+      refusing.tools = true
+
+      yield* a.mcp.callTool({ server: "resources", name: "echo" }).pipe(Effect.flip)
+
+      for (const location of [a, b])
+        expect(
+          yield* status(location.mcp).pipe(
+            Effect.filterOrFail((status) => status?.status !== "connected"),
+            Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+          ),
+        ).toMatchObject({ status: "needs_auth" })
+    }),
+  )
+
   live("connects with the credential its key was made from, even when a sign-in lands mid-start", () =>
     Effect.gen(function* () {
       // The authorization header of every tool call, in order.
@@ -4513,6 +4561,33 @@ describe("MCP events", () => {
     }),
   )
 
+  testEffect(Layer.empty).live("resumes an ended subscription from its cursor unless subscribed again from now", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      const bus = yield* workingBus
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        const ended = bus.until(only(mcp), (sub) => sub?.status.status === "ended")
+        const terminated = { error: { code: -32024, message: "Revoked" } }
+        yield* mcp.subscribe("resources", { name: "job.finished" })
+        const first = yield* server.opened
+        first.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+        first.send("notifications/events/terminated", terminated)
+        yield* ended
+
+        yield* mcp.subscribe("resources", { name: "job.finished" })
+        const resumed = yield* server.opened
+        expect(resumed.params).toMatchObject({ cursor: "c1" })
+        resumed.send("notifications/events/terminated", terminated)
+        yield* ended
+
+        yield* mcp.subscribe("resources", { name: "job.finished", cursor: null })
+        expect((yield* server.opened).params).toMatchObject({ cursor: null })
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
+    }),
+  )
+
   testEffect(Layer.empty).live("reopens without a replay gap when cursorless, and ends when disabled", () =>
     Effect.gen(function* () {
       const server = yield* streamServer()
@@ -4557,6 +4632,50 @@ describe("MCP events", () => {
           status: { status: "ended", reason: "unavailable" },
         })
       }).pipe(Effect.provide(subscriptionLayer(plain.url, bus.layer)))
+    }),
+  )
+
+  testEffect(Layer.empty).live("keeps following events while a reconnect tears the old connection down", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      // Once armed, the next tool list announcement, which the old connection's teardown makes, waits for release.
+      const armed = { value: false }
+      const reached = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const statuses = yield* Queue.unbounded<void>()
+      const bus = Layer.mock(Bus.Service, {
+        subscribe: () => Stream.never,
+        publish: (definition, data) =>
+          Effect.gen(function* () {
+            if (definition.type === McpEvent.StatusChanged.type) yield* Queue.offer(statuses, undefined)
+            if (armed.value && definition.type === McpEvent.ToolsChanged.type) {
+              armed.value = false
+              yield* Deferred.succeed(reached, undefined)
+              yield* Deferred.await(release)
+            }
+            return { id: ID.create(), type: definition.type, data } as Payload<typeof definition>
+          }),
+      })
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        // Startup announces the handshake, then the connection, after the lists it can read.
+        yield* Queue.take(statuses).pipe(Effect.repeat({ times: 1 }))
+        armed.value = true
+        const reconnect = yield* mcp.connect("resources").pipe(Effect.forkScoped)
+        yield* Deferred.await(reached)
+        const during = yield* Effect.all({
+          status: mcp.servers().pipe(Effect.map((servers) => servers[0]?.status)),
+          // Following waits for the server to come back instead of ending.
+          follow: mcp
+            .follow("resources", { name: "job.finished" })
+            .pipe(Stream.take(1), Stream.runCollect, Effect.exit),
+        }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+        expect(during.follow).toEqual(Exit.succeed([{ type: "pending" }]))
+        expect(during.status).toEqual({ status: "pending" })
+
+        yield* Fiber.join(reconnect)
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus)))
     }),
   )
 
