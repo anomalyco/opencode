@@ -1016,6 +1016,10 @@ const registration = await ctx.tool.transform((editor) => {
 })
 ```
 
+A registered tool defaults to Code Mode: leaving `codemode` unset behaves like `codemode: true`, so the model reaches the
+tool through `execute` rather than by its own name. Set `options: { codemode: false }` to expose it as a direct tool; asking
+for a Code-Mode-only tool by name fails with `No tool named "<name>" is currently available`.
+
 Promise tool executors receive `context.signal`. Pass it to cancellable work such as `fetch` so stopping the Session
 also stops the underlying operation.
 
