@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Scope } from "effect"
+import { sql } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Database } from "@opencode/core/database/database"
@@ -100,6 +101,99 @@ describe("Session.remove", () => {
       expect(transportScopes.size).toBe(1)
       expect(yield* locations.keys).toEqual([])
       expect((yield* sessions.list()).data).toEqual([])
+    }),
+  )
+
+  it.effect("removes legacy V1 rows on a migrated database", () =>
+    Effect.gen(function* () {
+      const temporary = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(temporary.path) })
+      const session = yield* Session.Service
+      const created = yield* session.create({ location })
+      const db = (yield* Database.Service).db
+      const now = Date.now()
+      // Fresh test databases bootstrap the V2-only schema, so recreate the legacy tables a
+      // V1→V2 migration leaves in place, with their cascading foreign keys.
+      yield* Effect.forEach(
+        [
+          sql`CREATE TABLE \`session\` (
+            \`id\` text PRIMARY KEY,
+            \`project_id\` text NOT NULL,
+            \`parent_id\` text,
+            \`slug\` text NOT NULL,
+            \`directory\` text NOT NULL,
+            \`title\` text NOT NULL,
+            \`version\` text NOT NULL,
+            \`share_url\` text,
+            \`summary_additions\` integer,
+            \`summary_deletions\` integer,
+            \`summary_files\` integer,
+            \`summary_diffs\` text,
+            \`revert\` text,
+            \`permission\` text,
+            \`time_created\` integer NOT NULL,
+            \`time_updated\` integer NOT NULL,
+            \`time_compacting\` integer,
+            \`time_archived\` integer,
+            CONSTRAINT \`fk_session_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+          )`,
+          sql`CREATE TABLE \`message\` (
+            \`id\` text PRIMARY KEY,
+            \`session_id\` text NOT NULL,
+            \`time_created\` integer NOT NULL,
+            \`time_updated\` integer NOT NULL,
+            \`data\` text NOT NULL,
+            CONSTRAINT \`fk_message_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+          )`,
+          sql`CREATE TABLE \`part\` (
+            \`id\` text PRIMARY KEY,
+            \`message_id\` text NOT NULL,
+            \`session_id\` text NOT NULL,
+            \`time_created\` integer NOT NULL,
+            \`time_updated\` integer NOT NULL,
+            \`data\` text NOT NULL,
+            CONSTRAINT \`fk_part_message_id_message_id_fk\` FOREIGN KEY (\`message_id\`) REFERENCES \`message\`(\`id\`) ON DELETE CASCADE
+          )`,
+          sql`CREATE TABLE \`todo\` (
+            \`session_id\` text NOT NULL,
+            \`content\` text NOT NULL,
+            \`status\` text NOT NULL,
+            \`priority\` text NOT NULL,
+            \`position\` integer NOT NULL,
+            \`time_created\` integer NOT NULL,
+            \`time_updated\` integer NOT NULL,
+            CONSTRAINT \`todo_pk\` PRIMARY KEY(\`session_id\`, \`position\`),
+            CONSTRAINT \`fk_todo_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+          )`,
+        ],
+        (table) => db.run(table),
+      )
+      yield* db.run(sql`
+        INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+        VALUES (${created.id}, ${created.projectID}, 'legacy-cleanup', ${temporary.path}, 'legacy session', '1.19.5', ${now}, ${now})
+      `)
+      yield* db.run(sql`
+        INSERT INTO message (id, session_id, time_created, time_updated, data)
+        VALUES ('msg_legacy_cleanup', ${created.id}, ${now}, ${now}, '{}')
+      `)
+      yield* db.run(sql`
+        INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+        VALUES ('prt_legacy_cleanup', 'msg_legacy_cleanup', ${created.id}, ${now}, ${now}, '{}')
+      `)
+      yield* db.run(sql`
+        INSERT INTO todo (session_id, content, status, priority, position, time_created, time_updated)
+        VALUES (${created.id}, 'legacy todo', 'pending', 'high', 0, ${now}, ${now})
+      `)
+
+      yield* session.remove(created.id)
+
+      expect((yield* session.list()).data).toEqual([])
+      expect(yield* db.all<{ id: string }>(sql`SELECT id FROM session WHERE id = ${created.id}`)).toEqual([])
+      expect(yield* db.all<{ id: string }>(sql`SELECT id FROM message WHERE session_id = ${created.id}`)).toEqual([])
+      expect(yield* db.all<{ id: string }>(sql`SELECT id FROM part WHERE session_id = ${created.id}`)).toEqual([])
+      expect(
+        yield* db.all<{ session_id: string }>(sql`SELECT session_id FROM todo WHERE session_id = ${created.id}`),
+      ).toEqual([])
     }),
   )
 
