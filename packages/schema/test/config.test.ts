@@ -192,3 +192,20 @@ test("wildcard switches are reserved flag names", () => {
   expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
   expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
 })
+
+describe("Config.Info.subagent_wakeup", () => {
+  test("omitted subagent_wakeup decodes to true", () => {
+    const decoded = Schema.decodeUnknownSync(Config.Info)({})
+    expect(decoded.subagent_wakeup).toBe(true)
+  })
+
+  test("explicit true stays true", () => {
+    const decoded = Schema.decodeUnknownSync(Config.Info)({ subagent_wakeup: true })
+    expect(decoded.subagent_wakeup).toBe(true)
+  })
+
+  test("explicit false stays false", () => {
+    const decoded = Schema.decodeUnknownSync(Config.Info)({ subagent_wakeup: false })
+    expect(decoded.subagent_wakeup).toBe(false)
+  })
+})
