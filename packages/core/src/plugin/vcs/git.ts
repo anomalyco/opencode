@@ -157,7 +157,19 @@ interface GitDiffOptions extends DiffOptions {
 
 interface PatchOptions extends GitDiffOptions {
   readonly maxOutputBytes?: number
+  readonly scope?: DiffScope
 }
+
+/** Narrows a working-copy diff. `ignoreDirty` skips the per-submodule content scan, `paths` limits it to those files. */
+interface DiffScope {
+  readonly ignoreDirty?: boolean
+  readonly paths?: readonly string[]
+}
+
+const scopeArgs = (scope: DiffScope | undefined) => (scope?.ignoreDirty ? ["--ignore-submodules=dirty"] : [])
+
+const scopePaths = (scope: DiffScope | undefined) =>
+  scope?.paths ? scope.paths.map((file) => `:(top,literal)${file}`) : ["."]
 
 interface Ctx {
   readonly proc: AppProcess.Interface
@@ -378,11 +390,21 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     cwd: string,
     untracked: "normal" | "all" = "normal",
     names?: readonly string[],
+    ignoreSubmoduleUntracked = false,
   ) {
     const pathspecs = names ? names.map((name) => `:(literal)${name}`) : ["."]
     return nuls(
       yield* text(
-        ["status", "--porcelain=v1", `--untracked-files=${untracked}`, "--no-renames", "-z", "--", ...pathspecs],
+        [
+          "status",
+          "--porcelain=v1",
+          `--untracked-files=${untracked}`,
+          ...(ignoreSubmoduleUntracked ? ["--ignore-submodules=untracked"] : []),
+          "--no-renames",
+          "-z",
+          "--",
+          ...pathspecs,
+        ],
         { cwd },
       ),
     ).flatMap((item) => {
@@ -393,9 +415,20 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     })
   })
 
-  const diff = Effect.fn("VcsGit.diffNames")(function* (cwd: string, ref: string, target?: string) {
+  const diff = Effect.fn("VcsGit.diffNames")(function* (cwd: string, ref: string, target?: string, scope?: DiffScope) {
     const result = yield* run(
-      ["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, ...(target ? [target] : []), "--", "."],
+      [
+        "diff",
+        ...scopeArgs(scope),
+        "--no-ext-diff",
+        "--no-renames",
+        "--name-status",
+        "-z",
+        ref,
+        ...(target ? [target] : []),
+        "--",
+        ...scopePaths(scope),
+      ],
       { cwd },
     )
     if (result.exitCode !== 0) return yield* new DiffError({ message: "Unable to list Git changes" })
@@ -408,11 +441,37 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     })
   })
 
-  const stats = Effect.fn("VcsGit.stats")(function* (cwd: string, ref: string, target?: string) {
+  const stats = Effect.fn("VcsGit.stats")(function* (cwd: string, ref: string, target?: string, scope?: DiffScope) {
     return numstat(
       yield* text(
-        ["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, ...(target ? [target] : []), "--", "."],
+        [
+          "diff",
+          ...scopeArgs(scope),
+          "--no-ext-diff",
+          "--no-renames",
+          "--numstat",
+          "-z",
+          ref,
+          ...(target ? [target] : []),
+          "--",
+          ...scopePaths(scope),
+        ],
         { cwd },
+      ),
+    )
+  })
+
+  const submoduleIgnore = Effect.fn("VcsGit.submoduleIgnore")(function* (cwd: string) {
+    const result = yield* run(["config", "--get-regexp", "^(diff\\.ignoresubmodules|submodule\\..*\\.ignore)$"], {
+      cwd,
+    })
+    return result.exitCode === 0
+  })
+
+  const submodules = Effect.fn("VcsGit.submodules")(function* (cwd: string) {
+    return new Set(
+      nuls(yield* text(["ls-files", "--stage", "--full-name", "-z"], { cwd })).flatMap((item) =>
+        item.startsWith("160000 ") ? [item.slice(item.indexOf("\t") + 1)] : [],
       ),
     )
   })
@@ -427,6 +486,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
       [
         "diff",
         ...(mode.noIndex ? ["--no-index"] : []),
+        ...scopeArgs(options?.scope),
         "--patch",
         "--no-ext-diff",
         "--no-renames",
@@ -448,9 +508,12 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const patchAll = Effect.fn("VcsGit.patchAll")(function* (cwd: string, ref: string, options?: PatchOptions) {
-    return yield* diffPatch(cwd, [ref, ...(options?.target ? [options.target] : []), "--", "."], options, {
-      dropTruncated: false,
-    })
+    return yield* diffPatch(
+      cwd,
+      [ref, ...(options?.target ? [options.target] : []), "--", ...scopePaths(options?.scope)],
+      options,
+      { dropTruncated: false },
+    )
   })
 
   const patchUntracked = Effect.fn("VcsGit.patchUntracked")(function* (
@@ -514,6 +577,8 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     status,
     diff,
     stats,
+    submodules,
+    submoduleIgnore,
     patch,
     patchAll,
     patchUntracked,
@@ -612,10 +677,15 @@ const MAX_FOLDER_SCAN_MS = 1_000
  * `dir/` entry, as `git status` shows it, and a directory inside such a folder lists only its immediate entries, with
  * its subfolders again as one entry each.
  */
-const statusItems = Effect.fnUntraced(function* (ctx: Ctx, untracked: Untracked = "files") {
-  if (untracked === "files") return { list: yield* ctx.git.status(ctx.directory, "all"), more: undefined }
+const statusItems = Effect.fnUntraced(function* (
+  ctx: Ctx,
+  untracked: Untracked = "files",
+  ignoreSubmoduleUntracked = false,
+) {
+  if (untracked === "files")
+    return { list: yield* ctx.git.status(ctx.directory, "all", undefined, ignoreSubmoduleUntracked), more: undefined }
 
-  const list = yield* ctx.git.status(ctx.directory)
+  const list = yield* ctx.git.status(ctx.directory, "normal", undefined, ignoreSubmoduleUntracked)
   const prefix = path.relative(ctx.worktree, ctx.directory).split(path.sep).join("/")
   if (
     !prefix ||
@@ -637,7 +707,7 @@ const statusItems = Effect.fnUntraced(function* (ctx: Ctx, untracked: Untracked 
   ) {
     const batch = names.slice(checked, checked + MAX_FOLDER_ENTRIES)
     checked += batch.length
-    entries.push(...(yield* ctx.git.status(ctx.directory, "normal", batch)))
+    entries.push(...(yield* ctx.git.status(ctx.directory, "normal", batch, ignoreSubmoduleUntracked)))
   }
   return {
     list: entries.slice(0, MAX_FOLDER_ENTRIES),
@@ -664,19 +734,23 @@ const merge = (...lists: Item[][]) => {
 
 const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
 
-const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: Item[], options?: GitDiffOptions) {
-  if (list.length === 0) return emptyBatch()
-
-  const result = yield* ctx.git.patchAll(ctx.directory, ref, {
+const fetchPatches = (
+  ctx: Ctx,
+  ref: string,
+  options: GitDiffOptions | undefined,
+  scope: DiffScope | undefined,
+  budget: number,
+) =>
+  ctx.git.patchAll(ctx.directory, ref, {
+    scope,
     target: options?.target,
     context: options?.context ?? PATCH_CONTEXT_LINES,
-    maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
+    maxOutputBytes: budget,
   })
 
-  return {
-    patches: chunksByFile(result, (index) => list[index]?.file),
-    capped: result.truncated,
-  }
+const toBatch = (result: Patch, list: Item[]) => ({
+  patches: chunksByFile(result, (index) => list[index]?.file),
+  capped: result.truncated,
 })
 
 const nativePatch = Effect.fnUntraced(function* (
@@ -773,24 +847,68 @@ const files = Effect.fnUntraced(function* (
   return next
 })
 
+const changes = Effect.fnUntraced(function* (
+  ctx: Ctx,
+  ref: string,
+  options?: GitDiffOptions,
+  scope?: DiffScope,
+  budget = MAX_TOTAL_PATCH_BYTES,
+) {
+  const names = ctx.git.diff(ctx.directory, ref, options?.target, scope)
+  const counts = ctx.git.stats(ctx.directory, ref, options?.target, scope)
+  if (budget <= 0) {
+    const [list, stats] = yield* Effect.all([names, counts], { concurrency: 2 })
+    return { list, stats: nums(stats), batch: { patches: new Map<string, string>(), capped: true } }
+  }
+  const patches = fetchPatches(ctx, ref, options, scope, budget)
+  // The rescan runs after status has answered, so overlap its three commands instead of waiting for the names first.
+  if (scope?.paths) {
+    const [list, stats, result] = yield* Effect.all([names, counts, patches], { concurrency: 3 })
+    return { list, stats: nums(stats), batch: list.length === 0 ? emptyBatch() : toBatch(result, list) }
+  }
+  const [list, stats] = yield* Effect.all([names, counts], { concurrency: 2 })
+  return { list, stats: nums(stats), batch: list.length === 0 ? emptyBatch() : toBatch(yield* patches, list) }
+})
+
+// A configured `ignore` is overridden by `--ignore-submodules=dirty` on the command line, so leave those repositories on
+// the plain commands.
+const hasUnignoredSubmodules = Effect.fnUntraced(function* (ctx: Ctx) {
+  const modules = Bun.file(path.join(ctx.worktree, ".gitmodules"))
+  if (!(yield* Effect.promise(() => modules.exists()))) return false
+  if (/^\s*ignore\s*=/m.test(yield* Effect.promise(() => modules.text()))) return false
+  return !(yield* ctx.git.submoduleIgnore(ctx.directory))
+})
+
 const diffAgainstRef = Effect.fnUntraced(function* (ctx: Ctx, ref: string, options?: GitDiffOptions) {
-  const [list, stats, extra] = yield* Effect.all(
+  // Every parent-level `git diff` and `git status` re-scans each submodule's working tree. Scan them once, in
+  // status, then ask diff about only the submodules status reports as modified.
+  const nested = !options?.target && (yield* hasUnignoredSubmodules(ctx))
+  const [tracked, extra, gitlinks] = yield* Effect.all(
     [
-      ctx.git.diff(ctx.directory, ref, options?.target),
-      ctx.git.stats(ctx.directory, ref, options?.target),
-      options?.target ? Effect.succeed({ list: [], more: undefined }) : statusItems(ctx, options?.untracked),
+      changes(ctx, ref, options, nested ? { ignoreDirty: true } : undefined),
+      options?.target ? Effect.succeed({ list: [], more: undefined }) : statusItems(ctx, options?.untracked, nested),
+      nested ? ctx.git.submodules(ctx.directory) : Effect.succeed(new Set<string>()),
     ],
     { concurrency: 3 },
   )
+  const dirty = extra.list.filter((item) => item.code[1] === "M" && gitlinks.has(item.file)).map((item) => item.file)
+  const used = [...tracked.batch.patches.values()].reduce((total, patch) => total + Buffer.byteLength(patch), 0)
+  const rescanned = dirty.length
+    ? yield* changes(ctx, ref, options, { paths: dirty }, tracked.batch.capped ? 0 : MAX_TOTAL_PATCH_BYTES - used)
+    : undefined
   const rows = yield* files(
     ctx,
     ref,
     merge(
-      list,
+      rescanned?.list ?? [],
+      tracked.list,
       extra.list.filter((item) => item.code === "??"),
     ),
-    nums(stats),
-    yield* batchPatches(ctx, ref, list, options),
+    new Map([...tracked.stats, ...(rescanned?.stats ?? [])]),
+    {
+      patches: new Map([...tracked.batch.patches, ...(rescanned?.batch.patches ?? [])]),
+      capped: tracked.batch.capped || (rescanned?.batch.capped ?? false),
+    },
     options,
   )
   return withMore(rows, extra.more)
